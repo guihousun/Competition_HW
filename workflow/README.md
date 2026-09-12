@@ -3,6 +3,8 @@
 适用仓库：`guihousun/Competition_HW`。规则依据：项目 AGENTS.md 与
 `docs/DEVELOPMENT_RULES.md`。本工作流属于工程工具，不更改官方行为。
 
+默认派单现使用[专员与同会话续聊](SPECIALISTS.md)。明确任务交给DeepSeek，困难或歧义Issue由Codex直接处理。
+
 ## 角色与证据
 
 | 角色 | 职责 | 不能替代的证据 |
@@ -79,21 +81,21 @@ Issue关闭后停止新任务；正在运行的执行先核实再中止，不重
 1. 读取Git状态。当前开发目录可能包含其他Agent未提交工作，不在这里让dsh直接改代码。
 2. 根据Issue的被测SHA与目标分支核对版本。未发布的当前代码不得假装存在于main；
    缺少必要基线时等待发布/明确移植方案，不从旧main盲目修复。
-3. 创建独立worktree：`codex/issue-<n>-v<revision>`，基于明确的完整base SHA。
+3. 为专员维护固定的独立worktree，在其中使用候选分支 `codex/issue-<n>-v<revision>`；切换分支前必须处理完前项改动。
 4. 按 `SPEC_TEMPLATE.md` 写文件。与CodeGraph定位结果核对后，生成manifest：
 
 ```json
-{"worktree":"<absolute isolated worktree>","base_sha":"<40 hex>","spec_path":"<absolute spec.md>","spec_sha256":"<sha256>","approved_by":"codex"}
+{"specialist":"qa-tooling","worktree":"<absolute isolated worktree>","base_sha":"<40 hex>","workspace_sha256":"<reviewed tree fingerprint>","spec_path":"<absolute spec.md>","spec_sha256":"<sha256>","approved_by":"codex"}
 ```
 
 5. 启动执行：
 
 ```powershell
-python workflow/dsh_runner.py --manifest .workflow/issue-1/manifest.json --output .workflow/issue-1/run-1
+python workflow/dsh_sessions.py send --manifest .workflow/issue-1/manifest.json --output .workflow/issue-1/run-1
 ```
 
 输出目录必须是全新的，避免覆盖证据。保留result.json、answer.md和本地stderr.log；原始stderr和模型过程
-不自动贴GitHub。runner验证工作树干净、base和Spec哈希；结束后强制进入review。
+不自动贴GitHub。路由器验证工作树指纹、base和Spec哈希；同session继续对话，结束后强制进入review。
 Manifest是流程约束，不是签名/操作系统沙箱；更强隔离应另配容器或独立系统账号。
 
 6. Codex比对保护文件、允许改动路径和Git HEAD。dsh越界修改或自行提交即拒绝自动合并，保留现场。
