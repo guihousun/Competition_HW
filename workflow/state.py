@@ -40,6 +40,7 @@ def ingest(path, snapshot):
     if snapshot.get('repository')!='guihousun/Competition_HW':
         raise ValueError('Wrong repository')
     changed=[]
+    seen={}
     with lock(path):
         data=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {'issues':{}}
         for issue in snapshot['issues']:
@@ -51,6 +52,11 @@ def ingest(path, snapshot):
             source={k:issue.get(k) for k in ('title','body','state')}
             source['comments']=comments
             digest=hashlib.sha256(json.dumps(source,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+            if number in seen:
+                if seen[number] != digest:
+                    raise ValueError('Conflicting duplicate issue; fetch latest complete issue again')
+                continue
+            seen[number]=digest
             old=data['issues'].get(str(number),{})
             if old.get('input_digest')==digest: continue
             row=dict(old,input_digest=digest,source=source,needs_triage=True)
