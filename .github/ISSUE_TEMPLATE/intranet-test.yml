@@ -1,0 +1,53 @@
+name: 内网实机反馈
+description: 报告指定提交在公司官方测试环境的行为
+title: "[内网测试] "
+body:
+  - type: markdown
+    attributes:
+      value: "请仅提供可公开的脱敏最小复现。仓库公开；不要粘贴内网地址、账号、令牌或完整公司日志。"
+  - type: input
+    id: commit
+    attributes:
+      label: 被测提交 SHA
+      description: 完整 40 位 SHA（git rev-parse HEAD），不要只填分支名
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 官方平台与规则版本
+      description: 提供版本标识及 Python/OS 信息，无需服务器地址
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: 测试结果
+      options: [FAIL, PASS, BLOCKED, 需求或规则澄清]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 最小复现与实际结果
+      description: 场景、回合、角色、操作步骤、实际报错；可附已脱敏请求/响应
+    validations:
+      required: true
+  - type: textarea
+    id: expectation
+    attributes:
+      label: 预期行为与官方依据
+      description: 对应 R01–R08、官方章节或新说明。无法判断时写待确认。
+    validations:
+      required: true
+  - type: textarea
+    id: related
+    attributes:
+      label: 相关 Issue / PR 与补充信息
+  - type: checkboxes
+    id: public
+    attributes:
+      label: 数据范围
+      options:
+        - label: 我确认以上信息已脱敏并允许公开，附件不含公司凭据或未获允许的数据。
+          required: true
