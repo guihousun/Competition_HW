@@ -13,7 +13,8 @@
     "reasoningEffort": "max",
     "task_timeout_seconds": 1200,
     "runner": "workflow/dsh_sessions.py",
-    "delivery": "send --wait; reconnect with wait on the same output directory"
+    "delivery": "send --wait; reconnect with wait on the same output directory",
+    "steering": "Native next-step only; bind active session/job/turn and approved supplemental Spec; reject legacy/inactive targets without queueing"
   },
   "concurrency": 1,
   "max_implementation_attempts_per_revision": 2,

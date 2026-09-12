@@ -26,17 +26,28 @@ def git(cwd, *args):
     return subprocess.check_output(['git', '-C', str(cwd), *args], text=True, encoding='utf-8').strip()
 
 
-def launch(cwd, stderr):
+def launch(cwd, stderr, patch=None):
     env = os.environ.copy()
     if os.name == 'nt':
         exe = shutil.which('dsh.ps1') or shutil.which('dsh')
         if not exe:
             raise RuntimeError('dsh not installed')
         env['COMPETITION_DSH_EXE'] = exe
-        cmd = [shutil.which('pwsh') or 'powershell', '-NoProfile', '-NonInteractive',
-               '-Command', '& $env:COMPETITION_DSH_EXE --profile sdk']
+        script = '& $env:COMPETITION_DSH_EXE --profile sdk'
+        if patch:
+            package=Path(exe).parent/'node_modules/@deepseek-ai/dsh/package.json'
+            if not package.exists(): raise RuntimeError('Cannot locate DSH package for native steering bridge')
+            env['COMPETITION_DSH_PACKAGE_JSON']=str(package)
+            env['COMPETITION_DSH_PATCH']=str(patch)
+            script += ' --patch $env:COMPETITION_DSH_PATCH'
+        cmd = [shutil.which('pwsh') or 'powershell', '-NoProfile', '-NonInteractive', '-Command', script]
     else:
         cmd = ['dsh', '--profile', 'sdk']
+        if patch:
+            package=Path(shutil.which('dsh')).resolve().parents[1]/'package.json'
+            if not package.exists(): raise RuntimeError('Cannot locate DSH package for native steering bridge')
+            env['COMPETITION_DSH_PACKAGE_JSON']=str(package)
+            cmd += ['--patch',str(patch)]
     return subprocess.Popen(cmd, cwd=cwd, env=env, stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE, stderr=stderr, text=True,
                             encoding='utf-8', bufsize=1)

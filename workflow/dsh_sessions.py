@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import queue
+import re
 import subprocess
 import sys
 import threading
@@ -49,8 +50,9 @@ def alive(pid):
 
 class SDK:
     """One native SDK runtime, reusable for multiple sequential prompts."""
-    def __init__(self, cwd, stderr):
-        self.process = launch(cwd, stderr)
+    def __init__(self, cwd, stderr, patch=None):
+        self.process = launch(cwd, stderr, patch) if patch else launch(cwd, stderr)
+        self.steering = False
         self.inbox = queue.Queue()
         self.rid = 0
         self.seq = {}
@@ -66,6 +68,9 @@ class SDK:
             reply = self.reply(rid, time.monotonic()+60)
             if reply.get('serverInfo',{}).get('name') != 'deepseek-harness-sdk-runtime':
                 raise RuntimeError('Unexpected SDK identity')
+            if patch:
+                self.steering = self.reply(self.send('competition/capabilities'),time.monotonic()+10).get('nativeSteer') is True
+                if not self.steering: raise RuntimeError('Native steering bridge unavailable')
         except Exception:
             self.broken = True
             self.close()
@@ -79,13 +84,16 @@ class SDK:
         self.process.stdin.flush()
         return self.rid
 
-    def receive(self, deadline):
-        remaining = deadline-time.monotonic()
-        if remaining <= 0: raise TimeoutError('DSH deadline exceeded')
-        try: frame = self.inbox.get(timeout=remaining)
-        except queue.Empty: raise TimeoutError('DSH deadline exceeded')
+    def receive(self, deadline, tick=None):
+        while True:
+            if tick: tick()
+            remaining = deadline-time.monotonic()
+            if remaining <= 0: raise TimeoutError('DSH deadline exceeded')
+            try: frame = self.inbox.get(timeout=min(.2,remaining) if tick else remaining); break
+            except queue.Empty:
+                if not tick: raise TimeoutError('DSH deadline exceeded')
         if 'transport_error' in frame: raise RuntimeError(frame['transport_error'])
-        if 'error' in frame: raise RuntimeError(str(frame['error']))
+        if 'error' in frame and not tick: raise RuntimeError(str(frame['error']))
         params = frame.get('params', {})
         if frame.get('method') == 'session.event':
             sid, seq = params.get('sessionId'), params.get('event',{}).get('seq',-1)
@@ -97,7 +105,7 @@ class SDK:
             frame = self.receive(deadline)
             if frame.get('id') == rid: return frame.get('result',{})
 
-    def prompt(self, session, task, timeout=1200):
+    def prompt(self, session, task, timeout=1200, interventions=None, progress=None):
         if self.broken: raise RuntimeError('SDK session unavailable')
         deadline = time.monotonic()+timeout
         # Discard transport notifications already delivered after a prior idle.
@@ -106,9 +114,23 @@ class SDK:
         watermark = self.seq.get(session,-1)
         rid = self.send('session/prompt', {'sessionId':session, 'contentBlocks':[{'type':'text','text':task}]})
         ack, answer, reason, turn, idle = None, '', None, None, False
+        pending, sent = {}, {}
+        def tick():
+            if not interventions or turn is None or reason is not None: return
+            for request in interventions(turn):
+                if request['requestId'] in sent: continue
+                request_id = self.send('competition/steer', {'sessionId':session,'expectedTurn':turn,
+                    'requestId':request['requestId'],'text':request['text']})
+                pending[request_id]=request; sent[request['requestId']]=request
         try:
             while True:
-                frame = self.receive(deadline)
+                frame = self.receive(deadline,tick=tick)
+                if frame.get('id') in pending:
+                    request=pending.pop(frame['id'])
+                    receipt=frame.get('result') or {'accepted':False,'error':frame.get('error')}
+                    save(Path(request['receipt']),receipt)
+                    frame={}
+                if 'error' in frame: raise RuntimeError(str(frame['error']))
                 if frame.get('id') == rid: ack = frame.get('result',{}).get('messageId')
                 p = frame.get('params', {})
                 if p.get('sessionId') == session:
@@ -118,6 +140,7 @@ class SDK:
                         if event.get('seq',-1) > watermark:
                             if event.get('type') == 'turn/start':
                                 turn, idle = data['turn'], False
+                                if progress: progress(turn)
                             elif turn is not None and data.get('turn') == turn:
                                 if event.get('type') == 'assistant/message':
                                     value = '\n'.join(b.get('text','') for b in data.get('message',{}).get('content',[]) if b.get('type')=='text')
@@ -125,10 +148,14 @@ class SDK:
                                 elif event.get('type') == 'turn/end': reason = data.get('reason')
                     if frame.get('method') == 'session.status' and p.get('status') == 'idle' and reason is not None:
                         idle = True
-                if ack and idle and reason is not None:
+                    if frame.get('method') == 'competition.steer_consumed' and p.get('requestId') in sent:
+                        request=sent[p['requestId']]
+                        save(Path(request['receipt']).with_suffix('.consumed.json'),p)
+                if ack and idle and reason is not None and not pending:
                     return dict(MODEL, session_id=session, message_id=ack, turn=turn,
                                 status='completed' if reason.get('kind')=='completed' and answer.strip() else 'failed',
-                                end_reason=reason, answer=answer, review_required=True)
+                                end_reason=reason, answer=answer, review_required=True,
+                                steering_requests=list(sent))
         except Exception:
             self.broken = True
             raise
@@ -272,6 +299,52 @@ def wait_result(pool, output, timeout=1250, interval=.2):
         time.sleep(min(interval,remaining))
 
 
+def request_steer(pool, manifest):
+    """Side-channel intervention bound to a live job; never a new queued job."""
+    if manifest.get('approved_by')!='codex': raise ValueError('Codex-approved steering Spec required')
+    request_id=manifest['request_id']
+    if not isinstance(request_id,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}',request_id):
+        raise ValueError('Invalid steering request ID')
+    role=manifest['specialist']
+    if role not in SPECIALISTS: raise ValueError('Unknown specialist')
+    out=Path(manifest['job_output']).resolve()
+    job=json.loads((out/'request.json').read_text(encoding='utf-8'))
+    if manifest['job_id']!=job['job_id'] or role!=job['specialist']: raise ValueError('Wrong target job')
+    if sha(manifest['spec_path'])!=manifest['spec_sha256']: raise ValueError('Steering Spec changed')
+    item={k:manifest[k] for k in ('request_id','session_id','job_id','base_sha','spec_sha256')}
+    item.update(turn=manifest['expected_turn'],spec_path=str(Path(manifest['spec_path']).resolve()))
+    path=out/'steering'/(request_id+'.request.json')
+    receipt=path.with_suffix('.ack.json')
+    if path.exists():
+        if json.loads(path.read_text(encoding='utf-8'))!=item: raise ValueError('Steering ID already used for different content')
+        return {'receipt':str(receipt),'consumed':str(receipt.with_suffix('.consumed.json')),'request_id':request_id}
+    slot=Path(pool).resolve()/role
+    identity=json.loads((slot/'identity.json').read_text(encoding='utf-8'))
+    state=json.loads((slot/'status.json').read_text(encoding='utf-8'))
+    if not identity.get('native_steer'): raise ValueError('This native session has no steering bridge; not queued or restarted')
+    if identity['session_id']!=manifest['session_id']: raise ValueError('Native session mismatch')
+    if (out/'result.json').exists() or state['status']!='running' or Path(state.get('output','')).resolve()!=out or state.get('active_turn')!=manifest['expected_turn']:
+        raise ValueError('Target turn is not active; steering was not queued')
+    if git(job['worktree'],'rev-parse','HEAD')!=manifest['base_sha']: raise ValueError('Target HEAD changed')
+    path.parent.mkdir(exist_ok=True)
+    with lock(out/'steering-submit'):
+        if path.exists(): raise ValueError('Concurrent duplicate intervention; inspect receipt')
+        save(path,item)
+    return {'receipt':str(receipt),'consumed':str(receipt.with_suffix('.consumed.json')),'request_id':request_id}
+
+
+def wait_steer(paths, timeout=30):
+    deadline=time.monotonic()+timeout; receipt=Path(paths['receipt'])
+    while not receipt.exists():
+        if (receipt.parent.parent/'result.json').exists():
+            result={'accepted':False,'error':'Target turn finished before receipt; not queued'}
+            save(receipt,result)
+            return result
+        if time.monotonic()>=deadline: raise TimeoutError('Steering receipt pending; inspect same request, do not duplicate it')
+        time.sleep(.1)
+    return json.loads(receipt.read_text(encoding='utf-8'))
+
+
 def worker(pool, role):
     pool = Path(pool).resolve(); slot=pool/role
     record=json.loads((slot/'identity.json').read_text(encoding='utf-8'))
@@ -281,7 +354,13 @@ def worker(pool, role):
     try:
         status('starting')
         with (slot/'sdk.stderr.log').open('a',encoding='utf-8') as stderr:
-            sdk=SDK(record['worktree'],stderr)
+            patch=slot/'steering.patch.yml'
+            bridge=str(Path(__file__).with_name('dsh_steering_bridge.mjs').resolve()).replace('\\','/')
+            patch.write_text('- id: sdk-jsonrpc-server\n  disabled: true\n- insert:\n    - id: competition-steering\n      name: '+json.dumps(bridge)+'\n      inject: [sdkAppStartup, loader]\n',encoding='utf-8')
+            sdk=SDK(record['worktree'],stderr,patch=patch)
+            record.update(json.loads((slot/'identity.json').read_text(encoding='utf-8')))
+            record['native_steer']=sdk.steering
+            save(slot/'identity.json',record)
             while not (slot/'STOP').exists():
                 status('idle')
                 for path in sorted((slot/'jobs').glob('*.json')):
@@ -301,13 +380,32 @@ def worker(pool, role):
                                 task+='\n\nCurrent assignment (supersedes old task scope): '+SPECIALISTS[role]
                                 task+=f"\nWorktree: {job['worktree']}\nHEAD: {job['base_sha']}\nSpec SHA256: {job['spec_sha256']}"
                                 task+='\nImplement only the current Spec. Do not modify official sources or files outside this worktree. Do not commit, push, merge, create subagents or change global settings. Report actual tests and limitations. Codex owns review and decisions. DSH owns context management; do not manually rewrite history.'
-                                result=sdk.prompt(record['session_id'],task)
+                                control_dir=out/'steering'
+                                def interventions(turn):
+                                    if not control_dir.exists(): return []
+                                    requests=[]
+                                    for control in sorted(control_dir.glob('*.request.json')):
+                                        item=json.loads(control.read_text(encoding='utf-8'))
+                                        receipt=control.with_suffix('.ack.json')
+                                        if receipt.exists(): continue
+                                        if item['session_id']!=record['session_id'] or item['job_id']!=job['job_id'] or item['turn']!=turn or item['base_sha']!=git(job['worktree'],'rev-parse','HEAD'):
+                                            save(receipt,{'accepted':False,'error':'Active job/turn/base changed'}); continue
+                                        if sha(item['spec_path'])!=item['spec_sha256']:
+                                            save(receipt,{'accepted':False,'error':'Steering Spec changed'}); continue
+                                        requests.append({'requestId':item['request_id'],'text':Path(item['spec_path']).read_text(encoding='utf-8'),'receipt':str(receipt)})
+                                    return requests
+                                def progress(turn):
+                                    status('running',output=str(out),active_turn=turn,native_steer=sdk.steering)
+                                result=sdk.prompt(record['session_id'],task,interventions=interventions,progress=progress)
                                 (out/'answer.md').write_text(result.pop('answer'),encoding='utf-8')
                                 result['workspace_after']=fingerprint(job['worktree'])
                                 result['base_after']=git(job['worktree'],'rev-parse','HEAD')
                             except Exception as error:
                                 result=dict(MODEL,status='failed',error=str(error),session_id=record['session_id'],review_required=True)
                             save(out/'result.json',result)
+                            for control in (out/'steering').glob('*.request.json'):
+                                receipt=control.with_suffix('.ack.json')
+                                if not receipt.exists(): save(receipt,{'accepted':False,'error':'Turn finished before steering receipt; not queued'})
                             if sdk.broken:
                                 sdk.close()
                                 raise RuntimeError('Native session interrupted; not reconstructing context')
@@ -325,7 +423,7 @@ def worker(pool, role):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('command',choices=['send','wait','status','stop','worker','fingerprint'])
+    p.add_argument('command',choices=['send','steer','wait','status','stop','worker','fingerprint'])
     p.add_argument('--pool',type=Path,default=Path('.workflow/dsh-sessions'))
     p.add_argument('--specialist',choices=SPECIALISTS)
     p.add_argument('--manifest',type=Path); p.add_argument('--output',type=Path)
@@ -338,6 +436,15 @@ def main():
     if args.command=='fingerprint':
         if not args.worktree: p.error('--worktree required')
         print(fingerprint(args.worktree)); return
+    if args.command=='steer':
+        if not args.manifest: p.error('--manifest required')
+        paths=request_steer(args.pool,json.loads(args.manifest.read_text(encoding='utf-8')))
+        print(json.dumps(paths),flush=True)
+        if args.wait:
+            result=wait_steer(paths,min(args.timeout,30))
+            print(json.dumps(result,ensure_ascii=False),flush=True)
+            if not result.get('accepted'): raise SystemExit(1)
+        return
     if args.command=='send':
         if not args.manifest or not args.output: p.error('--manifest and --output required')
         print(json.dumps(submit(args.pool,json.loads(args.manifest.read_text(encoding='utf-8')),args.output)),flush=True)
