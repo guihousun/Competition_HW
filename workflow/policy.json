@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "repository": "guihousun/Competition_HW",
+  "trusted_request_authors": ["guihousun"],
+  "monitor_interval_minutes": 30,
+  "executor": {"launcher": "dsh", "profile": "sdk", "provider": "deepseek-official", "model": "deepseek-flash", "reasoningEffort": "max", "task_timeout_seconds": 1200},
+  "concurrency": 1,
+  "max_implementation_attempts_per_revision": 2,
+  "allow_issue_replies": true,
+  "allow_candidate_prs": true,
+  "allow_reviewed_merge": true,
+  "merge_policy": "Codex review and required checks on current head; official behavior changes additionally require owner intranet PASS naming that exact head SHA",
+  "runtime_directory": ".workflow",
+  "notes": "Worktree/prompt restrictions are not an OS sandbox. No automatic raw log upload. No model fallback."
+}
