@@ -62,11 +62,14 @@ manifest格式：
 
 ```powershell
 python workflow/dsh_sessions.py fingerprint --worktree <absolute-worktree>
-python workflow/dsh_sessions.py send --manifest .workflow/issue-2/review-v2.json --output .workflow/issue-2/run-2
+python workflow/dsh_sessions.py send --manifest .workflow/issue-2/review-v2.json --output .workflow/issue-2/run-2 --wait
 python workflow/dsh_sessions.py status --specialist qa-tooling
 ```
 
-`send`立即返回并保留原生session，运行结果写入指定新目录的result.json、answer.md。
+默认使用 `send --wait`：调用进程持续等待本轮结果，将DSH的答案和状态作为工具结果返回后退出，
+原生session进程继续保留。Codex收到工具结果即可审核或在同session追问，不等30分钟调度。
+工具执行时间较长而返回进程/session ID时，Codex应继续等待该进程，不主动结束当前工作轮次。
+`send`不加 `--wait` 仍支持异步立即返回。两种方式均保存result.json、answer.md。
 status.json和started.json用于定位排队/在执行状态；主控轮询这些状态，不将无输出误判为已结束。
 再次调用send会复用同一专员session；有新文件变更、HEAD或Spec变化时拒绝旧授权指纹。
 多个排队任务在执行前各自复核指纹；前一任务修改了代码，后一旧Spec必须重新审核。
@@ -82,3 +85,16 @@ python workflow/dsh_sessions.py stop --specialist qa-tooling
 不自动重放可能已执行的任务。中途崩溃的started记录必须先人工审核，不能重复派单。
 
 这套机制是本机编排与版本校验，不是操作系统沙箱；仍由Codex审核改动路径、测试和实机证据。
+
+## 等待器中断或超时
+
+等待器默认1250秒超时，独立于DSH单次1200秒的执行期限；排队较长也可能使等待器先超时。
+等待超时返回退出码2，不取消DSH、不删除任务、不重复派单。恢复时等待原输出目录：
+
+```powershell
+python workflow/dsh_sessions.py wait --output .workflow/issue-2/run-2 --timeout 1250
+```
+
+结果成功返回退出码0，模型失败返回1；session身份不匹配、进程已退出等情况明确报错。
+等待器内部每0.2秒检查原子结果文件；这是当前工具调用及时返回，不是向已结束的Codex会话推送通知。
+30分钟heartbeat仍负责发现新Issue以及用户中断后续接未完成工作。

@@ -91,7 +91,7 @@ Issue关闭后停止新任务；正在运行的执行先核实再中止，不重
 5. 启动执行：
 
 ```powershell
-python workflow/dsh_sessions.py send --manifest .workflow/issue-1/manifest.json --output .workflow/issue-1/run-1
+python workflow/dsh_sessions.py send --manifest .workflow/issue-1/manifest.json --output .workflow/issue-1/run-1 --wait
 ```
 
 输出目录必须是全新的，避免覆盖证据。保留result.json、answer.md和本地stderr.log；原始stderr和模型过程

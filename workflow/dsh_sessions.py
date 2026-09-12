@@ -6,6 +6,7 @@ Never reconstruct history, silently replace a stopped session, or alter DSH sett
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import queue
@@ -230,6 +231,47 @@ def submit(pool, manifest, output):
     return {'output':str(output),'session_id':record['session_id'],'status':'queued'}
 
 
+def wait_result(pool, output, timeout=1250, interval=.2):
+    """Wait in this caller process, leaving the native session worker alive.
+
+    A waiter timeout neither cancels nor resubmits the existing job. Call wait
+    again with the same output directory to collect its eventual result.
+    """
+    if not math.isfinite(timeout) or not math.isfinite(interval) or timeout <= 0 or interval <= 0:
+        raise ValueError('Finite positive wait timeout/interval required')
+    output=Path(output).resolve()
+    request=json.loads((output/'request.json').read_text(encoding='utf-8'))
+    receipt=json.loads((output/'status.json').read_text(encoding='utf-8'))
+    expected=receipt['session_id']
+    if Path(request['output']).resolve() != output: raise ValueError('Output does not match submitted job')
+    role=request['specialist']
+    if role not in SPECIALISTS: raise ValueError('Unknown specialist')
+    slot=Path(pool).resolve()/role
+    deadline=time.monotonic()+timeout
+    while True:
+        if (output/'result.json').exists():
+            result=json.loads((output/'result.json').read_text(encoding='utf-8'))
+            if result.get('session_id') != expected: raise ValueError('Result belongs to another native session')
+            answer=output/'answer.md'
+            if result.get('status')=='completed' and not answer.exists():
+                raise RuntimeError('Completed result is missing its answer')
+            result.update(answer=answer.read_text(encoding='utf-8') if answer.exists() else '',
+                          output=str(output),waiter_pid=os.getpid())
+            return result
+        state=json.loads((slot/'status.json').read_text(encoding='utf-8'))
+        identity=json.loads((slot/'identity.json').read_text(encoding='utf-8'))
+        if identity['session_id'] != expected: raise RuntimeError('Native session changed while waiting')
+        if state['status'] in ('failed','stopped') and not (output/'result.json').exists():
+            raise RuntimeError('Worker stopped before result; inspect job, do not resubmit blindly')
+        pid=identity.get('worker_pid') or state.get('worker_pid')
+        if pid and not alive(pid) and not (output/'result.json').exists():
+            raise RuntimeError('Worker exited before result; inspect existing job')
+        remaining=deadline-time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError('Wait timed out; job/session left unchanged. Use wait with the same output directory.')
+        time.sleep(min(interval,remaining))
+
+
 def worker(pool, role):
     pool = Path(pool).resolve(); slot=pool/role
     record=json.loads((slot/'identity.json').read_text(encoding='utf-8'))
@@ -283,18 +325,33 @@ def worker(pool, role):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('command',choices=['send','status','stop','worker','fingerprint'])
+    p.add_argument('command',choices=['send','wait','status','stop','worker','fingerprint'])
     p.add_argument('--pool',type=Path,default=Path('.workflow/dsh-sessions'))
     p.add_argument('--specialist',choices=SPECIALISTS)
     p.add_argument('--manifest',type=Path); p.add_argument('--output',type=Path)
     p.add_argument('--worktree',type=Path)
+    p.add_argument('--wait',action='store_true',help='Keep this caller alive until the submitted turn returns')
+    p.add_argument('--timeout',type=float,default=1250,help='Waiter deadline only; does not cancel the DSH job')
     args=p.parse_args()
+    if (args.command=='wait' or args.wait) and (not math.isfinite(args.timeout) or args.timeout <= 0):
+        p.error('--timeout must be finite and positive')
     if args.command=='fingerprint':
         if not args.worktree: p.error('--worktree required')
         print(fingerprint(args.worktree)); return
     if args.command=='send':
         if not args.manifest or not args.output: p.error('--manifest and --output required')
-        print(json.dumps(submit(args.pool,json.loads(args.manifest.read_text(encoding='utf-8')),args.output))); return
+        print(json.dumps(submit(args.pool,json.loads(args.manifest.read_text(encoding='utf-8')),args.output)),flush=True)
+        if not args.wait: return
+    if args.command=='wait' or (args.command=='send' and args.wait):
+        if not args.output: p.error('--output required')
+        try:
+            result=wait_result(args.pool,args.output,args.timeout)
+            print(json.dumps(result,ensure_ascii=False),flush=True)
+            if result.get('status')!='completed': raise SystemExit(1)
+        except TimeoutError as error:
+            print(json.dumps({'status':'wait_timeout','error':str(error),'output':str(args.output)},ensure_ascii=False),flush=True)
+            raise SystemExit(2)
+        return
     if not args.specialist: p.error('--specialist required')
     if args.command=='worker': worker(args.pool,args.specialist)
     elif args.command=='stop':
