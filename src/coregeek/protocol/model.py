@@ -19,7 +19,7 @@ from typing import Any
 from ..game.grid import Pos
 from ..game.map import ENEMY_PREFIX, ROBOT_PREFIX, Map
 from ..game.roles import BaseRole, make
-from ..game.world import WEAPON_KINDS, Robot, Turn, Weapon
+from ..game.world import WEAPON_KINDS, Error, Robot, Turn, Weapon
 
 
 def load(payload: Any) -> Turn | None:
@@ -42,6 +42,8 @@ def load(payload: Any) -> Turn | None:
         task_points=_tasks(payload),
         phase_task=_text(payload, "phaseTask"),
         llm_resp=_text(payload, "llmResp"),
+        errors=_errors(payload),
+        action_results=_action_results(payload),
     )
 
 
@@ -204,6 +206,54 @@ def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
         pos = _pos(node, "taskPosition")
         if pos is not None and _int(node.get("coldDownRounds")) <= 0:
             out.append(pos)
+    return tuple(out)
+
+
+def _errors(payload: dict[str, Any]) -> tuple[Error, ...]:
+    """顶层 `errors` → 判题器本轮报的错（接口文档 §1.7）。
+
+    **`errorCode` 解析不出来 ⇒ 整条丢掉**，而降级方向在这里**不是"少做"**：
+    错误码是读日志时的第一眼信息，一条 `-1：xxx` 会被当成"未知错误 0"去查一个不存在的问题。
+    "本轮没有错误"本来就是天然的安全值（空元组），少认一条不影响任何指令 ——
+    与 `_gold` / `_size` / `_stone` 的"宁可少做"同一个方向，理由不同。
+
+    `description` 缺失给空串：码本身已经在报错那一行里了，不该因为这个字段缺就丢掉整条。
+    """
+    out = []
+    for node in _items(payload, "errors"):
+        if not isinstance(node, dict):
+            continue
+        code = _int(node.get("errorCode"))
+        if code < 0:
+            continue
+        text = node.get("description")
+        out.append(Error(code=code, description=text if isinstance(text, str) else ""))
+    return tuple(out)
+
+
+def _action_results(payload: dict[str, Any]) -> tuple[tuple[int, bool], ...]:
+    """`lastRoundRoleActionResults` → `((实体 id, 是否合法), …)`（接口文档 §1.1）。
+
+    key 在 JSON 里**是字符串**（JSON 对象的 key 本来就只能是字符串）：转不成 int 的那条丢掉
+    —— 留下会让日志报出一个不存在的 `-1` 号单位。
+
+    value **只认真正的布尔**，不写 `bool(ok)`：JSON 里的 `"false"` 是个**非空字符串**，
+    `bool("false") == True`，那一步会把"不合法"读成"合法"，比丢掉更糟 ——
+    而这份回执的全部价值就在于"谁没通过"。
+
+    顺序照 payload 原样。排序是**呈现**的事，交给 `app._log` 在打印时做。
+    """
+    raw = payload.get("lastRoundRoleActionResults")
+    if not isinstance(raw, dict):
+        return ()
+    out = []
+    for key, ok in raw.items():
+        if not isinstance(ok, bool):
+            continue
+        try:
+            out.append((int(key), ok))
+        except (TypeError, ValueError):
+            continue
     return tuple(out)
 
 

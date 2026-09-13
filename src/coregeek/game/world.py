@@ -63,6 +63,22 @@ class Weapon(NamedTuple):
     样例里没有这个字段 ⇒ `model._int` 给 -1 ⇒ `> 0` 为假 ⇒ 照打。"""
 
 
+class Error(NamedTuple):
+    """判题器本轮报的一条错（接口文档 §1.7 `Error`：`{errorCode, description}`）。
+
+    **不把 `errorCode` 翻译成文字**：那 5 个码（0 未知 / 1 任务超时 / 2 答案错误 /
+    3 网络错误 / 4 指令错误 / 5 LLM 额度超限，接口文档 L181-198）是**协议知识**，
+    写进代码就多出一份会跟文档漂移的副本；`description` 本来就是判题器的原话。
+    码的含义记在 `CLAUDE.md` 的领域事实里 —— 给人读日志用，不给代码用。
+    """
+
+    code: int
+    description: str
+
+    def __str__(self) -> str:
+        return f"{self.code}：{self.description}"
+
+
 class Robot(NamedTuple):
     """一台机器人（接口文档 §1.5.1）。**只留这一步用得上的**：打谁只看血量。
 
@@ -102,6 +118,19 @@ class Turn(NamedTuple):
     #: 判题器 LLM 的回复（接口文档 L31）= **我们要提交的答案原文**。
     #: 上一回合的响应里发过 `prompt` 才有值。
     llm_resp: str = ""
+    #: 判题器**本轮**报的错（接口文档 §1.7，顶层 `errors`）。空元组 = 本轮没报错。
+    #: **这是"任务为什么一直失败"唯一的答案来源**：errorCode 2 = 答案错误
+    #:（`submitAnswer` 交的不对或不完全对）、1 = 任务超时、4 = 指令错误、5 = LLM 额度超限。
+    #: 在它落地之前，判题器的判决**从来没有进过日志** —— 任务线失败只能看见"我们发了什么"，
+    #: 看不见"判题器怎么判的"。
+    errors: tuple[Error, ...] = ()
+    #: 上回合各实体的动作**合法性**回执（接口文档 §1.1 `lastRoundRoleActionResults`，
+    #: key 是角色/武器 id、value = 是否合法）。`errors` 答的是"**为什么**"，
+    #: 这份答的是"**哪一条**" —— 一条格式合法的指令照样可能**执行失败**（撞墙、打空），
+    #: 那类不计异常、`errors` 里什么都没有，只有这里会翻成 `false`。
+    #: **原样保留、不剪枝**（判题器给几条就留几条，含我们不操控的基地格）：
+    #: 少一条就是少一份证词，而过滤是**记录**该不该做的判断，不是解析该做的。
+    action_results: tuple[tuple[int, bool], ...] = ()
 
     @property
     def within(self) -> int:

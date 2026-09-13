@@ -29,10 +29,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. **每回合的复盘日志（`app._log`）写在 `try` 里面，别挪出去。** 日志代码再不起眼也是代码，
    `web/server.py` 的 `do_POST` **不接异常**（`server.py:22` 直接 `handler(...)`）—— 逃出去连接就断了，
    判题器那边是"响应超时"（红线第一条）。放进 `try` 里，最坏只是退化成空指令（丢一个回合，合法、不计异常）。
-   ⚠️ **stdout 有被写满的风险**：每回合 40 行 / **2262 字节**（第 12 步实测）→ 1300 回合 ≈ **2.9MB**；
-   Windows 管道缓冲 64KB ⇒ 判题器若**不读** stdout，约 **29 回合**后 `write` 阻塞 ⇒ 响应超时 ⇒ 直通红线。
-   **未实测**（本地没法验证判题器读不读）。改前是 33 行 / 1374 字节 / 约 48 回合 —— 第 12 步把阻塞点**提前**了，
-   但两种设计都是死，所以不构成不做的理由。**数字要跟 `app._log` 的 docstring 对齐，别凭记忆写。**
+   ⚠️ **stdout 有被写满的风险**：每回合 **42 行 / 2294 字节**（第 14 步实测，干净回合）、
+   **45 行 / 4832 字节**（任务在身，`phaseTask`/`llmResp` 都顶到 `LOG_TEXT_MAX`=400）→
+   1300 回合 ≈ 3MB ～ 6.3MB；Windows 管道缓冲 64KB ⇒ 判题器若**不读** stdout，
+   约 **26 回合**（无任务）/ **13 回合**（任务在身，那条任务日志**每回合都打**）后
+   `write` 阻塞 ⇒ 响应超时 ⇒ 直通红线。**未实测**（本地没法验证判题器读不读）。
+   第 12 步是 40 行 / 2262 字节 / 约 29 回合、第 14 步之前是 33 行 / 1374 字节 / 约 48 回合 ——
+   每加一块内容阻塞点就**提前**一次，但**每一种设计都是死**，所以不构成不做的理由；
+   真要救只能把 `LOG_TEXT_MAX` 调小或者干脆少打一块。
+   **数字要跟 `app._log` 的 docstring 对齐，别凭记忆写。**
 
 ## 架构
 
@@ -45,7 +50,7 @@ src/coregeek/
 ├── app.py            组装根：handle(bytes) + run(port) + 每回合复盘日志 `_log`。**红线所在**，异常一律退化成空指令
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
-│   ├── model.py      payload → Turn（容错解析）
+│   ├── model.py      payload → Turn（容错解析；含判题器回执 `errors` / `lastRoundRoleActionResults`）
 │   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack` / `acceptTask` / `submitAnswer`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）。⚠️ 后两个**没有 `targetPos`**，只有 `describe` 需要留心
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
@@ -55,9 +60,11 @@ src/coregeek/
     │                 + `render()`（**带坐标标尺与行号槽的整块**）+ `LEGEND`（图例，**由 `_NAMES` 生成**）。
     │                 **纯地形**：武器名册不在这里（见 world.py），第 10 步把 `Map.weapons` 删了
     ├── roles.py      §4.5.2 的 Pioneer / Worker（各带自己的 `stone` 块数）；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（round_no / map / roles / gold / weapons / robots / task_points / phase_task / llm_resp）
+    ├── world.py      Turn（round_no / map / roles / gold / weapons / robots / task_points
+    │                 / phase_task / llm_resp / errors / action_results）
     │                 + `within` / `is_day` / `day_rounds_left` / **`summary()`（3 行关键事实摘要）**
-    │                 + `Weapon`（id/kind/pos/attack_range/cooldown）与 `Robot`（pos/health）两个 NamedTuple
+    │                 + `Weapon`（id/kind/pos/attack_range/cooldown）、`Robot`（pos/health）、
+    │                 `Error`（code/description，**码不翻译成文字**）三个 NamedTuple
     └── planner.py    决策。**策略只写在这里**（白天：**开拓者去接任务**、工人建武器 → 采石砌墙；
                       夜里：**所有没被任务钉住的角色**回炮位，贴着就开火，目标 = 射程内**血最少**的机器人）
                       + `prompt_for(turn)` 产出响应顶层 `prompt`（任务线唯一的对外通道，**纯函数、无状态**）
@@ -113,7 +120,24 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
   - **开拓者一旦接任务就被钉死**：离开己方任务点周围一格内、超时、开拓者死亡、完成 —— 四种情形任务都结束（任务书 L377-380）。所以**它连夜里都不回炮位**，这一支写在 `plan()` 循环的**最前面**（全局最早的判据，与昼夜无关）。代价：**夜里三座炮只有两个人操，火力打折 1/3**，由任务积分覆盖。⚠️ **没有"离开后重新入环还能续上"这回事**。"周围一格"按**切比雪夫**（含对角，文档没写，与全局距离度量一致）。**"答案格式"文档完全没写**（只有"通过率 = 正确字段数 / 全量字段数" ⇒ 是多字段结构化答案），`TASK_PROMPT` 的措辞是唯一的杠杆 —— 本步最大的单点风险。
 - **`describe()` 读 `targetPos` 必须容缺**（第 11 步修）：它跑在 `app.handle` 的 `try` 里，硬读 `cmd["targetPos"][0]` 遇到 `acceptTask` / `submitAnswer`（**报文里没有这个字段**）会 `IndexError` ⇒ **整回合退化成空指令**。反向验证实证过：把它改回硬读，两条用例一起炸（含端到端那条）。**每加一个"无坐标"动作都要回头看一眼这里。**
 - **`render()` 的图例里 `1`-`4` 是「阵营」的任务点，不是「我方/敌方」**（第 12 步）：`1`/`2` 来自 `zones` 的 `challengerTaskPoint*`、`3`/`4` 来自 `defenderTaskPoint*`，两队**同时存在**。样例里 `teamOur.type == "challenger"` 两套恰好重合 ⇒ **写"我方任务点"是一个在样例上永远测不出来的错**。我方可接的那两个点是 `Turn.task_points`。**别把 `mapInfo.zones` 的这 4 个字符和 `playerTasks` 混起来。**
-- **复盘日志的体量与格式**（第 12 步）：`Turn.summary()` 的每个列表**必须有上界**（`SUMMARY_MAX_ITEMS`）—— `Turn.robots` 是逐回合全量、没有上界，日志长度不能是"数据相关的量"。摘要里 **-1 是"字段缺失"不是 0**（金币/回合号打成 `?`）。三块（摘要/图例/地图）拼成**一条**日志记录 —— `logging` 的时间戳只加在第一条物理行上，拆开地图那几十行就没时间戳了。
+- **判题器的回执有两个字段，"为什么"与"哪一条"分家**（第 14 步）：
+  - **`errors`（顶层，本轮）** —— `[{errorCode, description}]`，**这是"任务为什么一直失败"的唯一答案来源**。
+    码的含义（接口文档 L181-198）：**0 未知 / 1 任务超时 / 2 答案错误 / 3 网络错误 / 4 指令错误 / 5 LLM 额度超限**；
+    **2 专指 `submitAnswer` 交的答案"不正确或者不完全正确"**，**5 只在每个游戏日的 3 次额度用尽时出现**
+    （任务存续期间不占额度、也不报这个错）。**这段含义不写进代码** —— 写进去就是一份会跟文档漂移的第二真相，
+    码表只活在 `CLAUDE.md` 这一行里给读日志的人看。
+  - **`lastRoundRoleActionResults`（顶层，上回合）** —— `Map<int, boolean>`，key 是**角色/武器 id**、value = **动作合法性**。
+    它答的是"**哪一条**没通过"：撞墙、打空这类**执行失败**不计异常、`errors` 里一个字都没有，只有这里会翻 `false`。
+    解析时**原样保留**（含我们不操控的基地格），**排序是打印时才做的事**。
+    ⚠️ **`"false"` 是个非空字符串**，`bool("false") == True` —— 只能认真正的 JSON 布尔，猜一次就会把"不合法"读成"合法"。
+  - **`lastCmdResult` 我们永远用不上**：它只装 `executeCmd` 的结果，而 `executeCmd` 至今恒为 `""`
+    （接口文档 L33 原文："未发命令时为空字符串"）⇒ 读它等于读一个恒空的字段。**别再加了。**
+  - **`worldNews` 不读**：它是宝藏线（`summonTreasure`）的线索（样例那段的"石门需三钥"就是），与任务线无关。
+- **复盘日志的体量与格式**（第 12 步，第 14 步扩了触发条件）：`Turn.summary()` 的每个列表**必须有上界**（`SUMMARY_MAX_ITEMS`）—— `Turn.robots` 是逐回合全量、没有上界，日志长度不能是"数据相关的量"。摘要里 **-1 是"字段缺失"不是 0**（金币/回合号打成 `?`）。三块（摘要/图例/地图）拼成**一条**日志记录 —— `logging` 的时间戳只加在第一条物理行上，拆开地图那几十行就没时间戳了。
+  **记录数不固定，每条都"有事才吭声"**：局面、动作每回合各一条；**判题器报错 / 有实体未通过 / 任务线**三条各自只在有内容时出现（干净的白天回合 2 条，样例那种带假错误的局面 4 条）。`errors` 与 `action_results` 的空值是**天然的安全值**，所以正常局面一个字节都不花 —— 这是它们能与硬约束 5 共处的原因。
+  **截断必须留痕**：`_clip` 超长时打 `…（共 N 字）`。原来那版 `text[:120]` 是**静默**截断 —— 任务一长，日志里就是一段没头没尾的文字，看不出后面还有没有内容，于是"任务一直失败"根本无从查起（第 14 步就是被这个坑叫醒的）。**`LOG_TEXT_MAX` 的单位是字不是字节**（中文 1 字 = 3 字节，按字节限同一个数字在中英文题目下差 3 倍）。
+  **`prompt` 不打原文**：它就是 `TASK_PROMPT.format(task=任务原文)`，全文等于把任务抄第二遍，有意义的只是"这回合到底问没问"。
+  **任务行的触发条件带 `llm_resp`**：任务刚结束那一回合 `phase_task` 已经空了，而那是唯一一次能看见"判题器最后答了什么"的机会。
 
 ## 文档地图
 
@@ -130,11 +154,12 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
-`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策四类），**不建自研测试框架**：标准库 `unittest` 够用。
-进度见 `docs/design/code-task.md`（当前到第 13 步：**武器落点改成"后列 1 格 + 前排两角"**
-（`grid.weapon_sites` + `planner.WEAPONS_BY_SITE`，顺带修掉"先滤种类再 zip 落点"的错位）；
-第 12 步是地图可视化，第 11 步是开拓者任务线，第 10 步是夜里操炮防守，
-第 9 步是每回合复盘日志）——**别照记忆里的进度走**。
+`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**113 条**。
+进度见 `docs/design/code-task.md`（当前到第 14 步：**把判题器的回执记进日志**
+（`Turn.errors` / `Turn.action_results`，`app._log` 加"判题器报错 / 上回合未通过 / 任务线"三块，
+并修掉任务原文的**静默** 120 字截断）；
+第 13 步是武器落点"后列 1 格 + 前排两角"，第 12 步是地图可视化，第 11 步是开拓者任务线，
+第 10 步是夜里操炮防守，第 9 步是每回合复盘日志）——**别照记忆里的进度走**。
 
 **常用命令**：
 

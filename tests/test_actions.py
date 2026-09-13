@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coregeek.app import handle  # noqa: E402
+from coregeek.app import LOG_TEXT_MAX, handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
     base_cells,
@@ -42,7 +42,7 @@ from coregeek.game.planner import (  # noqa: E402
     prompt_for,
 )
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
+from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
 
 SAMPLE = Path(__file__).resolve().parents[1] / "docs" / "request.txt"
@@ -226,19 +226,25 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
     def test_every_round_logs_the_map_then_the_actions(self):
-        """每回合的复盘日志：**先局面、后动作**（用户指定，顺序是重点）。
+        """每回合的复盘日志：**先局面、再动作、再判题器的回执**（顺序是重点）。
 
         判题器是黑盒、只给我们这一个视角，出事故时得能看见当时的局面 ——
         只看见一条 `move` 是没法回答"为什么走了这一格"的。
-        `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那两条。
+        `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那几条。
 
-        **恰好两条记录**：三块内容（摘要 / 图例 / 地图）拼成**一条**，
-        `logging` 的时间戳前缀只加在第一条物理行上 —— 拆成三条的话那几十行地图
-        就没有时间戳了，而按时间翻日志时正是这些行要定位。
+        **局面那三块拼成一条记录**（摘要 / 图例 / 地图）：`logging` 的时间戳前缀
+        只加在第一条物理行上 —— 拆成三条的话那几十行地图就没有时间戳了，
+        而按时间翻日志时正是这些行要定位。
+
+        ⚠️ **样例自带一条假错误与两条假未通过**（`request.txt` 的 `errors` 是
+        `[{"errorCode": 2, "description": "xxx"}]`、`lastRoundRoleActionResults` 里
+        10010/10030 是 false）。`CLAUDE.md` 已声明**别把样例的这两个值当真实信号读**，
+        但**这里的记录条数是真实断言**：回执那两条各自"有事才吭声"，
+        所以样例这种局面是 4 条，而一个干净回合只有 2 条（下面那条用例）。
         """
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(SAMPLE.read_bytes())
-        head, acts = (r.getMessage() for r in caught.records)
+        head, acts, errors, failed = (r.getMessage() for r in caught.records)
         lines = head.splitlines()
         #: 摘要 3 行 + 图例 3 行 + 地图 34 行（41×32 的图，行自上而下 = y 由大到小）
         self.assertEqual(len(lines), 40)
@@ -250,6 +256,79 @@ class HandleTest(unittest.TestCase):
         #: 标尺两行 + 行号槽 —— 图从第 7 行开始
         self.assertTrue(lines[8].startswith("31 │ "), lines[8])
         self.assertEqual(acts, "动作：10010 move(6,22)；10012 move(9,17)；10011 move(9,13)")
+        self.assertEqual(errors, "判题器报错：2：xxx")
+        #: **按 id 排序**（不照 payload 的顺序）：`{10010: false, 10030: false}` 在样例里
+        #: 恰好就是升序，靠样例**测不出**这一条 —— 所以下面那条解析用例专门打乱一次顺序。
+        self.assertEqual(failed, "上回合未通过：10010 10030")
+
+    def test_a_clean_round_logs_only_the_map_and_the_actions(self):
+        """回执那两条**有事才吭声** —— 干净回合一条都不该多打（日志字节是有预算的）。
+
+        与上面那条用例合起来才钉得住"触发条件"：只测样例的话，全打也算过。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        self.assertEqual(len(caught.records), 2, [r.getMessage()[:40] for r in caught.records])
+
+    def test_the_failed_ids_are_sorted_not_payload_ordered(self):
+        """未通过那几个 id **按升序打**，不照 payload 里的顺序。
+
+        样例那份恰好就是升序，所以上面那条用例**测不出**这一点 —— 而一旦顺序随
+        payload 走，同一种局面会打出两种日志，翻日志时对不上号（`_defend` 里
+        "并列按 id 排"是同一条理由：先后不能取决于报文给的顺序）。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {"10030": False, "10011": True, "10010": False}
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        self.assertEqual(caught.records[-1].getMessage(), "上回合未通过：10010 10030")
+
+    def test_the_task_line_shows_the_whole_text_and_marks_any_truncation(self):
+        """任务日志**必须能看见全文** —— 这正是第 14 步的来由。
+
+        原来那版是 `phase_task[:120]` 的**静默**截断：任务一长，日志里就是一段没头没尾的
+        文字，看不出后面还有没有内容，于是"任务一直失败"根本无从查起。
+        现在：短文本原样打全；超长时截到 `LOG_TEXT_MAX` 并**明说被截了、原文共多少字**。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        raw["phaseTask"] = "短题目"
+        raw["llmResp"] = ""  # 判题器还没回话 ⇒ 这一回合会提问
+
+        def line_after_sending(**overrides):
+            raw.update(overrides)
+            with self.assertLogs("coregeek.app", level="INFO") as caught:
+                self._handle(json.dumps(raw).encode("utf-8"))
+            return caught.records[-1].getMessage()
+
+        line = line_after_sending()
+        self.assertIn("任务：短题目", line)
+        self.assertIn("提交：无", line)
+        #: `prompt` **不打原文**（它就是任务原文再抄一遍）：只报"这一回合问没问"
+        self.assertIn("提问：有", line)
+
+        #: 判题器答了 ⇒ 提交那一格才有内容，而且**不再提问**（省 LLM 额度）
+        line = line_after_sending(llmResp="答案")
+        self.assertIn("提交：答案", line)
+        self.assertIn("提问：无", line)
+
+        long_text = "题" * (LOG_TEXT_MAX + 7)
+        line = line_after_sending(phaseTask=long_text)
+        self.assertIn("题" * LOG_TEXT_MAX, line)
+        self.assertNotIn("题" * (LOG_TEXT_MAX + 1), line)
+        self.assertIn(f"共 {LOG_TEXT_MAX + 7} 字", line)
+
+        #: **任务刚结束的那一回合**是唯一一次能看见"判题器最后答了什么"的机会
+        #: （`phase_task` 已经空了）—— 所以触发条件里带着 `llm_resp`，不能只判任务。
+        line = line_after_sending(phaseTask="")
+        self.assertIn("任务：无", line)
+        self.assertIn("提交：答案", line)
 
     def test_attack_through_the_real_payload_path(self):
         """端到端**唯一**一条：从真实 payload 到线上报文。
@@ -1408,6 +1487,65 @@ class TaskParseTest(unittest.TestCase):
         `llm_resp` 空 ⇒ 不提交答案（空答案可能被判成"字段缺失"）。"""
         turn = self._load(phaseTask={"text": "x"}, llmResp=42)
         self.assertEqual((turn.phase_task, turn.llm_resp), ("", ""))
+
+
+class JudgeReceiptTest(unittest.TestCase):
+    """顶层 `errors` / `lastRoundRoleActionResults` → `Turn.errors` / `Turn.action_results`。
+
+    **这两个字段是"任务为什么一直失败"唯一的答案来源**，而第 14 步之前它们
+    一个都没被读进来过 —— 判题器的判决从来没进过日志。
+    """
+
+    def _load(self, **top) -> Turn:
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw.update(top)
+        turn = model.load(raw)
+        self.assertIsNotNone(turn)
+        return turn
+
+    def test_errors_come_from_the_payload(self):
+        """逐字读原始样例：`[{"errorCode": 2, "description": "xxx"}]`。
+
+        ⚠️ **样例那条是假错误**（`CLAUDE.md`：`request.txt` 是手工示意数据）——
+        这里钉的是**解析路径通不通**，不是"真的一直在报答案错误"。
+        """
+        self.assertEqual(self._load().errors, (Error(code=2, description="xxx"),))
+
+    def test_a_missing_description_still_keeps_the_code(self):
+        """码是读日志时的第一眼信息 —— 缺 `description` 不该把整条丢掉。"""
+        turn = self._load(errors=[{"errorCode": 5}])
+        self.assertEqual(turn.errors, (Error(code=5, description=""),))
+
+    def test_an_error_without_a_code_is_dropped(self):
+        """降级方向**不是"少做"**：一条 `-1：xxx` 会被当成"未知错误 0"去查一个不存在的问题，
+        比不打印更糟。同理 `errors` 本身缺失 ⇒ 空元组（"本轮没报错"是天然的安全值）。"""
+        self.assertEqual(self._load(errors=[{"description": "x"}, "junk"]).errors, ())
+        self.assertEqual(self._load(errors="boom").errors, ())
+        self.assertEqual(self._load(errors=None).errors, ())
+
+    def test_action_results_keep_both_verdicts(self):
+        """**两种判决都要留**（`false` 才是信号，`true` 是它的参照）—— 只留 `false` 的话，
+        "判题器压根没提这个单位" 与 "这个单位通过了" 就分不出来了。"""
+        turn = self._load(lastRoundRoleActionResults={"10011": True, "10010": False})
+        self.assertEqual(dict(turn.action_results), {10011: True, 10010: False})
+
+    def test_action_results_only_trust_real_booleans(self):
+        """JSON 里的 `"false"` 是个**非空字符串** ⇒ `bool("false") == True`。
+
+        那一步会把"不合法"读成"合法"，而这份回执的全部价值就在于"谁没通过" ——
+        所以宁可丢掉也不猜（接口文档 §1.1 声明 value 就是 boolean）。
+        """
+        turn = self._load(lastRoundRoleActionResults={"10011": "false", "10012": True, "10010": 0})
+        self.assertEqual(turn.action_results, ((10012, True),))
+
+    def test_an_unparsable_key_is_dropped(self):
+        """key 是 JSON 字符串：转不成 int 的那条丢掉，别在日志里报出一个不存在的 `-1` 号单位。"""
+        turn = self._load(lastRoundRoleActionResults={"x": False, "10010": False})
+        self.assertEqual(turn.action_results, ((10010, False),))
+
+    def test_a_missing_action_results_map_is_empty(self):
+        self.assertEqual(self._load(lastRoundRoleActionResults=None).action_results, ())
+        self.assertEqual(self._load(lastRoundRoleActionResults=[1, 2]).action_results, ())
 
 
 class TaskAcceptTest(unittest.TestCase):
