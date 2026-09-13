@@ -6,20 +6,13 @@
 from typing import NamedTuple
 
 from .grid import Pos
-
-#: 会移动的角色。建筑（基地/武器/围墙）是障碍物，不是可操控单位（接口文档 §1.3.1）。
-MOVERS = ("worker", "pioneer")
-
-
-class Role(NamedTuple):
-    id: int
-    pos: Pos
-    role_type: str
+from .roles import BaseRole
 
 
 class Turn(NamedTuple):
     round_no: int
-    roles: tuple[Role, ...]
+    #: **只含角色**（开拓者/工人）。建筑不是可操控单位，见 `roles.make`
+    roles: tuple[BaseRole, ...]
     #: 阻挡移动的格子：双方建筑与角色 + 中立单位/任务点/矿区 + 机器人（任务书 L85）
     blocked: frozenset[Pos]
     #: 我方基地**左上角**坐标。基地 4 格都在 `blocked` 里

@@ -9,7 +9,8 @@
 from typing import Any
 
 from ..game.grid import Pos, base_cells
-from ..game.world import Role, Turn
+from ..game.roles import BaseRole, make
+from ..game.world import Turn
 
 #: 阻挡移动的格子来源（任务书 L85）。`teamEnemy` 只含**进入视野**的单位，
 #: 但基地与围墙是全图可见的，所以敌方那一路拿到的至少是这两类。
@@ -26,8 +27,12 @@ def load(payload: Any) -> Turn | None:
     if not isinstance(payload, dict):
         return None
 
-    roles = tuple(r for r in (_role(n) for n in _items(payload, "teamOur", "roles")) if r)
-    station = next((r.pos for r in roles if r.role_type == "station"), None)
+    units = _items(payload, "teamOur", "roles")
+    characters = tuple(c for c in (_character(n) for n in units) if c)
+
+    # 建筑不在 characters 里（见 roles.make），所以基地要单独扫一遍原始单位列表。
+    # 它同时喂给 blocked（base_cells）和寻路目标，扫漏了角色会一头撞进基地。
+    station = _station(units)
 
     blocked: set[Pos] = set()
     for path in _BLOCKING:
@@ -37,7 +42,7 @@ def load(payload: Any) -> Turn | None:
 
     return Turn(
         round_no=_int(payload.get("roundNo")),
-        roles=roles,
+        roles=characters,
         blocked=frozenset(blocked),
         station=station,
     )
@@ -68,10 +73,22 @@ def _pos(node: Any) -> Pos | None:
     return Pos(x, y) if x >= 0 and y >= 0 else None
 
 
-def _role(node: Any) -> Role | None:
+def _character(node: Any) -> BaseRole | None:
+    """单位 → 角色。建筑（station/gatling/railgun/rocket/wall）返回 None。
+
+    先确认 `role_type` 是 `str` 再交给 `make()` —— 那里用 `dict.get`，不可哈希的 key 会抛。
+    """
     if not isinstance(node, dict):
         return None
     pos, role_id, role_type = _pos(node), _int(node.get("id")), node.get("roleType")
     if pos is None or role_id < 0 or not isinstance(role_type, str):
         return None
-    return Role(role_id, pos, role_type)
+    return make(role_id, pos, role_type)
+
+
+def _station(units: list[Any]) -> Pos | None:
+    """我方基地的**左上角**（接口文档 §1.3.1 注）。"""
+    for node in units:
+        if isinstance(node, dict) and node.get("roleType") == "station":
+            return _pos(node)
+    return None

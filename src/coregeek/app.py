@@ -32,9 +32,9 @@ def handle(raw: bytes) -> bytes:
         turn = model.load(payload)
         if turn is None:
             raise ValueError("payload 不是 JSON 对象")
-        commands = planner.plan(turn)
+        cmds = planner.plan(turn)
         body = json.dumps(
-            {"roleCommandMap": commands, "prompt": "", "executeCmd": ""},
+            {"roleCommandMap": cmds, "prompt": "", "executeCmd": ""},
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -42,5 +42,5 @@ def handle(raw: bytes) -> bytes:
         LOGGER.warning("fallback 空指令：%s", exc)
         return EMPTY_BODY
 
-    LOGGER.info("round %s → %d 条指令", turn.round_no, len(commands))
+    LOGGER.info("round %s → %d 条指令", turn.round_no, len(cmds))
     return body

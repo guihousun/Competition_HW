@@ -203,3 +203,117 @@ Intent 类型体系，而现在**只有 `move` 一个动作**——按本项目�
 ### 下一步
 
 同上：夜间 `attack`。
+
+---
+
+## 第 3 步：Action 基类（创建即校验）+ 两个角色类
+
+### 目标
+
+把任务书 §4.4 表**最右列**（可用角色）变成可执行的东西，让**角色无权执行的动作根本构造不出来**。
+
+动机是红线：§8 规定单队累计 5 次异常即整场不再被调度，而 §8 的注解把"指令错误"收窄为
+「字段缺失」或「动作码非法」——**它没说"角色没权限"算异常，也没说算"指令执行失败"（不计）**。
+口径不明，就只能让它发不出去。
+
+形态由用户选定：**建 `BaseAction` 基类 + "创建时必须传 `roleType` 并在创建时校验"的规范，
+但只建已实现动作的子类**（当前只有 `Move`），不预建 11 个空壳。
+
+> ⚠️ **必须说清的局限**：`Move` 对全部角色合法，所以**这一步的校验在真实运行中拦不到任何东西**。
+> 交付的是机制、两个角色类、和把机制钉死的用例。第一次真正拦住东西要等第一个受限动作
+> （`build`/`collect`）落地。如实记下来，免得日后误以为这层已经在保护我们。
+
+> 📌 这个设计与被推倒的上一版里的 `domain/intent.py` **同构**（`Intent` 基类 + 12 子类，
+> 权限校验在旧版 `protocol/commands.py::validate()` 里也有一份）。那次推倒的理由是**整体**
+> 过度设计，不单是这些类；而且那套校验是**一次真实出局事故之后补的**（开拓者被派去 `collect`，
+> 每天吃一个异常）。所以重建这层有正当理由——折中方案就是"要那个规范、不要 11 个空壳"。
+
+### 产出
+
+| 文件 | 为什么存在 |
+|---|---|
+| `src/coregeek/protocol/actions.py`（新增） | `BaseAction` + `Move`。**唯一写线上格式的地方**（`commands.py` 并进来了）。创建即校验 |
+| `src/coregeek/game/roles.py`（新增） | §4.5.2 的 `Pioneer` / `Worker` + `make()` 工厂。**只认角色，建筑返回 None** |
+| `src/coregeek/protocol/commands.py`（**删除**） | `move()` 的编码并入 `Move.to_wire()`。留着就是**两处写线上格式** |
+| `src/coregeek/game/world.py` | 删 `Role` NamedTuple 与 `MOVERS`；`Turn.roles` 改为 `tuple[BaseRole, ...]` |
+| `src/coregeek/protocol/model.py` | 角色走 `roles.make()`（只收角色）；**`station` 改为单独扫原始单位列表** |
+| `src/coregeek/game/planner.py` | per-role 循环里构造 `Move`；`PermissionError` → **丢那一条 + 告警**，不连坐 |
+| `src/coregeek/app.py` | 局部变量 `commands` → `cmds`（模块没了，名字不再贴切） |
+| `tests/test_actions.py`（新增） | 权限与报文的 8 条用例。**`tests/` 首次出现** |
+
+两个刻意的取舍：
+
+- **放 `protocol/` 而不是 `game/`**：Action 的全部意义就是"要发出去的那条指令"，让它自己
+  编码才能守住"只有 `protocol/` 知道线上字段名"。代价是 §4.4 的权限表（游戏规则）也在这个文件里。
+- **角色类不带 `can()`**：校验已经在 Action 构造时做了，角色侧再放一份就是**第二份真相**。
+  也不带 §4.5.2 的 HP(200/220) 与背包容量(40格/100格)——`payload` 里的 `health`/`backpack`
+  才是权威的**当前值**，把上限写进类常量只会制造矛盾。等真有决策读血量/背包时从 payload 读。
+
+**最易改错的一处**：`station` 原本是从角色列表里推导的，而角色列表现在只剩角色了。
+改成单独扫原始 `teamOur.roles` 找 `roleType == "station"`——它同时喂给 `blocked`（`base_cells`）
+和寻路目标，扫漏了角色会一头撞进基地。
+
+### 不做什么
+
+- ❌ **11 个未实现动作的子类**（`Attack`/`Sell`/`Buy`/`Build`/`Remove`/`Collect`/`AcceptTask`/
+  `SubmitAnswer`/`SummonTreasure`/`Use`/`Drop`）。每个落地时补 `code`/`roles`/参数/`to_wire` 四样
+- ❌ §4.5.2 的 HP 与背包容量（没有使用者；且 payload 里的当前值才是权威）
+- ❌ 昼夜（时间窗）限制：`attack` 仅黑夜、`build` 仅白天是**另一个维度**（看 `roundNo` 而非
+  `roleType`），随 `attack` 一起做
+- ❌ 给建筑建模（§4.5.1）：建筑继续以原始形态参与 `blocked`
+- ❌ 解析 `errors` / `lastRoundRoleActionResults`（判题器给我们的**唯一反馈通道**，也是"距红线
+  还剩几条命"的唯一度量）——本地触发不到，加了没有可断言的验证。**触发条件见"下一步"**
+
+### 验证
+
+**1. 单测**（8 条全过）
+
+```bash
+PYTHONUTF8=1 py -m unittest discover -s tests -v
+# Ran 8 tests in 0.058s / OK
+```
+
+| 用例 | 钉住什么 |
+|---|---|
+| `test_wire_shape_is_the_flat_record` | 报文形状 |
+| `test_move_is_allowed_for_both_roles` | "全部"角色没被误拦 |
+| `test_roles_classvar_rejects_unauthorized_role` | **`BaseAction` 校验机制本身**（测试内定义 `roles = WORKER` 的子类） |
+| `test_buildings_cannot_act` | 基地/武器/围墙产生不了指令（**真实可触发**） |
+| `test_typo_role_type_is_rejected` | 角色类型拼错 → 造不出动作 |
+| `test_sample_payload_produces_three_moves` | 端到端没被改坏 |
+| `test_bad_json_falls_back_to_empty_commands` | 红线兜底仍有效 |
+| `test_turn_holds_characters_only_and_still_finds_station` | 解析拆分正确（`station == (10,24)`，角色恰好 3 个） |
+
+**2. 逐字节回归**（行为不变 —— 这一步唯一的行为变化只发生在本地走不到的越权分支上）
+
+```bash
+bash run.sh 18086
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18086/
+```
+与重构前**逐字节一致（213 字节）**，三个 `move`，坐标 `(6,22)` / `(9,17)` / `(9,13)`；
+服务端日志 `round 85 → 3 条指令`（**闸门对合法指令零副作用**）。
+
+**3. 红线两条退化路径**（起真服务打出来的）
+
+| 请求 | 响应 | 日志 |
+|---|---|---|
+| 坏 JSON `{oops` | `{"roleCommandMap":{},"prompt":"","executeCmd":""}` | `fallback 空指令：...` |
+| 空 body | 同上（三个字段都在） | `round -1 → 0 条指令` |
+
+> 起真服务这一步不能省 —— 本项目两次事故（`collections.abc.AbstractSet` 在 3.13 被移除、
+> Windows 控制台 GBK 乱码）都只有真的把服务跑起来才暴露。
+
+### 下一步
+
+**第一个受限动作（`collect` 或 `build`）落地那一步，必须同时做三件事，缺一不可**：
+
+1. 加子类（`roles = WORKER`，构造即校验）——**这一步才第一次真正拦住东西**；
+2. 读 `errors` 与 `lastRoundRoleActionResults` 进日志（`handle` 是纯函数，**不做跨回合计数**）；
+3. 补一条"开拓者构造 `Collect` 抛异常"的用例。
+
+其余按原计划：夜间 `attack` —— 角色↔武器配对 + 站到操控位 + 按武器等级给 `targetPos`。
+
+> ⚠️ **留给 `attack` 的警告**：`roleCommandMap` 的 key 是**武器 id**，而"谁能攻击"要看
+> `controllerId`。动作改成"自己编码"之后，key 由**调用点**决定（`cmds[str(weapon.id)] = ...`），
+> 这个不变量**没有第二个地方能替你守住**。`docs/response.txt` 里
+> `"10020": {"action":"attack","controllerId":"10010"}` 就是官方证据。

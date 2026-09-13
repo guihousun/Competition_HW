@@ -20,7 +20,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 注意区分：**指令非法**（计异常）vs **指令执行失败**（移动碰撞、攻击落点无目标 → 该条标记无效，**不计**异常）。
    - 响应三个顶层字段必须**永远都在**（官方 demo 只发了 `roleCommandMap`，别照抄这个）。
 3. **动作有角色权限**（任务书 §4.4 表的**最右一列**）：`build` / `remove` / `collect` 仅**工人**；`acceptTask` / `submitAnswer` / `summonTreasure` 仅**开拓者**；其余动作全部角色可用。
-   - 这类 bug 的特征是**本地全绿**（格式完全合法，只有判题器会说"不"），而 `collect` 被误发给开拓者会每天吃一个异常——**红线只有 5 次**。所以权限闸门要放在指令出口处再拦一道，不能只靠 planner 自觉。
+   - 闸门在 **Action 的构造函数**里（`protocol/actions.py`）：`roleType` 不对就抛 `PermissionError`，**非法动作根本造不出来**。planner 侧接住它、丢那一条并告警，不连坐同回合其他角色（抛出去会变成"每回合空指令 → 全队冻结一整局"，现象与 `main3.py` 改名事故一样难排查）。
+   - 这类 bug 的特征是**本地全绿**（格式完全合法，只有判题器会说"不"），而 `collect` 被误发给开拓者会每天吃一个异常——**红线只有 5 次**。所以每加一个受限动作，都要在 `tests/test_actions.py` 补一条对应用例。
 4. 判题器侧超时：建连 > 10s 或响应 > 5s。
 
 ## 架构
@@ -35,10 +36,11 @@ src/coregeek/
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
 │   ├── model.py      payload → Turn（容错解析）
-│   └── commands.py   指令编码（合法性/权限闸门以后加在这里）
-└── game/             策略
+│   └── actions.py    BaseAction + 各动作。**创建即校验**，唯一写线上格式的地方
+└── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / step_toward
-    ├── world.py      Role / Turn
+    ├── roles.py      §4.5.2 的 Pioneer / Worker；`make()` 只认角色，建筑返回 None
+    ├── world.py      Turn
     └── planner.py    决策。**策略只写在这里**
 ```
 
@@ -46,14 +48,14 @@ src/coregeek/
 
 ```
 app → web / protocol / game        protocol → game
-game/planner → protocol/commands   ← 唯一一条"由内往外"，只走指令编码
+game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指令编码
 ```
 
 - 三件事：**怎么收（web）/ 报文长什么样（protocol）/ 打什么（game）**，`app` 把它们接起来。**没有第四件事就不加第四个包**，也不提前建空目录。
 - `app.py` 与 `planner.py` 的分工是**红线 vs 策略**：`app` 管"永远回得出合法报文"，`planner` 管"该做什么"。别让策略代码有机会破坏报文格式。
 - `roleCommandMap` 的 key 用**字符串**（JSON 对象的 key 本来就是字符串）。
 - 目前 `handle(raw: bytes) -> bytes` 是纯函数、无状态。**加任何跨回合状态之前先想清楚**是否需要，以及失败时的退化路径。
-- 领域对象只带**当前步骤真正用到**的字段（`Role` 目前只有 id/pos/roleType）。加字段之前先问这一步用不用得上。
+- 领域对象只带**当前步骤真正用到**的字段（`BaseRole` 目前只有 id/pos/type_name）。加字段之前先问这一步用不用得上——**尤其别把 §4.5.2 的 HP/背包上限写成类常量**，payload 里的 `health`/`backpack` 才是权威的当前值。
 - **不加分层 import-lint**：现在一共 3 个子包，违规肉眼可见；上一版为此写的 ast 检查属于过度设计。
 
 ## 会影响策略正确性的领域事实
@@ -82,5 +84,16 @@ game/planner → protocol/commands   ← 唯一一条"由内往外"，只走指�
 
 ## 当前工作区状态
 
-本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本仍在 HEAD 里，`git show HEAD:<path>` 可取回）。
+本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
+`tests/` 只有 `test_actions.py` 一个文件（权限用例），**不建自研测试框架**：标准库 `unittest` 够用。
+
+**常用命令**：
+
+```bash
+bash run.sh 18085                                          # 起服务（自动挑 python3/py 并验版本）
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
+PYTHONUTF8=1 py -m unittest discover -s tests -v           # 跑用例；不加 PYTHONUTF8 中文会乱码
+```
+
+本地 **`python` 是 3.7.1**（Anaconda），必须用 `py`（3.13）；`run.sh` 已处理这个坑。
