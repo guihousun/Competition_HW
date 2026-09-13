@@ -17,7 +17,8 @@
    升级/维修券才用得上），种类与落点按 `WEAPONS_BY_SITE` 一一对应（按射程配）。
 3. **采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
    另外**必须在晚上到来前将墙建好，注意计算回合数**"。攒几块不写死，按**白天还剩的回合数**
-   现算（见 `_stones_to_mine`）。墙砌在**面向机器人进攻的方向**（保护基地），背面留缺口。
+   现算（见 `_stones_to_mine`）。墙只砌**正面列 + 上下两行共 14 格**，
+   **背面整列留成一道永远不砌的门**（`grid.wall_cells`），且**不把人关起来**（见 `_trapped`）。
    **墙砌完之后不再闲置**：转去采**收购价最高**的矿（见 `_mine_spare_ore` / `_pick_ore`）
    —— 「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」。顺序不能反：
    墙只吃石头，先挑最贵的铜就永远砌不成墙。价目取自载荷 `vendorShopList`（`Turn.vendor_prices`），
@@ -57,7 +58,7 @@ from collections.abc import Iterator, Mapping, Set
 from typing import Any
 
 from ..protocol import actions  # 唯一一条"由内往外"的依赖：指令只能经 Action 产出
-from .grid import Pos, step_toward, wall_cells, weapon_sites
+from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
 from .map import STONE
 from .roles import BaseRole, Pioneer, Worker
 from .world import Turn, Weapon
@@ -117,6 +118,11 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     taken: set[Pos] = set()
     budget = turn.gold
     slots = _slots(turn)
+    #: 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"，`_trapped` 与 `step_outside` 都天然放行）
+    box = box_cells(turn.map.station) if turn.map.station else frozenset()
+    #: **砌满墙就会被关在盒子里的人**。两处都用它：闸门 (2) 在这里按人放行，
+    #: 闸门 (1)（"这一回合一格都不砌"）随 `gated` 传给 `_build_walls` —— 一次算、两个用户。
+    leaving = _trapped(turn, box)
 
     for role in turn.roles:
         # **服任务中的开拓者：钉死。** 离开己方任务点周围一格内任务立即作废（任务书 L379），
@@ -127,6 +133,19 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
         if isinstance(role, Pioneer) and turn.phase_task:
             _answer_task(role, turn, cmds)
             continue
+
+        # **要被关住的人先出来**（用户给的建墙原则："不能把工人关起来，如果可能出现，
+        # 需要工人先走出来"）。判据是 `leaving`（砌满墙就走不出去的人），
+        # 但**迈哪一步按"现在"的障碍算** —— 墙还没砌满，缺口就是出路。
+        # 两套障碍的差恰好是那 14 格里**还没砌的**部分，这正是它管用的原因：
+        # 若这里也按"假设砌满"算，`step_outside` 必然返回 None，这一支就永远是个空转。
+        # `claimed` 也要算进去：两个"要走出来的人"占着同一条缺口时会被指到**同一格**，
+        # 撞上任务书 §4.5.4 的目标点争夺 —— 两个人**都不动**（与建武器处同一个理由）。
+        if turn.is_day and role.id in leaving:
+            step = step_outside(role.pos, box, turn.map.blocked | claimed, turn.map.size)
+            if step is not None and _emit(cmds, role, actions.Move, step):
+                claimed.add(step)
+                continue
 
         if not turn.is_day:
             # 夜里**还没被钉住**的角色回炮位（§4.4 的 attack 可用角色就是"全部"）
@@ -159,7 +178,7 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
                     continue
             # 建不了 / 走不到 → 落到下面，别杵着
 
-        _build_walls(role, turn, cmds, claimed, sites)
+        _build_walls(role, turn, cmds, claimed, sites, gated=bool(leaving))
 
     return cmds
 
@@ -389,24 +408,38 @@ def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) ->
 
 # ── 白天：采石 → 砌墙 ────────────────────────────────────────────────
 def _build_walls(
-    role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
+    role: Worker,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    sites: set[Pos],
+    gated: bool = False,
 ) -> None:
     """白天：先攒石头，再把墙砌到优先级最高的那一格上；**砌完了就去采最值钱的矿**。
 
     每回合独立判定，**不存任何跨回合状态** —— 所以矿采没了、墙被别人砌了、
     白天快过完了，下一回合都能自动跟着变。
 
+    `gated` = **这一回合不许砌**（用户那把闸门：砌下去会把谁关在墙里，见 `_trapped`）。
+    ⚠️ **"不许砌"和"砌完了"是两件事，这里必须分开**（第 17 步评审揪出来的）：
+    两者都会让 `free` 空掉，但含义相反 —— 后者该转去采矿，前者**墙还没砌完**，
+    去采最值钱的矿就是跑到地图另一头、几十回合回不来（门一开就该回来接着砌）。
+    所以闸门挡住的这一支**原地待命**（空指令合法且不计异常）。
+
     用户策略指导那条的后半句在这里兑现（「手里面保持能建造墙的石头量就行，
     然后选择价格最高的矿」）：
     **"保持够砌墙的量"这一半本来就有** —— `_stones_to_mine` 拿"还差几格墙"当上限；
-    补上的是"然后"：16 格砌完之后工人原本**原地闲置**，现在转去采矿。
+    补上的是"然后"：14 格砌完之后工人原本**原地闲置**，现在转去采矿。
     """
     free = [c for c in _ring(turn) if c not in sites]
     if not free:
         # 墙砌满了。手里剩的石头留给第二天补墙（**没有转移物品的指令**，给不了别人），
         # 人不再闲着 —— 白天不采，夜里就只是站在炮位上。
+        # ⚠️ 这一支**与闸门无关**：环上已经无可砌，采矿不会关住谁（搬石头不砌墙）。
         _mine_spare_ore(role, turn, cmds, claimed, sites)
         return
+    if gated:
+        return  # 还砌得动，但这回合砌下去就把人关住了 ⇒ 一格都不砌（待命，**不是**"砌完了"）
     target = free[0]  # `_ring` 已按建造优先级排好
     #: **只认石矿**：墙只吃石头（`build` 围墙要求背包里有石头），铁/铜再多也砌不了墙。
     mine = _pick_ore(role.pos, turn.map.ores, turn.vendor_prices, want_stone=True)
@@ -424,6 +457,21 @@ def _build_walls(
         # **认领要发生在动身之前**（与建武器同一条做法）：等到砌完再登记的话，
         # 两个工人会在同一回合里都奔着 `target` 去，白走一路、还多花一块石头。
         sites.add(target)
+        if role.pos == target:
+            # ⚠️ **站在目标格上就先挪开一格，这一回合不砌**（第 17 步端到端实测的死循环）。
+            # 人站在墙上时那一格在网格里**只剩"worker"**（`model._entries` 把单位铺在最后，
+            # 墙被盖掉了）⇒ "这格砌过没有"在这里**看不出来**，而 `_ring` 的"自己人算路过"
+            # 又会把它复活成候选 ⇒ 每回合对着同一格 `build`（`dist == 0` 也是合法建造位），
+            # **永远轮不到下一格**：实测 40 回合卡在 12/14，最后 4 回合反复砌同一格，
+            # 石头白花，而且 `free` 永不为空 ⇒ 连"砌完了去采矿"那一支都进不去。
+            # 挪开一格就破了它，两个方向都收敛：
+            #   · 那格**砌过** ⇒ 没人站着它就现形（⇒ 出候选表），下一回合去砌真正的下一格；
+            #   · 那格**没砌过** ⇒ 下一回合从邻格稳稳砌上（`dist == 1`，本来就是标准站法）。
+            # 代价是这种局面白花 1 回合。它只在"人正好走到将来某一格墙的顶上"时出现
+            # —— `_step` 的 `avoid`（建造格）已经一直在防这件事，这里补的是它管不到的那一步：
+            # 人**已经**站在那儿了（新认领的目标可能正好压在脚下）。
+            _step_aside(role, turn, cmds, claimed, sites)
+            return
         if role.pos.dist(target) <= 1:
             # 与建武器同一条契约：`step_toward` 停在贴着目标的一格，那正是 `build` 的站位
             if _emit(cmds, role, actions.Build, WALL, target):
@@ -431,6 +479,56 @@ def _build_walls(
         elif _step(role, target, turn, cmds, claimed, sites):
             return
     # 手里没石头、又没时间采了 ⇒ 什么都不发。空指令合法且不计异常（CLAUDE.md 硬约束 2）
+
+
+def _walled(turn: Turn) -> frozenset[Pos]:
+    """"**假设墙砌满**"时的障碍集：现已挡路的**照原样** + 全部 14 格墙。
+
+    闸门问的是**将来** —— 现在走得出去不代表砌完还走得出去，而 `remove`（拆墙）**没实现**：
+    等最后一格砌上才发现，人就整场出不来了。这是用户那句"如果**可能出现**"的原意。
+
+    ⚠️ **自己人站的那格也算障碍**（不去掉），这与 `_ring` 里"自己人算路过"的做法**故意相反**：
+    两处的取舍不同 —— `_ring` 问"这一格要不要砌"（把路过的人排掉，否则两个工人对着改目标
+    来回踱步，第 8 步实测过），这里问"**会不会有人出不来**"。一个同事正堵在最后那道缺口上，
+    那一刻他**真的**堵着；把他当路过而放行砌墙，砌下去就把里面的人封死了（`remove` 缺席 ⇒
+    不可逆）。代价是这一回合宁可晚砌 —— 闸门本来就该往"**别砌**"那一侧倒
+    （与"整面墙一起判、全有或全无"是同一个取向），而且人一走开下一回合自动恢复。
+    """
+    station = turn.map.station
+    if station is None:
+        return frozenset()
+    return turn.map.blocked | set(wall_cells(station, turn.map.size[0]))
+
+
+def _trapped(turn: Turn, box: frozenset[Pos]) -> frozenset[str]:
+    """**砌满这一圈墙之后就走不出去了的**我方角色 id。没有这样的角色 ⇒ 空集。
+
+    ⚠️ **判据是"整面墙"，不是"某一格"**：障碍集里永远有全部 14 格墙（候选格本就属于
+    `wall_cells`），所以"哪一格会把人关住"与"哪一格"**无关** —— 真发生就是整面墙一起发生。
+    所以调用方拿到的是一个布尔量（该不该砌），而不是一串"可以砌的格子"：两者正交。
+
+    **要的是 id 而不只是"有没有"**：配套的另一半（闸门 (2)，`plan` 的循环里）得知道
+    **谁**先出来，逐角色问 `step_outside` 才对"站在自己那格上的人"天然正确
+    （BFS 从 pos 出发、只挑邻居），一个前提都不用额外写。
+
+    **打不打得着？实测过，会打着**（不是纯摆设）：`box_cells` 那个 36 格的盒子里虽然有
+    12 格武器环、且门那 6 格没有建筑，但**盒内只要有两个堵点就能封出一小片死区**
+    （基地 `(10,24)` + 用户选定的炮位 + 14 格墙，把盒内 15 格空地逐一试过：
+    单点封不出死区，两点的组合有 15 组封得出，死区 1~4 格）。堵点可以是机器人，
+    也可以是**我们自己人**。`remove` 缺席时"关住"不可逆，所以留着它。
+    """
+    station = turn.map.station
+    if station is None or not box:
+        return frozenset()  # 没基地 ⇒ 既没有盒子也没有围墙，谁都关不住
+    walled = _walled(turn)
+    return frozenset(
+        r.id
+        for r in turn.roles
+        # ⚠️ **`r.pos in box` 这一半不能省**：`step_outside` 对"本来就在外面"和"走不出去"
+        # 都返回 None（那是它的契约），不看这一半就会把**所有在盒外干活的角色**判成被关住
+        # —— 于是墙一格都不砌、整套用例全红。第 17 步第一版正是这么栽的。
+        if r.pos in box and step_outside(r.pos, box, walled, turn.map.size) is None
+    )
 
 
 def _ring(turn: Turn) -> tuple[Pos, ...]:
@@ -442,6 +540,10 @@ def _ring(turn: Turn) -> tuple[Pos, ...]:
     若把它从表里划掉，另一个工人的 `free[0]` 就整体后移一格、掉头去砌更靠后的墙；
     等它一挪窝，目标又变回来，两人对着改目标来回踱步 —— **实测死循环：一格不砌，
     两个工人两格之间转到天黑**。已砌的墙 / 中立元素 / 机器人照旧排除（那些不是"路过"）。
+
+    这里**只管"哪些格能砌"**（几何 + 占用）。"这一回合还砌不砌"是另一件事，
+    判据在 `_trapped`，由 `_build_walls` 的 `gated` 挡 —— 两者正交，混在一起就会
+    把"闸门挡住了"误当成"砌完了"（第 17 步评审揪出来的那个岔子）。
     """
     station = turn.map.station
     if station is None:
@@ -639,6 +741,36 @@ def _step(
         return False
     claimed.add(step)
     return True
+
+
+def _step_aside(
+    role: BaseRole,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    avoid: Set[Pos] = frozenset(),
+) -> bool:
+    """从**脚下**这一格挪到任一可走的邻格；八面都走不了（或指令发不出去）返回 False。
+
+    `_step` 管的是"朝某个目标走一格"，这里**没有目标** —— 只求离开脚下这一格：
+    它唯一的用途是 `_build_walls` 里"站在目标格上"那一支（理由写在那里）。
+    所以也不走 `step_toward`：它的契约是"贴着 goal 即到"，对**任意**邻格都返回 None。
+
+    `avoid` 与 `_step` 同义（工人传**本回合认领的建造格**与炮位）：迈到那上面等于把
+    "先挪开"变成"换个格子接着站"。八个方向走不了 ⇒ 待命 —— 与别处一样退化成空指令
+    （空指令合法且不计异常，而那种局面里连原地不动都是安全的）。
+    """
+    walk = turn.map.blocked | claimed | avoid
+    width, height = turn.map.size
+    for d in STEPS:  # 方向顺序无所谓：任何一个可走的邻格都等价（挪开一步就够了）
+        cell = Pos(role.pos.x + d.x, role.pos.y + d.y)
+        if cell in walk or not (0 <= cell.x < width and 0 <= cell.y < height):
+            continue
+        if not _emit(cmds, role, actions.Move, cell):
+            return False
+        claimed.add(cell)
+        return True
+    return False
 
 
 def _emit(

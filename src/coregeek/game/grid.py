@@ -61,12 +61,72 @@ def step_toward(pos: Pos, goal: Pos, blocked: Set[Pos], size: tuple[int, int]) -
     return None
 
 
+def step_outside(pos: Pos, box: Set[Pos], blocked: Set[Pos], size: tuple[int, int]) -> Pos | None:
+    """朝 `box` **外面**走一格（BFS 最短路）；`pos` 已经在外面、或压根走不出去，返回 None。
+
+    与 `step_toward` 同构，唯一的差别是**终止条件**：那里的目标是"贴着某一格"，
+    这里是"**迈出这个区域**"，也就是 `nxt not in box`。返回值同样是**从 pos 迈出的第一步**。
+
+    **为什么不能拿 `step_toward` 顶替**（两条都是硬理由）：
+    它只认**一个** goal，而"盒子外面"有上千个可能落点；更要命的是它的契约是"贴着 goal 即到"
+    （`pos.dist(goal) <= 1 ⇒ None`）—— 拿它测"出不出得去"时，一个**正贴着门口、
+    而门那格恰好被堵住**的角色会被误判成"到不了"，那是个会静默失效的假阴性。
+
+    `box` 是**格子集合**而不是坐标矩形：调用方要问的是"这个人在不在即将被墙围起来的那片区域里"，
+    那片区域由 `box_cells` 给（形状变了只需要改那一处）。
+
+    ⚠️ "**本来就在外面**"与"**走不出去**"合流成一个 `None` 是**有意的**（调用方只关心
+    "这一步迈不迈得出去"），代价是**"谁在盒子里面"必须由调用方自己筛**：
+    拿它统计"有多少人被关住"时漏掉 `pos in box`，会把所有在盒外干活的角色都算进去
+    —— `planner._trapped` 在那里踩过。
+    """
+    if pos not in box:
+        return None  # 本来就在外面
+    width, height = size
+    # 队列里存 `(当前格, 从 pos 迈出的第一步)`；pos 自己还没有"第一步"，故为 None
+    queue: deque[tuple[Pos, Pos | None]] = deque([(pos, None)])
+    seen = {pos}
+    while queue:
+        cell, first = queue.popleft()
+        for step in STEPS:
+            nxt = Pos(cell.x + step.x, cell.y + step.y)
+            if nxt in seen or nxt in blocked:
+                continue
+            if not (0 <= nxt.x < width and 0 <= nxt.y < height):
+                continue
+            seen.add(nxt)
+            # 与 `step_toward` 同一个坑：用新变量，别把上一格的第一步漏给下一个邻居
+            nxt_first = nxt if first is None else first
+            if nxt not in box:
+                return nxt_first
+            queue.append((nxt, nxt_first))
+    return None
+
+
 def base_cells(top_left: Pos) -> set[Pos]:
     """基地的 2×2 四格（接口文档 §1.3.1 注）。
 
     `pos` 给的是**左上角** ⇒ x 向右增、**y 向下减**。只标一格会让角色一头撞进基地里。
     """
     return {Pos(top_left.x + dx, top_left.y - dy) for dx in (0, 1) for dy in (0, 1)}
+
+
+def box_cells(base: Pos) -> frozenset[Pos]:
+    """整个防御盒子：**36 格** = 基地 4 + 武器环 12 + 围墙环 20。
+
+    即 `x ∈ [bx-2, bx+3]` × `y ∈ [by-3, by+2]`（蓝色 6×6 外圈的**实心**那一块），
+    `base_cells` / `weapon_cells` / `wall_cells` 三者的并集正好是它。
+
+    ⚠️ **不取 `width`**：盒子在基地两侧各外扩 2，左右半场算出来是**同一个矩形**
+    （与 `wall_cells` 的正面列 / 背面列相反 —— 那两条边是镜像的，盒子的边界不是）。
+
+    存在的唯一理由是给"**会不会被墙关住**"提供"里 / 外"的判据（`step_outside` 的 `box`）。
+    """
+    return frozenset(
+        Pos(x, y)
+        for x in range(base.x - 2, base.x + 4)
+        for y in range(base.y - 3, base.y + 3)
+    )
 
 
 def weapon_cells(base: Pos) -> tuple[Pos, ...]:
@@ -108,21 +168,26 @@ def _front_back(base: Pos, width: int) -> tuple[int, int, int]:
 
 
 def wall_cells(base: Pos, width: int) -> tuple[Pos, ...]:
-    """可砌围墙的 **16 格，按建造优先级排**（背面列中间留 4 格缺口）。
+    """可砌围墙的 **14 格，按建造优先级排**（**背面整列一格都不砌**）。
 
     环 = 6×6 边框（`build_map.png` 的蓝圈），即 `x ∈ [bx-2, bx+3]`、`y ∈ [by-3, by+2]`
     里既不属于基地 4 格、也不属于武器环 12 格的格子 —— 再往外那一圈与武器环**零重叠**。
+    那 20 格里砌 14 格：**正面列 6 + 顶行 4 + 底行 4**。
 
     正面/背面由 `_front_back` 给：左半基地 ⇒ **正面（迎着机器人）是 `x = bx+3`、
     背面是 `x = bx-2`**；右半镜像。顺序 = 正面列（从基地纵深中心向两端铺，正对基地的先砌）
-    → 顶行 → 底行 → 背面两角。
+    → 顶行 → 底行。
 
-    **背面列中间 4 格留空**（用户选定）：环一闭合，工人就进出不得了 —— 既采不了矿，
-    也回不到环内操炮。留一段 4 格宽的口子，正面仍完整；钻进来的机器人紧贴着武器列
-    （`x = bx-1`）与基地，等于直接撞在火力上。
+    **背面整列 6 格（含上下两角）留成一道永远不砌的"门"**（用户第 17 步选定，此前只留中间 4 格
+    缺口、两角照砌）：环一闭合工人就进出不得了 —— 既采不了矿，也回不到环内操炮，
+    而 `remove`（拆墙）**至今没实现**，关进去就是整场出不来。正面仍完整；
+    钻进来的机器人紧贴着武器列（`x = bx-1`）与基地，等于直接撞在火力上。
+
+    ⚠️ **门那 6 格里没有任何建筑**（后列炮位 `(bx-1, by-1)` 在**武器环**的后列，不在这一列），
+    所以能堵门的只有**单位**。这是"会不会把人关住"几乎打不着的原因 —— 详见 `planner._ring`。
     """
-    d, far, near = _front_back(base, width)
-    front_x, back_x = far + 2 * d, near - 2 * d
+    d, far, _ = _front_back(base, width)
+    front_x = far + 2 * d
     ys = list(range(base.y - 3, base.y + 3))  # 6 格
     xs = list(range(base.x - 2, base.x + 4))  # 6 格
     #: 基地纵深中心的 2 倍 —— 用整数比大小，避免浮点
@@ -133,7 +198,6 @@ def wall_cells(base: Pos, width: int) -> tuple[Pos, ...]:
     # `xs[1:-1]` 正好排除两端的正面列与背面列；`reversed` = 从正面往背面铺
     for row_y in (ys[-1], ys[0]):
         order += [Pos(x, row_y) for x in reversed(xs[1:-1])]
-    order += [Pos(back_x, y) for y in (ys[0], ys[-1])]  # 背面只剩两角，中间是缺口
     return tuple(order)
 
 
