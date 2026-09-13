@@ -34,12 +34,11 @@ from coregeek.game.map import (  # noqa: E402
     _char,
 )
 from coregeek.game.planner import (  # noqa: E402
-    TASK_PROMPT,
     TIME_MARGIN,
     WALL,
     WEAPONS_BY_SITE,
     plan,
-    prompt_for,
+    task_channel,
 )
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
@@ -378,32 +377,146 @@ class HandleTest(unittest.TestCase):
         )
 
     def test_the_task_loop_through_handle(self):
-        """端到端：`phaseTask` 非空 ⇒ 开拓者被钉死；`llmResp` 一回来就**原样**交上去。
+        """端到端走完整条**工具调用回路** —— 问 → 跑命令 → 回灌结果 → 交答案。
 
-        这条同时钉住三处只有整条链路才看得见的接线：`model` 读对了顶层字段、
-        `app` 把 `prompt` 装进了响应、开拓者服任务期间**一步不动**（动了任务就作废）。
+        这条是把整台状态机钉死的**唯一**一条：它同时钉住 `model` 读对了三个顶层字段
+        （`phaseTask` / `llmResp` / `lastCmdResult`）、`app` 把 `prompt` 与 `executeCmd`
+        **分头**装进了响应、以及开拓者服任务期间**一步不动**（动了任务就作废）。
+        单看某一条判据的用例都测不出"三个字段的接线到底通没通"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1  # 白天：开拓者本来在正常地去任务点，现在应当被钉住
         raw["phaseTask"] = "请查询北京天气"
+        raw["lastCmdResult"] = ""
+        raw["errors"] = []  # 样例自带一条**假**错误（`CLAUDE.md` 已声明别当真实信号读）
         for node in raw["teamOur"]["roles"]:
             if node["id"] == 10011:
                 node["pos"] = {"x": 13, "y": 13}  # 贴着任务点1 (14,14)
 
-        # ① 判题器还没回话 ⇒ 提问，开拓者一步不动
-        raw["llmResp"] = ""
-        body = self._handle(json.dumps(raw).encode("utf-8"))
-        self.assertIn("请查询北京天气", body["prompt"])
-        self.assertNotIn("10011", body["roleCommandMap"], "服任务期间绝不能移动")
+        def ask() -> dict:
+            body = self._handle(json.dumps(raw).encode("utf-8"))
+            #: 开拓者被钉死在任务点上：它可以 `submitAnswer`，但**一步都不能挪**
+            #: （离开任务点周围一格任务立刻作废，任务书 L379）
+            pioneer = body["roleCommandMap"].get("10011")
+            self.assertNotEqual(pioneer and pioneer["action"], "move", pioneer)
+            return body
 
-        # ② 答案回来了 ⇒ 原样提交，而且不再提问
+        # ① 判题器还没回话 ⇒ 提问，而且这一轮不发命令
+        raw["llmResp"] = ""
+        body = ask()
+        self.assertIn("请查询北京天气", body["prompt"])
+        self.assertEqual(body["executeCmd"], "")
+
+        # ② LLM 要一条命令 ⇒ 命令进 `executeCmd`，而**不是**当答案交上去
+        raw["llmResp"] = "<tool>python -c \"print(1+1)\"</tool>"
+        body = ask()
+        self.assertEqual(body["executeCmd"], 'python -c "print(1+1)"')
+        self.assertEqual(body["prompt"], "")
+
+        # ③ 沙盒交作业 ⇒ 结果**全文**回灌，这一轮绝不重复发命令
+        raw["lastCmdResult"] = "[exitCode:0]\n2"
+        body = ask()
+        self.assertIn("[exitCode:0]\n2", body["prompt"])
+        self.assertEqual(body["executeCmd"], "")
+
+        # ④ LLM 给出答案 ⇒ 原样提交，而且不再提问
+        #    （清掉 `lastCmdResult`：文档说"未发命令时为空字符串"，上一轮我们没发命令）
+        raw["lastCmdResult"] = ""
         raw["llmResp"] = "晴 26 度"
-        body = self._handle(json.dumps(raw).encode("utf-8"))
+        body = ask()
         self.assertEqual(
             body["roleCommandMap"]["10011"],
             {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
         )
-        self.assertEqual(body["prompt"], "")
+        self.assertEqual((body["prompt"], body["executeCmd"]), ("", ""))
+
+        # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，**同时照旧提交**
+        #    （两条通道独立：提问在推进，而按接口文档 L140 取"通过率最高"、重交零成本）
+        raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
+        body = ask()
+        self.assertIn("晴 26 度", body["prompt"])
+        self.assertIn("被判定为不正确", body["prompt"])
+        self.assertEqual(body["executeCmd"], "")
+        self.assertEqual(
+            body["roleCommandMap"]["10011"]["action"], "submitAnswer", "提交不该被提问挤掉"
+        )
+
+    def test_the_sandbox_line_only_appears_with_a_result(self):
+        """沙盒行**只在真有回执时出现** —— 「没发命令就一定是空串」是文档写死的
+        （接口文档 L33），所以"有沙盒行" ⟺ "上一轮真跑过一条命令"，这个对账关系要守住。
+
+        反例（提问回合、发命令那一回合）**一条都不该多打**：日志字节是有预算的，
+        而这条线每回合都可能触发。⚠️ 发命令那一回合之所以不打，是因为命令原文已经在
+        上面任务行的"提交："里了 —— 同一回合、同一条字符串，抄第二遍是纯浪费。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        raw["phaseTask"] = "请查询北京天气"
+        raw["llmResp"] = "<tool>ls</tool>"
+        raw["lastCmdResult"] = ""
+
+        def messages() -> list[str]:
+            with self.assertLogs("coregeek.app", level="INFO") as caught:
+                self._handle(json.dumps(raw).encode("utf-8"))
+            return [r.getMessage() for r in caught.records]
+
+        #: 发命令那一回合：任务行说明了一切，没有沙盒行
+        self.assertFalse([m for m in messages() if m.startswith("沙盒：")])
+
+        #: 有回执那一回合：多出**一条**沙盒行，且回执原文在里面
+        raw["llmResp"] = ""
+        raw["lastCmdResult"] = "[exitCode:0]\nhello"
+        sandbox = [m for m in messages() if m.startswith("沙盒：")]
+        self.assertEqual(len(sandbox), 1, sandbox)
+        self.assertIn("hello", sandbox[0])
+
+    def test_a_long_sandbox_result_marks_the_truncation(self):
+        """沙盒输出可能到 64KB（接口文档 L33），日志这边必须截断**并留痕**。
+
+        回灌给 LLM 的是全文，这里才是截断 —— 两个下游要的东西不同：一个要正确性、
+        一个要人眼看得下。`…（共 N 字）` 那句把"命令没输出"与"命令吐了 64KB、
+        你只看得到头"分开，后者正是最该立刻看见的事故形态。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        raw["phaseTask"] = "请查询北京天气"
+        raw["llmResp"] = ""
+        raw["lastCmdResult"] = "[exitCode:0]\n" + "y" * 9000
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        sandbox = [r.getMessage() for r in caught.records if r.getMessage().startswith("沙盒：")]
+        self.assertEqual(len(sandbox), 1)
+        self.assertIn(f"（共 {len(raw['lastCmdResult'])} 字）", sandbox[0])
+        self.assertLess(len(sandbox[0]), 1000, "截断之后这行必须是有界的")
+
+    def test_the_worst_round_stays_under_the_budget(self):
+        """**硬约束 5 的直接守卫**：最坏的一回合，日志总量不得超预算。
+
+        原来只数行数（42/45 行），行数**测不出字节**——而管道缓冲 64KB 是字节。
+        三个文本字段同时顶到 `LOG_TEXT_MAX`（中文 1 字 = 3 字节）就是最坏局面：
+        任务原文（判题器给的）、LLM 回复、沙盒输出 —— **实测 6002 字节**
+        （干净回合 2294 + 三个 400 字的中文块 × 1200）。上限取 6500 而不是 6002：
+        它要抓的是**结构性的膨胀**（少了一个 `_clip`、或者又加进来一个顶格的大字段），
+        不是几个标签的字节抖动 —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节），
+        真到 6002 这个数是中文任务原文 + 中文 LLM 回复 + 中文沙盒输出同时出现。
+
+        数字与 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5 三处一致。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        raw["phaseTask"] = "题" * LOG_TEXT_MAX
+        raw["llmResp"] = "答" * LOG_TEXT_MAX
+        raw["lastCmdResult"] = "出" * LOG_TEXT_MAX
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        total = sum(len(r.getMessage().encode("utf-8")) for r in caught.records)
+        self.assertLess(total, 6500, f"最坏回合 {total} 字节，超了硬约束 5 的预算")
 
 
 class ParseTest(unittest.TestCase):
@@ -1649,10 +1762,22 @@ class TaskParseTest(unittest.TestCase):
         self.assertEqual(turn.llm_resp, "晴 26 度")
 
     def test_a_non_string_phase_task_degrades_to_empty(self):
-        """空串是这两个字段天然的安全值：`phase_task` 空 ⇒ 开拓者回落到"去任务点"；
-        `llm_resp` 空 ⇒ 不提交答案（空答案可能被判成"字段缺失"）。"""
-        turn = self._load(phaseTask={"text": "x"}, llmResp=42)
-        self.assertEqual((turn.phase_task, turn.llm_resp), ("", ""))
+        """空串是这三个字段天然的安全值：`phase_task` 空 ⇒ 开拓者回落到"去任务点"、
+        且任务线一次都不碰沙盒；`llm_resp` 空 ⇒ 不提交答案（空答案可能被判成"字段缺失"）；
+        `cmd_result` 空 ⇒ 没有回执可回灌。"""
+        turn = self._load(phaseTask={"text": "x"}, llmResp=42, lastCmdResult=["y"])
+        self.assertEqual((turn.phase_task, turn.llm_resp, turn.cmd_result), ("", "", ""))
+
+    def test_the_sandbox_result_comes_from_the_payload(self):
+        """顶层 `lastCmdResult` 逐字读进来 —— 它是任务线唯一能看见沙盒的窗口。
+
+        **不解析那行状态**（`[exitCode:N]` / `[TIMEOUT]` / `[JUDGER_ERROR]`）：
+        非空即原文回灌，让 LLM 自己读 —— 解析它就是又多一份会跟判题器漂移的真相。
+        字段缺失 ⇒ 空串（文档 L33："未发命令时为空字符串"）。
+        """
+        turn = self._load(lastCmdResult="[exitCode:0]\n晴 26 度")
+        self.assertEqual(turn.cmd_result, "[exitCode:0]\n晴 26 度")
+        self.assertEqual(self._load(lastCmdResult=None).cmd_result, "")
 
 
 class JudgeReceiptTest(unittest.TestCase):
@@ -1833,48 +1958,247 @@ class TaskHoldTest(unittest.TestCase):
         self.assertEqual(cmds["10020"]["controllerId"], "1")
 
 
-class TaskAnswerTest(unittest.TestCase):
-    """应答闭环：**无状态** —— `llmResp` 一有就原样交，没有就把题目发出去问。"""
+class TaskChannelTest(unittest.TestCase):
+    """任务线的对外通道：`task_channel` 的五条判据 + `submitAnswer` 那条独立的线。
+
+    **两条通道是独立的**：`task_channel` 产出响应顶层的 `prompt` / `executeCmd`
+    （跟判题器的 LLM 与它的沙盒打交道），`plan` 里的 `_answer_task` 产出 `submitAnswer`
+    （跟判分打交道）—— 各自判各自的，不共享判据。所以"这一轮在提问"与"这一轮在提交"
+    **可以同时成立**，那是有利的（接口文档 L140 取"通过率最高"，重交零成本）。
+    """
 
     DAY = 1
     TASK = "请查询北京天气"
+    ANSWER = "晴 26 度"
+    #: 回灌那两段的**分界符**，用来断言"该出现 / 不该出现"。
+    #: 拿"分界符"而不是"某句话"当判据：模板正文里也有一句"沙盒的执行结果原文"，
+    #: 用普通词当判据会把自己绊倒；而 `【` 整个模板里一个都没有，**只属于注入的两段**
+    #: —— 沙盒输出与 LLM 回复都是任意文本，没有分界符档着就分不清哪段是题目。
+    RESULT_MARK = "【上一条命令的执行结果"
+    RETRY_MARK = "【你上一次提交的答案"
 
-    def _turn(self, phase_task: str = "", llm_resp: str = "") -> Turn:
+    def _turn(
+        self,
+        phase_task: str = "",
+        llm_resp: str = "",
+        cmd_result: str = "",
+        errors: tuple[Error, ...] = (),
+        roles: tuple[BaseRole, ...] = (Pioneer(10011, Pos(13, 13)),),
+    ) -> Turn:
         return Turn(
             round_no=self.DAY,
             map=Map((41, 32), {Pos(14, 14): "challengerTaskPoint1"}),
-            roles=(Pioneer(10011, Pos(13, 13)),),
+            roles=roles,
             gold=0,
             phase_task=phase_task,
             llm_resp=llm_resp,
+            cmd_result=cmd_result,
+            errors=errors,
             task_points=(Pos(14, 14),),
         )
 
     def test_the_question_carries_the_task_text(self):
-        """问题就是**任务原文**，外面只套了一层"直接给答案、不要解释"。"""
-        prompt = prompt_for(self._turn(self.TASK))
-        self.assertIn(self.TASK, prompt)
-        self.assertEqual(prompt, TASK_PROMPT.format(task=self.TASK))
+        """第一次提问 = **任务原文 + 怎么要命令 + 什么时候直接作答**，不带任何回灌。
 
-    def test_no_question_without_a_task(self):
-        """**不在任务里一次都不发**：每游戏日只有 3 次 LLM 额度（接口文档 L198），
-        那是任务线之外的资源，一分不花。"""
-        self.assertEqual(prompt_for(self._turn()), "")
+        断言用 `assertNotIn` 而不是"等于 `TASK_PROMPT.format(...)`"：后者是同义反复
+        （模板与断言一起改，永远过得去），而"第一次问不该有任何回灌"才是真要求。
+        """
+        prompt, execute = task_channel(self._turn(self.TASK))
+        self.assertIn(self.TASK, prompt)
+        self.assertEqual(execute, "")
+        self.assertNotIn(self.RESULT_MARK, prompt)
+        self.assertNotIn(self.RETRY_MARK, prompt)
+
+    def test_nothing_is_sent_without_a_task(self):
+        """**不在任务里一次都不发**（`prompt` 也不行、`executeCmd` 更不行）。
+
+        `prompt`：每游戏日只有 3 次 LLM 额度（接口文档 L198），那是任务线之外的资源。
+        `executeCmd`：接口文档 L208 写明沙盒"**仅在执行任务期间才能使用**"。
+        """
+        for llm_resp in ("", self.ANSWER, "<tool>rm -rf /</tool>"):
+            with self.subTest(llm_resp=llm_resp):
+                self.assertEqual(
+                    task_channel(self._turn(llm_resp=llm_resp)), ("", ""),
+                )
+
+    def test_a_dead_pioneer_never_touches_the_sandbox(self):
+        """**开拓者阵亡 ⇒ 两个通道都停**，哪怕 `phaseTask` 还没清干净。
+
+        这条闸门是**显式补的**，理由是一个对称性缺口：`submitAnswer` 走 `roleCommandMap`，
+        而阵亡的人根本不在 `model._character` 给出的 `roles` 里 ⇒ `_answer_task`
+        **天生**就进不来；但 `executeCmd` 是**响应顶层字段**，不经过角色循环、也不经过
+        `Action` 的权限闸门 ⇒ 那条白送的闸门对它**完全不存在**。
+        同一件事在一条通道上有闸门、在另一条上没有，迟早出事。
+        """
+        self.assertEqual(
+            task_channel(self._turn(self.TASK, "<tool>ls</tool>", roles=())), ("", ""),
+        )
 
     def test_no_question_once_the_llm_answered(self):
-        """同一个 prompt 问两遍不会得到更好的答案，没必要反复烧。"""
-        self.assertEqual(prompt_for(self._turn(self.TASK, "晴 26 度")), "")
+        """回复是答案 ⇒ 不再提问（同一个 prompt 问两遍不会得到更好的答案）。"""
+        self.assertEqual(task_channel(self._turn(self.TASK, self.ANSWER)), ("", ""))
+
+    def test_the_command_comes_out_of_the_tool_markup(self):
+        """`<tool>…</tool>` 里的东西**就是那条命令**，两侧空白去掉、内部原样保留。
+
+        多标签只取第一条：`executeCmd` 只有一个字段，一回合只跑得了一条（接口文档 L210）。
+        """
+        cases = {
+            "<tool>ls -la</tool>": "ls -la",
+            "  <tool>  ls -la  </tool>  ": "ls -la",
+            "<tool>python -c \"print(1)\"\nprint(2)</tool>": 'python -c "print(1)"\nprint(2)',
+            "<tool>first</tool> 然后 <tool>second</tool>": "first",
+        }
+        for reply, expected in cases.items():
+            with self.subTest(reply=reply):
+                self.assertEqual(task_channel(self._turn(self.TASK, reply)), ("", expected))
+
+    def test_a_broken_tool_tag_yields_no_command(self):
+        """凑不齐的标签 ⇒ **没有命令可发**。别把半截标签当命令丢进沙盒。"""
+        for reply in ("<tool ls", "<tool>ls", "</tool>", "<tool></tool>", "<tool>  </tool>"):
+            with self.subTest(reply=reply):
+                self.assertEqual(task_channel(self._turn(self.TASK, reply))[1], "")
+
+    def test_a_broken_tool_reply_is_asked_again(self):
+        """⚠️ **半截工具调用要落回"重问"，不能两边都哑火。**
+
+        `<tool` 有开无闭时取不出命令 ⇒ 判据 3 不命中；若再按"取不出命令 = 这是答案"
+        落到判据 5，就会 `("", "")` —— 而 `_answer_task` 又跳过工具回复，
+        于是**提问与提交同时哑火**。`llm_resp` 若粘住，下一回合还是同一条畸形回复、
+        **永久空转，且日志上什么都看不出来**（"提问：无 ｜ 提交：有"看着完全正常）。
+        """
+        prompt, execute = task_channel(self._turn(self.TASK, "<tool ls -la"))
+        self.assertEqual(execute, "")
+        self.assertIn(self.TASK, prompt)
+
+    def test_the_sandbox_result_goes_back_verbatim(self):
+        """沙盒输出**全文**回灌（用户拍板不截断），而且这一轮**绝不发命令**。"""
+        output = "[exitCode:0]\n" + "y" * 5000
+        prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
+        self.assertEqual(execute, "")
+        self.assertIn(output, prompt)
+
+    def test_a_result_already_in_hand_blocks_the_next_command(self):
+        """⚠️ **沙盒刚交作业这一轮，绝不能再发命令** —— 判据 2 必须压在判据 3 前面。
+
+        动机是 `llmResp` **可能粘住**：文档给 `lastCmdResult` 写了"未发命令时为空字符串"
+        （L33）、对 `llmResp` **一个字没写**（L31）。万一它还停在上轮那条 `<tool>…</tool>`
+        上，判据 3 先命中就会**同一条命令反复丢进沙盒**。附带挡住"结果延迟两回合"。
+        """
+        prompt, execute = task_channel(
+            self._turn(self.TASK, llm_resp="<tool>ls</tool>", cmd_result="[exitCode:0]\nok")
+        )
+        self.assertEqual(execute, "", "沙盒刚交作业，这轮不许再发命令")
+        self.assertIn("[exitCode:0]\nok", prompt)
+
+    def test_a_result_and_a_rejection_come_back_together(self):
+        """⚠️ **沙盒结果与"答错了"是同一个分支的两面，不能互相吞掉。**
+
+        `errors` 说的是**本轮产生**的错误，与我们上轮发了什么并不同步：第 R 轮发命令
+        （那轮没有 `prompt`）⇒ 第 R+1 轮 `cmd_result` 非空，而 `errors` 里的 `code 2`
+        说的是**更早**那次 `submitAnswer` 的判决 —— 两者同时命中是**真实可达的**。
+        把纠错做成独立分支就会把它整段吞掉，所以它是**修饰符**。
+        """
+        prompt, execute = task_channel(
+            self._turn(
+                self.TASK,
+                llm_resp=self.ANSWER,
+                cmd_result="[exitCode:0]\n晴",
+                errors=(Error(code=2, description="答案不正确"),),
+            )
+        )
+        self.assertEqual(execute, "")
+        self.assertIn("[exitCode:0]\n晴", prompt)
+        self.assertIn(self.ANSWER, prompt)
+        self.assertIn(self.RETRY_MARK, prompt)
+
+    def test_a_rejection_needs_an_answer_to_blame(self):
+        """带纠错那一段的**前提是"手上真有一个被否掉的答案"**，两个反例都要挡住。
+
+        - `llm_resp` 为空：任务刚换（上一条超时结束、开拓者立刻接了新任务）时
+          `errors` 里那个 2 是**旧账** —— 拿它去骂新任务，只会把 LLM 带偏。
+        - `llm_resp` 是工具调用：否则会塞进"你上一次的答案是 `<tool>ls</tool>` 被判错了"。
+          **两种工具回复都要挡**：取得出命令的（`<tool>ls</tool>`）在判据 3 就走了，
+          取不出的（`<tool ls`）会落到判据 4 —— 后者才是这条判据真正的守门员。
+        """
+        nobody_to_blame = task_channel(self._turn(self.TASK, errors=(Error(2, "x"),)))
+        self.assertNotIn(self.RETRY_MARK, nobody_to_blame[0])
+
+        replied_a_command = task_channel(
+            self._turn(self.TASK, llm_resp="<tool>ls</tool>", errors=(Error(2, "x"),))
+        )
+        self.assertNotIn(self.RETRY_MARK, replied_a_command[0])
+        # 顺带钉住：有 error 2 也不该妨碍"该跑的命令照跑"（判据 3 排在判据 4 前面）
+        self.assertEqual(replied_a_command[1], "ls")
+
+        broken = task_channel(
+            self._turn(self.TASK, llm_resp="<tool ls", errors=(Error(2, "x"),))
+        )
+        self.assertNotIn(self.RETRY_MARK, broken[0], "半条命令不是'上次交的答案'")
+
+    def test_only_the_answer_error_triggers_the_retry(self):
+        """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。"""
+        for code in (0, 1, 3, 4, 5):
+            with self.subTest(code=code):
+                prompt, execute = task_channel(
+                    self._turn(self.TASK, llm_resp=self.ANSWER, errors=(Error(code, "x"),))
+                )
+                self.assertEqual((prompt, execute), ("", ""))
+
+    def test_a_timeout_result_still_goes_back(self):
+        """`[TIMEOUT]` / `[JUDGER_ERROR]` 打头的回执**照样原样回灌** —— 那是沙盒侧的
+        失败，让 LLM 自己看着重试（自进化任务的主要恢复路径）。
+
+        我们不解析那行状态：解析它就是又多一份会跟判题器漂移的真相。
+        """
+        for output in ("[TIMEOUT]\n部分输出", "[JUDGER_ERROR]\n沙盒挂了", "[exitCode:127]\nno"):
+            with self.subTest(output=output):
+                prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
+                self.assertIn(output, prompt)
+                self.assertEqual(execute, "")
+
+    def test_prompt_and_command_are_never_both_set(self):
+        """**两条通道互斥** —— 这是整个状态机唯一的不变量，遍历所有分支钉一遍。
+
+        "同一轮既提问又发命令"会让 LLM 在没看到结果的情况下作答 ⇒ 又要一遍同一条命令
+        ⇒ 活锁。它也是 `task_channel` 之所以合成一个函数、而不是 `prompt_for` +
+        `execute_for` 的全部理由（拆开就要把这条链写两遍）。
+        """
+        turns = [
+            self._turn(),
+            self._turn(self.TASK),
+            self._turn(self.TASK, self.ANSWER),
+            self._turn(self.TASK, "<tool>ls</tool>"),
+            self._turn(self.TASK, "<tool ls", cmd_result="[exitCode:0]\nok"),
+            self._turn(self.TASK, cmd_result="[TIMEOUT]\n…"),
+            self._turn(self.TASK, self.ANSWER, errors=(Error(2, "x"),)),
+        ]
+        for i, turn in enumerate(turns):
+            with self.subTest(i=i):
+                prompt, execute = task_channel(turn)
+                self.assertFalse(prompt and execute, (prompt, execute))
 
     def test_the_answer_is_submitted_verbatim(self):
         """答案**原文进、原文出**（逐字对 `docs/response.txt` L54）：
         我们不知道判题器要什么格式，加工只会引入自己的假设。"""
-        cmds = plan(self._turn(self.TASK, "晴 26 度"))
-        self.assertEqual(cmds, {"10011": {"action": "submitAnswer", "taskAnswer": "晴 26 度"}})
+        cmds = plan(self._turn(self.TASK, self.ANSWER))
+        self.assertEqual(cmds, {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}})
 
     def test_a_blank_answer_is_not_submitted(self):
         """空答案不发 —— 那可能被判成"字段缺失"，正是红线里的"指令非法"。
         （顺带钉住 `.strip()`：只有空白也必须当成空。）"""
         self.assertEqual(plan(self._turn(self.TASK, "   ")), {})
+
+    def test_a_tool_call_is_never_submitted_as_an_answer(self):
+        """⚠️ **没取到命令的回复也绝不能当答案交上去。**
+
+        `_answer_task` 与 `task_channel` 判据 5 用的是**同一个谓词**
+        （`_is_tool_reply`）—— 一边当命令、一边当答案就是第二份真相。
+        交上去的话，`<tool>ls</tool>` 会被判题器当成一次错误答案（`errorCode 2`）。
+        """
+        for reply in ("<tool>ls</tool>", "<tool>ls</tool>\n记住这个", "<tool ls"):
+            with self.subTest(reply=reply):
+                self.assertEqual(plan(self._turn(self.TASK, reply)), {})
 
     def test_the_answer_is_resubmitted_every_round(self):
         """**同一份 payload 连打几次都要交** —— 这不是 bug，是无状态设计的正面确认。
@@ -1883,10 +2207,10 @@ class TaskAnswerTest(unittest.TestCase):
         判题器专门为"反复交、取最好"设计了这个字段。⚠️ 别把它"优化"成"只交一次"：
         那要记住交没交过，而**卡住的状态会静默关掉整条任务线**。
         """
-        turn = self._turn(self.TASK, "晴 26 度")
+        turn = self._turn(self.TASK, self.ANSWER)
         for _ in range(3):
             self.assertEqual(
-                plan(turn), {"10011": {"action": "submitAnswer", "taskAnswer": "晴 26 度"}}
+                plan(turn), {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}}
             )
 
 

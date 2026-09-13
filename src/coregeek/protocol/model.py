@@ -44,6 +44,7 @@ def load(payload: Any) -> Turn | None:
         task_points=_tasks(payload),
         phase_task=_text(payload, "phaseTask"),
         llm_resp=_text(payload, "llmResp"),
+        cmd_result=_text(payload, "lastCmdResult"),
         errors=_errors(payload),
         action_results=_action_results(payload),
         vendor_prices=_vendor_prices(payload),
@@ -281,10 +282,11 @@ def _action_results(payload: dict[str, Any]) -> tuple[tuple[int, bool], ...]:
 
 
 def _text(payload: dict[str, Any], key: str) -> str:
-    """顶层文本字段（`phaseTask` / `llmResp`）。非 `str` 一律退化成 `""`。
+    """顶层文本字段（`phaseTask` / `llmResp` / `lastCmdResult`）。非 `str` 一律退化成 `""`。
 
-    空串是这两个字段**天然的安全值**：`phase_task` 空 ⇒ "没任务" ⇒ 开拓者回落到
-    "去任务点"；`llm_resp` 空 ⇒ 不提交答案（空答案可能被判成"字段缺失"= 一次异常）。
+    空串是这三个字段**天然的安全值**：`phase_task` 空 ⇒ "没任务" ⇒ 开拓者回落到
+    "去任务点"、且**一次都不碰沙盒**；`llm_resp` 空 ⇒ 不提交答案（空答案可能被判成
+    "字段缺失"= 一次异常）；`cmd_result` 空 ⇒ 没有回执可回灌，任务线不动。
     """
     value = payload.get(key)
     return value if isinstance(value, str) else ""

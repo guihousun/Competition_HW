@@ -5,8 +5,9 @@
 **合法空指令**（空指令集合法且不计异常），宁可丢掉一个回合，不赌整队资格。
 
 响应的三个顶层字段永远都在（接口文档 §2.1）。官方 demo 只发了 `roleCommandMap`。
-`prompt` 是**任务线唯一的对外通道**（发给判题器的 LLM，答案下一回合从 payload 的
-`llmResp` 回来），其余时候恒为空串；`executeCmd` 至今没用过。
+`prompt` 与 `executeCmd` 是**任务线的对外通道**（发给判题器的 LLM 与它的沙盒，
+回复与执行结果下一回合分别从 payload 的 `llmResp` / `lastCmdResult` 回来），
+两者由 `planner.task_channel` 一起产出、**互斥**，任务之外恒为空串。
 
 **每回合记一份复盘日志**（`_log`）：先局面（摘要 + 图例 + 地图）、再本回合的动作、
 再**判题器的回执**（`errors` 与 `lastRoundRoleActionResults`）、最后任务线。
@@ -50,11 +51,11 @@ def handle(raw: bytes) -> bytes:
         turn = model.load(payload)
         if turn is None:
             raise ValueError("payload 不是 JSON 对象")
-        prompt = planner.prompt_for(turn)
+        prompt, execute = planner.task_channel(turn)
         cmds = planner.plan(turn)
         _log(turn, cmds, prompt)
         body = json.dumps(
-            {"roleCommandMap": cmds, "prompt": prompt, "executeCmd": ""},
+            {"roleCommandMap": cmds, "prompt": prompt, "executeCmd": execute},
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -127,7 +128,7 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
         # —— 不落下来，赛后无从校准时序与格式。触发条件带上 `llm_resp`：任务刚结束的
         # 那一回合 `phase_task` 已经空了，而那是唯一一次能看见"判题器最后答了什么"的机会。
         #
-        # `prompt` **不打印原文**：它就是 `TASK_PROMPT.format(task=任务原文)`，
+        # `prompt` **不打印原文**：它就是模板套上任务原文（外加沙盒结果那一段），
         # 全文等于把任务抄第二遍（白花一倍字节），有意义的只是"这一回合到底问没问"。
         LOGGER.info(
             "任务：%s ｜ 提交：%s ｜ 提问：%s",
@@ -135,6 +136,19 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
             _clip(turn.llm_resp) or "无",
             f"有（{len(prompt)} 字）" if prompt else "无",
         )
+
+    if turn.cmd_result:
+        # 沙盒回执**必须记**：回灌给 LLM 的就是它，"答案为什么不对"多半得从它里面看。
+        #
+        # **只记结果、不记发出去的命令** —— 发命令那一回合 `llm_resp` 就是那条
+        # `<tool>…</tool>`，已经印在上面那行的"提交："里了，再抄一遍是**同一回合、
+        # 同一条字符串抄第二遍**（与"`prompt` 不打印原文"逐字同源）。
+        # 而且这样"沙盒行数 = 实际跑过的命令数"，对账关系更干净。
+        #
+        # 回灌给 LLM 是**全文**，这里才截断 —— 两个下游要的东西不同：一个要正确性，
+        # 一个要人眼看得下。`_clip` 是**保头**截断，而沙盒输出最有诊断价值的恰好是头
+        # （`[exitCode:N]` / `[TIMEOUT]` / `[JUDGER_ERROR]` 全在第一行）。
+        LOGGER.info("沙盒：回「%s」", _clip(turn.cmd_result))
 
 
 def _clip(text: str) -> str:
