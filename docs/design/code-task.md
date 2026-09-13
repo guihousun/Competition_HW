@@ -1341,3 +1341,193 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 2. **首场比赛后的实测校准**：逐夜机器人曲线（该不该换炮、该不该多建）、
    `attackRange` 与 `cooldown` 的真实取值、以及"角色数 < 武器数"时的炮位分配。
    这些都要数据，凭猜改没意义。
+
+---
+
+## 第 11 步：开拓者做任务（`acceptTask` → 问判题器 LLM → `submitAnswer`）
+
+### 目标
+
+第 1~10 步的白天只有工人在动 —— `plan()` 里一行 `if not isinstance(role, Worker): continue`
+把开拓者整个跳过了。任务书 §5.3 把这条线说清楚了：开拓者到**己方任务点**周围一格内
+`acceptTask`，任务原文出现在下一回合 payload 的顶层 `phaseTask`，答案通过 `submitAnswer` 交回去。
+
+**收益量级完全不同**：任务是 `任务积分奖励 + 5 × 标准回合数 / (实际完成回合 − 接取回合)`
+（**越快交完奖励越高**，以乘法计；样例两个点各 50 分 + 30 金），
+而杀一台机器人按体型只有 1 / 2 / 4 / 10 分。这是当时收益最高的一条未做的线。
+
+卡点是**看懂题**：任务原文是任意文本，本地没有 LLM、没有外网。唯一确定存在的智能通道，
+就是响应里那个至今恒为空串的 `prompt` 字段 —— 发给判题器的 LLM，下一回合在 `llmResp` 里回来。
+这一步就是把这条握手接通。
+
+用户这一步的要求：「写开拓者做任务的逻辑」。本次问答定下四条：
+
+1. **范围 = 接任务 + LLM 求解闭环**，不做沙盒 `executeCmd`。
+2. **不发 `executeCmd`**：任务原文自带"三方 API 文档"，先只走 LLM，少一个未知量。
+3. **无状态**（推翻了最初"在 `app` 里加标志位"的想法，理由见下）。
+4. **提示词 = 让题目自己说话**，不硬塞格式要求。
+
+**为什么改成无状态。** 接口文档 L140 的原话是「任务超时后领取的任务会强制结束，
+并**以之前提交过的通过率最高的答案**计算积分与金币」—— 这句话说明**反复提交是判题器预期的
+用法**，它专门为"反复交、取最好"设计了这个字段。于是"每回合把 `llmResp` 原文交一次"不需要
+记住任何东西；而加标志位反而引入两个新风险：① `web/server.py` 是 `ThreadingHTTPServer`，
+模块级标志位没有锁与顺序保证；② 标志位一旦被异常路径污染而卡住，会**静默关掉整条任务线**
+（判题器是黑盒，比赛里看不见也改不了）。少几次多余的提交换不来什么，"静默卡死"赔不起。
+
+### 产出
+
+- **`src/coregeek/game/world.py`** —— `Turn` 加三栏，全带默认值（66 条既有用例零改动，
+  与第 10 步给 `weapons` / `robots` 带默认值同一条做法）：
+
+  | 字段 | 含义 |
+  |---|---|
+  | `task_points: tuple[Pos, ...] = ()` | 本回合**可接取**的己方任务点（不可接的已在 `model` 滤掉） |
+  | `phase_task: str = ""` | 任务**原文**。**非空 = 开拓者手上有任务** —— "任务进行中"的唯一判据 |
+  | `llm_resp: str = ""` | 判题器 LLM 的回复 = **我们要提交的答案原文** |
+
+  **不加 `Task` 类**：`playerTasks` 六个字段我们只用两个（坐标 + 能不能接），
+  而"能不能接"是谓词、`taskPosition` 是坐标 —— 单字段 NamedTuple 只是给 `Pos` 换个名字。
+  **不加 `team_type`**：`playerTasks` 已按阵营滤好。
+  **不加 `last_cmd_result` / `errors`**：这一步不发 `executeCmd`，闭环也不靠 `errors` 成立 ——
+  解析了没人读。
+- **`src/coregeek/protocol/model.py`** —— 新增 `_tasks` / `_text`，`_pos` 加 `key` 参数
+  （默认 `"pos"`；任务点是**唯一**叫 `taskPosition` 的）。
+  **`playerTasks` 是任务点的权威来源**：它只含我方那 2 个点，所以**不用**去 `mapInfo.zones`
+  里认 `challengerTaskPoint*` / `defenderTaskPoint*`，**也不用**读 `teamOur.type`。
+  只认**锚点格**就够（任务点 2 虽然占两格，但锚点本身就是其中一格 ⇒ 无需算并集）。
+  字段缺失的降级方向**故意不是"少做"**（与 `_gold` / `_size` / `_stone` 相反）：
+  误接一个冷却中的点只是**指令执行失败**（任务书 L508，不计异常），
+  而误判成"永远接不了"会让整条任务线**静默作废**。所以 `isValid` **明确为 `False`**
+  才排除，`coldDownRounds` 缺失给 -1、按 `<= 0` 也算就绪。
+- **`src/coregeek/protocol/actions.py`** —— 新增 `AcceptTask` / `SubmitAnswer`（**都仅开拓者**，
+  `roles = PIONEER`）。两者**报文里都没有 `targetPos`**（领哪个点由**站位**决定），
+  逐字对 `docs/response.txt` L51-57 的实证报文。`SubmitAnswer` 存 `taskAnswer`（String）。
+  顺带**修掉 `describe()` 的既有脆弱点**：它硬读 `cmd["targetPos"][0]`，遇到这两个动作会
+  `IndexError`，而它跑在 `app.handle` 的 `try` 里 ⇒ **整回合退化成空指令**。
+  改成 `point = cmd.get("targetPos") or []`（`or []` 顺手挡住"空数组"这半个同款坑），
+  四种既有动作的格式逐字节不变。
+- **`src/coregeek/game/planner.py`** —— `plan()` 的循环分四支，**"钉死"那一支放在最前面**：
+
+  ```python
+  if isinstance(role, Pioneer) and turn.phase_task:   # ← 本步新增，必须在最前
+      _answer_task(role, turn, cmds); continue
+  if not turn.is_day:      _defend(...);      continue
+  if isinstance(role, Pioneer): _take_task(...); continue   # ← 第 10 步这里是 continue
+  ...  # 工人那两条线原样不动
+  ```
+
+  放最前面是有意的：它是**全局最早**的判据（任务在不在，与昼夜无关）。
+  摆在这里之后昼夜两条分支才各自干净，而不用在 `_defend` 前写一个 `if`、白天再写一个
+  （同一件事写两遍）。判据用**载荷事实**（`phase_task`）而不是自己记的"谁领了任务"，
+  重放 / 换回合 / 崩溃都不会让它错。新增 `_take_task`（走过去、贴着就领）、
+  `_answer_task`（**绝不移动**，只交答案）、`prompt_for`（纯函数）与 `TASK_PROMPT` 模板。
+  `_step` 的形参 `sites` 改名 `avoid` 并给默认值 `frozenset()`（开拓者没有建造格要避开），
+  两个既有调用点位置传参、一个字没动。
+- **`src/coregeek/app.py`** —— `prompt = planner.prompt_for(turn)` 接进响应顶层；
+  `_log` 在任务存续期间多打一行「任务：原文 ｜ 提交：答案 ｜ 提问：prompt」（各截断 120 字，
+  理由同硬约束 5）。**必须记**：判题器是黑盒，题目原文与 LLM 答了什么只存在于本回合的 payload 里。
+- **`tests/test_actions.py`** —— 新增 `TaskParseTest`(8) / `TaskAcceptTest`(5) /
+  `TaskHoldTest`(4) / `TaskAnswerTest`(6)，`GateTest` 加两条越权、`HandleTest` 加三条。
+
+**为什么 `prompt_for` 留在 `planner.py` 而不新开 `game/tasks.py`**：无状态之后它只剩一个使用者
+（`app`），过不了"第二个使用者"这条判据（编码规则 1）。
+
+**机会成本（写进这里，别忘）**：开拓者被钉死 ⇒ 夜里三座炮只有两个人操，**火力打折 1/3**。
+由任务积分（50+ 分/个）对比机器人（1~10 分/台）覆盖。
+
+### 不做什么
+
+- ❌ **不发 `executeCmd`**，也不解析 `lastCmdResult` —— 发一条盲命令换回一段无法消费的文本，
+  只多一个超时面和日志体量。等第一次实测看到 `phaseTask` 到底长什么样再决定。
+- ❌ **不加任何跨回合状态**（见上面"为什么改成无状态"）。`handle` 仍是纯函数。
+- ❌ **不做 `summonTreasure` / 民间传闻 / 宝藏**（另一条任务体系）。
+- ❌ **不在冷却中的任务点蹲守** —— 白天走过去、夜里被 `_defend` 拉回炮位、第二天再走过去，
+  第 8 步 `_ring` 那个"两格之间对着改目标转到天黑"是同一类坑。
+- ❌ **不解析 `errors[]`** —— errorCode 1（任务超时）/ 2（答案错误）没有任何分支消费它们，
+  加了就是给下一个人递一个没人读的钩子。
+- ❌ **不改 `plan()` 的签名与返回类型**（仍 `dict[str, dict]`）—— 无状态之后没有东西要往外传，
+  既有用例的调用一个字都不用动。
+- ❌ **不做"答案格式重试"**（这回合交 JSON、下回合交纯文本）—— 诱人，但要记住"交过了哪种"，
+  而那正是本步否决掉的那类状态。
+
+### 验证
+
+**1. 单测：66 → 94 条，全绿**
+
+```bash
+PYTHONUTF8=1 py -m unittest discover -s tests
+# Ran 94 tests in 0.037s
+# OK
+```
+
+**2. 反向验证（每条先改坏、确认挂了、再复原）**
+
+| 故意改坏 | 实际结果 |
+|---|---|
+| 把"钉死"挪到夜间分支**之后** | `test_a_pinned_pioneer_does_not_man_a_weapon_at_night` **FAIL**：`{'10020': {'action': 'attack', 'controllerId': '10011', ...}} != {}` —— 开拓者真的被拉去开炮了，任务当场作废 |
+| `_tasks` 去掉 `coldDownRounds <= 0` 过滤 | `test_a_cooling_task_point_is_not_offered` **FAIL** |
+| `_tasks` 去掉 `isValid is False` 过滤 | `test_an_invalid_task_point_is_not_offered` **FAIL** |
+| `_tasks` 把缺失字段判成"不可接"（`is not True`） | `test_a_missing_is_valid_still_offers_the_point` **FAIL** |
+| 去掉 `_answer_task` 的 `if answer:` 守卫 | `test_a_blank_answer_is_not_submitted` **FAIL** |
+| `_take_task` 去掉"贴着就接"的近距离分支 | `test_the_pioneer_accepts_next_to_the_point` **FAIL** |
+| `describe` 的 `where` 改回硬读 `cmd["targetPos"][0]` | `test_describe_survives_a_command_without_a_target` 与 `test_the_task_loop_through_handle` **两条 ERROR** —— 后者是实证：`describe` 一炸，**整回合退化成空指令**，任务闭环一次都跑不起来 |
+
+**3. 逐字节回归：样例（`roundNo=85` 是夜、`phaseTask=""`）必须完全不变**
+
+```bash
+netstat -ano | grep LISTENING | grep 18085    # 输出为空 —— 端口空闲
+PYTHONUTF8=1 bash run.sh 18085 &
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
+# {"roleCommandMap":{"10010":{"action":"move","targetPos":[{"x":6,"y":22}]},
+#                    "10012":{"action":"move","targetPos":[{"x":9,"y":17}]},
+#                    "10011":{"action":"move","targetPos":[{"x":9,"y":13}]}},
+#  "prompt":"","executeCmd":""}
+# 2026-09-13 17:55:49,243 | 动作：10010 move(6,22)；10012 move(9,17)；10011 move(9,13)
+```
+
+与第 10 步**逐字节一致**（`EXPECTED_MOVES` 一个字没改）：`phaseTask` 为空 ⇒
+任务线完全不动。这是"没破坏既有行为"的硬证据。
+
+**4. 合成端到端（真 HTTP，改 `docs/request.txt` 的几个字段）**
+
+| 局面 | 实际响应（`roleCommandMap` 里 `10011` 那条 + 顶层 `prompt`） |
+|---|---|
+| `roundNo=1`（白天），`10011` 挪到 `(13,13)`（任务点1 在 `(14,14)`） | `"10011":{"action":"acceptTask"}`，`"prompt":""` —— **报文里没有 `targetPos`** |
+| 同上 + `phaseTask="请查询北京天气"` | **没有 `10011` 这条**（钉死，一步不动），`prompt` = 模板 + 任务原文 |
+| 同上 + `llmResp="晴 26 度"` | `"10011":{"action":"submitAnswer","taskAnswer":"晴 26 度"}`，`"prompt":""` |
+| **`roundNo=85`（夜）+ `phaseTask` 非空**，`10011` 挪到加特林 `(9,24)` 旁 | **没有** `10011` 那条 `attack`（两个工人照旧各走一格） |
+| 同一局面把 `phaseTask` 改回 `""` 再打 | `"10040":{"action":"attack","controllerId":"10011","targetPos":[{"x":4,"y":4}]}` —— **attack 回来了**，与第 10 步形成对照 |
+| 同一份"有 `llmResp`"的 payload 连打三次 | 三次都是 `submitAnswer` —— 无状态设计的**预期行为**（接口文档 L140），不是 bug |
+
+服务端日志一行齐（三种状态）：
+
+```
+2026-09-13 17:56:11,783 | 动作：10010 collect(4,24)；10012 move(9,17)；10011 acceptTask
+2026-09-13 17:56:11,957 | 任务：请查询北京天气 ｜ 提交： ｜ 提问：请完成下面这道任务题，直接给出答案。
+2026-09-13 17:56:12,165 | 任务：请查询北京天气 ｜ 提交：晴 26 度 ｜ 提问：
+```
+
+`describe` 那行同时钉住了两件事：无坐标动作不炸（`10011 acceptTask`，无括号），
+`attack` 的箭头没被改坏（`10040 attack←10011(4,4)`）。
+
+收尾 `taskkill` 掉服务，端口复查为空；临时 payload 与日志文件已删。
+
+### 已知不确定性（别假装确定）
+
+1. **答案格式完全未知** —— 这是本步最大的单点风险。通过率按"字段个数"算 ⇒ 是多字段结构化答案，
+   但字段名、分隔符、是否要 JSON，文档一个字都没有。`TASK_PROMPT` 的措辞是**唯一的杠杆**，
+   首场比赛后按 errorCode 2 的比例与提交的原文回看调。
+2. **`llmResp` 的生命周期未知**（"没发 prompt 时是空串"还是"保留上一次"）。设计对两种都成立，
+   但没实证。
+3. **跨任务时会多交一次上一个任务的答案**：新任务接取时 `llmResp` 若仍是旧的，会拿它交一次，
+   一回合后自愈。代价一个回合 + 一次 errorCode 2，**不值得为它加状态**。
+4. **`timeoutRounds` 样例里没有** ⇒ 不知道任务超时窗口多长 ⇒ 不做任何"值不值得接"的时间预算。
+5. **白天发 `acceptTask` 是否合法**（§4.4 那格没写昼夜限制，但策略指导只说"第一天白天接"）。
+   我们只白天接；若实测证明夜里也能接，是另一条策略（早接早完成，速度奖励是乘法的）。
+6. **"周围一格"是否含对角**没写。按切比雪夫（含对角）—— 与全局的距离度量一致。
+
+### 下一步
+
+首场比赛后按实测校准：① `TASK_PROMPT` 措辞与答案格式（最优先）；
+② 要不要启用沙盒 `executeCmd`（那就得加 `lastCmdResult` 解析）；
+③ `summonTreasure` / 宝藏那条线；④ 若 `timeoutRounds` 真出现，可加"时间不够就不接"的取舍。

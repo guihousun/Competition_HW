@@ -41,17 +41,19 @@ src/coregeek/
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
 │   ├── model.py      payload → Turn（容错解析）
-│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）
+│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack` / `acceptTask` / `submitAnswer`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）。⚠️ 后两个**没有 `targetPos`**，只有 `describe` 需要留心
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
     │                 + 基地几何：`base_cells` / `weapon_cells` / `back_weapon_cells` / `wall_cells`
     ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`stones`/`station`。
     │                 **纯地形**：武器名册不在这里（见 world.py），第 10 步把 `Map.weapons` 删了
     ├── roles.py      §4.5.2 的 Pioneer / Worker（各带自己的 `stone` 块数）；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（round_no / map / roles / gold / **weapons / robots**）+ `within` / `is_day` / `day_rounds_left`
+    ├── world.py      Turn（round_no / map / roles / gold / weapons / robots / **task_points / phase_task / llm_resp**）
+    │                 + `within` / `is_day` / `day_rounds_left`
     │                 + `Weapon`（id/kind/pos/attack_range/cooldown）与 `Robot`（pos/health）两个 NamedTuple
-    └── planner.py    决策。**策略只写在这里**（白天：工人建武器 → 采石砌墙；夜里：**所有角色**回炮位，
-                      贴着就开火，目标 = 射程内**血最少**的机器人）
+    └── planner.py    决策。**策略只写在这里**（白天：**开拓者去接任务**、工人建武器 → 采石砌墙；
+                      夜里：**所有没被任务钉住的角色**回炮位，贴着就开火，目标 = 射程内**血最少**的机器人）
+                      + `prompt_for(turn)` 产出响应顶层 `prompt`（任务线唯一的对外通道，**纯函数、无状态**）
 ```
 
 依赖方向：
@@ -97,6 +99,11 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
   - **`roundNo` 缺失时 `attack` 一条都不发**（`planner._defend` 的硬门）：缺失的回合号被 `is_day` 判成**夜里** —— 对"白天不许建造"安全，对"白天开火非法"就是反的。
 - **`attackRange` / `cooldown` 都以 payload 为准**：任务书等级表与样例数据矛盾（样例 gatling L1=4 / railgun=7 / rocket=INT_MAX，表格是 3/6/10）；`cooldown`（火箭发射后 3 回合空窗）**样例三座炮都没有这个字段** ⇒ 解析成 -1 ⇒ 不当成冷却。**缺省方向与射程相反**：射程 -1 ⇒ 够不着 ⇒ 不开火；冷却 -1 ⇒ 照打。
 - 夜里**不能建墙**（`build` 仅工人、仅白天）→ 墙一旦被拆，整夜都是缺口，所以夜间第一优先级是**预防性修复**而非爆了再补。**夜里所有角色（含开拓者）的动线 = 走到最近的一座还没被本回合别人认领的武器旁边**（一人只能操一座），贴着（切比雪夫 ≤1）就开火；**没敌人 / 炮在冷却 / 够不着 ⇒ 站在炮位待命，什么都不发**（空指令合法）。**不换炮**：站哪座炮是走到位那一刻定下的，每回合重挑会让角色在炮位之间来回走。已知代价：**角色数 < 武器数时火力打折**。
+- **任务线的三个权威事实**（第 11 步，全部交叉验证过）：
+  - **任务点的权威来源是 `teamOur.playerTasks`**（数组，**只含我方 2 个点**，阵营已按 `teamOur.type` 滤好）—— 元素 `{taskType, taskPosition, coldDownRounds, scoreReward, goldReward, isValid}`。坐标字段名是 **`taskPosition`**（唯一不叫 `pos` 的），且**只认锚点格就够**（任务点 2 虽占两格，锚点本身就是其中一格）⇒ **不需要读 `mapInfo.zones` 的 `challengerTaskPoint*`、不需要读 `teamOur.type`、不需要算两格并集**（旧笔记已作废）。`isValid: false` = 冷却中**或**该点任务已做完；结束时刷新冷却 30 回合。
+  - **`prompt` → `llmResp` 是唯一的 LLM 通道**：响应顶层 `prompt` 发出去，下一回合 payload 顶层 `llmResp` 回来。**任务存续期间不限量、不计数**（接口文档 L198），但**不在任务里一次都不要发**（每游戏日只有 3 次额度，那是任务线之外的资源）。答案**原文进、原文出**、**每回合都交** —— 接口文档 L140「以之前提交过的**通过率最高的**答案计算积分与金币」说明反复提交是判题器**预期的**用法，所以整条任务线**无状态**（`handle` 仍是纯函数，跨回合标志位一旦卡住会**静默关掉整条线**）。
+  - **开拓者一旦接任务就被钉死**：离开己方任务点周围一格内、超时、开拓者死亡、完成 —— 四种情形任务都结束（任务书 L377-380）。所以**它连夜里都不回炮位**，这一支写在 `plan()` 循环的**最前面**（全局最早的判据，与昼夜无关）。代价：**夜里三座炮只有两个人操，火力打折 1/3**，由任务积分覆盖。⚠️ **没有"离开后重新入环还能续上"这回事**。"周围一格"按**切比雪夫**（含对角，文档没写，与全局距离度量一致）。**"答案格式"文档完全没写**（只有"通过率 = 正确字段数 / 全量字段数" ⇒ 是多字段结构化答案），`TASK_PROMPT` 的措辞是唯一的杠杆 —— 本步最大的单点风险。
+- **`describe()` 读 `targetPos` 必须容缺**（第 11 步修）：它跑在 `app.handle` 的 `try` 里，硬读 `cmd["targetPos"][0]` 遇到 `acceptTask` / `submitAnswer`（**报文里没有这个字段**）会 `IndexError` ⇒ **整回合退化成空指令**。反向验证实证过：把它改回硬读，两条用例一起炸（含端到端那条）。**每加一个"无坐标"动作都要回头看一眼这里。**
 - **任务点 2 占两格**，相邻判定要取两格的并集；开拓者一旦领任务，**离开任务点一格内即任务作废**（等于钉死原地）。
 
 ## 文档地图
@@ -115,8 +122,9 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
 `tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策四类），**不建自研测试框架**：标准库 `unittest` 够用。
-进度见 `docs/design/code-task.md`（当前到第 10 步：夜里操炮防守，**所有角色**回炮位打射程内血最少的机器人；
-第 9 步是每回合复盘日志，第 8 步是采石砌墙）——**别照记忆里的进度走**。
+进度见 `docs/design/code-task.md`（当前到第 11 步：**开拓者做任务** —— 白天接任务 → 把题目发给判题器
+LLM（响应顶层 `prompt`）→ 答案从 payload 顶层 `llmResp` 回来 → `submitAnswer` 交回；
+第 10 步是夜里操炮防守，第 9 步是每回合复盘日志，第 8 步是采石砌墙）——**别照记忆里的进度走**。
 
 **常用命令**：
 

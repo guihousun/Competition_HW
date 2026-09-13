@@ -69,6 +69,17 @@ class Turn(NamedTuple):
     weapons: tuple[Weapon, ...] = ()
     #: 场上**全部**机器人（`robot.roles`，全图可见、逐回合全量）。白天是空的。
     robots: tuple[Robot, ...] = ()
+    #: 本回合**可接取**的己方任务点（`teamOur.playerTasks` 里还接得动的那几个）。
+    #: 不可接的（冷却中 / 已做完）在 `model._tasks` 就滤掉了 —— 策略侧不需要区分
+    #: "没有任务点"与"任务点都在冷却"，两者都是"什么都不发"。
+    task_points: tuple[Pos, ...] = ()
+    #: 当前已领取任务的**原文描述**（接口文档 L28）。**非空 = 开拓者手上有任务** ——
+    #: 这是"任务进行中"的**唯一判据**，白天走不走、夜里钉不钉、答不答题全靠它。
+    #: 用载荷事实而不是自己记"谁领了任务"，重放/换回合都不会错。
+    phase_task: str = ""
+    #: 判题器 LLM 的回复（接口文档 L31）= **我们要提交的答案原文**。
+    #: 上一回合的响应里发过 `prompt` 才有值。
+    llm_resp: str = ""
 
     @property
     def within(self) -> int:

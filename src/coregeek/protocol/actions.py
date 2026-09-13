@@ -12,9 +12,12 @@
     参数      §2.2 RoleCommand 里该动作用到的字段
     to_wire   编成 §2.2 的扁平记录
 
-> 目前有 `move` 与 `attack`（对全部角色合法）、`build` 与 `collect`（**都仅工人**）—— 按"禁止冗余设计"，
+> 目前有 `move` 与 `attack`（对全部角色合法）、`build` 与 `collect`（**都仅工人**）、
+> `acceptTask` 与 `submitAnswer`（**都仅开拓者**）—— 按"禁止冗余设计"，
 > 没实现的动作为空壳，等落地时再加。`build` 是**闸门第一次真的挡住东西**：
 > 把 `build` 发给开拓者，以前只是"格式合法地做错事"，现在连对象都造不出来。
+>
+> ⚠️ 两个任务动作**没有 `targetPos`** —— 全模块只有 `describe` 需要留心这件事。
 """
 
 from typing import Any, ClassVar
@@ -33,12 +36,17 @@ def describe(cmds: dict[str, Any]) -> str:
     不带上角色就看不出来是谁在开炮。**只加这一个字段**：日志每回合都打，
     体量已经贴着管道缓冲那条风险线了（`CLAUDE.md` 硬约束 5）。
 
+    **`targetPos` 是可选的**（`acceptTask` / `submitAnswer` 就没有这个字段）——
+    硬读它会 `IndexError`，而这里跑在 `app.handle` 的 `try` 里，代价是**整回合退化成空指令**。
+
     放在本模块而不是 `app`：`action` / `name` / `targetPos` 这几个字段名只有这里知道
     （`app` 只管三个顶层字段的封装）。唯一使用者是 `app._log` 的复盘日志。
     """
     parts = []
     for role_id, cmd in cmds.items():
-        point = cmd["targetPos"][0]
+        #: `or []` 顺手挡住"`targetPos` 是空数组"这半个同款坑
+        point = cmd.get("targetPos") or []
+        where = f"({point[0]['x']},{point[0]['y']})" if point else ""
         what = cmd["action"]
         name = cmd.get("name")
         if name:
@@ -46,7 +54,7 @@ def describe(cmds: dict[str, Any]) -> str:
         controller = cmd.get("controllerId")
         if controller:
             what = f"{what}←{controller}"
-        parts.append(f"{role_id} {what}({point['x']},{point['y']})")
+        parts.append(f"{role_id} {what}{where}")
     return "；".join(parts) if parts else "（空指令）"
 
 
@@ -178,3 +186,48 @@ class Attack(BaseAction):
             "controllerId": self.controller_id,
             "targetPos": [{"x": self.target.x, "y": self.target.y}],
         }
+
+
+class AcceptTask(BaseAction):
+    """领取任务。**仅开拓者**（任务书 §4.4 §4.6.2），**无额外参数**（接口文档 L234）。
+
+    ⚠️ 报文里**没有 `targetPos`** —— 领哪个任务点由**站位**决定（须在己方任务点
+    周围一格内），不由参数决定。实证报文（`docs/response.txt` L51）：
+    `{"10011":{"action":"acceptTask"}}`。这是第一个真正走"无坐标"分支的动作。
+
+    在**敌方**任务点执行无效（任务书 L272），但 `teamOur.playerTasks` 已经把阵营滤好了，
+    策略侧走到的那几个点必然是我方的。
+
+    `PIONEER` 是**唯一的角色闸门**；"任务在不在冷却""领了没有"都由 `planner` 把关 ——
+    闸门只管"谁"，与 `build` 的昼夜门同一条做法。
+    """
+
+    code = "acceptTask"
+    roles = PIONEER
+
+    def to_wire(self) -> dict[str, Any]:
+        return {"action": self.code}
+
+
+class SubmitAnswer(BaseAction):
+    """提交任务答案。**仅开拓者**（任务书 §4.4）。`taskAnswer` 是 **String**（接口文档 L221）。
+
+    实证报文（`docs/response.txt` L54）：
+    `{"10011":{"action":"submitAnswer","taskAnswer":"xxx"}}` —— 同样**没有 `targetPos`**。
+
+    **空答案不发**：闸门只管"谁"（`role_type`），"答案空不空"由 `planner` 把关 ——
+    答案为空时判题器算不算"字段缺失"（= 指令非法 = 一次异常）文档没写，所以干脆不发。
+
+    可以**反复提交**：接口文档 L140「以之前提交过的**通过率最高的**答案计算积分与金币」
+    —— 判题器专门为"反复交、取最好"设计了这个字段，重复提交是预期用法。
+    """
+
+    code = "submitAnswer"
+    roles = PIONEER
+
+    def __init__(self, role_type: str, answer: str) -> None:
+        super().__init__(role_type)
+        self.answer = answer
+
+    def to_wire(self) -> dict[str, Any]:
+        return {"action": self.code, "taskAnswer": self.answer}

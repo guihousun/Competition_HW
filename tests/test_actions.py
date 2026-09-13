@@ -26,7 +26,14 @@ from coregeek.game.grid import (  # noqa: E402
     weapon_cells,
 )
 from coregeek.game.map import Map  # noqa: E402
-from coregeek.game.planner import TIME_MARGIN, WALL, WEAPON_ORDER, plan  # noqa: E402
+from coregeek.game.planner import (  # noqa: E402
+    TASK_PROMPT,
+    TIME_MARGIN,
+    WALL,
+    WEAPON_ORDER,
+    plan,
+    prompt_for,
+)
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
@@ -170,6 +177,21 @@ class GateTest(unittest.TestCase):
             with self.subTest(role_type=role_type):
                 self.assertEqual(actions.Attack(role_type, "10010", Pos(1, 1)).to_wire()["action"], "attack")
 
+    def test_worker_cannot_accept_a_task(self):
+        """`acceptTask` 只在开拓者那一行（任务书 §4.4 最右列）。
+
+        ⚠️ 这条最容易"看起来没事"：它的报文**只有一个 `action` 字段**，格式挑不出毛病，
+        所以本地全绿、只有判题器会说"不" —— 而那条路直通红线。**每加一个受限动作
+        都要补一条**，否则工人每天误吃一个异常，而红线只有 5 次。
+        """
+        with self.assertRaises(PermissionError):
+            actions.AcceptTask("worker")
+
+    def test_worker_cannot_submit_an_answer(self):
+        """`submitAnswer` 同样只在开拓者那一行（任务书 §4.4 最右列）。"""
+        with self.assertRaises(PermissionError):
+            actions.SubmitAnswer("worker", "晴 26 度")
+
 
 class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
@@ -234,6 +256,57 @@ class HandleTest(unittest.TestCase):
             {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 9, "y": 21}]},
         )
         self.assertNotIn("10010", cmds, "角色 id 不能当 attack 的 key")
+
+    def test_describe_survives_a_command_without_a_target(self):
+        """`acceptTask` / `submitAnswer` **没有 `targetPos`**，而 `describe` 原来硬读它。
+
+        这不是显示问题：`describe` 跑在 `app.handle` 的 `try` 里（`app._log`），
+        一个 `IndexError` 会让**整回合退化成空指令** —— 开拓者领了任务却什么都没答，
+        现象与"任务线根本没做"一模一样，极难排查。
+        """
+        self.assertEqual(actions.describe({"10011": {"action": "acceptTask"}}), "10011 acceptTask")
+        self.assertEqual(
+            actions.describe({"10011": {"action": "submitAnswer", "taskAnswer": "x"}}),
+            "10011 submitAnswer",
+        )
+
+    def test_describe_keeps_the_attack_arrow(self):
+        """改 `describe` 时不能把既有格式改坏 —— `attack` 的 key 是武器 id，
+        不带上操控者就看不出来是谁在开炮。"""
+        self.assertEqual(
+            actions.describe(
+                {"10020": {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 4, "y": 4}]}}
+            ),
+            "10020 attack←10010(4,4)",
+        )
+
+    def test_the_task_loop_through_handle(self):
+        """端到端：`phaseTask` 非空 ⇒ 开拓者被钉死；`llmResp` 一回来就**原样**交上去。
+
+        这条同时钉住三处只有整条链路才看得见的接线：`model` 读对了顶层字段、
+        `app` 把 `prompt` 装进了响应、开拓者服任务期间**一步不动**（动了任务就作废）。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1  # 白天：开拓者本来在正常地去任务点，现在应当被钉住
+        raw["phaseTask"] = "请查询北京天气"
+        for node in raw["teamOur"]["roles"]:
+            if node["id"] == 10011:
+                node["pos"] = {"x": 13, "y": 13}  # 贴着任务点1 (14,14)
+
+        # ① 判题器还没回话 ⇒ 提问，开拓者一步不动
+        raw["llmResp"] = ""
+        body = self._handle(json.dumps(raw).encode("utf-8"))
+        self.assertIn("请查询北京天气", body["prompt"])
+        self.assertNotIn("10011", body["roleCommandMap"], "服任务期间绝不能移动")
+
+        # ② 答案回来了 ⇒ 原样提交，而且不再提问
+        raw["llmResp"] = "晴 26 度"
+        body = self._handle(json.dumps(raw).encode("utf-8"))
+        self.assertEqual(
+            body["roleCommandMap"]["10011"],
+            {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
+        )
+        self.assertEqual(body["prompt"], "")
 
 
 class ParseTest(unittest.TestCase):
@@ -1071,6 +1144,248 @@ class PathTest(unittest.TestCase):
         blocked.add(goal)
 
         self.assertIsNone(step_toward(Pos(0, 5), goal, frozenset(blocked), (10, 10)))
+
+
+class TaskParseTest(unittest.TestCase):
+    """`teamOur.playerTasks` → `Turn.task_points`，以及顶层的 `phaseTask` / `llmResp`。
+
+    **`playerTasks` 是任务点的权威来源**：它只含**我方**那 2 个点（阵营已按 `teamOur.type`
+    滤好），所以不必去 `mapInfo.zones` 里认 `challengerTaskPoint*`，也不必读 `teamOur.type`。
+    """
+
+    POINT = {
+        "taskType": "自进化类1",
+        "taskPosition": {"x": 14, "y": 14},
+        "coldDownRounds": 0,
+        "isValid": True,
+    }
+
+    def _load(self, *points: dict, **top) -> Turn:
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["teamOur"]["playerTasks"] = list(points)
+        raw.update(top)
+        turn = model.load(raw)
+        self.assertIsNotNone(turn)
+        return turn
+
+    def test_task_points_come_from_player_tasks(self):
+        """逐字读原始样例：两个点，坐标取的是 **`taskPosition`**（不是 `pos`）。"""
+        turn = model.load(json.loads(SAMPLE.read_text(encoding="utf-8")))
+        self.assertEqual(turn.task_points, (Pos(14, 14), Pos(17, 17)))
+        self.assertEqual(turn.phase_task, "", "样例里没接任务")
+
+    def test_a_cooling_task_point_is_not_offered(self):
+        """冷却中的点接不了（接口文档 L136：`coldDownRounds` = 还有多少回合就绪）。"""
+        self.assertEqual(self._load({**self.POINT, "coldDownRounds": 30}).task_points, ())
+
+    def test_an_invalid_task_point_is_not_offered(self):
+        """`isValid` 为 false = 冷却中**或**这个点的任务已做完（接口文档 L139）。"""
+        self.assertEqual(self._load({**self.POINT, "isValid": False}).task_points, ())
+
+    def test_a_missing_cold_down_rounds_still_offers_the_point(self):
+        """缺字段的降级方向**故意不是“少做”**（与 `_gold` / `_size` / `_stone` 相反）。
+
+        误接一个冷却中的点只是**指令执行失败**（任务书 L508，不计异常）；
+        误判成"永远接不了"却会让整条任务线**静默作废**。两害相权取前者。
+        """
+        point = {k: v for k, v in self.POINT.items() if k != "coldDownRounds"}
+        self.assertEqual(self._load(point).task_points, (Pos(14, 14),))
+
+    def test_a_missing_is_valid_still_offers_the_point(self):
+        """同上：只有**明确**的 `false` 才算接不了。"""
+        point = {k: v for k, v in self.POINT.items() if k != "isValid"}
+        self.assertEqual(self._load(point).task_points, (Pos(14, 14),))
+
+    def test_a_task_point_without_a_position_is_dropped(self):
+        """没有坐标 ⇒ 丢那一条，不能拿一个凭空造的 `Pos` 去发指令。"""
+        self.assertEqual(self._load({**self.POINT, "taskPosition": None}).task_points, ())
+
+    def test_phase_task_and_llm_resp_come_from_the_payload(self):
+        turn = self._load(phaseTask="请查询北京天气", llmResp="晴 26 度")
+        self.assertEqual(turn.phase_task, "请查询北京天气")
+        self.assertEqual(turn.llm_resp, "晴 26 度")
+
+    def test_a_non_string_phase_task_degrades_to_empty(self):
+        """空串是这两个字段天然的安全值：`phase_task` 空 ⇒ 开拓者回落到"去任务点"；
+        `llm_resp` 空 ⇒ 不提交答案（空答案可能被判成"字段缺失"）。"""
+        turn = self._load(phaseTask={"text": "x"}, llmResp=42)
+        self.assertEqual((turn.phase_task, turn.llm_resp), ("", ""))
+
+
+class TaskAcceptTest(unittest.TestCase):
+    """白天：开拓者走到最近一个**能接**的任务点旁边，贴着就 `acceptTask`。
+
+    与 `build` / `collect` 同一条契约 —— 任务点挡路（任务书 L85），`step_toward`
+    天然停在贴着它的那一格，而那正是"周围一格内"（§4.6.2）：不用先挪开再领。
+    """
+
+    DAY = 1
+    P1, P2 = Pos(14, 14), Pos(17, 17)
+
+    def _turn(self, *points: Pos, pioneer: Pos = Pos(10, 10)) -> Turn:
+        return Turn(
+            round_no=self.DAY,
+            map=Map((41, 32), {p: "challengerTaskPoint1" for p in points}),
+            roles=(Pioneer(10011, pioneer),),
+            gold=0,
+            task_points=points,
+        )
+
+    def test_the_pioneer_walks_to_the_nearest_task_point(self):
+        cmds = plan(self._turn(self.P1, self.P2))
+        self.assertEqual(set(cmds), {"10011"})
+        self.assertEqual(cmds["10011"]["action"], "move")
+        point = cmds["10011"]["targetPos"][0]
+        self.assertEqual((point["x"], point["y"]), (11, 11), "朝最近的 (14,14) 迈一步")
+
+    def test_the_pioneer_accepts_next_to_the_point(self):
+        """贴着任务点 ⇒ `acceptTask`，**报文里没有 `targetPos`**
+        （逐字对 `docs/response.txt` L51：`{"action":"acceptTask"}`）。"""
+        cmds = plan(self._turn(self.P1, pioneer=Pos(13, 13)))
+        self.assertEqual(cmds, {"10011": {"action": "acceptTask"}})
+
+    def test_a_pioneer_two_cells_away_keeps_walking(self):
+        """"周围一格"是**切比雪夫 1**（8 邻格、含对角）—— 差一格都不算贴着。"""
+        cmds = plan(self._turn(self.P1, pioneer=Pos(12, 12)))
+        self.assertEqual(cmds["10011"]["action"], "move")
+
+    def test_no_ready_point_means_no_command(self):
+        """一个能接的点都没有 ⇒ 待命（空指令合法且不计异常）。
+
+        **不走去冷却中的点蹲守**：白天走过去、夜里回炮位、第二天再走过去 ——
+        第 8 步 `_ring` 那个"两格之间对着改目标转到天黑"是同一类坑。
+        """
+        self.assertEqual(plan(self._turn()), {})
+
+    def test_distance_ties_break_by_position(self):
+        """并列时的先后**不能取决于 payload 里的顺序**，否则用例复现不了
+        （与 `_defend` 的 `(dist, id)` 同一条理由）。"""
+        left, right = Pos(18, 20), Pos(22, 20)
+        cmds = plan(self._turn(right, left, pioneer=Pos(20, 20)))
+        point = cmds["10011"]["targetPos"][0]
+        step = Pos(point["x"], point["y"])
+        self.assertLess(step.dist(left), step.dist(right), "同距离该挑坐标小的那个")
+
+
+class TaskHoldTest(unittest.TestCase):
+    """开拓者一旦领到任务就被**钉死**（任务书 L379：离开任务点周围一格内任务立即作废）。
+
+    这是本步最危险的一条 —— 钉不住的话它会照旧走向炮位，任务当场作废，
+    而**本地全绿**：报文挑不出毛病、"行为也正常"，只是任务一次都没做完。
+    """
+
+    DAY, NIGHT = 1, 85
+    GUN = Pos(12, 25)
+    REACH = 4  # 加特林 L1 的射程，**取自样例 payload**（任务书表格写的是 3）
+    TASK = "请查询北京天气"
+
+    def _turn(self, role: BaseRole, round_no: int, phase_task: str = "", **kw) -> Turn:
+        guns = (Weapon(id=10020, kind="gatling", pos=self.GUN, attack_range=self.REACH, cooldown=0),)
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), _terrain(guns, {Pos(20, 20): "station"})),
+            roles=(role,),
+            gold=0,
+            weapons=guns,
+            phase_task=phase_task,
+            task_points=(Pos(30, 30),),
+            **kw,
+        )
+
+    def test_a_pinned_pioneer_does_not_move_in_the_day(self):
+        """`phaseTask` 非空时它一步都不走 —— 哪怕任务点就在旁边（走开一格就作废）。"""
+        turn = self._turn(Pioneer(10011, Pos(30, 29)), self.DAY, self.TASK)
+        self.assertEqual(plan(turn), {})
+
+    def test_a_pinned_pioneer_does_not_man_a_weapon_at_night(self):
+        """**夜里也不回炮位**（这一条是本步最危险的）。
+
+        开拓者已经贴着炮、射程内还有敌人 —— 不钉住的话它会开炮，而开炮要"走过去"，
+        任务当场作废。`phaseTask` 一空（下面那条）同样的局面就必须开炮，两相对照。
+        """
+        turn = self._turn(
+            Pioneer(10011, Pos(12, 24)), self.NIGHT, self.TASK, robots=(Robot(Pos(12, 27), 40),)
+        )
+        self.assertEqual(plan(turn), {})
+
+    def test_a_free_pioneer_still_mans_a_weapon_at_night(self):
+        """第 10 步的回归："所有角色都操炮"不能被任务线吃掉。"""
+        turn = self._turn(
+            Pioneer(10011, Pos(12, 24)), self.NIGHT, "", robots=(Robot(Pos(12, 27), 40),)
+        )
+        cmds = plan(turn)
+        self.assertEqual(
+            cmds,
+            {"10020": {"action": "attack", "controllerId": "10011", "targetPos": [{"x": 12, "y": 27}]}},
+        )
+
+    def test_the_workers_are_not_pinned_by_the_pioneers_task(self):
+        """钉的是开拓者一个人 —— 别连坐（工人该开炮照开）。"""
+        turn = self._turn(Pioneer(10011, Pos(40, 40)), self.NIGHT, self.TASK)
+        turn = turn._replace(
+            roles=(Pioneer(10011, Pos(40, 40)), Worker(1, Pos(12, 24))),
+            robots=(Robot(Pos(12, 27), 40),),
+        )
+        cmds = plan(turn)
+        self.assertEqual(list(cmds), ["10020"], "只有工人那一炮")
+        self.assertEqual(cmds["10020"]["controllerId"], "1")
+
+
+class TaskAnswerTest(unittest.TestCase):
+    """应答闭环：**无状态** —— `llmResp` 一有就原样交，没有就把题目发出去问。"""
+
+    DAY = 1
+    TASK = "请查询北京天气"
+
+    def _turn(self, phase_task: str = "", llm_resp: str = "") -> Turn:
+        return Turn(
+            round_no=self.DAY,
+            map=Map((41, 32), {Pos(14, 14): "challengerTaskPoint1"}),
+            roles=(Pioneer(10011, Pos(13, 13)),),
+            gold=0,
+            phase_task=phase_task,
+            llm_resp=llm_resp,
+            task_points=(Pos(14, 14),),
+        )
+
+    def test_the_question_carries_the_task_text(self):
+        """问题就是**任务原文**，外面只套了一层"直接给答案、不要解释"。"""
+        prompt = prompt_for(self._turn(self.TASK))
+        self.assertIn(self.TASK, prompt)
+        self.assertEqual(prompt, TASK_PROMPT.format(task=self.TASK))
+
+    def test_no_question_without_a_task(self):
+        """**不在任务里一次都不发**：每游戏日只有 3 次 LLM 额度（接口文档 L198），
+        那是任务线之外的资源，一分不花。"""
+        self.assertEqual(prompt_for(self._turn()), "")
+
+    def test_no_question_once_the_llm_answered(self):
+        """同一个 prompt 问两遍不会得到更好的答案，没必要反复烧。"""
+        self.assertEqual(prompt_for(self._turn(self.TASK, "晴 26 度")), "")
+
+    def test_the_answer_is_submitted_verbatim(self):
+        """答案**原文进、原文出**（逐字对 `docs/response.txt` L54）：
+        我们不知道判题器要什么格式，加工只会引入自己的假设。"""
+        cmds = plan(self._turn(self.TASK, "晴 26 度"))
+        self.assertEqual(cmds, {"10011": {"action": "submitAnswer", "taskAnswer": "晴 26 度"}})
+
+    def test_a_blank_answer_is_not_submitted(self):
+        """空答案不发 —— 那可能被判成"字段缺失"，正是红线里的"指令非法"。
+        （顺带钉住 `.strip()`：只有空白也必须当成空。）"""
+        self.assertEqual(plan(self._turn(self.TASK, "   ")), {})
+
+    def test_the_answer_is_resubmitted_every_round(self):
+        """**同一份 payload 连打几次都要交** —— 这不是 bug，是无状态设计的正面确认。
+
+        接口文档 L140：「以之前提交过的**通过率最高的**答案计算积分与金币」——
+        判题器专门为"反复交、取最好"设计了这个字段。⚠️ 别把它"优化"成"只交一次"：
+        那要记住交没交过，而**卡住的状态会静默关掉整条任务线**。
+        """
+        turn = self._turn(self.TASK, "晴 26 度")
+        for _ in range(3):
+            self.assertEqual(
+                plan(turn), {"10011": {"action": "submitAnswer", "taskAnswer": "晴 26 度"}}
+            )
 
 
 if __name__ == "__main__":

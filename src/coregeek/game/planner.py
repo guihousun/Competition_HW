@@ -1,36 +1,49 @@
 """决策入口：`Turn` → `roleCommandMap`。**策略只写在这里。**
 
 角色每回合按 `docs/策略指导.md` 的优先级**择一**（每回合每个角色只能一个动作，任务书 L177）。
-昼夜是两条不同的线 —— **白天只动工人，夜里所有角色都上炮位**：
+三条线 —— **白天开拓者去接任务、白天工人建造、夜里（还没被钉住的）角色上炮位**：
+
+**白天**（开拓者，见 `_take_task`）：
+
+1. **去任务点接任务** —— 走到最近一个**能接**的任务点旁边，贴着就 `acceptTask`
+   （任务书 §4.6.2：「开拓者处于任一格即可领取任务」，而任务点挡路 ⇒ `step_toward`
+   天然停在"周围一格内"，与 `build` / `collect` 是同一条契约）。一个能接的都没有 ⇒
+   **原地待命**（空指令合法且不计异常）。
 
 **白天**（工人）：
 
-1. **建武器** —— 武器数 < 角色数、金币够。位置优先放在**基地后方**那一列，
+2. **建武器** —— 武器数 < 角色数、金币够。位置优先放在**基地后方**那一列，
    让基地的 2×2 实体挡在武器与机器人之间（"建造的位置优先放在基地后面，让基地也能
    防守一下机器人的进攻"）。三座按 加特林 → 电磁狙击炮 → 火箭发射台。
-2. **采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
+3. **采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
    另外**必须在晚上到来前将墙建好，注意计算回合数**"。攒几块不写死，按**白天还剩的回合数**
    现算（见 `_stones_to_mine`）。墙砌在**面向机器人进攻的方向**（保护基地），背面留缺口。
 
-开拓者白天不发指令（任务线还没做）。
+**夜里**（还没被任务钉住的角色 —— §4.4 里 `attack` 的可用角色列写的就是"全部"）：
 
-**夜里**（**所有角色，含开拓者** —— §4.4 里 `attack` 的可用角色列写的就是"全部"）：
-
-3. **回炮位操炮** —— 走到最近的一座还没被本回合别人认领的武器旁，贴着就开火（见 `_defend`）；
+4. **回炮位操炮** —— 走到最近的一座还没被本回合别人认领的武器旁，贴着就开火（见 `_defend`）；
    够不着/没敌人/炮在冷却就**站在炮位待命，什么都不发**（空指令合法且不计异常）。
    火力目标 = **射程内血最少的机器人**（补刀）。
 
+> ⚠️ **开拓者一旦领到任务就被钉死**：离开己方任务点周围一格内任务立即作废（任务书 L379），
+> 所以它**连夜里都不回炮位**（代价：那三座炮少一个人操）。分支写在 `plan()` 循环的**最前面**
+> —— 它是全局最早的判据（任务在不在，与昼夜无关），放在那里昼夜两条分支才各自干净。
+
 返回 `{角色ID: 指令}`，key 用**字符串** —— JSON 对象的 key 本来就是字符串。
 ⚠️ **`attack` 那条是唯一的例外**：它的 key 是**武器 id**，操控者在 `controllerId` 里。
+
+任务线的另一半不在这个返回值里：`prompt_for(turn)` 单独产出响应顶层的 `prompt`
+（发给判题器的 LLM）。它**没有状态、也没有第二个使用者**，所以留在本模块当一个纯函数，
+不另开一个模块、也不改 `plan()` 的签名。
 """
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterator, Set
 from typing import Any
 
 from ..protocol import actions  # 唯一一条"由内往外"的依赖：指令只能经 Action 产出
 from .grid import Pos, back_weapon_cells, step_toward, wall_cells
-from .roles import BaseRole, Worker
+from .roles import BaseRole, Pioneer, Worker
 from .world import Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
@@ -56,6 +69,16 @@ ROUNDS_PER_STONE = 3
 #: 它同时吸收**距离估算的误差** —— 下面的距离一律用切比雪夫，绕障时会低估。
 TIME_MARGIN = 5
 
+#: 任务提问模板（发给判题器的 LLM，答案从下一回合 payload 的 `llmResp` 回来）。
+#: **本步最大的猜测** —— 答案格式文档一个字的没写（只说 `taskAnswer` 是 String、
+#: 通过率按"字段个数"算），所以**不硬塞格式要求**：任务原文里既然带着"三方 API 文档"，
+#: 题目自己很可能就规定了答案形式，我们猜错反而把 LLM 带偏。
+TASK_PROMPT = (
+    "请完成下面这道任务题，直接给出答案。\n"
+    "按题目本身要求的形式作答；不要解释、不要前言、不要 Markdown 代码块标记。\n"
+    "\n题目：\n{task}"
+)
+
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     cmds: dict[str, dict[str, Any]] = {}
@@ -69,13 +92,26 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     slots = _slots(turn)
 
     for role in turn.roles:
+        # **服任务中的开拓者：钉死。** 离开己方任务点周围一格内任务立即作废（任务书 L379），
+        # 所以它**连夜里都不回炮位**。判据用**载荷事实**（`phase_task`），不是自己记的
+        # "谁领了任务" —— 重放 / 换回合 / 崩溃都不会让这一条错。
+        # 放在循环最前面是有意的：它是全局最早的判据（任务在不在，与昼夜无关），
+        # 摆在这里昼夜两条分支才各自干净，而不用在两边各写一遍。
+        if isinstance(role, Pioneer) and turn.phase_task:
+            _answer_task(role, turn, cmds)
+            continue
+
         if not turn.is_day:
-            # 夜里**所有**角色回炮位 —— 开拓者也上（§4.4 的 attack 可用角色就是"全部"）
+            # 夜里**还没被钉住**的角色回炮位（§4.4 的 attack 可用角色就是"全部"）
             _defend(role, turn, cmds, claimed, taken)
             continue
 
+        if isinstance(role, Pioneer):
+            _take_task(role, turn, cmds, claimed)  # ← 第 10 步之前这里是一句 continue
+            continue
+
         if not isinstance(role, Worker):
-            continue  # 白天开拓者不动（任务线未做，见 code-task.md「不做什么」）
+            continue  # 既不是开拓者也不是工人 ⇒ 不是可操控单位（`roles.make` 已挡过一道）
 
         slot = next(slots, None)
         if slot is not None and budget >= WEAPON_COST:
@@ -99,6 +135,21 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
         _build_walls(role, turn, cmds, claimed, sites)
 
     return cmds
+
+
+def prompt_for(turn: Turn) -> str:
+    """本回合要发给判题器 LLM 的 `prompt`（响应顶层字段）。**纯函数、无状态。**
+
+    有任务在身、且判题器还没回话 ⇒ 把任务原文发出去问。`llm_resp` 一旦非空就不再问：
+    同一个 prompt 问两遍不会得到更好的答案，没必要烧额度（任务存续期间虽然不限量、
+    也不计数 —— 接口文档 L198）。
+
+    **不在任务里就一次都不发**（`phase_task` 为空 ⇒ `""`）：每游戏日只有 3 次 LLM 额度，
+    那是任务线之外的资源，一分不花。
+    """
+    if not turn.phase_task or turn.llm_resp:
+        return ""
+    return TASK_PROMPT.format(task=turn.phase_task)
 
 
 def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
@@ -127,6 +178,56 @@ def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
     kinds = [k for k in WEAPON_ORDER if k not in have]
     free = [c for c in back_weapon_cells(station, turn.map.size[0]) if c not in turn.map.blocked]
     yield from list(zip(kinds, free))[:need]
+
+
+# ── 开拓者的任务线 ──────────────────────────────────────────────────
+def _take_task(
+    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos]
+) -> None:
+    """白天：走到最近一个**能接**的任务点旁边，贴着就 `acceptTask`。
+
+    与 `build` / `collect` **同一条契约**：任务点挡路（任务书 L85），`step_toward`
+    天然停在贴着它的那一格，而那正是"周围一格内"（§4.6.2）—— 不用先挪开再领。
+
+    只认**锚点格**就够：走到锚点旁边必然满足"任一格周围一格内"（锚点本身就是其中一格；
+    即便 `taskPosition` 报的是任务点2 的另一格，走到它旁边照样合法）。
+
+    一个能接的点都没有（都在刷新冷却里 / 已做完）⇒ **什么都不发**。**不去冷却中的点蹲守**：
+    白天走过去、夜里回炮位、第二天再走过去 —— 第 8 步 `_ring` 那个"两格之间对着改目标
+    转到天黑"是同一类坑。
+
+    ⚠️ 领到任务之后本函数就再也进不来了：`plan()` 最前面那道 `turn.phase_task` 分支
+    会先一步接管（钉死）。
+    """
+    if not turn.task_points:
+        return
+    # "已经贴着就领"与"走过去"分两步判：合成一步（先滤掉 ≤1 的点、再取最近）会在
+    # 站在两个任务点中间时**舍近求远**。
+    if min(role.pos.dist(p) for p in turn.task_points) <= 1:
+        _emit(cmds, role, actions.AcceptTask)
+        return
+    # 并列按坐标排：与 `_defend` 的 `(dist, id)` 同一条理由 —— 先后不能取决于
+    # payload 里的顺序，否则用例复现不了。
+    target = min(turn.task_points, key=lambda p: (role.pos.dist(p), p))
+    _step(role, target, turn, cmds, claimed)
+
+
+def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) -> None:
+    """服任务中：把手上的答案**原样**交上去。**这里从来不移动** —— 一旦挪出任务点
+    周围一格，任务立即作废（任务书 L379），这一趟就白钉了。
+
+    答案 = `llmResp` 原文（只去首尾空白），不做任何加工：我们不知道判题器要什么格式，
+    唯一能做的是原文进、原文出。**空答案不发** —— 那可能被判成"字段缺失"，
+    而那正是红线里的"指令非法"。闸门只管"谁"，"空不空"归这里把关（与 `build` 的昼夜门同一条做法）。
+
+    **每回合都交**：接口文档 L140「以之前提交过的**通过率最高的**答案计算积分与金币」
+    —— 反复提交是判题器**预期的**用法。重复交同一个答案分数不变，而开拓者被钉在这里、
+    本来也没有第二个动作可做。⚠️ **这就是本步不需要任何跨回合状态的全部理由**，
+    别把它"优化"成"只交一次"：那要记住交没交过，而卡住的状态会**静默关掉整条任务线**。
+    """
+    answer = turn.llm_resp.strip()
+    if answer:
+        _emit(cmds, role, actions.SubmitAnswer, answer)
 
 
 # ── 白天：采石 → 砌墙 ────────────────────────────────────────────────
@@ -307,13 +408,14 @@ def _step(
     turn: Turn,
     cmds: dict[str, dict[str, Any]],
     claimed: set[Pos],
-    sites: set[Pos],
+    avoid: Set[Pos] = frozenset(),
 ) -> bool:
     """朝 `goal` 走一格并登记落脚格。走不到 / 发不出去返回 False。
 
-    `sites` 也算障碍：免得工人径直走到建造格**上**去（那样建完自己站在墙里）。
+    `avoid` = 额外要避开的格。工人传**建造格**（免得径直走到建造格**上**去 ——
+    那样建完自己站在墙里）；开拓者没有这一层，用默认的空集。
     """
-    walk = turn.map.blocked | claimed | sites
+    walk = turn.map.blocked | claimed | avoid
     step = step_toward(role.pos, goal, walk, turn.map.size)
     if step is None or not _emit(cmds, role, actions.Move, step):
         return False

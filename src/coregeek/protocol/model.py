@@ -39,6 +39,9 @@ def load(payload: Any) -> Turn | None:
         gold=_gold(payload),
         weapons=_weapons(payload),
         robots=_robots(payload),
+        task_points=_tasks(payload),
+        phase_task=_text(payload, "phaseTask"),
+        llm_resp=_text(payload, "llmResp"),
     )
 
 
@@ -95,10 +98,12 @@ def _int(value: Any) -> int:
     return value if isinstance(value, int) and not isinstance(value, bool) else -1
 
 
-def _pos(node: Any) -> Pos | None:
-    """`node["pos"]` → Pos。角色、中立元素、机器人都是这个字段名。"""
+def _pos(node: Any, key: str = "pos") -> Pos | None:
+    """`node[key]` → Pos。角色、中立元素、机器人、武器都叫 `pos`；
+    **任务点是唯一例外**（`taskPosition`），所以 `key` 可换。
+    """
     parent = node if isinstance(node, dict) else {}
-    raw = parent.get("pos")
+    raw = parent.get(key)
     if not isinstance(raw, dict):
         return None
     x, y = _int(raw.get("x")), _int(raw.get("y"))
@@ -170,6 +175,46 @@ def _robots(payload: dict[str, Any]) -> tuple[Robot, ...]:
             continue
         out.append(Robot(pos=pos, health=_int(node.get("health"))))
     return tuple(out)
+
+
+def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
+    """本回合**可接取**的己方任务点，坐标取自 `teamOur.playerTasks[].taskPosition`。
+
+    **`playerTasks` 是权威来源**：它只含我方那 2 个点（阵营已按 `teamOur.type` 滤好），
+    所以**不用去 `mapInfo.zones` 里认 `challengerTaskPoint*` / `defenderTaskPoint*`，
+    也不用读 `teamOur.type`**。字段名是 `taskPosition` 而**不是** `pos`。
+
+    只认**锚点格**就够（接口文档 L134："任务点对应的坐标"）：任务点2 虽然占两格，
+    但走到锚点旁边必然满足"任一格周围一格内"——锚点本身就是其中一格。
+
+    字段缺失的降级方向**故意不是"少做"**（与 `_gold` / `_size` / `_stone` 相反）：
+    误接一个冷却中的点只是**指令执行失败**（任务书 L508，不计异常），
+    而误判成"永远接不了"会让整条任务线**静默作废**——后者代价大得多。所以
+    `isValid` **明确为 `False`** 才排除（缺字段按"没说不可以"），
+    `coldDownRounds` 缺失给 -1、按 `<= 0` 也算就绪（负的冷却不存在，只可能是缺字段）。
+
+    `taskType` / `scoreReward` / `goldReward` / `timeoutRounds` 都不读：两个任务点
+    处理方式完全相同、奖励规则无差异，也没有"值不值得接"的取舍（那要 `timeoutRounds`，
+    而样例里根本没这个字段）。
+    """
+    out = []
+    for node in _items(payload, "teamOur", "playerTasks"):
+        if not isinstance(node, dict) or node.get("isValid") is False:
+            continue
+        pos = _pos(node, "taskPosition")
+        if pos is not None and _int(node.get("coldDownRounds")) <= 0:
+            out.append(pos)
+    return tuple(out)
+
+
+def _text(payload: dict[str, Any], key: str) -> str:
+    """顶层文本字段（`phaseTask` / `llmResp`）。非 `str` 一律退化成 `""`。
+
+    空串是这两个字段**天然的安全值**：`phase_task` 空 ⇒ "没任务" ⇒ 开拓者回落到
+    "去任务点"；`llm_resp` 空 ⇒ 不提交答案（空答案可能被判成"字段缺失"= 一次异常）。
+    """
+    value = payload.get(key)
+    return value if isinstance(value, str) else ""
 
 
 def _destroyed(node: dict[str, Any]) -> bool:
