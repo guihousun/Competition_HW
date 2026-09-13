@@ -117,8 +117,11 @@ class Turn(NamedTuple):
     #: 这是"任务进行中"的**唯一判据**，白天走不走、夜里钉不钉、答不答题全靠它。
     #: 用载荷事实而不是自己记"谁领了任务"，重放/换回合都不会错。
     phase_task: str = ""
-    #: 判题器 LLM 的回复（接口文档 L31）= **我们要提交的答案原文**，也可能是它要跑的命令
-    #: （`<tool>…</tool>`，见 `planner.task_channel`）。
+    #: 判题器 LLM 的回复（接口文档 L31）。三种可能，**全靠 `agent.chat` 解析**：
+    #: 一次工具调用（`<tool><tool_name>…</tool_name><tool_param>…</tool_param></tool>`，
+    #: 第 16 步的旧形状 `<tool>整条命令</tool>` 也还认）⇒ 命令进 `executeCmd`；
+    #: 包在 `<answer>…</answer>` 里的答案 ⇒ `submitAnswer`；**两者都不像 ⇒ 原文即答案**
+    #: （`answer_of` 的兜底，判题器的 LLM 是黑盒，它认不认我们的形状没得选）。
     #: ⚠️ **文档没写"没发 prompt 时它是什么"**（对比 `lastCmdResult` 那句专门写明的空值约定），
     #: 所以**必须按"它可能粘住"设计** —— 上一回合那条回复有可能原样再来一遍。
     #: `planner.task_channel` 判据 2 压在判据 3 之前，就是为这件事买的保险。

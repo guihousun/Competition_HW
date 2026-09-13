@@ -17,6 +17,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from coregeek.agent.chat import PROMPT, answer_of, chat, looks_like_tool, tool_of  # noqa: E402
+from coregeek.agent.tools import TOOLS, tool_call, tool_desc  # noqa: E402
+from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import LOG_TEXT_MAX, handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
@@ -204,6 +207,11 @@ class GateTest(unittest.TestCase):
 
 class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
+
+    def setUp(self) -> None:
+        #: SOP 是**模块级状态**（全项目唯一一处跨回合状态），不清就会跨用例串味：
+        #: 前一条用例存进去的 SOP 会出现在后一条的 prompt 里。
+        sop.reset()
 
     def _handle(self, raw: bytes) -> dict:
         return json.loads(handle(raw).decode("utf-8"))
@@ -410,8 +418,11 @@ class HandleTest(unittest.TestCase):
         self.assertIn("请查询北京天气", body["prompt"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ② LLM 要一条命令 ⇒ 命令进 `executeCmd`，而**不是**当答案交上去
-        raw["llmResp"] = "<tool>python -c \"print(1+1)\"</tool>"
+        # ② LLM 要一条命令（新形状）⇒ 命令进 `executeCmd`，而**不是**当答案交上去
+        raw["llmResp"] = (
+            '<tool><tool_name>executeCmd</tool_name>'
+            '<tool_param>python -c "print(1+1)"</tool_param></tool>'
+        )
         body = ask()
         self.assertEqual(body["executeCmd"], 'python -c "print(1+1)"')
         self.assertEqual(body["prompt"], "")
@@ -422,10 +433,10 @@ class HandleTest(unittest.TestCase):
         self.assertIn("[exitCode:0]\n2", body["prompt"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ④ LLM 给出答案 ⇒ 原样提交，而且不再提问
+        # ④ LLM 给出答案 ⇒ **只交 `<answer>` 里的内容**（不是整段回复）
         #    （清掉 `lastCmdResult`：文档说"未发命令时为空字符串"，上一轮我们没发命令）
         raw["lastCmdResult"] = ""
-        raw["llmResp"] = "晴 26 度"
+        raw["llmResp"] = "<answer>晴 26 度</answer>"
         body = ask()
         self.assertEqual(
             body["roleCommandMap"]["10011"],
@@ -435,13 +446,25 @@ class HandleTest(unittest.TestCase):
 
         # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，**同时照旧提交**
         #    （两条通道独立：提问在推进，而按接口文档 L140 取"通过率最高"、重交零成本）
+        #    ⚠️ 纠错段里带的必须是**交上去的那一份**（`晴 26 度`），不是 `<answer>…</answer>` 原文
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
         self.assertIn("晴 26 度", body["prompt"])
         self.assertIn("被判定为不正确", body["prompt"])
+        #: ⚠️ 判据是**整段带标记的回复**，不是 `<answer>` 这个字面量 ——
+        #: 模板自己的「输出格式」段里就有一个 `<answer>答案本身</answer>` 当示例。
+        self.assertNotIn("<answer>晴 26 度</answer>", body["prompt"])
         self.assertEqual(body["executeCmd"], "")
         self.assertEqual(
             body["roleCommandMap"]["10011"]["action"], "submitAnswer", "提交不该被提问挤掉"
+        )
+
+        # ⑥ 落回裸文本 ⇒ 照旧原文提交（兜底：判题器的 LLM 不按我们的形状回时唯一的退路）
+        raw["llmResp"] = "晴 26 度"
+        body = ask()
+        self.assertEqual(
+            body["roleCommandMap"]["10011"],
+            {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
         )
 
     def test_the_sandbox_line_only_appears_with_a_result(self):
@@ -457,7 +480,9 @@ class HandleTest(unittest.TestCase):
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {}
         raw["phaseTask"] = "请查询北京天气"
-        raw["llmResp"] = "<tool>ls</tool>"
+        raw["llmResp"] = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>"
+        )
         raw["lastCmdResult"] = ""
 
         def messages() -> list[str]:
@@ -499,27 +524,38 @@ class HandleTest(unittest.TestCase):
     def test_the_worst_round_stays_under_the_budget(self):
         """**硬约束 5 的直接守卫**：最坏的一回合，日志总量不得超预算。
 
-        原来只数行数（42/45 行），行数**测不出字节**——而管道缓冲 64KB 是字节。
-        三个文本字段同时顶到 `LOG_TEXT_MAX`（中文 1 字 = 3 字节）就是最坏局面：
-        任务原文（判题器给的）、LLM 回复、沙盒输出 —— **实测 6002 字节**
-        （干净回合 2294 + 三个 400 字的中文块 × 1200）。上限取 6500 而不是 6002：
-        它要抓的是**结构性的膨胀**（少了一个 `_clip`、或者又加进来一个顶格的大字段），
-        不是几个标签的字节抖动 —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节），
-        真到 6002 这个数是中文任务原文 + 中文 LLM 回复 + 中文沙盒输出同时出现。
+        原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。四个顶格的东西撞在一起
+        就是最坏局面：任务原文、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，
+        中文 1 字 = 3 字节）**再加**一条 SOP 更新行 —— **实测 6180 字节 / 44 行**。
+        上限取 6900 而不是 6180：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
+        或者又加进来一个顶格的大字段 —— 那至少是 1200 字节），不是几个标签的字节抖动
+        —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节）。
+
+        ⚠️ **`assertLogs` 必须收 root（不写 logger 名）**：SOP 那条走的是
+        `coregeek.agent.tools.sop`，只盯 `coregeek.app` 的话它是**唯一一条绕开本守卫的输出**
+        —— 守卫看着在岗，实际漏掉一整块。第 18 步新加这一条时正是这么发现的。
 
         数字与 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5 三处一致。
         """
+        sop.reset()  # 模块级状态：不清的话"同内容不再打日志"会让 SOP 行整条消失
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {}
         raw["phaseTask"] = "题" * LOG_TEXT_MAX
-        raw["llmResp"] = "答" * LOG_TEXT_MAX
+        #: LLM 这一格放**一次 SOP 调用**（而不是一串裸中文）：这样三个字段照样顶格，
+        #: 而 SOP 那条日志也一起被算进来 —— 它是本守卫唯一容易漏掉的一条。
+        raw["llmResp"] = (
+            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>"
+            + "答" * LOG_TEXT_MAX
+            + "</tool_param></tool>"
+        )
         raw["lastCmdResult"] = "出" * LOG_TEXT_MAX
-        with self.assertLogs("coregeek.app", level="INFO") as caught:
+        with self.assertLogs(level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
+        self.assertIn(sop.__name__, {r.name for r in caught.records}, "SOP 行没被收进来 ⇒ 守卫有盲区")
         total = sum(len(r.getMessage().encode("utf-8")) for r in caught.records)
-        self.assertLess(total, 6500, f"最坏回合 {total} 字节，超了硬约束 5 的预算")
+        self.assertLess(total, 6900, f"最坏回合 {total} 字节，超了硬约束 5 的预算")
 
 
 class ParseTest(unittest.TestCase):
@@ -2319,6 +2355,10 @@ class TaskChannelTest(unittest.TestCase):
     **可以同时成立**，那是有利的（接口文档 L140 取"通过率最高"，重交零成本）。
     """
 
+    def setUp(self) -> None:
+        #: SOP 是**模块级状态**（全项目唯一一处跨回合状态），不清就会跨用例串味。
+        sop.reset()
+
     DAY = 1
     TASK = "请查询北京天气"
     ANSWER = "晴 26 度"
@@ -2350,9 +2390,9 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_the_question_carries_the_task_text(self):
-        """第一次提问 = **任务原文 + 怎么要命令 + 什么时候直接作答**，不带任何回灌。
+        """第一次提问 = **四段模板（定位 / 工具 / 格式 / SOP）+ 题目原文**，不带任何回灌。
 
-        断言用 `assertNotIn` 而不是"等于 `TASK_PROMPT.format(...)`"：后者是同义反复
+        断言用 `assertNotIn` 而不是"等于 `PROMPT.format(...)`"：后者是同义反复
         （模板与断言一起改，永远过得去），而"第一次问不该有任何回灌"才是真要求。
         """
         prompt, execute = task_channel(self._turn(self.TASK))
@@ -2360,6 +2400,8 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, "")
         self.assertNotIn(self.RESULT_MARK, prompt)
         self.assertNotIn(self.RETRY_MARK, prompt)
+        for header in ("# Agent定位", "# 可使用的工具", "# 输出格式", "# 沉淀的 SOP"):
+            self.assertIn(header, prompt)
 
     def test_nothing_is_sent_without_a_task(self):
         """**不在任务里一次都不发**（`prompt` 也不行、`executeCmd` 更不行）。
@@ -2391,14 +2433,29 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(task_channel(self._turn(self.TASK, self.ANSWER)), ("", ""))
 
     def test_the_command_comes_out_of_the_tool_markup(self):
-        """`<tool>…</tool>` 里的东西**就是那条命令**，两侧空白去掉、内部原样保留。
+        """工具调用里的 `<tool_param>` **就是那条命令**，两侧空白去掉、内部原样保留。
+
+        **两种形状都收**：第 18 步的新形状（`<tool_name>` 点名工具）与第 16 步的旧形状
+        （块里直接放命令 ⇒ 当 `executeCmd`）。兼容层是用户拍板的 —— 判题器的 LLM 认不认
+        新形状**是黑盒**，旧形状是"不被认账"时唯一能让任务线继续跑下去的退路。
 
         多标签只取第一条：`executeCmd` 只有一个字段，一回合只跑得了一条（接口文档 L210）。
         """
+        def call(param: str) -> str:
+            return (
+                f"<tool><tool_name>executeCmd</tool_name>"
+                f"<tool_param>{param}</tool_param></tool>"
+            )
+
         cases = {
+            call("ls -la"): "ls -la",
+            f"  {call('  ls -la  ')}  ": "ls -la",
+            call('python -c "print(1)"\nprint(2)'): 'python -c "print(1)"\nprint(2)',
+            f"{call('first')} 然后 {call('second')}": "first",
+            # ↓ 第 16 步的旧形状（兼容层）
             "<tool>ls -la</tool>": "ls -la",
             "  <tool>  ls -la  </tool>  ": "ls -la",
-            "<tool>python -c \"print(1)\"\nprint(2)</tool>": 'python -c "print(1)"\nprint(2)',
+            '<tool>python -c "print(1)"\nprint(2)</tool>': 'python -c "print(1)"\nprint(2)',
             "<tool>first</tool> 然后 <tool>second</tool>": "first",
         }
         for reply, expected in cases.items():
@@ -2406,10 +2463,50 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertEqual(task_channel(self._turn(self.TASK, reply)), ("", expected))
 
     def test_a_broken_tool_tag_yields_no_command(self):
-        """凑不齐的标签 ⇒ **没有命令可发**。别把半截标签当命令丢进沙盒。"""
-        for reply in ("<tool ls", "<tool>ls", "</tool>", "<tool></tool>", "<tool>  </tool>"):
+        """凑不齐的标签 ⇒ **没有命令可发**。别把半截标签当命令丢进沙盒。
+
+        ⚠️ 最后两条是第 18 步新增的**隐式子路径 ③′**：调用是完整的，但工具给不出命令
+        （`SOP2Prompt` / 未知工具 / 有名字没参数）。它们与"畸形"落同一个出口：**重问**。
+        """
+        replies = (
+            "<tool ls",
+            "<tool>ls",
+            "</tool>",
+            "<tool></tool>",
+            "<tool>  </tool>",
+            "<tool><tool_name>executeCmd</tool_name></tool>",
+            "<tool><tool_name>没这个工具</tool_name><tool_param>ls</tool_param></tool>",
+            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>方法</tool_param></tool>",
+        )
+        for reply in replies:
             with self.subTest(reply=reply):
                 self.assertEqual(task_channel(self._turn(self.TASK, reply))[1], "")
+
+    def test_a_tool_that_yields_no_command_is_asked_again(self):
+        """**③′：工具调用成了、但工具不产出命令 ⇒ 重问**（既不提交、也不发命令）。
+
+        `SOP2Prompt` 是最典型的一个 —— 它**当回合没有别的回执**，而下一轮 prompt 里
+        那段「沉淀的 SOP」就是"调用成功了"的凭证（它自己看得见）。
+        ⚠️ 这条路径**不会活锁**：任务期间 prompt 不限量不计数（接口文档 L198），
+        而出口有"LLM 改口 / `code 2` 带来的纠错段 / 它看见 SOP 段"三条。
+        """
+        prompt, execute = task_channel(self._turn(self.TASK, "<tool><tool_name>SOP2Prompt</tool_name><tool_param>先看目录</tool_param></tool>"))
+        self.assertEqual(execute, "")
+        self.assertIn(self.TASK, prompt)
+        self.assertIn("先看目录", prompt)  # 存下的 SOP 立刻出现在同一份 prompt 里
+        self.assertEqual(sop.current(), "先看目录")
+
+    def test_the_stored_sop_rides_along_in_every_later_prompt(self):
+        """**自进化的可观测证据**：存过一次之后，后面每一份 prompt 都带着它 ——
+        包括"回灌沙盒结果"与"带纠错重问"这两条分支。"""
+        sop.SOP2Prompt("先 ls 再算")
+        for turn in (
+            self._turn(self.TASK),
+            self._turn(self.TASK, cmd_result="[exitCode:0]\nok"),
+            self._turn(self.TASK, errors=(Error(2, "x"),), llm_resp=self.ANSWER),
+        ):
+            with self.subTest(turn=turn):
+                self.assertIn("先 ls 再算", task_channel(turn)[0])
 
     def test_a_broken_tool_reply_is_asked_again(self):
         """⚠️ **半截工具调用要落回"重问"，不能两边都哑火。**
@@ -2488,6 +2585,26 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertNotIn(self.RETRY_MARK, broken[0], "半条命令不是'上次交的答案'")
 
+    def test_the_retry_blames_exactly_what_we_submitted(self):
+        """⚠️ **纠错段里带的必须是"我们交上去的那一份"，不是回复原文。**
+
+        交的是解包后的 `晴 26 度`，骂的却是 `<answer>晴 26 度</answer>` 的话，
+        LLM 会以为自己交了一堆标签 —— 它会去改一个并不存在的问题。
+        两处（`_answer_task` 提交、判据 ④ 回灌）共用 `answer_of` 就是为了这件事，
+        这条用例把它钉死：**骂的 = 交的**。
+        """
+        prompt, execute = task_channel(
+            self._turn(
+                self.TASK,
+                llm_resp=f"<answer>{self.ANSWER}</answer>",
+                errors=(Error(2, "答案不正确"),),
+            )
+        )
+        self.assertEqual(execute, "")
+        self.assertIn(self.RETRY_MARK, prompt)
+        self.assertIn(self.ANSWER, prompt)
+        self.assertNotIn(f"<answer>{self.ANSWER}</answer>", prompt)
+
     def test_only_the_answer_error_triggers_the_retry(self):
         """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。"""
         for code in (0, 1, 3, 4, 5):
@@ -2516,14 +2633,23 @@ class TaskChannelTest(unittest.TestCase):
         ⇒ 活锁。它也是 `task_channel` 之所以合成一个函数、而不是 `prompt_for` +
         `execute_for` 的全部理由（拆开就要把这条链写两遍）。
         """
+        call = "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>"
         turns = [
             self._turn(),
             self._turn(self.TASK),
             self._turn(self.TASK, self.ANSWER),
+            self._turn(self.TASK, f"<answer>{self.ANSWER}</answer>"),
+            self._turn(self.TASK, call),
             self._turn(self.TASK, "<tool>ls</tool>"),
             self._turn(self.TASK, "<tool ls", cmd_result="[exitCode:0]\nok"),
+            self._turn(self.TASK, call, cmd_result="[exitCode:0]\nok"),  # 发过命令又拿到结果
             self._turn(self.TASK, cmd_result="[TIMEOUT]\n…"),
             self._turn(self.TASK, self.ANSWER, errors=(Error(2, "x"),)),
+            self._turn(self.TASK, "<tool ls", errors=(Error(2, "x"),)),
+            # ③′：工具调用成了但工具不产出命令（含 SOP 那条会写状态的）
+            self._turn(self.TASK, "<tool><tool_name>SOP2Prompt</tool_name><tool_param>方法</tool_param></tool>"),
+            self._turn(self.TASK, "<tool><tool_name>未知</tool_name><tool_param>ls</tool_param></tool>"),
+            self._turn(self.TASK, "<tool><tool_name>executeCmd</tool_name></tool>"),
         ]
         for i, turn in enumerate(turns):
             with self.subTest(i=i):
@@ -2531,10 +2657,32 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertFalse(prompt and execute, (prompt, execute))
 
     def test_the_answer_is_submitted_verbatim(self):
-        """答案**原文进、原文出**（逐字对 `docs/response.txt` L54）：
+        """裸文本答案**原文进、原文出**（逐字对 `docs/response.txt` L54）：
         我们不知道判题器要什么格式，加工只会引入自己的假设。"""
         cmds = plan(self._turn(self.TASK, self.ANSWER))
         self.assertEqual(cmds, {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}})
+
+    def test_a_wrapped_answer_is_submitted_without_the_markup(self):
+        """`<answer>…</answer>` ⇒ 交的是**块里那一段**，不是整段回复。
+
+        多字段结构化答案（通过率按"字段个数"算）落在这里：交上去的字节里不能混进标签。
+        """
+        for reply in ("<answer>晴 26 度</answer>", "  <answer> 晴 26 度 </answer>  "):
+            with self.subTest(reply=reply):
+                self.assertEqual(
+                    plan(self._turn(self.TASK, reply)),
+                    {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}},
+                )
+
+    def test_a_malformed_answer_wrapper_submits_nothing(self):
+        """畸形 `<answer>`（空块 / 半截）⇒ **这一回合不提交**。
+
+        不回落成原文是有意的：交一串光秃秃的标签只会被判一次错。判题器取"通过率最高的一份"
+        （接口文档 L140）⇒ 少交一次不扣分，而**不交**永远比**交错的**好。
+        """
+        for reply in ("<answer></answer>", "<answer>   </answer>", "<answer>晴"):
+            with self.subTest(reply=reply):
+                self.assertEqual(plan(self._turn(self.TASK, reply)), {})
 
     def test_a_blank_answer_is_not_submitted(self):
         """空答案不发 —— 那可能被判成"字段缺失"，正是红线里的"指令非法"。
@@ -2544,11 +2692,18 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_tool_call_is_never_submitted_as_an_answer(self):
         """⚠️ **没取到命令的回复也绝不能当答案交上去。**
 
-        `_answer_task` 与 `task_channel` 判据 5 用的是**同一个谓词**
-        （`_is_tool_reply`）—— 一边当命令、一边当答案就是第二份真相。
+        `_answer_task` 与 `task_channel` 判据 ⑤ 用的是**同一个谓词**（`answer_of`，
+        内部就是 `looks_like_tool` 那一条）—— 一边当命令、一边当答案就是第二份真相。
         交上去的话，`<tool>ls</tool>` 会被判题器当成一次错误答案（`errorCode 2`）。
         """
-        for reply in ("<tool>ls</tool>", "<tool>ls</tool>\n记住这个", "<tool ls"):
+        replies = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>",
+            "<tool>ls</tool>",
+            "<tool>ls</tool>\n记住这个",
+            "<tool ls",
+            "<tool_name>executeCmd</tool_name><tool_param>ls</tool_param>",
+        )
+        for reply in replies:
             with self.subTest(reply=reply):
                 self.assertEqual(plan(self._turn(self.TASK, reply)), {})
 
@@ -2564,6 +2719,347 @@ class TaskChannelTest(unittest.TestCase):
             self.assertEqual(
                 plan(turn), {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}}
             )
+
+
+# ── 第 18 步：Agent 系统（`agent/` + `tools/`）──────────────────────────
+class AgentToolCallTest(unittest.TestCase):
+    """工具注册表与顶层调度 `tool_call`。
+
+    ⚠️ **`setUp` 里 `sop.reset()` 不能省**：`sop._current` 是模块级状态，
+    同一个测试进程里会跨用例串味（前一条用例存进去的 SOP 会出现在后一条的 prompt 里）。
+    碰 SOP 的类都这么办 —— 这是唯一一处需要复位的状态。
+    """
+
+    def setUp(self) -> None:
+        sop.reset()
+
+    def test_execute_cmd_returns_the_command_verbatim(self):
+        """`executeCmd` 就是"把命令搬进响应字段"这一步 —— **本地一个字都不执行**。
+
+        换行、引号、重定向、中文原样过（沙盒那边才解释它）。所以这里**只能**断言原文返回：
+        断言里出现任何"执行"的痕迹（`subprocess` / `os.system`）都说明这一步走错了。
+        """
+        for cmd in (
+            "ls -la",
+            'python -c "print(1+1)"',
+            "cat < input.txt > out.txt",
+            "grep -n '中文' a.txt\nwc -l a.txt",
+        ):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(tool_call("executeCmd", cmd), cmd)
+
+    def test_sop2prompt_stores_the_method_and_yields_no_command(self):
+        """`SOP2Prompt` 存下方法、**返回空串**（它不产出命令）。
+
+        返回值直接进响应顶层的 `executeCmd` ⇒ 返回非空就是往沙盒里丢一条命令
+        （而这条命令根本不存在，只会白烧一次沙盒执行）。
+        """
+        self.assertEqual(tool_call("SOP2Prompt", "第一步：先 ls"), "")
+        self.assertEqual(sop.current(), "第一步：先 ls")
+
+    def test_an_unknown_tool_yields_no_command_and_no_exception(self):
+        """未知工具 ⇒ 空串，**绝不抛**。
+
+        它跑在 `app.handle` 的 `try` 里，抛出去会把**整回合所有角色的指令**一起带走
+        （不只任务线）—— 合法、不计异常，但白白丢一个回合。LLM 编工具名是常态。
+        """
+        for name in ("nope", "", "execute_cmd", None):
+            with self.subTest(name=name):
+                self.assertEqual(tool_call(name, "ls"), "")
+
+    def test_a_blank_or_non_string_param_never_reaches_the_tool(self):
+        """空参数 / 非字符串参数 ⇒ 空串，**而且 SOP 没被清空**（闸门在调用之前）。
+
+        这条钉的是**闸门的位置**：`SOP2Prompt("")` 的语义是"清空"，
+        如果校验下沉到工具里，一次空参数调用就会把整场攒下来的 SOP 抹掉。
+        """
+        sop.SOP2Prompt("保住我")
+        for param in ("", "   ", "\n", None, 42, ["ls"]):
+            with self.subTest(param=param):
+                self.assertEqual(tool_call("SOP2Prompt", param), "")
+        self.assertEqual(sop.current(), "保住我")
+
+    def test_every_registered_tool_is_described_and_callable(self):
+        """`tool_desc()` 覆盖 `TOOLS` 里的每一个工具，且每个都能真的调起来。
+
+        注册了却没进描述（LLM 永远不知道它存在），或者描述里有、注册表里没有
+        （LLM 一调就落空）—— 两种都是**只有在实盘上才会暴露**的不一致。
+        """
+        desc = tool_desc()
+        for name in TOOLS:
+            self.assertIn(name, desc)
+        for name, (impl, text) in TOOLS.items():
+            with self.subTest(name=name):
+                self.assertTrue(callable(impl))
+                self.assertTrue(text.strip())
+
+    def test_a_newly_registered_tool_shows_up_everywhere(self):
+        """**加一个工具只改一处**（`TOOLS`）—— 描述与调度同时跟上。
+
+        注入一个假工具来钉这条性质（把描述写死成字面量的实现会在这里露馅）：
+        漏掉的症状是"**LLM 永远不知道它存在**"，本地全绿、实盘上只是"少用了一个工具"。
+        """
+        TOOLS["测试用工具"] = (lambda param: f"命令:{param}", "只在这条用例里存在")
+        try:
+            self.assertIn("测试用工具", tool_desc())
+            self.assertIn("只在这条用例里存在", tool_desc())
+            self.assertEqual(tool_call("测试用工具", "参数"), "命令:参数")
+        finally:
+            del TOOLS["测试用工具"]
+        self.assertNotIn("测试用工具", tool_desc())
+
+
+class SopStateTest(unittest.TestCase):
+    """SOP 的跨回合状态 —— **全项目唯一一处**（用户拍板：进程内、整场存活、重启清空）。"""
+
+    def setUp(self) -> None:
+        sop.reset()
+
+    def test_it_replaces_instead_of_appending(self):
+        """**整段替换**，不是追加。
+
+        追加没有遗忘机制：几百回合下来 prompt 会被旧套路撑爆，而且"上一版不对"这件事
+        LLM 自己重写一遍就能表达。
+        """
+        sop.SOP2Prompt("第一版")
+        sop.SOP2Prompt("第二版")
+        self.assertEqual(sop.current(), "第二版")
+
+    def test_it_survives_across_calls(self):
+        """存下来之后**下一个调用者读得到** —— 这就是"跨回合"的全部含义。"""
+        sop.SOP2Prompt("先看 ls 的输出再算")
+        self.assertEqual(sop.current(), "先看 ls 的输出再算")
+        self.assertEqual(sop.current(), "先看 ls 的输出再算")
+
+    def test_an_overlong_sop_is_truncated_and_says_so(self):
+        """超上限 ⇒ **保头截断**，而且日志同时报"收到多少 / 存了多少"。
+
+        静默截断正是第 14 步被叫醒的那个坑：LLM 灌进来 9000 字，日志上只看见"存 1000 字"，
+        下一个人会以为是它只写了 1000 字。上限存在的理由是硬约束 5（prompt 每回合都发）。
+        """
+        with self.assertLogs(sop.__name__, level="INFO") as caught:
+            sop.SOP2Prompt("长" * 9000)
+        self.assertEqual(len(sop.current()), sop.SOP_MAX)
+        line = caught.records[0].getMessage()
+        self.assertIn("9000", line)
+        self.assertIn(str(sop.SOP_MAX), line)
+
+    def test_storing_the_same_text_again_is_silent(self):
+        """同样的内容存第二遍**不打日志**。
+
+        `llm_resp` 粘住时 LLM 会把同一段 SOP 反复喂进来，每回合打一行是白花 stdout 预算
+        （硬约束 5），而"又存了一遍同样的东西"不算"有事"。
+        """
+        sop.SOP2Prompt("一样的内容")
+        with self.assertNoLogs(sop.__name__, level="INFO"):
+            sop.SOP2Prompt("一样的内容")
+
+    def test_a_multiline_sop_is_logged_as_one_line(self):
+        """SOP 必然是多行的 ⇒ 日志必须**打成一行**（换行转义）。
+
+        不转义的话一条记录变几十行，而 `logging` 的时间戳前缀只加在**第一条物理行**上
+        （与 `app._log` 的"三块拼成一条"同一条理由）。
+        """
+        with self.assertLogs(sop.__name__, level="INFO") as caught:
+            sop.SOP2Prompt("第一步：ls\r\n第二步：cat")
+        message = caught.records[0].getMessage()
+        self.assertNotIn("\n", message)
+        self.assertNotIn("\r", message)
+        self.assertIn("\\n", message)
+
+    def test_clearing_is_silent_about_content(self):
+        """清空（= 整段替换成空串）也要留一行 —— 否则"怎么没了"无从查起。"""
+        sop.SOP2Prompt("有内容")
+        with self.assertLogs(sop.__name__, level="INFO") as caught:
+            sop.SOP2Prompt("")
+        self.assertEqual(sop.current(), "")
+        self.assertEqual(len(caught.records), 1)
+
+
+class ChatPromptTest(unittest.TestCase):
+    """prompt 的组装 —— 四段模板 + 两段回灌 + 题目。
+
+    断言**逐字**钉住四个小节标题与两个形状的示例：它们是"LLM 照不照抄"的唯一杠杆，
+    而 `str.format` 漏填一个占位符会让整段变成 `{tool_desc}` 这种字面量出现在 prompt 里
+    —— 那种错在实盘上表现为"LLM 完全不按格式回"，本地却什么都看不出来。
+    """
+
+    def setUp(self) -> None:
+        sop.reset()
+
+    def test_the_placeholders_are_all_filled(self):
+        prompt = chat("题目")
+        for header in ("# Agent定位", "# 可使用的工具", "# 输出格式", "# 沉淀的 SOP"):
+            self.assertIn(header, prompt)
+        for leftover in ("{tool_desc}", "{sop}", "{result}", "{retry}", "{task}"):
+            self.assertNotIn(leftover, prompt)
+
+    def test_every_tool_appears_in_the_prompt(self):
+        """prompt 里的工具清单由 `TOOLS` 生成 ⇒ 每个注册的工具都得在。"""
+        prompt = chat("题目")
+        for name in TOOLS:
+            self.assertIn(name, prompt)
+
+    def test_both_output_shapes_are_shown_verbatim(self):
+        """两个形状（工具调用 / `<answer>`）**逐字**出现在输出格式那一段。
+
+        这是唯一能提高"LLM 照抄概率"的杠杆：描述得含糊一点，它就自己发明第三种形状，
+        而那种失败**本地测不出来**（我们的解析自洽，判题器认不认只有实盘知道）。
+        """
+        prompt = chat("题目")
+        self.assertIn("<tool><tool_name>工具名</tool_name><tool_param>参数原文</tool_param></tool>", prompt)
+        self.assertIn("<answer>答案本身</answer>", prompt)
+
+    def test_the_task_text_is_there(self):
+        self.assertIn("请查询北京天气", chat("请查询北京天气"))
+
+    def test_the_two_injections_only_appear_when_given(self):
+        """回灌那两段"没有就不占地方"，而且**在第一次提问里一个都看不到**。"""
+        plain = chat("题目")
+        self.assertNotIn("【上一条命令的执行结果", plain)
+        self.assertNotIn("【你上一次提交的答案", plain)
+
+        with_result = chat("题目", result="[exitCode:0]\nok")
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result)
+
+        with_retry = chat("题目", retry="晴 26 度")
+        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry)
+
+    def test_a_stored_sop_shows_up_in_the_next_prompt(self):
+        """**这就是"自进化"的全部可观测证据**：存过一次之后，后面每一份 prompt 都带着它。"""
+        sop.SOP2Prompt("先看目录再动手")
+        self.assertIn("先看目录再动手", chat("另一道题"))
+
+    def test_braces_in_the_values_are_not_scanned_again(self):
+        """`str.format` **只做一次** —— 替换值里的 `{}` 不能被当成占位符。
+
+        题目原文与沙盒输出都是**任意文本**，python 代码片段里 `{}` 太常见了；
+        二次扫描会在 `chat` 里直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。
+        """
+        prompt = chat("题目 {task} {0} {}", result="{'a': 1}")
+        self.assertIn("题目 {task} {0} {}", prompt)
+        self.assertIn("{'a': 1}", prompt)
+
+
+class ToolReplyParseTest(unittest.TestCase):
+    """`tool_of`：解析工具调用。**严格**（与 `looks_like_tool` 故意相反）。"""
+
+    def test_a_full_call_gives_the_name_and_the_param(self):
+        reply = "<tool><tool_name>executeCmd</tool_name><tool_param>cat /tmp/a.txt</tool_param></tool>"
+        self.assertEqual(tool_of(reply), ("executeCmd", "cat /tmp/a.txt"))
+
+    def test_the_param_keeps_its_inner_newlines(self):
+        """参数**内部**的换行原样保留（只去首尾空白）—— 多行命令、带缩进的 python 都合法。"""
+        reply = (
+            "<tool><tool_name>executeCmd</tool_name>"
+            "<tool_param>\nls -la\n  wc -l a.txt\n</tool_param></tool>"
+        )
+        self.assertEqual(tool_of(reply), ("executeCmd", "ls -la\n  wc -l a.txt"))
+
+    def test_only_the_first_call_is_taken(self):
+        """只取第一条：`executeCmd` 只有一个字段，一回合只跑得了一条（接口文档 L210）。"""
+        reply = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param>first</tool_param></tool>"
+            "<tool><tool_name>executeCmd</tool_name><tool_param>second</tool_param></tool>"
+        )
+        self.assertEqual(tool_of(reply), ("executeCmd", "first"))
+
+    def test_the_old_bare_shape_still_works(self):
+        """**兼容层**（用户拍板全覆盖）：块里没有 `<tool_name>` ⇒ 整块正文就是一条命令。
+
+        第 16 步的形状就是这个。判题器的 LLM 认不认新形状是**黑盒**，
+        这是"不被认账"时唯一能让任务线继续跑下去的退路。
+        ⚠️ **不加"含 `<` 就当畸形"的守卫**：那会误杀 `cat < input.txt`。
+        """
+        for reply in ("<tool>ls -la</tool>", "<tool  >  ls -la  </tool>", "<tool >ls -la</tool>"):
+            with self.subTest(reply=reply):
+                self.assertEqual(tool_of(reply), ("executeCmd", "ls -la"))
+
+    def test_partial_markup_is_not_a_call(self):
+        """半截的都不算 —— **不猜半个调用**，让调用方落到"重问"那一支。
+
+        `cat /tmp/x` 这种没有 `<tool>` 的裸参数也不认（那只是普通文本）。
+        """
+        cases = (
+            "<tool><tool_name>executeCmd</tool_name></tool>",  # 有名字没参数
+            "<tool><tool_param>ls</tool_param></tool>",  # 有参数没名字
+            "<tool></tool>",  # 空块
+            "<tool>   </tool>",  # 只有空白
+            "<tool>ls",  # 有开无闭
+            "<tool><tool_name>executeCmd</tool_name>",  # 外层没闭合
+            "<tool_name>executeCmd</tool_name><tool_param>ls</tool_param>",  # 没有外层
+            "ls -la",  # 裸文本（那不是工具调用，是答案）
+        )
+        for reply in cases:
+            with self.subTest(reply=reply):
+                self.assertIsNone(tool_of(reply))
+
+    def test_a_broken_block_still_counts_as_a_tool_reply(self):
+        """⚠️ **`looks_like_tool` 宽、`tool_of` 严，这个差是承重的。**
+
+        半截的工具回复既要"取不出命令"（`tool_of` 返回 `None`）又要"不能被当成答案"
+        （`looks_like_tool` 返回真）—— 两个谓词里任何一个判反，都会出现
+        "提问与提交同时哑火、永久空转、日志上什么都看不出来"（第 16 步踩过）。
+        """
+        for reply in ("<tool ls -la", "<tool>ls", "<tool_name>executeCmd</tool_name>"):
+            with self.subTest(reply=reply):
+                self.assertTrue(looks_like_tool(reply))
+                self.assertIsNone(tool_of(reply))
+
+    def test_a_plain_answer_is_not_a_tool_reply(self):
+        for reply in ("晴 26 度", "<answer>晴 26 度</answer>", ""):
+            with self.subTest(reply=reply):
+                self.assertFalse(looks_like_tool(reply))
+
+
+class AnswerParseTest(unittest.TestCase):
+    """`answer_of`：**该提交什么**（`_answer_task` 与 `task_channel` 判据 ④/⑤ 共用的谓词）。"""
+
+    def test_a_wrapped_answer_is_unwrapped(self):
+        self.assertEqual(answer_of("<answer>晴 26 度</answer>"), "晴 26 度")
+
+    def test_an_empty_block_does_not_fall_back_to_the_raw_text(self):
+        """空块 ⇒ `""`（**不回落成原文**）。
+
+        那一回合宁可不提交（判题器按"通过率最高的一份"算分，少交一次不扣分），
+        也不要把 `<answer></answer>` 这串标签当成答案交上去。
+        """
+        self.assertEqual(answer_of("<answer></answer>"), "")
+        self.assertEqual(answer_of("<answer>   </answer>"), "")
+
+    def test_a_half_written_answer_is_not_submitted(self):
+        """半截 `<answer>`（有开无闭 / 闭标签写错）⇒ `""` —— 不拿半截标记去凑答案。"""
+        for reply in ("<answer>晴", "<answer>晴</answer", "<answer>晴<answer>"):
+            with self.subTest(reply=reply):
+                self.assertEqual(answer_of(reply), "")
+
+
+    def test_a_tool_call_is_never_an_answer(self):
+        """工具回复（新形状 / 旧形状 / 畸形）一个都不能当答案 —— 判**宽**（`looks_like_tool`）。
+
+        用 `tool_of` 判就会漏掉畸形那种，然后它既不被提交、又不会被重问。
+        """
+        for reply in (
+            "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>",
+            "<tool>ls -la</tool>",
+            "<tool ls -la",
+            "<tool_name>executeCmd</tool_name>",
+        ):
+            with self.subTest(reply=reply):
+                self.assertEqual(answer_of(reply), "")
+
+    def test_bare_text_is_the_answer(self):
+        """**兜底，逐字不变**（第 16 步的行为）：判题器的 LLM 是黑盒，
+        它认不认 `<answer>` 我们没得选 —— 这是不被认账时唯一的退路。
+
+        ⚠️ 孤立的 `</answer>` 也落在这里（判据认的是**开**标签，它一个都没有）。
+        结果是把这串标签当答案交上去 —— 与任何一段普通文本同一条路径，
+        代价是被判一次错（零成本，不扣分），而不值得为它加一条判据。
+        """
+        self.assertEqual(answer_of("晴 26 度"), "晴 26 度")
+        self.assertEqual(answer_of("  晴 26 度\n"), "晴 26 度")
+        self.assertEqual(answer_of("</answer>"), "</answer>")
+        self.assertEqual(answer_of(""), "")
 
 
 if __name__ == "__main__":

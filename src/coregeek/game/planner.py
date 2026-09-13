@@ -39,14 +39,24 @@
 
 任务线的另一半不在这个返回值里：`task_channel(turn)` 单独产出响应顶层的
 **`(prompt, executeCmd)`** —— 与判题器的 LLM、与它的沙盒打交道的**唯一**通道。
-它**没有状态、也没有第二个使用者**，所以留在本模块当一个纯函数，不另开一个模块、
-也不改 `plan()` 的签名。
+
+**"说什么"与"怎么读回复"不在这个模块里**，在 `coregeek/agent/`（第 18 步）：`agent.chat`
+拿四段模板组装上下文、解析回复，`agent.tools` 是工具注册表（`executeCmd` / `SOP2Prompt`）
+与顶层调度 `tool_call`。切分的判据是：**"什么时候跟 LLM 说话"是策略**（判据链、纠错、
+开拓者在不在），留在这里；**"说什么、怎么解析"**与战场规则无关，搬出去 ——
+机械保证是 `chat(request: str, ...)` **收字符串、不收 `Turn`**，`agent` 只依赖标准库。
+
+> ⚠️ **`SOP2Prompt` 会写一个进程内的模块级变量**（`agent.tools.sop._current`，整场存活、
+> 重启清空），这是全项目**唯一**一处跨回合状态 —— `handle` 从第 11 步起一直是无状态纯函数，
+> 这一步用户明确拍板破例。代价与缓解写在 `sop.py` 的 docstring 里；这里只记一条：
+> 它**不碰红线**（SOP 读成空串 ⇒ prompt 里那一段是空的，报文字节照旧合法）。
 
 那条通道是一条**工具调用回路**（`<tool>…</tool>` 是我们与 LLM 约定的协议）：
 
-    LLM 只回一条命令 → 我们把它放进响应顶层的 `executeCmd` → 判题器本回合在沙盒里跑
-    （接口文档 L210）→ 下一回合 `lastCmdResult` 带回执行结果 → 我们把它**原文**回灌给 LLM
-    → ……直到 LLM 不再要命令、直接给答案 → `_answer_task` 每回合 `submitAnswer`。
+    LLM 回一次工具调用（`<tool><tool_name>…</tool_name><tool_param>…</tool_param></tool>`）
+    → 我们把它放进响应顶层的 `executeCmd` → 判题器本回合在沙盒里跑（接口文档 L210）
+    → 下一回合 `lastCmdResult` 带回执行结果 → 我们把它**原文**回灌给 LLM
+    → ……直到 LLM 不再要工具、直接给答案（`<answer>…</answer>`）→ `_answer_task` 每回合 `submitAnswer`。
 
 判题器答错了（`errors` 里的 `errorCode 2`）就把"上次答错了、上次交的是什么"一起带回去重问。
 **回路的前半截在第 16 步之前根本不存在**：`executeCmd` 恒为 `""`，LLM 只能凭空猜答案 ——
@@ -57,7 +67,9 @@ import logging
 from collections.abc import Iterator, Mapping, Set
 from typing import Any
 
-from ..protocol import actions  # 唯一一条"由内往外"的依赖：指令只能经 Action 产出
+from ..agent.chat import answer_of, chat, tool_of  # 第二条"由内往外"：与 LLM 说什么不在策略层
+from ..agent.tools import tool_call
+from ..protocol import actions  # 第一条"由内往外"：指令只能经 Action 产出
 from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
 from .map import STONE
 from .roles import BaseRole, Pioneer, Worker
@@ -89,24 +101,6 @@ ROUNDS_PER_STONE = 3
 #: 留给"从矿走回工地、把石头砌完"的容错余量（用户指定 5 回合）。
 #: 它同时吸收**距离估算的误差** —— 下面的距离一律用切比雪夫，绕障时会低估。
 TIME_MARGIN = 5
-
-#: 任务提问模板（发给判题器的 LLM，回复从下一回合 payload 的 `llmResp` 回来）。
-#: 三段：**怎么要命令**（`<tool>` 工具协议）、**什么时候直接作答**、**题目本身**。
-#: `{result}` / `{retry}` 两段由 `_asked` 现拼，没有就是空串 —— 六条判据共用一个模板。
-#:
-#: **本步最大的猜测** —— `<tool>` 这个形状文档一个字没规定（任务书只写了沙盒"能跑基础的
-#: shell 指令与 python 指令"），是我们自己定的协议，只能靠"判题器的 LLM 认不认"来检验。
-#: 同理**不硬塞答案格式**：任务原文里既然带着"三方 API 文档"，题目自己很可能就规定了
-#: 答案形式（通过率按"字段个数"算 ⇒ 是多字段结构化答案），我们猜错反而把 LLM 带偏。
-TASK_PROMPT = (
-    "你在一个沙盒环境里完成下面这道任务题。沙盒中能执行基础的 shell 指令与 python 指令。\n"
-    "需要先取信息时，只回复一条要执行的命令，用 <tool> 与 </tool> 包起来，例如：\n"
-    '<tool>python -c "print(1+1)"</tool>\n'
-    "我下一回合把沙盒的执行结果原文发给你。信息够了就直接给答案：\n"
-    "只写答案本身，按题目要求的形式作答，不要解释、不要前言、不要 Markdown 代码块标记。\n"
-    "{result}{retry}\n题目：\n{task}"
-)
-
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     cmds: dict[str, dict[str, Any]] = {}
@@ -183,13 +177,6 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     return cmds
 
 
-#: 工具调用的定界符。**这是我们自己定的协议**（任务书只说了沙盒里能跑 shell 与 python，
-#: 没说 LLM 该怎么要一条命令），所以 `_is_tool_reply` 判得**宽**：只要出现开标签就算
-#: "它想跑命令"，格式凑不齐就去重问，而不是当成答案交上去。
-_TOOL_OPEN = "<tool"
-_TOOL_CLOSE = "</tool>"
-
-
 def task_channel(turn: Turn) -> tuple[str, str]:
     """本回合任务的 `(prompt, executeCmd)` —— **响应顶层那两个字段的唯一来源**。
 
@@ -198,9 +185,9 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     单边修改都会造成"同一轮既提问又发命令"（LLM 在没看到结果的情况下作答 ⇒ 又要一遍
     同一条命令 ⇒ 活锁）或"两边都不发"（见判据 5 的畸形回复）。两份真相迟早对不上。
 
-    **纯函数、无状态** —— 这是本模块最重要的架构不变量。任务线要靠跨回合标志位才能跑的话，
-    那个位一旦卡住就**静默关掉整条任务线**（第 11 步为这条否决过"只交一次"的优化），
-    而且出问题时日志上什么异常都看不出来。
+    **这个函数自己仍然无状态**（跨回合状态只有 `agent.tools.sop._current` 一处）。
+    任务线要靠跨回合标志位才能跑的话，那个位一旦卡住就**静默关掉整条任务线**
+    （第 11 步为这条否决过"只交一次"的优化），而且出问题时日志上什么异常都看不出来。
 
     判据**从上往下，先命中先返回**：
 
@@ -214,108 +201,78 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     2. **沙盒刚交作业（`cmd_result` 非空）⇒ 回灌结果、这轮绝不发命令。**
        **必须压在判据 3 前面**：接口文档 L33 给 `lastCmdResult` 专门写了一句
        "未发命令时为空字符串"，而 L31 的 `llmResp` **一个字没写** —— 文档作者对前者明说了
-       "不粘"，对后者没说。所以 `llm_resp` 必须按**可能粘住**设计：万一它还停在上轮那条
-       `<tool>…</tool>` 上，判据 2 先命中就避免了同一条命令被反复丢进沙盒。
+       "不粘"，对后者没说。所以 `llm_resp` 必须按**可能粘住**设计：万一它还停在上轮那次
+       工具调用上，判据 2 先命中就避免了同一条命令被反复丢进沙盒。
        附带挡住"沙盒结果万一延迟两回合" ⇒ 同一命令发两遍。
-    3. **回复里有 `<tool>…</tool>` ⇒ 把那条命令交给判题器**（不提问）。任务存续期间 LLM
-       不限量也不计数（接口文档 L198），所以这里不心疼额度，心疼的是"让它拿着过期结果作答"。
-    4. **判题器说答案错了 ⇒ 带着"上次答错了"重问。** 见 `_retry_note` 的触发条件。
+    3. **回复是完整的工具调用、且工具给了命令 ⇒ 把命令交给判题器**（不提问）。任务存续期间
+       LLM 不限量也不计数（接口文档 L198），所以这里不心疼额度，心疼的是"让它拿着过期结果作答"。
+    4. **判题器说答案错了 ⇒ 带着"上次答错了"重问**（触发条件见本函数末尾那一段）。
        排在 3 之后：`code 2` 会连着报几轮（我们每回合重交旧答案），而 LLM 若在这时回了新的
        工具调用，让它先跑（那是进展），纠错下一轮还在。
     5. **回复是最终答案 ⇒ 什么都不发**，开拓者那边每回合在 `submitAnswer`。
-       判据用 `_is_tool_reply` 而**不是**"取不出命令"：`<tool` 有开无闭时 `_tool_command`
-       取不到东西，若按"取不到 = 是答案"处理就会**把半条工具调用当答案交上去**，
+       判据用 `answer_of` 而**不是**"取不出命令"：工具调用有开无闭时 `tool_of` 取不到东西，
+       若按"取不到 = 是答案"处理就会**把半条工具调用当答案交上去**，
        而 `_answer_task` 又跳过工具回复 ⇒ **两条通道同时哑火，永久空转**
        （`llm_resp` 粘住的话下一回合还是同一条畸形回复，日志上还什么都看不出来）。
        所以畸形的落到判据 6 去重问，而不是到这里。
     6. **否则（第一次提问 / 畸形回复重问）⇒ 只把题目发出去问。**
+
+    ── 第 18 步换的形状，两处要说清楚 ─────────────────────────────
+
+    **① 工具调度只有一个入口**（`tool_call`），**副作用（SOP 沉淀）只发生在那一行**。
+    那一行写在四条判据**之前**，所以哪怕这一轮走的是"回灌结果"（判据 2），`SOP2Prompt`
+    照样生效 —— 那是**有意的**：LLM 在等结果的同时顺手把方法沉淀下来，而下一轮的 prompt
+    会带上这段新 SOP，那正是它要的回执（这个工具当回合没有别的回执可用）。
+
+    **② 隐式子路径 ③′：完整工具调用、但拿不到命令**（`SOP2Prompt`、未知工具名、空参数、
+    只有 `<tool_name>` 没有 `<tool_param>`）⇒ `command` 是空串 ⇒ **落到判据 6 重问**。
+    ⚠️ **它不会活锁**，几个出口随便哪个都能出去：① 任务期间 prompt **不限量、不计数**
+    （接口文档 L198）⇒ 循环不吃额度、不碰红线；② LLM 自己改口给答案；③ `code 2` 带来的
+    **纠错段**（我们从第一份答案起每回合都在提交，所以纠错一定会来）；④ 下一回合 prompt 里
+    **它自己刚写进去的 SOP 段**就是"调用成功了"的回执，它看得见就知道不必再调。
+    **升级触发条件**（写进留痕、别提前做）：首场日志若出现"同一任务连续 ≥3 回合
+    `llm_resp` 都是 `SOP2Prompt` 调用、且始终没有 `submitAnswer`" ⇒ 升级成显式 ack 编排。
+
+    ── 纠错那一段的触发条件（第 16 步 `_retry_note` 的推导，逐字搬到这里）─────
+
+    `retry` 非空**三个条件缺一不可**：
+
+    - **`errors` 里有 `code == 2`**（答案不正确，接口文档 L181-198）。只认这一个码 ——
+      1（任务超时）与 5（LLM 额度超限）是终局，3/4 重问也救不回来。**码的含义不写进代码**，
+      那是会跟接口文档漂移的第二份真相（`CLAUDE.md` 已有这条规矩）。
+    - **拿到的不是工具调用**：否则会往 prompt 里塞"你上一次的答案是 `<tool>ls -la</tool>`
+      被判错了"这种胡话。工具回复分两路都要挡：**取不出命令**的（`<tool ls`）会落到
+      判据 4 去用这个值，**取得出命令**的（`<tool>ls</tool>`）在判据 3 就走了、
+      但它与 `cmd_result` 同时出现时（判据 2）照样会被带上。
+    - **回复非空**这一条**不需要单独写**：`answer_of` 对空回复返回 `""`，而 `chat` 里
+      那两段是"空就不占地方"的。任务刚换时（上一条超时结束、开拓者立刻接了新任务）
+      `errors` 里那个 2 是**旧账**，`llm_resp` 往往是空的 —— **没有答案可骂就不骂**，
+      这件事由"空串"天然表达，别再加一句 `if reply`。
+
+    ⚠️ **骂的那一份必须与交的那一份出自同一个谓词**（`answer_of`）：我们交上去的是解包后的
+    `晴`，骂的却是原文 `<answer>晴</answer>` 的话，LLM 会以为我们交了一堆标签。
+    这一条是第 18 步评审揪出来的 —— 它是"两侧共用谓词"从注释变成**结构性保证**的原因
+    （`_answer_task` 与判据 ④/⑤ 都调 `answer_of`，没有第二处解析）。
     """
     if not turn.phase_task or not any(isinstance(r, Pioneer) for r in turn.roles):
         return "", ""
 
     reply = turn.llm_resp.strip()
-    command = _tool_command(reply)
-    retry = _retry_note(turn)
+    answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
+    call = tool_of(reply)
+    command = tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
+    retry = answer if any(e.code == 2 for e in turn.errors) else ""
 
-    if turn.cmd_result:
-        return _asked(turn, result=turn.cmd_result, retry=retry), ""
-    if command:
+    if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（**必须压在 ③ 前**）
+        return chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
+    if command:  # ③ 工具给了命令 ⇒ 交给沙盒
         return "", command
-    if retry:
-        return _asked(turn, result="", retry=retry), ""
-    if reply and not _is_tool_reply(reply):
+    if retry:  # ④ 判题器说答案错了 ⇒ 带上"上次答错了"重问
+        return chat(turn.phase_task, retry=retry), ""
+    if answer:  # ⑤ 我们已经拿到了答案 ⇒ 都不发
         return "", ""
-    return _asked(turn, result="", retry=""), ""
-
-
-def _asked(turn: Turn, *, result: str, retry: str) -> str:
-    """按 `TASK_PROMPT` 拼一条 prompt。`result` / `retry` **没有就不占地方**。
-
-    两段各自带标题：沙盒输出是**任意文本**（可能是 JSON、可能是报错、可能带换行），
-    没有标题档着，LLM 分不清哪一段是题目、哪一段是它要的输出。
-    """
-    return TASK_PROMPT.format(
-        result=f"\n【上一条命令的执行结果（原文）】\n{result}\n" if result else "",
-        retry=(
-            f"\n【你上一次提交的答案被判定为不正确】\n{retry}\n请重新作答。\n"
-            if retry
-            else ""
-        ),
-        task=turn.phase_task,
-    )
-
-
-def _is_tool_reply(reply: str) -> bool:
-    """这条回复是**工具调用**吗？判据只认开标签出现。
-
-    判得比分隔符宽是有意的：`<tool ls`、`<tool\n>` 这类**想跑命令但格式没凑对**的回复
-    也该被认出来 —— 落到"重问"而不是"当答案交上去"。代价是答案里若含字面量 `<tool`
-    会被误判（拒绝提交、改问），概率极低，而且降级方向是"少交一次"不是"发非法指令"。
-
-    **`task_channel` 判据 5 与 `_answer_task` 必须用同一个谓词** ——
-    一边当命令、一边当答案就是第二份真相。
-    """
-    return _TOOL_OPEN in reply
-
-
-def _tool_command(reply: str) -> str:
-    """从回复里取出**第一条**要执行的命令；取不到（没有标签 / 有开无闭 / 内容是空的）⇒ `""`。
-
-    只取一条：`executeCmd` 只有一个字段、判题器一回合只跑一条（接口文档 L210），
-    多要几条也只会丢掉。开标签按 `>` 定位而不是硬写 `<tool>`，这样 `<tool >` 也认。
-    """
-    start = reply.find(_TOOL_OPEN)
-    if start < 0:
-        return ""
-    head_end = reply.find(">", start)
-    tail = reply.find(_TOOL_CLOSE, start)
-    # 开标签没闭合、或 `</tool>` 跑到 `>` 前面（`</tool>` 单独出现）⇒ 这条回复是坏的
-    if head_end < 0 or tail < head_end:
-        return ""
-    return reply[head_end + 1 : tail].strip()
-
-
-def _retry_note(turn: Turn) -> str:
-    """该往回带"你上次答错了"吗？该 ⇒ 返回上次交的答案原文，否则 `""`。
-
-    三个条件缺一不可：
-
-    - **`errors` 里有 `code == 2`**（答案不正确，接口文档 L181-198）。只认这一个码 ——
-      1（任务超时）与 5（LLM 额度超限）是终局，3/4 重问也救不回来。**码的含义不写进代码**，
-      那是会跟接口文档漂移的第二份真相（`CLAUDE.md` 已有这条规矩）。
-    - **回复不是工具调用**：否则会往 prompt 里塞"你上一次的答案是 `<tool>ls -la</tool>`
-      被判错了"这种胡话。工具回复分两路都要挡：**取不出命令**的（`<tool ls`）会落到
-      判据 4 去用这个值，**取得出命令**的（`<tool>ls</tool>`）在判据 3 就走了、
-      但它与 `cmd_result` 同时出现时（判据 2）照样会被带上。
-    - **回复非空**这一条**不需要单独写**：空回复时本函数返回 `""`，而 `_asked` 里
-      那两段是"空就不占地方"的。任务刚换时（上一条超时结束、开拓者立刻接了新任务）
-      `errors` 里那个 2 是**旧账**，`llm_resp` 往往是空的 —— **没有答案可骂就不骂**，
-      这件事由"返回空串"天然表达，别再加一句 `if reply`。
-    """
-    if not any(e.code == 2 for e in turn.errors):
-        return ""
-    reply = turn.llm_resp.strip()
-    return reply if not _is_tool_reply(reply) else ""
+    # ⑥ 第一次提问 / 畸形或"不产出命令"的工具回复 ⇒ 只把题目问出去（**③′ 落在这里**）
+    return chat(turn.phase_task), ""
 
 
 def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
@@ -388,21 +345,25 @@ def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) ->
     """服任务中：把手上的答案**原样**交上去。**这里从来不移动** —— 一旦挪出任务点
     周围一格，任务立即作废（任务书 L379），这一趟就白钉了。
 
-    答案 = `llmResp` 原文（只去首尾空白），不做任何加工：我们不知道判题器要什么格式，
-    唯一能做的是原文进、原文出。**空答案不发** —— 那可能被判成"字段缺失"，
-    而那正是红线里的"指令非法"。闸门只管"谁"，"空不空"归这里把关（与 `build` 的昼夜门同一条做法）。
+    答案 = `answer_of(llmResp)`（第 18 步）：`<answer>…</answer>` 里包着就取块内容，
+    否则**原文即答案**（第 16 步的行为，逐字不变 —— 判题器的 LLM 是黑盒，
+    它认不认 `<answer>` 我们没得选，那是唯一退路）。除此之外不做任何加工。
+    **空答案不发** —— 那可能被判成"字段缺失"，而那正是红线里的"指令非法"。
+    闸门只管"谁"，"空不空"归这里把关（与 `build` 的昼夜门同一条做法）。
 
     **每回合都交**：接口文档 L140「以之前提交过的**通过率最高的**答案计算积分与金币」
     —— 反复提交是判题器**预期的**用法。重复交同一个答案分数不变，而开拓者被钉在这里、
-    本来也没有第二个动作可做。⚠️ **这就是本步不需要任何跨回合状态的全部理由**，
+    本来也没有第二个动作可做。⚠️ **这就是任务线到现在都不需要跨回合状态的全部理由**，
     别把它"优化"成"只交一次"：那要记住交没交过，而卡住的状态会**静默关掉整条任务线**。
 
-    ⚠️ **工具调用绝不能当答案交上去**（`_is_tool_reply`）：那条回复要的是"去沙盒跑一下"，
-    交上去等于把 `<tool>ls</tool>` 当成答案。用的谓词与 `task_channel` 判据 5 **同一个**
-    —— 一边当命令、一边当答案就是第二份真相。
+    ⚠️ **工具调用绝不能当答案交上去**：那条回复要的是"去沙盒跑一下"，
+    交上去等于把 `<tool>ls</tool>` 当成答案。那道闸门现在在 `answer_of` 内部，
+    与 `task_channel` 判据 ⑤ **同一个谓词** —— 一边当命令、一边当答案就是第二份真相。
+    ⚠️ **而且交的这一份必须与判据 ④ 骂的那一份同源**：判题器说"上次答错了"时，
+    `task_channel` 回灌给 LLM 的正是这里交上去的东西（两个调用点、一个 `answer_of`）。
     """
-    answer = turn.llm_resp.strip()
-    if answer and not _is_tool_reply(answer):
+    answer = answer_of(turn.llm_resp)
+    if answer:
         _emit(cmds, role, actions.SubmitAnswer, answer)
 
 

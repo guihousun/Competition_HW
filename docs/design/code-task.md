@@ -1642,3 +1642,279 @@ PYTHONUTF8=1 py -m unittest discover -s tests      # Ran 151 tests … OK
    迁移点必须在这一步里交代清楚，否则任务线会在两个形状之间静默哑火。
 ② 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
 ③ 第 16 步的沙盒链路仍是**唯一没被实盘验证过**的一环，下一场第一件事还是看它。
+
+---
+
+## 第 18 步：Agent 系统（`agent/` + `tools/`）+ 任务线切到新工具协议
+
+### 目标
+
+用户原话（逐字）：
+
+> 设计一个Agent系统，独立一个agent文件夹，下面再弄一个tools文件夹，
+> - 提供executeCmd工具执行cmd命令，接口是executeCmd(cmd)，
+> - 提供SOP2Prompt命令提供PromptSOP的自进化能力，接口是SOP2Prompt(SOP)，
+> 按照设想，接到自进化任务的时候，触发这个Agent的chat功能，组装我们的prompt和用户请求构建成上下文；
+> 当request中有llmResp的时候，去解析是否有`<tool></tool>`块，把工具使用解析出来，内部包含`<tool_name></tool_name>`块和`<tool_param></tool_param>`块
+> 例如：`<tool><tool_name>executeCmd</tool_name><tool_param>cat xxx.txt</tool_param></tool>`
+> - 提供一个顶层的tool_call函数，可以基于tool_name参数和tool_param调用函数
+> - 当无需调用tool，直接完成了用户任务的时候，用`<answer></answer>`包裹住答案
+> Prompt里面需要对工具进行注册，整体上Prompt构建成以下模式：
+> `# Agent定位 / # 可使用的工具 {{tool_desc}} / # 输出格式（工具调用用<tool></tool>包裹，直接返回用<answer></answer>包裹）/ # 沉淀的SOP {{SOP}}`
+
+**为什么现在做**：第 16 步给任务线接上了沙盒（`executeCmd` ↔ `lastCmdResult`），但 `<tool>…</tool>`
+这个形状是我们**自己定的**（接口文档只说沙盒能跑 shell/python、**没规定工具调用长什么样**），
+而且当时只有"一条裸命令"、没有"工具"这个概念。这一步把工具**注册化**：LLM 用名字点工具、
+我们按名字调度、答案用 `<answer>` 显式声明，并留出 SOP 这个能逐回合长出来的槽。
+
+四条拍板（`AskUserQuestion`）：
+
+1. **位置 = `src/coregeek/agent/`**（`main3.py:24` 只把 `src/` 加进 `sys.path`）。
+2. **SOP = 进程内跨回合状态**（模块级变量，整场存活、重启清空）—— 明确接受"破掉 `handle` 是纯函数"
+   这条第 11 步起的不变量。这是全项目**唯一**一处跨回合状态。
+3. **同一步把任务线切过去**：新形状**取代**第 16 步的 `<tool>整条命令</tool>`。不建"暂时没人调用"的子系统。
+4. **全覆盖兼容**：`<tool>整条命令</tool>`（块里没有 `tool_name`）照旧当 `executeCmd`；
+   回复里没有 `<answer>` 就**原文当答案交**（= 第 16 步的行为）。判题器的 LLM 是黑盒，
+   这是新协议不被认账时唯一的退路。
+
+### 产出
+
+| 文件 | 改动 |
+|---|---|
+| `src/coregeek/agent/__init__.py` | 新建：**0 字节**（与 `game`/`web`/`protocol` 的 `__init__.py` 逐字一致，`wc -c` 核实过） |
+| `src/coregeek/agent/chat.py` | 新建：`PROMPT` 四段模板 + `chat(request, *, result, retry)` + 三个谓词 `tool_of` / `looks_like_tool` / `answer_of` + 共用的 `_block` |
+| `src/coregeek/agent/tools/__init__.py` | 新建：`TOOLS` 注册表（名 → (实现, 描述)）+ `tool_call` + `tool_desc` |
+| `src/coregeek/agent/tools/cmd.py` | 新建：`executeCmd(cmd)` —— **原样返回**，一个赋值都不做 |
+| `src/coregeek/agent/tools/sop.py` | 新建：`SOP2Prompt` / `current` / `reset` / `SOP_MAX=1000` + 内容变化时一行日志 |
+| `src/coregeek/game/planner.py` | `task_channel` 换料（判据链顺序不变）；删 `TASK_PROMPT` / `_TOOL_OPEN` / `_TOOL_CLOSE` / `_asked` / `_is_tool_reply` / `_tool_command` / `_retry_note` 七个旧符号；`_answer_task` 改走 `answer_of`；模块 docstring 的形状回路换新 |
+| `src/coregeek/game/world.py` | 只改 `llm_resp` 的 docstring（三种可能：工具调用 / `<answer>` 包着的答案 / 都不像 ⇒ 原文即答案）。结构零改动 |
+| `src/coregeek/app.py` | 只改注释：`_log` 的字节表换成第 18 步实测（含最坏那格 6180）+ `prompt` 不打印原文那条补上"纠错 / 沉淀的 SOP" + 沙盒行那条 `<tool>…</tool>` 改成"那次工具调用（新旧形状都算）"。**逻辑一行未动** |
+| `tests/test_actions.py` | **151 → 187 条**（新增 5 个类 30 条、改 12 条既有、**预算守卫换 root logger**） |
+| `CLAUDE.md` / 本文件 | 见下文"同步" |
+
+**包结构 —— `agent` 是叶子包，只依赖标准库**：
+
+```
+src/coregeek/agent/
+├── __init__.py      空
+├── chat.py          PROMPT 模板 + chat() + 三个谓词
+└── tools/
+    ├── __init__.py  TOOLS 注册表 + tool_call + tool_desc
+    ├── cmd.py       executeCmd
+    └── sop.py       SOP2Prompt / current / reset（**唯一的跨回合状态**）
+```
+
+- 依赖方向新增一条：**`game/planner.py → agent`**（第二条"由内往外"；第一条是 `planner → protocol/actions`）。
+  `agent` 不认识 `game`/`protocol`/`web` —— 机械保证是 **`chat(request: str, …)` 收字符串、不收 `Turn`**。
+  切分理由：决定"**什么时候**跟 LLM 说话"（判据链、纠错、开拓者在不在）是**策略**，留在 planner；
+  "**说什么、怎么说、怎么解析回复**"全在 agent。
+- ⚠️ **"顶层的 `tool_call`"我理解为"tools 包顶层的统一调度入口"**（`from coregeek.agent.tools import tool_call`）：
+  `agent/__init__.py` 保持空，与其余四个包一致（名字不在两个地方）。若要的是
+  `from coregeek.agent import tool_call`，加一行 re-export 即可，其余设计不受影响。
+- `chat.py` **不拆** `prompt.py` / `parse.py`：模板与三个谓词必须一起读（严谨的 `tool_of`、宽的
+  `looks_like_tool`、有兜底的 `answer_of`），拆开就是"读一个改动要翻两个文件"。
+
+**`tool_call` 的唯一铁律：返回值即命令。** `""` 有两个含义 —— "这个工具不产出命令"
+（`SOP2Prompt`）与"调用不成立"（未知工具 / 空参数 / 非字符串参数），**下游不需要区分**，
+因为两者都落到判据 ⑥ 重问。注册表是唯一真相：`tool_desc()` 由 `TOOLS` 生成，加工具只改一处。
+
+**`executeCmd` 不执行任何东西**：执行者是**判题器的沙盒**（响应顶层字段，判题器本回合执行、
+限时 15 秒，故障与超时**不计异常**）。这个函数就是"把命令搬进响应字段"这一步 ——
+**不做校验、不做清洗、不做解释**（换行、引号、重定向、`cat < input.txt` 里的 `<` 一律原样送）。
+
+**`SOP2Prompt` 是整段替换不是追加**（追加没有遗忘机制，几百回合会把 prompt 撑爆；
+而"上一版不对"这件事 LLM 自己重写一遍就能表达）。上限 `SOP_MAX = 1000` 字、保头截断；
+**内容没变就不吭声**（`llm_resp` 粘住时反复存同一段，每回合打一行是白花 stdout 预算）。
+`reset()` 不用 `SOP2Prompt("")`：那个会打日志，而用例的 `assertLogs` 正盯着日志。
+
+**三个谓词的分工**（同住 `chat.py`，互不派生第二份真相）：
+
+| 谓词 | 宽严 | 语义 |
+|---|---|---|
+| `tool_of(reply)` | **严格** | `<tool>` 块里名字与参数**成对**才给 `(名, 参数)`；**两个都没有 ⇒ 整块正文就是一条 `executeCmd` 命令**（旧形状兼容）；只有其中一个 ⇒ `None`（**绝不猜部分成对**） |
+| `looks_like_tool(reply)` | **宽** | `"<tool" in reply` —— 与第 16 步逐字相同（故意判宽） |
+| `answer_of(reply)` | **三级** | ① 有 `<answer` 标记 ⇒ 只认成对块内容，空/半截 ⇒ `""`（不拿半截标记去凑答案）；② 否则像工具回复 ⇒ `""`；③ 否则**原文即答案**（兜底） |
+
+⚠️ **`answer_of` 是「该提交什么」与「该骂什么」的同一个谓词** —— `_answer_task` 提交它、
+判据 ④ 用它当纠错内容、判据 ⑤ 用它判"已经有答案了"。这是本步评审的关键修正：
+若提交与纠错各写一套，纠错段就会把**带 `<answer>` 标签的原文**喂回去，
+LLM 看到自己上次的标记被原文骂回来，行为是未定义的。
+
+**`planner.task_channel` 的判据链**（顺序与语义**一条没改**，只换料）：
+
+| # | 判据 | 第 18 步的实现 |
+|---|---|---|
+| ① | 没任务 **或** 名册里没开拓者 ⇒ `("","")` | 不变（`executeCmd` 是响应顶层字段、不过角色循环也不过 `Action` 的权限闸门 ⇒ 这句"名册里得有开拓者"必须**手写**） |
+| ② | `cmd_result` 非空 ⇒ 回灌、**绝不发命令** | 不变。**必须压在 ③ 前**：文档给 `lastCmdResult` 写了"未发命令时为空字符串"（L33）、对 `llmResp` **一个字没写** ⇒ `cmd_result` 按**不粘**设计、`llm_resp` 必须按**可能粘住**设计 |
+| ③ | 工具给了命令 ⇒ 发命令不提问 | `command = tool_call(*tool_of(reply))` |
+| ③′ | *（新的隐式子路径）* | **完整工具调用但拿不到命令**（`SOP2Prompt` / 未知工具 / 空参数）⇒ 掉到 ⑥ 重问。**写进 docstring** |
+| ④ | `code 2` ⇒ 带纠错重问 | `retry = answer if any(e.code == 2 …)` —— 谓词换成 `answer_of`，**骂的正是交上去的那一份** |
+| ⑤ | 是答案 ⇒ 都不发 | `answer_of(reply)` 非空 |
+| ⑥ | 否则重问 | 不变（③′ 落在这里） |
+
+- **`tool_call` 是副作用唯一发生点**，写在四条判据**之前** ⇒ 即便这一轮走的是"回灌结果"（判据 ②），
+  SOP 照样生效。**有意为之**：LLM 不该因为"结果刚好回来了"就白调一次工具。
+- **③′ 不活锁**（写进 docstring）：① 任务期间 prompt **不限量、不计数**（接口文档 L198）⇒ 不吃额度、
+  不碰红线；② 出口有三个 —— LLM 自己改口给答案、`code 2` 带来的**纠错段**（我们从第一份答案起
+  每回合都在提交）、以及下一回合 prompt 里**它自己刚写进去的 SOP 段**（那就是"调用成功了"的回执）。
+  **升级触发条件**：首场日志若出现「同一任务连续 ≥3 回合 `llm_resp` 都是 `SOP2Prompt` 调用、
+  且始终没有 `submitAnswer`」⇒ 升级成"显式 ack"编排。
+- **两条通道互斥**仍是唯一的不变量，也是 `task_channel` 合成一个函数而不是
+  `prompt_for` + `execute_for` 的全部理由。
+
+**日志与预算**：`sop.py` 的 `LOGGER = logging.getLogger(__name__)`（= `coregeek.agent.tools.sop`）
+经 `main3.py` 挂在 root 上的 `basicConfig` 传播 ⇒ 与其他日志**同流同格式**。
+两个细节都是既有约定的复用：**截断必须留痕**（`存 1000 字（收到 9000 字，超上限截断）`，
+与 `app._clip` 的 `…（共 N 字）` 同源）；**换行转义成 `\n`**（SOP 必然多行，不转义一条记录变几十行，
+而 `logging` 的时间戳前缀只加在第一条物理行上 —— 与 `_log` 的"三块拼成一条"同一条理由）。
+
+⚠️ **这条日志是本步唯一一条绕开硬约束 5 守卫的输出**：`test_the_worst_round_stays_under_the_budget`
+原本用 `assertLogs("coregeek.app")`，**看不见兄弟 logger** ⇒ 必须换成 `assertLogs(level="INFO")`（root），
+并把"SOP 刚更新"补进最坏局面。**不加锁**：判题器逐回合同步请求，GIL 下 `str` 赋值/读取不会撕裂，
+最坏结果是"某条 prompt 带着上一版 SOP"，**不碰红线**。
+
+### 不做什么
+
+- ❌ **不给 `tool_call` 套 `try/except`**：两个工具都是纯字符串运算，**没有能抛的路径**；
+  真抛了由 `handle` 的 `try` 兜住（退化成空指令，合法、不计异常）。规则 1 的判据是"现在有没有第二种情况"。
+- ❌ **不加"工具种类"判别器**（`kind ∈ {command, observation}` 那种更"通用"的编排）：评审提过，**不采纳** ——
+  它不改变"出口只有 LLM"这个事实，只把"LLM 看得见 SOP 段"换成"LLM 看得见一句明写的回执"，
+  代价是给"返回值即命令"这条好用的铁律开一个洞（多一个注册字段 + 多一个入口 + 模板多一段 + 约 8 条用例）。
+- ❌ **不删旧形状兼容层**：评审主张删掉（理由是"兼容会把'LLM 没采纳新形状'这个信号藏起来"）。
+  **不采纳，理由有二**：① 用户已拍板全覆盖兼容；② 那个信号**藏不住** —— 任务行一直在打
+  `提交：<llm_resp 原文>`，旧形状在日志里一眼可见。
+- ❌ **不给 SOP 落盘 / 按任务分区**：落盘要处理"判题环境能不能写、写坏怎么办"；分区要处理"任务边界在哪"。
+  现在都没有第二个使用者。**副作用已知**（任务 A 的 SOP 会灌进任务 B），记进不确定性、不修。
+- ❌ **不改判据链的顺序与语义**（尤其"② 必须压在 ③ 前"、"两条通道互斥"）：第 16 步的推导一条不动。
+- ❌ **不做 `sell` / `buy` / `use`**（卖矿那条线仍未实现）、**不动策略**（砌墙 / 操炮 / 采矿）。
+- ❌ **不建 `agent` 的第四个文件**（不拆 `prompt.py` / `parse.py`、不设 `registry.py`）。
+
+### 验证
+
+**1. 单测（`PYTHONUTF8=1 py -m unittest discover -s tests`）**
+
+```
+Ran 187 tests in 0.069s
+OK
+```
+
+新增 5 个类（**每个碰 SOP 的类都在 `setUp` 里 `sop.reset()`** —— 模块级状态会跨用例串味）：
+
+| 类 | 钉住什么 |
+|---|---|
+| `AgentToolCallTest`（5） | `executeCmd` 原样返回（内部换行/引号不动）；`SOP2Prompt` 存下且返回 `""`；**未知工具 ⇒ `""` 不抛**；空参 / 非字符串参 ⇒ `""` **且 SOP 未被清空**（闸门在调用之前）；`tool_desc()` 覆盖 `TOOLS` 里每一个工具 |
+| `SopStateTest`（6） | 整段替换（不是追加）；超长截断且**存下来的就是截断后的**；日志同时报"存了/收到"；同内容重复存**不再打**日志（`assertNoLogs`）；含换行的 SOP 打成**一行** |
+| `ChatPromptTest`（7） | 四个小节标题逐字在、`{tool_desc}`/`{sop}` 无残留；每个工具名都在 prompt 里；输出格式段含 `<tool_name>`/`<tool_param>`/`<answer>` 三个字面量；题目原文在；两段回灌只在传了的时候出现；**存过的 SOP 出现在下一份 prompt 里**（自进化的可见证据） |
+| `ToolReplyParseTest`（7） | happy path（两侧空白去掉、**param 内部换行原样**）；一次只取第一个块；只有名字没参数 ⇒ `None`；有开无闭 ⇒ `None`；**旧形状 ⇒ `("executeCmd","ls -la")`**；`looks_like_tool` 真而 `tool_of` 空 |
+| `AnswerParseTest`（5） | `<answer>x</answer>` ⇒ `x`；空块 ⇒ `""`（**不回落成原文**）；半截 `<answer>晴` ⇒ `""`；工具回复（新旧 + 畸形）⇒ `""`；裸文本 ⇒ 原文 |
+
+改的 12 条既有用例里，两条值得单记：
+
+- **`HandleTest.test_the_task_loop_through_handle` 扩到六步**（新形状调用 → 沙盒回灌 → `<answer>` 提交 →
+  纠错段 → 裸文本兜底）：端到端任务回路在**层与层的接缝上**只有这一条用例能证明。
+- **`test_the_worst_round_stays_under_the_budget` 换成 root logger**，并断言
+  `sop.__name__` **必须在捕获集合里** —— 只换 `assertLogs` 而不加这句，等于把守卫放宽到"root 有没有日志"，
+  新 logger 写错名字也照样绿。
+
+**2. 反向验证（`D:/tmp/reverse18.py`，临时不入库）**
+
+逐条改坏 21 处（`tool_of` 丢掉 param 配对 / 去掉旧形状兼容；`looks_like_tool` 判窄；`answer_of`
+不解包 / 让空块回落成原文 / 去掉"工具回复⇒`""`"；`tool_call` 未知工具改 `raise` / 不挡空参数；
+**`executeCmd` 改成 `subprocess.run`（这条是"不许本地执行"的守门员）**；`SOP2Prompt` 改追加 / 去上限 /
+截断不打"收到 N 字" / 每次存都打日志 / 不转义换行；模板里 `{sop}` 写死；`TOOLS` 加一项而 `tool_desc` 不跟；
+`_answer_task` 自己写一套提交逻辑；判据 ③ 改回旧形状；……）⇒ **21/21 全中，无假绿**。
+
+- ⚠️ **第 12 条一开始是假绿**（`tool_desc` 不再由 `TOOLS` 生成 ⇒ 挂了 0 条）：我的改坏把描述写死成
+  一个**仍然包含两个工具名**的字面量 ⇒ 行为等价。修的是**用例**，不是改坏脚本 ——
+  新增 `test_a_newly_registered_tool_shows_up_everywhere`（往 `TOOLS` 注入假工具、断言 `tool_desc()`
+  含它、`tool_call` 能调到，`finally` 删除后又不含）。
+- **还原**：全部用 `cp D:/tmp/bak18/rev/<file> <file>`（**没用 `git checkout`**，第 15 步的教训），
+  逐文件 `cmp` 五个文件**全 same**，再跑一次套件 `OK` 确认好状态无损。
+
+**3. 字节预算（硬约束 5）**：最坏局面实测 **44 行 / 6180 字节**（任务在身 + 沙盒结果顶格 +
+**SOP 刚更新**），上限钉在 **6900**（抓的是结构性膨胀，不是这次的具体数字）。
+`app._log` 的 docstring、`CLAUDE.md` 硬约束 5 的表、用例注释**三处同步**成同一组实测值
+（41/2329、43/2398、42/4770、43/6002、**44/6180**）。
+
+**4. 真服务端到端**
+
+```bash
+netstat -ano | grep LISTENING | grep 18085     # 空（grep exit=1）⇒ 端口上没有旧进程
+PYTHONUTF8=1 bash run.sh 18085 > D:/tmp/logs18.txt 2>&1 &
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
+PYTHONUTF8=1 py D:/tmp/e2e18.py
+```
+
+样例响应**逐项不变**（`10010→(6,22)` / `10012→(9,17)` / `10011→(9,13)`，`prompt` 与 `executeCmd` 都是 `""`）
+—— 这一条是"本步没碰既有策略"的回归证据。
+
+`D:/tmp/e2e18.py`（临时、**不入库**）九轮：
+
+```
+[1] 提问             prompt= 597 字  executeCmd=''                         提交=None
+[2] SOP2Prompt     prompt= 630 字  executeCmd=''                         提交=None
+[3] 新形状命令         prompt=   0 字  executeCmd='python -c "print(1+1)"'   提交=None
+[4] 沙盒结果           prompt= 663 字  executeCmd=''                         提交=None
+[5] <answer>提交     prompt=   0 字  executeCmd=''                         提交='晴 26 度'
+[6] 纠错重问           prompt= 664 字  executeCmd=''                         提交='晴 26 度'
+[7] 裸文本兜底         prompt=   0 字  executeCmd=''                         提交='晴 26 度'
+[8] 旧形状兼容         prompt=   0 字  executeCmd='ls -la'                   提交=None
+[9] 畸形重问           prompt= 630 字  executeCmd=''                         提交=None
+
+★ 九轮全部通过
+```
+
+九轮里每一条都验了：① 四段标题 + 题目原文都在、不发命令不提交；② `SOP2Prompt` 不发命令
+**且存下的 SOP 立刻出现在同一轮的 prompt 里**；③ 命令=参数原文、`prompt==""`；④ 沙盒结果原文回灌；
+⑤ **交上去的是块内容 `晴 26 度`，不是 `<answer>` 原文**；⑥ 纠错段含 `晴 26 度` 且**不含**
+`<answer>晴 26 度</answer>`（同一个谓词的证据）；⑦ 裸文本兜底活着；⑧ 旧形状在**真服务**上仍当命令；
+⑨ 畸形回复**不发命令、不提交、prompt 非空**（两条通道都不哑火）。
+**全局断言**：任何一回合都没有同时出现非空 `prompt` 与非空 `executeCmd`（九轮全过）。
+
+服务端日志（`D:/tmp/logs18.txt`）：
+
+```
+SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文件名理解题意\n第三步：把字段逐个填满
+```
+
+- `grep -c "SOP 更新"` = **1**（第 2 轮存过，第 3~9 轮不再存 ⇒ 幂等检查生效）；
+- 那一行**确实是一行**（`\n` 转义生效，`wc -l` 没被它撑大）；
+- `grep -c "沙盒：回"` = **1**（只在第 4 轮有 `lastCmdResult` ⇒ **沙盒行数 = 实际跑过的命令数**这个对账关系成立）；
+- `grep -ci "traceback\|warning\|error"` = **0**；
+- 九轮共 428 行 / 25821 字节（含启动那行）。
+
+收尾 `taskkill //F //PID 35520` + `netstat` 确认端口释放（`grep exit=1`）。
+
+⚠️ **这份 e2e 里的"LLM"是我们自己写的** ⇒ 它只证明"我们的解析与编排自洽"，
+**不证明判题器认这个形状**（见不确定性 1）。
+
+### 已知不确定性（别假装确定）
+
+1. **最大单点风险：判题器的 LLM 认不认这个形状。** 协议形状是我们自己定的，
+   本地 e2e 的"LLM"也是我们自己写的 ⇒ 那九轮**只证明解析与编排自洽**，不证明判题器认账。
+   兼容层把"不认账"的后果压到"退化回第 16 步"，但"LLM 用第三种形状"仍是敞口。
+   **首场自检判据**：任务行"提交："里若**不是** `<tool_name>` 形状（而是旧形状或一团不像任何形状的文字）
+   ⇒ 形状没被采纳 ⇒ 回退只需改 `tool_of` 一处。第一优先级仍是那条：日志里有没有
+   `沙盒：回「[exitCode:N]…」`。
+2. **SOP 一旦存错就是整场的事**（没有重置机制、没有遗忘）。最坏 = LLM 往 SOP 里灌了一段有害的"套路"，
+   此后每回合 prompt 都带着它。后果是**答得差，不是异常**；上限 + 变化时的日志行是全部缓解手段。**未实测**。
+3. **SOP 不按任务分区**：任务 A 沉淀的 SOP 会灌进任务 B 的 prompt（症状：prompt 里出现与当前题目无关的方法）。
+   用户拍板的取舍，记录、不修。
+4. **`SOP2Prompt` 那一轮走判据 ⑥ 重问**：LLM 若反复调它（`llm_resp` 粘住），会退化成"每回合重问、永不提交"。
+   幂等检查让它不重复存、日志上一眼能看出来。升级触发条件见上文。**未实测**。
+5. **`<answer>` 被解包后提交，等于改了交上去的字节**（第 16 步是原文进原文出）。若判题器想要的正是
+   带标签的原文（没这个道理，但**未实测**），分数会掉。裸文本兜底保证"没有 `<answer>` 时行为与第 16 步一致"。
+6. **畸形 `<answer>`（空块 / 半截）改成了"不提交 + 重问"**：它不再会误交半个标签，代价是那一回合
+   没有提交（判题器取"通过率最高"的那份，所以不提交不扣分）。**未实测**。
+7. **`planner → agent` 是新的依赖边**：若将来 `agent` 需要 `Turn`/`Pos`，这条边会变成双向 ——
+   那时应该把"什么时候说话"也搬进 agent，而不是让 agent 认识 `game`。
+8. **`SOP_MAX = 1000` 是拍的**，没有实盘依据。太小会截断掉有用的方法，太大会每回合多发几千字
+   （prompt 是逐回合发的）⇒ 首场看 `SOP 更新：存 N 字` 那一行的 N 分布。
+
+### 下一步
+
+① 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+② **沙盒链路 + 新工具形状都还没经过实盘**，下一场第一件事是看日志里的
+   `任务：… ｜ 提交：… ｜ 提问：有（N 字）` → `沙盒：回「[exitCode:0]…」` 这条序列，
+   以及"提交："里的形状是不是 `<tool_name>` 那一种（两条判据见不确定性 1）。
+③ 若新形状被采纳但 `SOP2Prompt` 从不被调用 ⇒ SOP 段恒空，模板白留一段（无害，但说明没触发自进化）。
