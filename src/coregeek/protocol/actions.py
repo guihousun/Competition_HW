@@ -17,10 +17,11 @@
 > 没实现的动作为空壳，等落地时再加。`build` 是**闸门第一次真的挡住东西**：
 > 把 `build` 发给开拓者，以前只是"格式合法地做错事"，现在连对象都造不出来。
 >
-> ⚠️ 两个任务动作**没有 `targetPos`** —— 全模块只有 `describe` 需要留心这件事。
+> ⚠️ 两个任务动作**没有 `targetPos`** —— 这件事只有 `describe` 需要留心，
+> 而它第 20 步起改成**通用摊开**（有什么字段打什么），不用再记着这份差别了。
 """
 
-from typing import Any, ClassVar
+from typing import Any, Callable, ClassVar
 
 from ..game.grid import Pos
 
@@ -29,32 +30,38 @@ PIONEER = frozenset({"pioneer"})
 ALL = WORKER | PIONEER
 
 
-def describe(cmds: dict[str, Any]) -> str:
-    """把 `roleCommandMap` 压成**一行**日志：`10010 move(12,22)；10012 build wall(13,23)`。
+def describe(cmds: dict[str, Any], *, clip: Callable[[str], str]) -> str:
+    """把 `roleCommandMap` 压成**一行**日志：`10010 move targetPos=(12,22)；10020 attack controllerId=10010 (4,4)`。
 
-    `attack` 多带一个操控者：`10020 attack←10010(4,4)` —— 那条指令的 key 是**武器 id**，
-    不带上角色就看不出来是谁在开炮。**只加这一个字段**：日志每回合都打，
-    体量已经贴着管道缓冲那条风险线了（`CLAUDE.md` 硬约束 5）。
+    **字段是通用摊开的，不是逐个手写的**（第 20 步）：`action` 之外的每个字段一律
+    `名=值` 印出来，`targetPos` 折成 `(x,y)`（多格用 `、` 连 —— `attack` 的等级 >1 时才有）。
+    手写一份"哪个动作有哪几个字段"的清单就是**又一份会跟报文漂移的真相**：`build` 多个
+    `name`、`attack` 多个 `controllerId`、`submitAnswer` 只有 `taskAnswer`……每加一个动作
+    都要回头改一次，而漏掉的那一次没人会发现（日志少打一个字段，不像崩溃那么显眼）。
 
-    **`targetPos` 是可选的**（`acceptTask` / `submitAnswer` 就没有这个字段）——
-    硬读它会 `IndexError`，而这里跑在 `app.handle` 的 `try` 里，代价是**整回合退化成空指令**。
+    通用摊开顺手拆掉一颗老雷：原来硬读 `cmd["targetPos"]`，而 `acceptTask` /
+    `submitAnswer` **压根没有这个字段** —— 这里跑在 `app.handle` 的 `try` 里，
+    一个 `IndexError` 的代价是**整回合退化成空指令**（第 11 步踩过，见 `CLAUDE.md`）。
 
-    放在本模块而不是 `app`：`action` / `name` / `targetPos` 这几个字段名只有这里知道
-    （`app` 只管三个顶层字段的封装）。唯一使用者是 `app._log` 的复盘日志。
+    `clip` 由**调用方传进来**（唯一使用者仍只有 `app._log`）：截断的上限与留痕格式
+    （`…（共 N 字）`）是日志层的规则，全项目只有 `app._clip` 一份；而 `protocol`
+    **不能 import `app`**（依赖方向是 `app → protocol`）。所以把"怎么截"当参数递进来，
+    而不是在这儿复制一份截断格式。字符串值一律过它 —— 这里不必知道哪个字段是自由文本。
     """
     parts = []
-    for role_id, cmd in cmds.items():
-        #: `or []` 顺手挡住"`targetPos` 是空数组"这半个同款坑
-        point = cmd.get("targetPos") or []
-        where = f"({point[0]['x']},{point[0]['y']})" if point else ""
-        what = cmd["action"]
-        name = cmd.get("name")
-        if name:
-            what = f"{what} {name}"
-        controller = cmd.get("controllerId")
-        if controller:
-            what = f"{what}←{controller}"
-        parts.append(f"{role_id} {what}{where}")
+    for entity_id, cmd in cmds.items():
+        fields = []
+        for key, value in cmd.items():
+            if key == "action":
+                continue
+            if key == "targetPos" and isinstance(value, list):
+                #: 坐标折成 `(x,y)`，**不带字段名**（全模块只有这一个坐标字段，带上是噪音）
+                points = [p for p in value if isinstance(p, dict)]
+                if points:
+                    fields.append("、".join(f"({p.get('x')},{p.get('y')})" for p in points))
+            else:
+                fields.append(f"{key}={clip(value) if isinstance(value, str) else value}")
+        parts.append(" ".join([str(entity_id), str(cmd.get("action", "?"))] + fields))
     return "；".join(parts) if parts else "（空指令）"
 
 

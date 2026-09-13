@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from coregeek.agent import AGENT, Agent  # noqa: E402
 from coregeek.agent.chat import PROMPT, answer_of, chat, looks_like_tool, tool_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
-from coregeek.app import LOG_TEXT_MAX, handle  # noqa: E402
+from coregeek.app import LOG_PROMPT_MAX, LOG_TEXT_MAX, _clip, handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
     base_cells,
@@ -265,11 +265,18 @@ class HandleTest(unittest.TestCase):
         self.assertTrue(lines[3].startswith("图例："), lines[3])
         #: 标尺两行 + 行号槽 —— 图从第 7 行开始
         self.assertTrue(lines[8].startswith("31 │ "), lines[8])
-        self.assertEqual(acts, "动作：10010 move(6,22)；10012 move(9,17)；10011 move(9,13)")
+        self.assertEqual(
+            acts, "动作：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
+        )
         self.assertEqual(errors, "判题器报错：2：xxx")
         #: **按 id 排序**（不照 payload 的顺序）：`{10010: false, 10030: false}` 在样例里
         #: 恰好就是升序，靠样例**测不出**这一条 —— 所以下面那条解析用例专门打乱一次顺序。
-        self.assertEqual(failed, "上回合未通过：10010 10030")
+        #: 样例那份回执里有 7 个实体 —— 现在**全都打**（第 20 步），不再只列未通过的两个
+        self.assertEqual(
+            failed,
+            "上回合合法性：10010=False 10011=True 10012=True 10013=True"
+            " 10020=True 10030=False 10040=True",
+        )
 
     def test_a_clean_round_logs_only_the_map_and_the_actions(self):
         """回执那两条**有事才吭声** —— 干净回合一条都不该多打（日志字节是有预算的）。
@@ -283,19 +290,33 @@ class HandleTest(unittest.TestCase):
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertEqual(len(caught.records), 2, [r.getMessage()[:40] for r in caught.records])
 
-    def test_the_failed_ids_are_sorted_not_payload_ordered(self):
-        """未通过那几个 id **按升序打**，不照 payload 里的顺序。
+    def test_the_receipt_line_lists_every_entity_sorted(self):
+        """回执那一行**列全部实体、按 id 升序**（含 `True` 的那些）。
 
-        样例那份恰好就是升序，所以上面那条用例**测不出**这一点 —— 而一旦顺序随
-        payload 走，同一种局面会打出两种日志，翻日志时对不上号（`_defend` 里
-        "并列按 id 排"是同一条理由：先后不能取决于报文给的顺序）。
+        两件事分别钉住：
+
+        - **全都打**（第 20 步）：判题器只回它**收到**的那几条，所以"这条压根没发指令"
+          与"发了但没过"在只列未通过名单时长得一模一样，而下一步该怎么做完全相反。
+          `10011=True` 必须出现在行里。
+        - **升序**：样例那份恰好就是升序，上面那条用例**测不出**这一点 —— 顺序一旦随
+          payload 走，同一种局面会打出两种日志，翻日志时对不上号（`_defend` 里
+          "并列按 id 排"是同一条理由：先后不能取决于报文给的顺序）。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {"10030": False, "10011": True, "10010": False}
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        self.assertEqual(caught.records[-1].getMessage(), "上回合未通过：10010 10030")
+        self.assertEqual(
+            caught.records[-1].getMessage(),
+            "上回合合法性：10010=False 10011=True 10030=False",
+        )
+        #: **全通过也照样打**：触发条件是"有回执"，不是"有未通过" ——
+        #: 一行全 `True` 正是"这回合发出去的都合法"的唯一证据（第 20 步的触发条件就在这里）。
+        raw["lastRoundRoleActionResults"] = {"10010": True, "10011": True}
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        self.assertEqual(caught.records[-1].getMessage(), "上回合合法性：10010=True 10011=True")
 
     def test_the_task_line_shows_the_whole_text_and_marks_any_truncation(self):
         """任务日志**必须能看见全文** —— 这正是第 14 步的来由。
@@ -320,8 +341,14 @@ class HandleTest(unittest.TestCase):
         line = line_after_sending()
         self.assertIn("任务：短题目", line)
         self.assertIn("提交：无", line)
-        #: `prompt` **不打原文**（它就是任务原文再抄一遍）：只报"这一回合问没问"
-        self.assertIn("提问：有", line)
+        #: `prompt` **打全文**（第 20 步）：模板头、工具清单、「沉淀的 SOP」那个槽、
+        #: 题目原文全在这一行里 —— 这四样**实盘上只有这里看得见**（本地 e2e 的"LLM"
+        #: 是我们自己写的，只证明解析自洽）。
+        self.assertIn("提问：# Agent定位", line)
+        self.assertIn("# 可使用的工具", line)
+        self.assertIn("- SOP2Prompt：", line)
+        self.assertIn("# 沉淀的 SOP", line)
+        self.assertIn("题目：\n短题目", line)
 
         #: 判题器答了 ⇒ 提交那一格才有内容，而且**不再提问**（省 LLM 额度）
         line = line_after_sending(llmResp="答案")
@@ -339,6 +366,62 @@ class HandleTest(unittest.TestCase):
         line = line_after_sending(phaseTask="")
         self.assertIn("任务：无", line)
         self.assertIn("提交：答案", line)
+
+    def test_a_long_answer_in_the_actions_line_is_clipped(self):
+        """`submitAnswer` 的 `taskAnswer` 是**外侧（LLM）给的自由文本**，日志这一行必须有界。
+
+        通用摊开之后它一定会被打出来（这正是要它），而它没有内在长度上限：
+        一串 9000 字的答案会把「动作：」那一行撑到 27KB，而这条日志**每回合都打**
+        （硬约束 5）。这条**走真链路**（`answer_of` → `submitAnswer` → `describe`）——
+        上面那条用例证明"`describe` 会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        raw["phaseTask"] = "请查询北京天气"  # 有任务 ⇒ 开拓者 `_answer_task`（不管白天夜里）
+        raw["llmResp"] = "<answer>" + "答" * 9000 + "</answer>"
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        acts = [r.getMessage() for r in caught.records if r.getMessage().startswith("动作：")]
+        self.assertEqual(len(acts), 1, acts)
+        self.assertIn("taskAnswer=", acts[0], "答案得打出来，不然这条用例什么也没钉住")
+        self.assertIn("（共 9000 字）", acts[0])
+        self.assertLess(len(acts[0]), 600, "截断之后这一行必须是有界的")
+
+    def test_the_prompt_line_has_its_own_bigger_limit(self):
+        """`prompt` 的上限是 `LOG_PROMPT_MAX`，**比 `LOG_TEXT_MAX` 大** —— 而它大得有理由。
+
+        理由是一件可测的事实（下面第一句断言）：**光模板就长过 `LOG_TEXT_MAX`**。
+        按 400 截的话，这一行永远只看得见开头的「Agent定位」几行 ——
+        "SOP 那个槽填进去没有""工具清单长什么样""题目在不在里面"全看不见，
+        而打它的唯一目的就是这三件事。
+        """
+        AGENT.reset()
+        prompt = chat("题", sop=AGENT.sop, tool_desc=AGENT.tool_desc())
+        self.assertGreater(len(prompt), LOG_TEXT_MAX, "模板比 LOG_TEXT_MAX 还短 ⇒ 这两个常量该合并")
+        self.assertGreater(LOG_PROMPT_MAX, LOG_TEXT_MAX)
+
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["errors"] = []
+        raw["lastRoundRoleActionResults"] = {}
+        raw["llmResp"] = ""  # 没答过 ⇒ 这一回合提问
+        raw["phaseTask"] = "题" * LOG_PROMPT_MAX
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        line = caught.records[-1].getMessage()
+
+        #: `planner` 组装出来的那一份（同一个 `AGENT`，同一份题目），长度应当是它自己的
+        full = chat(raw["phaseTask"], sop=AGENT.sop, tool_desc=AGENT.tool_desc())
+        asked = line.split("提问：", 1)[1]
+        self.assertEqual(
+            len(asked),
+            LOG_PROMPT_MAX + len(f"…（共 {len(full)} 字）"),
+            "提问那一格该是『上限字 + 留痕那句话』—— 超长必须留痕、且有界",
+        )
+        self.assertTrue(asked.startswith("# Agent定位"), asked[:20])
+        self.assertIn(f"共 {len(full)} 字", asked)
 
     def test_attack_through_the_real_payload_path(self):
         """端到端**唯一**一条：从真实 payload 到线上报文。
@@ -365,27 +448,87 @@ class HandleTest(unittest.TestCase):
         self.assertNotIn("10010", cmds, "角色 id 不能当 attack 的 key")
 
     def test_describe_survives_a_command_without_a_target(self):
-        """`acceptTask` / `submitAnswer` **没有 `targetPos`**，而 `describe` 原来硬读它。
+        """`acceptTask` / `submitAnswer` **没有 `targetPos`** —— 而旧版硬读它。
 
         这不是显示问题：`describe` 跑在 `app.handle` 的 `try` 里（`app._log`），
         一个 `IndexError` 会让**整回合退化成空指令** —— 开拓者领了任务却什么都没答，
         现象与"任务线根本没做"一模一样，极难排查。
-        """
-        self.assertEqual(actions.describe({"10011": {"action": "acceptTask"}}), "10011 acceptTask")
-        self.assertEqual(
-            actions.describe({"10011": {"action": "submitAnswer", "taskAnswer": "x"}}),
-            "10011 submitAnswer",
-        )
 
-    def test_describe_keeps_the_attack_arrow(self):
-        """改 `describe` 时不能把既有格式改坏 —— `attack` 的 key 是武器 id，
-        不带上操控者就看不出来是谁在开炮。"""
+        第 20 步起字段是**通用摊开**的（有什么打什么），这类动作天然踩不到雷；
+        这条用例留着当**守门员**：谁要回头去手写字段清单，先在这里挂一次。
+        """
+        self.assertEqual(
+            actions.describe({"10011": {"action": "acceptTask"}}, clip=_clip), "10011 acceptTask"
+        )
         self.assertEqual(
             actions.describe(
-                {"10020": {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 4, "y": 4}]}}
+                {"10011": {"action": "submitAnswer", "taskAnswer": "晴 26 度"}}, clip=_clip
             ),
-            "10020 attack←10010(4,4)",
+            "10011 submitAnswer taskAnswer=晴 26 度",
         )
+
+    def test_describe_prints_every_field_of_every_command(self):
+        """通用摊开：一条指令**有什么字段就打什么**，一个都不许漏。
+
+        手写清单的坏处不是"少打几个字"，而是**漏字段不会有人发现** —— 日志少打一个
+        `controllerId`，看着完全正常（与"`attack` 的 key 是武器 id"是同一类坑：
+        一个会把炮打歪，一个只会让事后复盘瞎猜）。
+
+        `attack` 那三个字段里，**武器 id 是 key**、操控者在 `controllerId` ——
+        旧版用一个 `←` 箭头表示这件事，现在就是 `controllerId=值`，同样一眼能看出来。
+        """
+        self.assertEqual(
+            actions.describe(
+                {
+                    "10020": {
+                        "action": "attack",
+                        "controllerId": "10010",
+                        "targetPos": [{"x": 4, "y": 4}],
+                    },
+                    "10012": {
+                        "action": "build",
+                        "name": "wall",
+                        "targetPos": [{"x": 13, "y": 23}],
+                    },
+                },
+                clip=_clip,
+            ),
+            "10020 attack controllerId=10010 (4,4)；10012 build name=wall (13,23)",
+        )
+        #: `targetPos` 是**数组**（`attack` 的等级 >1 时多格）：多格用 `、` 连，别只打头一个
+        self.assertEqual(
+            actions.describe(
+                {
+                    "10020": {
+                        "action": "attack",
+                        "controllerId": "10010",
+                        "targetPos": [{"x": 4, "y": 4}, {"x": 5, "y": 5}],
+                    }
+                },
+                clip=_clip,
+            ),
+            "10020 attack controllerId=10010 (4,4)、(5,5)",
+        )
+
+    def test_describe_clips_free_text_through_the_injected_clip(self):
+        """自由文本（`taskAnswer`）一律过**调用方递进来的** `clip`。
+
+        `describe` 不需要知道哪个字段是自由文本 —— 字符串值全过一遍就够了。
+        截断规则（上限 + `…（共 N 字）` 那句留痕）全项目只有 `app._clip` 一份：
+        `protocol` 不能 import `app`（依赖方向反了），所以是**把规则递进来**、
+        不是在这儿复制一份。这条用例传一个假 clip，正好钉住"没复制"。
+        """
+        seen = []
+
+        def clip(text: str) -> str:
+            seen.append(text)
+            return f"<{text[:3]}>"
+
+        line = actions.describe(
+            {"10011": {"action": "submitAnswer", "taskAnswer": "答" * 9}}, clip=clip
+        )
+        self.assertEqual(seen, ["答" * 9], "原文该整个交给 clip，而不是自己先截")
+        self.assertEqual(line, "10011 submitAnswer taskAnswer=<答答答>")
 
     def test_the_task_loop_through_handle(self):
         """端到端走完整条**工具调用回路** —— 问 → 跑命令 → 回灌结果 → 交答案。
@@ -524,10 +667,11 @@ class HandleTest(unittest.TestCase):
     def test_the_worst_round_stays_under_the_budget(self):
         """**硬约束 5 的直接守卫**：最坏的一回合，日志总量不得超预算。
 
-        原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。四个顶格的东西撞在一起
-        就是最坏局面：任务原文、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，
-        中文 1 字 = 3 字节）**再加**一条 SOP 更新行 —— **实测 6180 字节 / 44 行**。
-        上限取 6900 而不是 6180：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
+        原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。顶格的东西全撞在一起
+        就是最坏局面：题目、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，中文 1 字 = 3 字节）、
+        被回灌那一轮**顶到 `LOG_PROMPT_MAX` 的 prompt**、**再加**一条 SOP 更新行
+        —— **实测 8574 字节 / 66 行**（第 20 步；上一版是 6180 / 44 行，那时 prompt 只报字数）。
+        上限取 9300 而不是 8574：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
         或者又加进来一个顶格的大字段 —— 那至少是 1200 字节），不是几个标签的字节抖动
         —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节）。
 
@@ -555,7 +699,7 @@ class HandleTest(unittest.TestCase):
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertIn(sop.__name__, {r.name for r in caught.records}, "SOP 行没被收进来 ⇒ 守卫有盲区")
         total = sum(len(r.getMessage().encode("utf-8")) for r in caught.records)
-        self.assertLess(total, 6900, f"最坏回合 {total} 字节，超了硬约束 5 的预算")
+        self.assertLess(total, 9300, f"最坏回合 {total} 字节，超了硬约束 5 的预算")
 
 
 class ParseTest(unittest.TestCase):
