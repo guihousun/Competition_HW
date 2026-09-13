@@ -29,10 +29,9 @@ def main() -> None:
         format="%(asctime)s | %(message)s",
     )
 
-    from coregeek.server import serve
+    from coregeek.app import run
 
-    logging.info("listening on 0.0.0.0:%d", port)
-    serve(port)
+    run(port)
 
 
 if __name__ == "__main__":

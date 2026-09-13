@@ -25,20 +25,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 架构
 
-三步骨架（第 1 步落地，见 `docs/design/code-task.md`）：
+骨架（逐步记录见 `docs/design/code-task.md`）：
 
 ```
-main3.py          入口：读端口 → chdir → src/ 进 sys.path → 起服务。不放策略
-run.sh            接口文档规定的 bash run.sh <port>；陪跑本地（python3 / py）
+main3.py              入口：读端口 → chdir → src/ 进 sys.path → 起服务。不放策略
+run.sh                接口文档规定的 bash run.sh <port>；陪跑本地（python3 / py）
 src/coregeek/
-├── server.py     HTTP 层：收字节 → app.handle → 回字节。不认识任何游戏概念
-├── app.py        组装点：报文 ↔ 决策。**红线所在**，异常一律退化成空指令
-└── planner.py    决策入口：payload → roleCommandMap。策略只写在这里
+├── app.py            组装根：handle(bytes) + run(port)。**红线所在**，异常一律退化成空指令
+├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
+├── protocol/         线上格式：读与写，**只有这里知道字段名**
+│   ├── model.py      payload → Turn（容错解析）
+│   └── commands.py   指令编码（合法性/权限闸门以后加在这里）
+└── game/             策略
+    ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / step_toward
+    ├── world.py      Role / Turn
+    └── planner.py    决策。**策略只写在这里**
 ```
 
+依赖方向：
+
+```
+app → web / protocol / game        protocol → game
+game/planner → protocol/commands   ← 唯一一条"由内往外"，只走指令编码
+```
+
+- 三件事：**怎么收（web）/ 报文长什么样（protocol）/ 打什么（game）**，`app` 把它们接起来。**没有第四件事就不加第四个包**，也不提前建空目录。
 - `app.py` 与 `planner.py` 的分工是**红线 vs 策略**：`app` 管"永远回得出合法报文"，`planner` 管"该做什么"。别让策略代码有机会破坏报文格式。
 - `roleCommandMap` 的 key 用**字符串**（JSON 对象的 key 本来就是字符串）。
 - 目前 `handle(raw: bytes) -> bytes` 是纯函数、无状态。**加任何跨回合状态之前先想清楚**是否需要，以及失败时的退化路径。
+- 领域对象只带**当前步骤真正用到**的字段（`Role` 目前只有 id/pos/roleType）。加字段之前先问这一步用不用得上。
+- **不加分层 import-lint**：现在一共 3 个子包，违规肉眼可见；上一版为此写的 ast 检查属于过度设计。
 
 ## 会影响策略正确性的领域事实
 

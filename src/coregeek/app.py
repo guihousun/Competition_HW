@@ -1,17 +1,18 @@
-"""组装点：线上报文 → 决策 → 线上报文。
+"""组装根：接起 HTTP 层与决策，并守好那条唯一会出局的红线。
 
-唯一不可妥协的约束：**永远返回合法 JSON，永不抛异常**。
-判题器把"响应格式错误"计为一次异常，累计 5 次该队就不再被调度 ——
-所以下面那个 `except` 不是防御性编程，它就是红线本身。
+判题器只认三类异常（建连/响应超时、响应格式错、**指令非法**），累计 5 次该队整场不再被调度。
+所以 `handle()` 里的 `except` 不是防御性编程 —— 它就是红线本身：任何失败都退化成
+**合法空指令**（空指令集合法且不计异常），宁可丢掉一个回合，不赌整队资格。
 
 响应的三个顶层字段永远都在（接口文档 §2.1）。官方 demo 只发了 `roleCommandMap`。
 """
 
 import json
 import logging
-from typing import Any
 
-from . import planner
+from .game import planner
+from .protocol import model
+from .web import server
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,13 +20,19 @@ LOGGER = logging.getLogger(__name__)
 EMPTY_BODY = b'{"roleCommandMap":{},"prompt":"","executeCmd":""}'
 
 
+def run(port: int) -> None:
+    LOGGER.info("listening on 0.0.0.0:%d", port)
+    server.serve(port, handle)
+
+
 def handle(raw: bytes) -> bytes:
     """处理一个回合。**不抛异常**，返回的字节永远是合法响应。"""
     try:
         payload = json.loads(raw.decode("utf-8")) if raw else {}
-        if not isinstance(payload, dict):
-            raise ValueError("body 不是 JSON 对象")
-        commands = planner.plan(payload)
+        turn = model.load(payload)
+        if turn is None:
+            raise ValueError("payload 不是 JSON 对象")
+        commands = planner.plan(turn)
         body = json.dumps(
             {"roleCommandMap": commands, "prompt": "", "executeCmd": ""},
             ensure_ascii=False,
@@ -35,5 +42,5 @@ def handle(raw: bytes) -> bytes:
         LOGGER.warning("fallback 空指令：%s", exc)
         return EMPTY_BODY
 
-    LOGGER.info("round %s → %d 条指令", payload.get("roundNo"), len(commands))
+    LOGGER.info("round %s → %d 条指令", turn.round_no, len(commands))
     return body
