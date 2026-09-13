@@ -8,7 +8,7 @@ from types import MappingProxyType
 from typing import Any, Callable, NamedTuple
 
 from .grid import Pos
-from .map import Map
+from .map import COPPER, IRON, STONE, Map
 from .roles import BaseRole
 
 #: 日历（任务书 L90）：130 回合 = 1 天（**白天 70 + 夜晚 60**），共 10 天。
@@ -181,8 +181,12 @@ class Turn(NamedTuple):
         return DAY_ROUNDS - self.within + 1 if self.is_day else 0
 
     def summary(self) -> str:
-        """**3 行**关键事实摘要 —— 图上推不出来的那些：金币 / 武器名册与射程 / 角色背包 /
+        """关键事实摘要 —— 图上推不出来的那些：金币 / 武器名册与射程 / 角色背包 /
         机器人血量 / 可接任务点。
+
+        **四块，块间空一行**（用户第 22 步改定的格式）：`【回合】` / `【我方】` /
+        `【机器】` / `【可接任务点】`。前两块各带一个前导 `\n`、后两块挤在同一个
+        列表项里 —— 长度对不上块数时别数行，数**非空行**（用例的 `_blocks` 就是这么做的）。
 
         放在这里而不是 `app._log` 里，与 `Map.render()` 在 `map.py` 是同一条分工：
         **领域对象自己格式化自己**，`app` 只管装配与红线。下面这些字段
@@ -214,7 +218,14 @@ class Turn(NamedTuple):
             return f"{w.id} {w.kind}({w.pos.x},{w.pos.y})r{span}{cooldown}"
 
         def role(r: BaseRole) -> str:
-            return f"{r.id} {r.type_name}({r.pos.x},{r.pos.y})石{r.stone}"
+            #: 三种矿**都打**（第 22 步）：卖矿那条线只认背包里的矿石，而"工人有铜却不去卖"
+            #: 的原因（没货、还是闸门拦了）只有这里能回答 —— 日志是黑盒下唯一的观察窗。
+            #: 背包里的**其它**物品（将来买的券和道具）不打：现在没有使用者，`summary` 是
+            #: 给固定几行的事实，不是背包转储。
+            return (
+                f"{r.id} {r.type_name}({r.pos.x},{r.pos.y})"
+                f"石{r.bag.get(STONE, 0)}铁{r.bag.get(IRON, 0)}铜{r.bag.get(COPPER, 0)}"
+            )
 
         def robot(b: Robot) -> str:
             return f"({b.pos.x},{b.pos.y})h{b.health}"
@@ -226,11 +237,11 @@ class Turn(NamedTuple):
             [
                 #: 回合号在最前 —— `logging` 的时间戳前缀只加在**第一条物理行**上，
                 #: 按时间翻日志时要一眼看见这是哪一回合
-                f"回合 {round_no}（{when}）｜ 金币 {gold}"
-                f" ｜ 武器 {len(self.weapons)}/{len(self.roles)}："
+                f"\n【回合】 {round_no}（{when}） ｜ 【金币】 {gold} | "
+                f"【武器】 {len(self.weapons)}/{len(self.roles)}："
                 f"{_listed(self.weapons, weapon) or '无'}",
-                f"我方 {_listed(self.roles, role, ' ｜ ') or '无'}",
-                f"机器 {len(self.robots)} 台：{_listed(self.robots, robot) or '无'}"
-                f" ｜ 可接任务点 {_listed(self.task_points, point) or '无'}",
+                f"\n【我方】 {_listed(self.roles, role, ' ｜ ') or '无'}",
+                f"\n【机器】 {len(self.robots)} 台：{_listed(self.robots, robot) or '无'}"
+                f"\n【可接任务点】 {_listed(self.task_points, point) or '无'}",
             ]
         )

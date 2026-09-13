@@ -1,7 +1,7 @@
 """决策入口：`Turn` → `roleCommandMap`。**策略只写在这里。**
 
 角色每回合按 `docs/策略指导.md` 的优先级**择一**（每回合每个角色只能一个动作，任务书 L177）。
-三条线 —— **白天开拓者去接任务、白天工人建造、夜里（还没被钉住的）角色上炮位**：
+四条线 —— **白天开拓者去接任务、白天工人建造 → 卖矿 → 采矿、夜里（还没被钉住的）角色上炮位**：
 
 **白天**（开拓者，见 `_take_task`）：
 
@@ -23,10 +23,17 @@
    —— 「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」。顺序不能反：
    墙只吃石头，先挑最贵的铜就永远砌不成墙。价目取自载荷 `vendorShopList`（`Turn.vendor_prices`），
    **不写死"铜 > 铁 > 石头"**（那只是样例的价目，官方消息会让它波动）。
+4. **卖矿**（第 22 步）—— 墙砌完之后**先试一次卖**（`_sell_ore`，在采矿之前）：
+   从背包里挑**收购价最高**的那种矿，够本（货值 ≥ 往返回合数）就背到**小贩周围一格内**
+   一次卖光（`sell`，`num` = 手上那种矿的全部件数）；不够本 / 地图上没有小贩 / 去了赶不回来
+   才落回上一支去采矿。**石头也卖**：能走到这一支就说明 14 格墙砌满了，手里剩的石头
+   一定是多余的（那个不变量就是"多余的石头"的定义，不再另写一遍计数）。
+   ⚠️ 阈值口径「**货值 ≥ 2 × 距离**」（≈ 每回合至少换 1 金币）是**拍的**，没有文档依据
+   —— 它是这一步唯一的调参旋钮，见 `docs/design/code-task.md` 第 22 步的已知不确定性。
 
 **夜里**（还没被任务钉住的角色 —— §4.4 里 `attack` 的可用角色列写的就是"全部"）：
 
-4. **回炮位操炮** —— 走到最近的一座还没被本回合别人认领的武器旁，贴着就开火（见 `_defend`）；
+5. **回炮位操炮** —— 走到最近的一座还没被本回合别人认领的武器旁，贴着就开火（见 `_defend`）；
    够不着/没敌人/炮在冷却就**站在炮位待命，什么都不发**（空指令合法且不计异常）。
    火力目标 = **射程内血最少的机器人**（补刀）。
 
@@ -77,7 +84,7 @@ from ..agent import AGENT  # 第二条"由内往外"：与 LLM 说什么不在�
 from ..agent.chat import answer_of, tool_of
 from ..protocol import actions  # 第一条"由内往外"：指令只能经 Action 产出
 from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
-from .map import STONE
+from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
 from .world import Turn, Weapon
 
@@ -107,6 +114,14 @@ ROUNDS_PER_STONE = 3
 #: 留给"从矿走回工地、把石头砌完"的容错余量（用户指定 5 回合）。
 #: 它同时吸收**距离估算的误差** —— 下面的距离一律用切比雪夫，绕障时会低估。
 TIME_MARGIN = 5
+
+#: 能拿去卖给小贩的矿：**三种都卖**（用户选定，含多余的石头）。这里的顺序无关紧要 ——
+#: 挑哪一种由 `Turn.vendor_prices` 现算（**不写死"铜 > 铁 > 石头"**，那是样例的价目）。
+#: ⚠️ **石头只在"墙砌完了"那一支里才卖得出去**，调用点（`_build_walls` 的 `if not free:`）
+#: 已经保证了这一点：墙没砌完时手里的石头一律有用（`_stones_to_mine` 的上限正是"还差几格墙"，
+#: 采多了它就不采了）⇒ `free` 非空时**不存在**"多余的石头"。那个不变量就是它的定义。
+SELLABLE = (STONE, IRON, COPPER)
+
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     cmds: dict[str, dict[str, Any]] = {}
@@ -382,7 +397,7 @@ def _build_walls(
     sites: set[Pos],
     gated: bool = False,
 ) -> None:
-    """白天：先攒石头，再把墙砌到优先级最高的那一格上；**砌完了就去采最值钱的矿**。
+    """白天：先攒石头，再把墙砌到优先级最高的那一格上；**砌完了就去卖矿、采最值钱的矿**。
 
     每回合独立判定，**不存任何跨回合状态** —— 所以矿采没了、墙被别人砌了、
     白天快过完了，下一回合都能自动跟着变。
@@ -396,14 +411,16 @@ def _build_walls(
     用户策略指导那条的后半句在这里兑现（「手里面保持能建造墙的石头量就行，
     然后选择价格最高的矿」）：
     **"保持够砌墙的量"这一半本来就有** —— `_stones_to_mine` 拿"还差几格墙"当上限；
-    补上的是"然后"：14 格砌完之后工人原本**原地闲置**，现在转去采矿。
+    补上的是"然后"：14 格砌完之后工人原本**原地闲置**，第 15 步起转去采最值钱的矿，
+    第 22 步起再往前一步 —— 采到的矿背到小贩那儿换钱（`_sell_ore`）。
     """
     free = [c for c in _ring(turn) if c not in sites]
     if not free:
-        # 墙砌满了。手里剩的石头留给第二天补墙（**没有转移物品的指令**，给不了别人），
-        # 人不再闲着 —— 白天不采，夜里就只是站在炮位上。
-        # ⚠️ 这一支**与闸门无关**：环上已经无可砌，采矿不会关住谁（搬石头不砌墙）。
-        _mine_spare_ore(role, turn, cmds, claimed, sites)
+        # 墙砌满了。**先把货卖了，卖不动再去采矿**（第 22 步）。
+        # 卖矿没有位置上的独占性（各卖各的背包），所以不进 `sites`、也不像夜里那样抢 `taken`。
+        # ⚠️ 这一支**与闸门无关**：环上已经无可砌，卖矿/采矿都不会关住谁（搬矿不砌墙）。
+        if not _sell_ore(role, turn, cmds, claimed, sites):
+            _mine_spare_ore(role, turn, cmds, claimed, sites)
         return
     if gated:
         return  # 还砌得动，但这回合砌下去就把人关住了 ⇒ 一格都不砌（待命，**不是**"砌完了"）
@@ -557,6 +574,67 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
     return max(0, min(budget // ROUNDS_PER_STONE, free - role.stone))
 
 
+def _sell_ore(
+    role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
+) -> bool:
+    """墙砌完了 ⇒ 把小贩肯收的矿背过去换金币。**这一回合没去卖就返回 `False`**。
+
+    调用方（`_build_walls` 的"砌完了"那一支）接着去采矿，所以返回真假是契约的一部分，
+    不是顺手 —— "卖不动"与"不卖"在这里是同一件事。
+
+    四条门，任一条不成立就 `False`（**判据顺序有讲究，见各自注释**）：
+
+    ① **有货**：`_best_load` 从 `SELLABLE` 里挑**收购价最高**的那种；
+    ② **有小贩**：`Map.vendors` 为空就无处可卖；
+    ③ **够本**：**已经不贴着才算** —— 货值 < 往返回合数（`2 × 距离`）就留在矿边接着采。
+       这一条只回答"值不值得走过去"；人已经站在小贩旁边时这趟路早就付过了，不再拦。
+       ⚠️ **"1 金币 ≈ 1 回合"是拍的**，没有文档依据（见第 22 步留痕的已知不确定性）。
+    ④ **回得来**：`走到小贩 + 从小贩回基地 ≤ 白天剩余 − TIME_MARGIN`。与 `_mine_spare_ore`
+       同源，只是把"工地"换成了小贩 —— 夜里必须在炮位上，黑天还在赶路等于拿火力换矿石。
+
+    站位是 **`sell` 要求的"小贩周围一格内"**（任务书 §4.4）：与小贩格本身挡路这件事
+    正好对上（`step_toward` 撞上它自然停在贴着一格，与采矿同一条契约）。
+
+    **一回合只能发一条指令** ⇒ 一次只卖一种矿，`num` = 手上那种矿的**全部件数**（卖光）。
+    卖完人还站在小贩边上，下一回合再卖另一种，两趟之间没有走路成本。
+    """
+    station = turn.map.station
+    kind, num = _best_load(role, turn.vendor_prices)
+    if not kind or station is None or not turn.map.vendors:
+        return False
+    # 并列按坐标排（与 `_pick_ore` / `_defend` 同一条理由：不能取决于 payload 里的顺序）
+    vendor = min(turn.map.vendors, key=lambda p: (role.pos.dist(p), p))
+    if role.pos.dist(vendor) <= 1:
+        return _emit(cmds, role, actions.Sell, kind, num)
+    value = turn.vendor_prices.get(kind, 0) * num
+    if value < 2 * role.pos.dist(vendor):
+        return False  # ③ 为这一堆货走这么远不划算，接着采
+    if role.pos.dist(vendor) + vendor.dist(station) > turn.day_rounds_left - TIME_MARGIN:
+        return False  # ④ 去了就赶不回来（`_mine_spare_ore` 同款闸门）
+    return _step(role, vendor, turn, cmds, claimed, sites)
+
+
+def _best_load(role: Worker, prices: Mapping[str, int]) -> tuple[str, int]:
+    """挑这一趟卖哪种矿：**收购价最高的**，同价取件数多的。挑不出来 ⇒ `("", 0)`。
+
+    **价 ≤ 0 或件数为 0 的矿直接跳过**：价 ≤ 0 = 小贩不收（价目表里没有也算不收，
+    与 `_pick_ore` 同一条口径），换不来金币、白白扔一件。价目表为空 ⇒ 一件都不卖 ——
+    "哪一堆最值钱"在没有价格时无从谈起，与 `_gold` / `_size` 同一条降级方向。
+
+    名字参与比较（`max` 的 key 带上它）只是为了让并列**可复现** —— 与 `_defend` 的
+    `(dist, id)` 同一条理由：先后不能取决于 payload 里的顺序。
+    """
+    loads = [
+        (prices.get(kind, 0), role.bag.get(kind, 0), kind)
+        for kind in SELLABLE
+        if prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > 0
+    ]
+    if not loads:
+        return "", 0
+    _, num, kind = max(loads)
+    return kind, num
+
+
 def _mine_spare_ore(
     role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
 ) -> None:
@@ -567,11 +645,10 @@ def _mine_spare_ore(
     同源，只是把"工地"换成了基地。
 
     **拿不到收购价就哪儿也不去**（`vendorPrices` 缺失、或三种矿小贩都不收）：
-    "价格最高"在没有价格时无从谈起，与 `_gold` / `_size` / `_stone` 同一条降级方向。
+    "价格最高"在没有价格时无从谈起，与 `_gold` / `_size` 同一条降级方向。
 
-    ⚠️ **别指望这一步现在就能换钱**：`sell`（小贩周围一格内把石头/铁/铜换成金币）
-    还没实现，采回来的矿现在只是压在背包里 —— 它的价值等那条线做出来才兑现。
-    在那之前这一步的收益是"工人反正闲着"，代价是背包占用与离炮位更远。
+    与 `_sell_ore` 的分工：**它只管采，不管运**。采回来的矿由 `_sell_ore` 在这之前先试一次
+    —— 攒够了（货值 ≥ 往返回合数）就先送去卖，没攒够才继续采。
     """
     station = turn.map.station
     mine = _pick_ore(role.pos, turn.map.ores, turn.vendor_prices, want_stone=False)

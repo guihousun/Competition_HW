@@ -80,6 +80,16 @@ def _terrain(weapons: tuple[Weapon, ...], *layers: dict[Pos, str]) -> dict[Pos, 
     return grid
 
 
+def _blocks(summary: str) -> list[str]:
+    """`Turn.summary()` → **非空**行。
+
+    摘要第 22 步起带**空行分段**（`【回合】 / 【我方】 / 【机器】 / 【可接任务点】` 各占一块，
+    块间空一行），块数**固定**但物理行数是数据相关的（一块里放不下会换行）。
+    断言块内容就够 —— 空行只是给人眼看的，钉住它反而会把"某块变长了"误报成格式错。
+    """
+    return [line for line in summary.splitlines() if line]
+
+
 class MoveWireTest(unittest.TestCase):
     def test_wire_shape_is_the_flat_record(self):
         self.assertEqual(
@@ -133,6 +143,24 @@ class MoveWireTest(unittest.TestCase):
         for role_type in ("worker", "pioneer"):
             with self.subTest(role_type=role_type):
                 self.assertEqual(len(actions.Attack(role_type, "7", Pos(1, 1)).to_wire()["targetPos"]), 1)
+
+    def test_sell_wire_shape(self):
+        """`sell` 是**第一个带 `num` 的动作** —— 逐字段钉死，别让 `str` 漏进 JSON。
+
+        接口文档 §2.2 标的是 **Int**（不填默认 1），§2.3 给的形状是
+        `{"action":"sell","name":<矿种>,"num":<件数>}`。`name` 取**矿种**而不是动作名，
+        与 `build` 的 `name` 是建筑名同一个约定（与载荷里 `neutralType` /
+        `vendorShopList.name` / 背包物品名**同一套词**）。
+
+        ⚠️ **没有实证报文**：`docs/response.txt` 里只有 `move`/`build`/`remove`。
+        形状是从接口文档推的 —— 这是这一步最大的单点风险，也只有这里能钉。
+        `attack` 的 `controllerId` 标的是 String、这里标的是 Int，**两者相反**，
+        所以两处各钉一次类型（抄错方向 = 一次"指令非法"，直通红线）。
+        """
+        wire = actions.Sell("worker", "copper", 4).to_wire()
+        self.assertEqual(wire, {"action": "sell", "name": "copper", "num": 4})
+        self.assertIsInstance(wire["num"], int)
+        self.assertNotIsInstance(wire["num"], bool)
 
 
 class GateTest(unittest.TestCase):
@@ -204,6 +232,19 @@ class GateTest(unittest.TestCase):
         with self.assertRaises(PermissionError):
             actions.SubmitAnswer("worker", "晴 26 度")
 
+    def test_sell_is_allowed_for_both_roles(self):
+        """§4.4 里 `sell` 的可用角色是**全部**（开拓者一样能卖），与 `build`/`collect` **相反**。
+
+        反方向的那种 bug（把开拓者/别的角色挡在门外）本地**永远测不出来** ——
+        报文格式完全合法，只有判题器会说"不"。所以这一条与上面那两条成对：
+        `build`/`collect` 钉"窄得对"，这里钉"窄不得"。
+        """
+        for role_type in ("worker", "pioneer"):
+            with self.subTest(role_type=role_type):
+                self.assertEqual(
+                    actions.Sell(role_type, "stone", 1).to_wire()["action"], "sell"
+                )
+
 
 class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
@@ -250,23 +291,28 @@ class HandleTest(unittest.TestCase):
         `[{"errorCode": 2, "description": "xxx"}]`、`lastRoundRoleActionResults` 里
         10010/10030 是 false）。`CLAUDE.md` 已声明**别把样例的这两个值当真实信号读**，
         但**这里的记录条数是真实断言**：回执那两条各自"有事才吭声"，
-        所以样例这种局面是 4 条，而一个干净回合只有 2 条（下面那条用例）。
+        所以样例这种局面是 **5** 条（**banner** + 局面 + 动作 + 报错 + 回执），
+        而一个干净回合只有 3 条（下面那条用例）。
         """
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(SAMPLE.read_bytes())
-        head, acts, errors, failed = (r.getMessage() for r in caught.records)
+        #: 五条：**banner** + 局面 + 动作 + 报错 + 回执。banner 是 `handle` 打的、
+        #: 不归 `_log` 管 —— 数记录数时最容易漏的就是它。
+        banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
+        self.assertEqual(banner, f"{'#' * 35}第85回合{'#' * 35}")
         lines = head.splitlines()
-        #: 摘要 3 行 + 图例 3 行 + 地图 34 行（41×32 的图，行自上而下 = y 由大到小）
-        self.assertEqual(len(lines), 40)
-        #: 回合号在最前 —— 时间戳就加在这一行上
-        self.assertEqual(lines[0].split("｜")[0], "回合 85（夜里）")
-        self.assertIn("金币 20", lines[0])
+        #: 摘要 4 块（块间空行 ⇒ 7 条物理行）+ 图例 3 行 + 地图 34 行
+        self.assertEqual(len(lines), 44)
+        #: 回合号在最前 —— 时间戳就加在这一行上（摘要头一块前面那个空行不带时间戳）
+        self.assertEqual(lines[1].split("｜")[0].rstrip(), "【回合】 85（夜里）")
+        self.assertIn("【金币】 20", lines[1])
         #: 图例在摘要与地图之间（紧挨着图，看着图例看图）
-        self.assertTrue(lines[3].startswith("图例："), lines[3])
-        #: 标尺两行 + 行号槽 —— 图从第 7 行开始
-        self.assertTrue(lines[8].startswith("31 │ "), lines[8])
+        legend_at = next(i for i, line in enumerate(lines) if line.startswith("图例："))
+        self.assertEqual(legend_at, 7, "\n".join(lines[:10]))
+        #: 标尺两行 + 行号槽 —— 图紧跟在图例（3 行）与标尺（2 行）之后
+        self.assertTrue(lines[legend_at + 5].startswith("31 │ "), lines[legend_at + 5])
         self.assertEqual(
-            acts, "动作：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
+            acts, "【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
         )
         self.assertEqual(errors, "判题器报错：2：xxx")
         #: **按 id 排序**（不照 payload 的顺序）：`{10010: false, 10030: false}` 在样例里
@@ -274,21 +320,27 @@ class HandleTest(unittest.TestCase):
         #: 样例那份回执里有 7 个实体 —— 现在**全都打**（第 20 步），不再只列未通过的两个
         self.assertEqual(
             failed,
-            "上回合合法性：10010=False 10011=True 10012=True 10013=True"
-            " 10020=True 10030=False 10040=True",
+            "【上回合合法性】：10010=False | 10011=True | 10012=True | 10013=True"
+            " | 10020=True | 10030=False | 10040=True",
         )
 
     def test_a_clean_round_logs_only_the_map_and_the_actions(self):
         """回执那两条**有事才吭声** —— 干净回合一条都不该多打（日志字节是有预算的）。
 
         与上面那条用例合起来才钉得住"触发条件"：只测样例的话，全打也算过。
+
+        **banner 是那第三条**（`handle` 打的，不归 `_log` 管）：它每回合都出现，
+        是这个计数里唯一"不该省"的一条 —— 分段符省了，几 MB 的日志就没法按回合切。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {}
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        self.assertEqual(len(caught.records), 2, [r.getMessage()[:40] for r in caught.records])
+        self.assertEqual(
+            len(caught.records), 3, [r.getMessage()[:40] for r in caught.records]
+        )
+        self.assertTrue(caught.records[0].getMessage().startswith("###"), "banner 该在最前")
 
     def test_the_receipt_line_lists_every_entity_sorted(self):
         """回执那一行**列全部实体、按 id 升序**（含 `True` 的那些）。
@@ -309,14 +361,16 @@ class HandleTest(unittest.TestCase):
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertEqual(
             caught.records[-1].getMessage(),
-            "上回合合法性：10010=False 10011=True 10030=False",
+            "【上回合合法性】：10010=False | 10011=True | 10030=False",
         )
         #: **全通过也照样打**：触发条件是"有回执"，不是"有未通过" ——
         #: 一行全 `True` 正是"这回合发出去的都合法"的唯一证据（第 20 步的触发条件就在这里）。
         raw["lastRoundRoleActionResults"] = {"10010": True, "10011": True}
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        self.assertEqual(caught.records[-1].getMessage(), "上回合合法性：10010=True 10011=True")
+        self.assertEqual(
+            caught.records[-1].getMessage(), "【上回合合法性】：10010=True | 10011=True"
+        )
 
     def test_the_task_line_shows_the_whole_text_and_marks_any_truncation(self):
         """任务日志**必须能看见全文** —— 这正是第 14 步的来由。
@@ -383,7 +437,9 @@ class HandleTest(unittest.TestCase):
         raw["llmResp"] = "<answer>" + "答" * 9000 + "</answer>"
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        acts = [r.getMessage() for r in caught.records if r.getMessage().startswith("动作：")]
+        acts = [
+            r.getMessage() for r in caught.records if r.getMessage().startswith("【动作】：")
+        ]
         self.assertEqual(len(acts), 1, acts)
         self.assertIn("taskAnswer=", acts[0], "答案得打出来，不然这条用例什么也没钉住")
         self.assertIn("（共 9000 字）", acts[0])
@@ -670,8 +726,9 @@ class HandleTest(unittest.TestCase):
         原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。顶格的东西全撞在一起
         就是最坏局面：题目、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，中文 1 字 = 3 字节）、
         被回灌那一轮**顶到 `LOG_PROMPT_MAX` 的 prompt**、**再加**一条 SOP 更新行
-        —— **实测 8574 字节 / 66 行**（第 20 步；上一版是 6180 / 44 行，那时 prompt 只报字数）。
-        上限取 9300 而不是 8574：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
+        —— **实测 8723 字节 / 71 行**（第 22 步；上一版是 8574 / 66 行，再上一版
+        6180 / 44 行 —— 第 22 步多出的 5 行 / 149 字节 = banner + 摘要的空行块 + 角色行的铁铜明细）。
+        上限取 9300 而不是 8723：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
         或者又加进来一个顶格的大字段 —— 那至少是 1200 字节），不是几个标签的字节抖动
         —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节）。
 
@@ -835,6 +892,68 @@ class ParseTest(unittest.TestCase):
                 self.assertIn(pos, grid.blocked, f"{what} 应当挡路")
                 self.assertNotIn(pos, grid.ores, f"{what} 不是矿")
 
+    def test_vendors_are_an_index_of_their_own(self):
+        """小贩**单独一张表**（`Map.vendors`，第 22 步）：`sell` 那条线唯一的目标点。
+
+        它和矿在网格里的形状一样（都是 `neutralType`）却**不打矿种** —— 所以是
+        `frozenset[Pos]` 而不是 `Mapping`。卖矿要先知道"小贩在哪"，而这一点
+        **只能从网格认**：小贩不是 `teamOur.roles` 里的单位，别处查不到。
+
+        顺带钉住第 15 步那条不变量没被改写：小贩**照样挡路、也照样不是矿**
+        （`step_toward` 撞上它自然停在贴着一格 —— 那正好是 `sell` 要求的站位）。
+        """
+        grid = self._turn().map
+        self.assertEqual(grid.vendors, {Pos(20, 16)})
+        self.assertIn(Pos(20, 16), grid.blocked)
+        self.assertNotIn(Pos(20, 16), grid.ores)
+
+    def test_a_size_less_map_has_no_vendors_either(self):
+        """尺寸非法 ⇒ 整个矩阵为空 ⇒ **小贩也没有**（`vendors` 得跟着 `ores` 一起空）。
+
+        漏了这一步的症状很隐蔽：`frozenset()` 与"地图上没有小贩"在策略侧是同一件事
+        （`_sell_ore` 的门 ②），但**属性不存在**会直接 `AttributeError`
+        —— 那跑在 `handle` 的 `try` 里，代价是整回合空指令。
+        """
+        for size in ((-1, -1), (41, 0)):
+            with self.subTest(size=size):
+                empty = Map(size, {Pos(3, 3): "vendor"})
+                self.assertEqual(empty.vendors, frozenset())
+                self.assertEqual(empty.ores, {})
+                self.assertEqual(empty.blocked, frozenset())
+
+    def test_the_backpack_is_counted_by_name(self):
+        """背包是**物品名数组**，重复即计数（接口文档 §1.3.1）—— `_bag` 取代了"只数石头"。
+
+        `sell` 要按矿种报件数，而三个散装的 int 才是绕的那个东西：`backpack` 本来的形状
+        就是一张名字表，将来买的券和道具也只会往这张表里加。
+        `BaseRole.stone` 现在是它的**派生属性**（既有调用点一字未改）。
+
+        ⚠️ 背包里的**非矿石**（开拓者那个 `medicine`）也照样收进来 —— `_bag` 不认识矿，
+        认矿是 `planner` 的事（`SELLABLE`）。
+        """
+        by_id = {r.id: r for r in self._turn().roles}
+        self.assertEqual(by_id[10010].bag, {"stone": 1, "iron": 1, "copper": 1})
+        self.assertEqual(by_id[10010].stone, 1)
+        self.assertEqual(by_id[10011].bag, {"medicine": 1})
+        self.assertEqual(by_id[10011].stone, 0, "开拓者没有石头 —— 派生属性得跟着空")
+
+    def test_a_missing_backpack_is_an_empty_bag(self):
+        """背包缺失 / 不是数组 ⇒ 空表 ⇒ 石头 0 块、**一件都卖不掉**。
+
+        降级方向是"少做"，与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发 `build`，
+        也不可对着空背包发 `sell`（`num` 报大件数会不会被判"指令非法"文档没写）。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        for node in raw["teamOur"]["roles"]:
+            if node["id"] == 10010:
+                node.pop("backpack", None)
+            if node["id"] == 10011:
+                node["backpack"] = "stone,stone"  # 不是数组（逗号串，看着很像"内容一样"）
+        by_id = {r.id: r for r in model.load(raw).roles}
+        self.assertEqual(by_id[10010].bag, {})
+        self.assertEqual(by_id[10010].stone, 0)
+        self.assertEqual(by_id[10011].bag, {})
+
 
 class GridTest(unittest.TestCase):
     """格子矩阵本身 —— `Turn.map` 这一步的主要交付物。
@@ -907,16 +1026,16 @@ class GridTest(unittest.TestCase):
         self.assertEqual(lines[8][15], "r")  # 电磁狙击炮 (10,25)，在基地上方一行
         self.assertEqual(lines[23][35], "S")  # 敌方基地左上角 (30,10) → 第 31-10=21 行
         self.assertEqual(lines[9][9], "o")  # 石矿 (4,24)
-        self.assertEqual(lines[26][33], "%")  # 敌方围墙 (28,7) —— 墙是大小写规则的例外
+        self.assertEqual(lines[26][33], "%")  # 敌方围墙 (28,7) —— 墙不走字母，是例外
         self.assertEqual(lines[29][9], "x")  # 机器人 (4,4)
-        self.assertEqual(lines[33][5], ".")  # (0,0) 空地 —— 最后一行是最底下的 y=0
+        self.assertEqual(lines[33][5], " ")  # (0,0) 空地 —— 最后一行是最底下的 y=0
         # 最上一行网格的行号必须是 height-1 —— 槽宽与网格对得上（差一列就全错位）
         self.assertTrue(lines[2].startswith("31 │ "), lines[2])
 
     def test_render_labels_every_row_with_its_y(self):
         """每行行号自 `height-1` **递减到 0**。
 
-        这是 y 翻转最直接的守卫 —— `lines[31][0] == "."` 只能证明"最后一行是 y=0"，
+        这是 y 翻转最直接的守卫 —— `lines[31][0] == " "` 只能证明"最后一行是 y=0"，
         中间那些行翻反了它照样过。
         """
         labels = [
@@ -948,9 +1067,18 @@ class GridTest(unittest.TestCase):
         self.assertEqual(set(_NAMES), set(_RENDER_SIDED) | set(_RENDER_NEUTRAL))
         for kind in _NAMES:
             self.assertIn(f"{_char(kind)}=", LEGEND)
-        # 这三样不在 `_NAMES` 里 —— 它们不是"某个类别"，而是 `_char` 的兜底与大小写规则
-        for token in ("x=机器人", ".=空地", "?=未知", "大写=敌方", "%=敌方围墙"):
+        # 这几样不在 `_NAMES` 里 —— 它们不是"某个类别"，而是 `_char` 的兜底与大小写规则
+        for token in ("x=机器人", "空格=空地", "?=未知", "大写=敌方", "%=敌方围墙"):
             self.assertIn(token, LEGEND)
+
+        # **一个字符只能代表一样东西。** 第 21 步空地填 `#` 时正撞上"围墙也是 `#`"
+        # —— 两个类别共用一个字符的症状是**图上分不出来**（我方围墙整圈沉进空地背景），
+        # 而图例看上去只是重复了一项，不像 bug。上面那些 `assertIn` 一条都不会挂，
+        # 所以这一条要单独钉。（`_char` 恒返回 1 字符，所以比长度就够了。）
+        # 第 22 步空地改成**空格**、墙收回 `#`，这一对不再撞 —— 守门员照旧留着，
+        # 它管的是"任何两个类别都不许共用字符"，不是"某一对具体值"。
+        chars = [_char(kind) for kind in _NAMES] + ["x", " ", "?"]
+        self.assertEqual(len(set(chars)), len(chars), sorted(chars))
 
     def test_the_legend_names_the_task_points_by_faction(self):
         """`1`-`4` 是**阵营**的任务点，不是"我方/敌方"。
@@ -986,8 +1114,8 @@ class TurnSummaryTest(unittest.TestCase):
     def test_a_full_turn_reports_every_fact(self):
         turn = self._turn(
             roles=(
-                Worker(10010, Pos(5, 23), 1),
-                Worker(10012, Pos(10, 16), 1),
+                Worker(10010, Pos(5, 23), {"stone": 1}),
+                Worker(10012, Pos(10, 16), {"stone": 1}),
                 Pioneer(10011, Pos(10, 12)),
             ),
             gold=20,
@@ -1000,35 +1128,34 @@ class TurnSummaryTest(unittest.TestCase):
             robots=(Robot(Pos(4, 4), 40), Robot(Pos(5, 5), 800)),
             task_points=(Pos(14, 14), Pos(17, 17)),
         )
-        lines = turn.summary().splitlines()
-        self.assertEqual(len(lines), 3)
+        lines = _blocks(turn.summary())
+        self.assertEqual(len(lines), 4)
         self.assertEqual(
             lines[0],
-            "回合 85（夜里）｜ 金币 20 ｜ 武器 3/3："
+            "【回合】 85（夜里） ｜ 【金币】 20 | 【武器】 3/3："
             "10020 gatling(9,24)r4 10030 railgun(10,25)r7 10040 rocket(9,25)r∞c3",
         )
         self.assertEqual(
             lines[1],
-            "我方 10010 worker(5,23)石1 ｜ 10012 worker(10,16)石1 ｜ 10011 pioneer(10,12)石0",
+            "【我方】 10010 worker(5,23)石1铁0铜0 ｜ 10012 worker(10,16)石1铁0铜0"
+            " ｜ 10011 pioneer(10,12)石0铁0铜0",
         )
-        self.assertEqual(
-            lines[2],
-            "机器 2 台：(4,4)h40 (5,5)h800 ｜ 可接任务点 (14,14) (17,17)",
-        )
+        self.assertEqual(lines[2], "【机器】 2 台：(4,4)h40 (5,5)h800")
+        self.assertEqual(lines[3], "【可接任务点】 (14,14) (17,17)")
 
-    def test_an_empty_turn_still_prints_three_lines(self):
-        """空局面：一条事实都没有，但**每一格都得有字**（`无` / `0 台`），不能是空行。"""
-        lines = self._turn(roles=(Worker(10010, Pos(5, 23)),)).summary().splitlines()
-        self.assertEqual(len(lines), 3)
-        self.assertIn("武器 0/1：无", lines[0])
-        self.assertIn("机器 0 台：无", lines[2])
-        self.assertIn("可接任务点 无", lines[2])
+    def test_an_empty_turn_still_prints_every_block(self):
+        """空局面：一条事实都没有，但**每一块都得有字**（`无` / `0 台`），不能是空行。"""
+        lines = _blocks(self._turn(roles=(Worker(10010, Pos(5, 23)),)).summary())
+        self.assertEqual(len(lines), 4)
+        self.assertIn("【武器】 0/1：无", lines[0])
+        self.assertIn("【机器】 0 台：无", lines[2])
+        self.assertIn("【可接任务点】 无", lines[3])
 
     def test_missing_fields_are_not_reported_as_zero(self):
         """`-1` 是"字段缺失"，不是 0 金 / 第 -1 回合 —— 打成 `?`，别让它看着像个事实。"""
-        line = self._turn(gold=-1, round_no=-1).summary().splitlines()[0]
-        self.assertIn("回合 ?（夜里）", line)
-        self.assertIn("金币 ?", line)
+        line = _blocks(self._turn(gold=-1, round_no=-1).summary())[0]
+        self.assertIn("【回合】 ?（夜里）", line)
+        self.assertIn("【金币】 ?", line)
 
     def test_the_unknown_range_is_not_printed_as_a_negative_number(self):
         """射程 -1 = 字段缺失 ⇒ 够不着 ⇒ `?`；0 也照原样打 0（不做特殊处理）。"""
@@ -1039,7 +1166,7 @@ class TurnSummaryTest(unittest.TestCase):
                 Weapon(2, "gatling", Pos(9, 25), 0, 0),
             ),
         )
-        line = turn.summary().splitlines()[0]
+        line = _blocks(turn.summary())[0]
         self.assertIn("1 gatling(9,24)r?", line)
         self.assertIn("2 gatling(9,25)r0", line)
         # 冷却 -1 与 0 都是"没有冷却"，都不该出现 `c`
@@ -1052,8 +1179,8 @@ class TurnSummaryTest(unittest.TestCase):
             roles=(Worker(10010, Pos(5, 23)),),
             robots=tuple(Robot(Pos(i, 5), 10 * i) for i in range(11)),
         )
-        line = turn.summary().splitlines()[2]
-        self.assertIn("机器 11 台：", line)
+        line = _blocks(turn.summary())[2]
+        self.assertIn("【机器】 11 台：", line)
         self.assertIn("…+3", line)  # 11 - SUMMARY_MAX_ITEMS(8) = 3
         self.assertNotIn("(10,5)", line)  # 第 11 台没打出来
 
@@ -1151,7 +1278,7 @@ class MineApproachTest(unittest.TestCase):
         return Turn(
             round_no=1,
             map=Map((41, 32), {self.BASE: "station", self.MINE: mine_kind}),
-            roles=(Worker(1, worker_pos, stone),),
+            roles=(Worker(1, worker_pos, {"stone": stone}),),
             gold=0,
         )
 
@@ -1471,7 +1598,7 @@ class BuildWallTest(unittest.TestCase):
         self.worker = Worker(1, Pos(6, 24))
 
     def _turn(self, round_no: int = 1, stone: int = 0, pos: Pos | None = None) -> Turn:
-        self.worker = Worker(1, pos or self.worker.pos, stone)
+        self.worker = Worker(1, pos or self.worker.pos, {"stone": stone})
         return Turn(
             round_no=round_no,
             map=Map((41, 32), self.entries),
@@ -1504,9 +1631,9 @@ class BuildWallTest(unittest.TestCase):
                 self.entries[cell] = WALL
                 built.append(cell)
                 stone -= 1
-                self.worker = Worker(1, self.worker.pos, stone)
+                self.worker = Worker(1, self.worker.pos, {"stone": stone})
             else:
-                self.worker = Worker(1, cell, stone)
+                self.worker = Worker(1, cell, {"stone": stone})
 
         self.assertEqual(built, list(wall_cells(self.BASE, 41)), "顺序必须与优先级表一致")
         self.assertEqual(stone, 0, "别多采 —— 白天总共就 14 格墙可砌")
@@ -1577,7 +1704,10 @@ class WallGateTest(unittest.TestCase):
 
         站位是可以换到盒外的 —— "盒外的人不许否决这一圈墙"那条就得两个都在外面才测得出。
         """
-        workers = (Worker(1, at1 or self.INSIDE, 0), Worker(2, at2 or self.OUTSIDE, 1))
+        workers = (
+            Worker(1, at1 or self.INSIDE, {}),
+            Worker(2, at2 or self.OUTSIDE, {"stone": 1}),
+        )
         robots_on_map = {c: "robot" for c in (self.DOOR if door_blocked else ())}
         return Turn(
             round_no=round_no,
@@ -1773,7 +1903,7 @@ class SpareOreTest(unittest.TestCase):
         return Turn(
             round_no=round_no,
             map=Map((41, 32), entries),
-            roles=(Worker(1, pos, 0),),
+            roles=(Worker(1, pos, {}),),
             gold=0,
             weapons=self.WEAPONS,
             vendor_prices=prices,
@@ -1861,6 +1991,183 @@ class SpareOreTest(unittest.TestCase):
         )
 
 
+class SellOreTest(unittest.TestCase):
+    """墙砌满之后的白天：**把矿背到小贩跟前卖掉**（第 22 步）。
+
+    与 `SpareOreTest` 是同一条支路上的**先后**：砌满 ⇒ 先卖（`_sell_ore`），
+    卖不动才去采（`_mine_spare_ore`）。所以这里每个局面都砌满，而且必须能说清
+    "为什么没去卖" —— 四条门各有一条用例（没货 / 没人收 / 不够本 / 回不来）。
+
+    站位与小贩的关系是这一步的核心事实（任务书 §4.4：「在小贩周围一格内使用」）——
+    而小贩格本身挡路，`step_toward` 撞上它自然停在"周围一格"，与采矿同一条契约。
+
+    阈值口径（用户拍板）：**货值 ≥ 往返回合数**（≈ 每回合至少换 1 金币）才动身。
+    那个"1 金币 ≈ 1 回合"是**拍的**，没有文档依据，用例把它钉成可测的行为：
+    小贩距离 10 ⇒ 阈值 20 ⇒ 铜（价 5）要攒 4 块。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+    RING = {c: WALL for c in wall_cells(Pos(10, 24), 41)}
+    #: 小贩 (20,24)：与基地切比雪夫距离 10 ⇒ 来回 20 回合，阈值 20 金币
+    VENDOR = Pos(20, 24)
+    #: 卖不动时工人转去采的那座矿 —— **故意放在小贩的反方向**：
+    #: 否则"朝矿走"在距离上也"朝小贩走"，那条用例会假通过（第 8 步踩过同款夹具坑）
+    ORE = Pos(36, 24)
+    #: 样例的价目：铜 5 > 铁 3 > 石 1
+    SAMPLE_PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    #: 离小贩 10 格 ⇒ 阈值 20 金币 ⇒ 4 块铜
+    FAR = Pos(30, 24)
+
+    def _turn(
+        self,
+        pos: Pos,
+        bag: dict[str, int],
+        *,
+        prices: dict[str, int] | None = None,
+        vendor: Pos | None = VENDOR,
+        round_no: int = 1,
+    ) -> Turn:
+        entries = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station"},
+            self.RING,
+            {self.ORE: "stone"},
+            {} if vendor is None else {vendor: "vendor"},
+        )
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), entries),
+            roles=(Worker(1, pos, bag),),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=(
+                self.SAMPLE_PRICES if prices is None else prices
+            ),
+        )
+
+    def _sold(self, turn: Turn) -> dict:
+        """本回合那条指令 —— 不是 `sell` 就挂（这几条只关心卖给谁、卖多少）。"""
+        cmd = plan(turn)["1"]
+        self.assertEqual(cmd["action"], "sell", f"这一回合该是卖矿，实际是 {cmd}")
+        return cmd
+
+    def test_standing_next_to_the_vendor_sells_the_whole_load(self):
+        """**贴着小贩 ⇒ 一次性卖光手上那种矿**（`num` = 全部件数）。
+
+        `num` 报成 1（默认值）等于把背包里的铜一块一块地卖 —— 一回合一条指令，
+        卖 4 块要 4 个回合，而任务书 §4.4 明说"**支持批量贩卖**"。
+        """
+        cmd = self._sold(self._turn(Pos(20, 23), {"copper": 4}))  # 小贩正下方，切比雪夫 1
+        self.assertEqual(cmd, {"action": "sell", "name": "copper", "num": 4})
+
+    def test_the_pricier_ore_is_sold_first(self):
+        """一次只卖一种 ⇒ 卖**收购价最高的**那种（同价才看件数）。
+
+        手上铁铜都有时卖铜（5 > 3）。谁把"铜 > 铁 > 石头"写死都**恰好**对得上样例 ——
+        所以下面还有一条把价目翻过来的用例。
+        """
+        cmd = self._sold(self._turn(Pos(20, 23), {"iron": 9, "copper": 2}))
+        self.assertEqual(cmd["name"], "copper")
+        self.assertEqual(cmd["num"], 2, "卖的是铜这一堆的**全部**件数，不是最多的那一堆")
+
+    def test_a_market_flip_changes_which_ore_is_sold(self):
+        """铁矿塌方 ⇒ 铁涨到 9 ⇒ 卖铁不卖铜。写死的排序在事件期间恰好是错的。"""
+        cmd = self._sold(
+            self._turn(Pos(20, 23), {"iron": 3, "copper": 2}, prices={"stone": 1, "iron": 9, "copper": 5})
+        )
+        self.assertEqual(cmd["name"], "iron")
+
+    def test_spare_stone_gets_sold_too(self):
+        """砌满之后**多余的石头也卖**（用户选定：三种都卖）。
+
+        这一条是"石头为什么敢进 `SELLABLE`"的实证：调用点只在"墙砌完了"那一支
+        （`_build_walls` 的 `if not free:`），而墙没砌完时手里的石头一律有用。
+        """
+        cmd = self._sold(self._turn(Pos(20, 23), {"stone": 6}))
+        self.assertEqual(cmd, {"action": "sell", "name": "stone", "num": 6})
+
+    def test_a_full_load_that_does_not_pay_for_the_trip_is_not_worth_walking(self):
+        """货**不够本** ⇒ 一步都不走，留在矿边接着采（阈值 = 2 × 距离 = 20 金币）。
+
+        一块铜值 5，走 10 格过去要 10 回合、回来还要 10 —— 这一趟的收益还抵不上
+        在那儿多采 3 回合。行为上要能看出来"它没在往小贩那儿走"：这一回合是
+        `move`/`collect` 朝**矿**去，不是朝小贩。
+        """
+        turn = self._turn(self.FAR, {"copper": 1})
+        cmd = plan(turn)["1"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.ORE), self.FAR.dist(self.ORE), "该朝矿走，不是朝小贩")
+        self.assertGreater(step.dist(self.VENDOR), self.FAR.dist(self.VENDOR), "不该朝小贩走")
+
+    def test_a_load_worth_the_trip_gets_walked_to_the_vendor(self):
+        """攒够了（4 块铜 = 20 金币 ≥ 阈值 20）⇒ 动身朝小贩走一格。
+
+        ⚠️ 阈值是 `>=` 不是 `>`：4 块铜正好 20，差的这一点会把"恰好攒够"的工人
+        永远留在矿边（每一次采集都在重新计算，永远差一块）。
+        """
+        turn = self._turn(self.FAR, {"copper": 4})
+        cmd = plan(turn)["1"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), self.FAR.dist(self.VENDOR), "该朝小贩走")
+
+    def test_no_vendor_means_no_selling(self):
+        """地图上没有小贩 ⇒ 谁也别卖（把矿卖了换不成钱，走这一趟纯亏）。
+
+        同时钉住"没有小贩时不会崩"：`min(vendors)` 在空集上会 `ValueError`，
+        而那跑在 `handle` 的 `try` 里 —— 代价是整回合空指令。
+        """
+        #: 手上四块铜、价格也对，但没有小贩 ⇒ 这一回合只能去采矿
+        cmd = plan(self._turn(Pos(20, 23), {"copper": 4}, vendor=None))["1"]
+        self.assertNotEqual(cmd["action"], "sell", cmd)
+
+    def test_nobody_buys_it_means_nothing_is_sold(self):
+        """价目表为空 / 小贩不收这种矿 ⇒ **一件都不卖**（与 `_pick_ore` 同一条口径）。
+
+        价目表是**逐回合**从 `vendorShopList` 读的：空表意味着"这一回合什么都不收"，
+        而不是"按默认价收"。降级方向是少做 —— 宁可多采一趟，不可白送一件矿石出去
+        （`num` 报出去就没了，而 `sell` 没有撤销）。
+        """
+        #: 空表 ⇒ **一条指令都没有**（不是"发条空指令"）：`_pick_ore` 也按 0 算，
+        #: 于是连"该去采哪座矿"都答不出来 —— 这正是不写死价格的代价与收益。
+        self.assertEqual(plan(self._turn(Pos(20, 23), {"copper": 4}, prices={})), {})
+        #: 只收石头、而手上一块石头也没有 ⇒ 铜按 0 算 ⇒ 不是卖矿（转去采那座石矿）
+        cmd = plan(self._turn(Pos(20, 23), {"copper": 4}, prices={"stone": 1}))["1"]
+        self.assertNotEqual(cmd["action"], "sell", cmd)
+
+    def test_too_late_in_the_day_to_walk_there_and_back(self):
+        """白天不够"走到小贩 + 从小贩回基地" ⇒ 不卖，转去采矿。
+
+        夜里必须在炮位上，黑天还在赶路 = 拿火力换矿石。`roundNo=60` ⇒ 白天还剩 11 回合，
+        减去 `TIME_MARGIN` 5 只剩 6，而这一趟（10 + 10）根本走不完。
+        """
+        sell_early = plan(self._turn(self.FAR, {"copper": 9}))
+        self.assertEqual(sell_early["1"]["action"], "move", sell_early)
+        #: 同一个局面只差回合号：这时候连矿也不该去（`_mine_spare_ore` 有同款闸门）
+        self.assertEqual(plan(self._turn(self.FAR, {"copper": 9}, round_no=60)), {})
+
+    def test_the_wall_comes_first(self):
+        """**墙没砌完 ⇒ 一块矿都不卖**（哪怕人已经站在小贩旁边）。
+
+        这就是用户那句「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」里
+        那个"然后"，也是 `SELLABLE` 敢把石头收进来的全部理由：砌墙那一支里不存在
+        "多余的石头"（`_stones_to_mine` 的上限正是"还差几格墙"）。
+        """
+        turn = Turn(
+            round_no=1,
+            map=Map((41, 32), _terrain(self.WEAPONS, {self.BASE: "station"}, {self.VENDOR: "vendor"})),
+            roles=(Worker(1, Pos(20, 23), {"copper": 4, "stone": 3}),),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=self.SAMPLE_PRICES,
+        )
+        cmd = plan(turn)["1"]
+        self.assertNotEqual(cmd["action"], "sell", cmd)
+        self.assertEqual(cmd["action"], "move", cmd)
+
+
 class TwoWallBuildersTest(unittest.TestCase):
     """两个工人同时在环上：**不能对着改目标来回踱步**。
 
@@ -1885,8 +2192,8 @@ class TwoWallBuildersTest(unittest.TestCase):
             self.WEAPONS, {self.BASE: "station", self.MINE: "stone"}, self.FRONT_BUILT
         )
         roles = {
-            10010: Worker(10010, Pos(13, 21), 14),
-            10012: Worker(10012, Pos(11, 22), 13),
+            10010: Worker(10010, Pos(13, 21), {"stone": 14}),
+            10012: Worker(10012, Pos(11, 22), {"stone": 13}),
         }
         built: list[Pos] = []
         for rnd in range(1, 7):  # 6 回合足够砌完剩下的正面列（死循环下一次都砌不上）
@@ -1907,11 +2214,11 @@ class TwoWallBuildersTest(unittest.TestCase):
                     self.assertEqual(cmd["name"], WALL)
                     entries[cell] = WALL
                     built.append(cell)
-                    roles[role_id] = Worker(role_id, role.pos, role.stone - 1)
+                    roles[role_id] = Worker(role_id, role.pos, {"stone": role.stone - 1})
                 elif cmd["action"] == "collect":
-                    roles[role_id] = Worker(role_id, role.pos, role.stone + 1)
+                    roles[role_id] = Worker(role_id, role.pos, {"stone": role.stone + 1})
                 else:
-                    roles[role_id] = Worker(role_id, cell, role.stone)
+                    roles[role_id] = Worker(role_id, cell, {"stone": role.stone})
 
         self.assertGreaterEqual(len(built), 2, "两个工人在原地打转 ⇒ 一座墙都砌不上")
         self.assertEqual({c.x for c in built}, {13}, "先砌的必须是**正面**那一列")
@@ -1961,7 +2268,7 @@ class StandingOnTheTargetTest(unittest.TestCase):
 
         旧代码在这里发的是 `build (11,21)` —— 与上一回合**逐字段相同**，于是无限重复。
         """
-        worker = Worker(1, self.ON, 5)
+        worker = Worker(1, self.ON, {"stone": 5})
         turn = self._turn(self.BUILT | {self.ON}, worker)
         cmds = plan(turn)
         self.assertEqual(len(cmds), 1, f"只有一个工人、只该有一条指令：{cmds}")
@@ -1976,13 +2283,13 @@ class StandingOnTheTargetTest(unittest.TestCase):
         这一条钉的是"先挪开"没有把闸门变成拖延：挪开之后就**贴着**它了（`dist == 1`），
         下一回合 `free[0]` 还是它、位置却合法 ⇒ 稳稳砌完。
         """
-        worker = Worker(1, self.ON, 5)
+        worker = Worker(1, self.ON, {"stone": 5})
         built = {c for c in wall_cells(self.BASE, 41) if c != self.ON}
         cmds = plan(self._turn(built, worker))
         self.assertEqual(cmds["1"]["action"], "move", "先让开")
         aside = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
 
-        worker = Worker(1, aside, 5)  # 判题器照做，下一回合
+        worker = Worker(1, aside, {"stone": 5})  # 判题器照做，下一回合
         cmds = plan(self._turn(built, worker))
         self.assertEqual(cmds["1"]["action"], "build", "下一回合就该把这一格砌上，不能干等")
         self.assertEqual(cmds["1"]["name"], WALL)

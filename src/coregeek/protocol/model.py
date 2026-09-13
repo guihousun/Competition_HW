@@ -126,7 +126,7 @@ def _character(node: Any) -> BaseRole | None:
     pos, role_id, role_type = _pos(node), _int(node.get("id")), node.get("roleType")
     if pos is None or role_id < 0 or not isinstance(role_type, str):
         return None
-    return make(role_id, pos, role_type, _stone(node))
+    return make(role_id, pos, role_type, _bag(node))
 
 
 def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
@@ -193,7 +193,7 @@ def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
     只认**锚点格**就够（接口文档 L134："任务点对应的坐标"）：任务点2 虽然占两格，
     但走到锚点旁边必然满足"任一格周围一格内"——锚点本身就是其中一格。
 
-    字段缺失的降级方向**故意不是"少做"**（与 `_gold` / `_size` / `_stone` 相反）：
+    字段缺失的降级方向**故意不是"少做"**（与 `_gold` / `_size` / `_bag` 相反）：
     误接一个冷却中的点只是**指令执行失败**（任务书 L508，不计异常），
     而误判成"永远接不了"会让整条任务线**静默作废**——后者代价大得多。所以
     `isValid` **明确为 `False`** 才排除（缺字段按"没说不可以"），
@@ -239,7 +239,7 @@ def _errors(payload: dict[str, Any]) -> tuple[Error, ...]:
     **`errorCode` 解析不出来 ⇒ 整条丢掉**，而降级方向在这里**不是"少做"**：
     错误码是读日志时的第一眼信息，一条 `-1：xxx` 会被当成"未知错误 0"去查一个不存在的问题。
     "本轮没有错误"本来就是天然的安全值（空元组），少认一条不影响任何指令 ——
-    与 `_gold` / `_size` / `_stone` 的"宁可少做"同一个方向，理由不同。
+    与 `_gold` / `_size` / `_bag` 的"宁可少做"同一个方向，理由不同。
 
     `description` 缺失给空串：码本身已经在报错那一行里了，不该因为这个字段缺就丢掉整条。
     """
@@ -315,22 +315,29 @@ def _gold(payload: dict[str, Any]) -> int:
     return _int(team.get("goldNum"))
 
 
-_STONE = "stone"
+def _bag(node: dict[str, Any]) -> Mapping[str, int]:
+    """背包 → `{物品名: 件数}`（接口文档 §1.3.1：`backpack` 是**物品名数组**，重复即计数）。
 
+    第 22 步从"只数 `stone` 的 `_stone()`"改过来：`sell` 要按矿种报件数，
+    而三个散装的 int 才是那个绕的东西 —— `backpack` 本来的形状就是一张名字表。
+    `BaseRole.stone` 现在是 `self.bag[STONE]` 的派生属性，既有调用点一字未改。
 
-def _stone(node: dict[str, Any]) -> int:
-    """背包里石头的**块数**（接口文档 §1.3.1：`backpack` 是**物品名数组**，重复即计数）。
-
-    **只数 `stone`** —— 这一步只有围墙用它（代价 石头×1）。
+    背包缺失或不是数组 ⇒ 空表 ⇒ 石头 0 块（不砌墙、转去采矿）、一件都卖不掉。
+    **降级方向是"少做"**，与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发 `build`。
 
     **不读 `backPackCapability`**（注意大写 P）：一座矿最多采 10 次、围墙只有 14 格，
     一天实际到不了 100 的容量上限，先不加。
 
-    背包缺失或不是数组 ⇒ 0 块 ⇒ 不砌墙、转去采矿。**降级方向是"少做"**，
-    与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发 `build`。
+    非 `str` 的项丢弃 —— 接口文档说这数组装的是物品名。与 `_vendor_prices` 同一条做法。
     """
     bag = node.get("backpack")
-    return sum(1 for item in bag if item == _STONE) if isinstance(bag, list) else 0
+    if not isinstance(bag, list):
+        return MappingProxyType({})
+    counts: dict[str, int] = {}
+    for item in bag:
+        if isinstance(item, str):
+            counts[item] = counts.get(item, 0) + 1
+    return MappingProxyType(counts)
 
 
 def _size(payload: dict[str, Any]) -> tuple[int, int]:

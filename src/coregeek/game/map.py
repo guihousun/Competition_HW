@@ -10,7 +10,10 @@
 1. **寻路** —— 只问 `blocked`，不问格子里是什么。**不变量：非空即挡路**（任务书 L85 那张清单）。
 2. **打印日志调试** —— `render()` 出图。出事故时能看见当时的地形，而不是只看见一条 `move`。
 3. **建造** —— `station` 给出可建造环的原点（接口文档里**没有**可建造区字段，只能这样推）。
-   `ores` 是采矿那条线的料源（**矿点 → 矿种**，三种矿各值多少钱在 `Turn.vendor_prices`）。
+   `ores` 是采矿那条线的料源（**矿点 → 矿种**，三种矿各值多少钱在 `Turn.vendor_prices`），
+   `vendors` 是卖矿那条线的**目标点**（`sell` 要求站在小贩周围一格内）。
+   ⚠️ 小贩是**格子**而不是 `teamOur.roles` 里的单位 —— 只能从网格认（第 22 步补）。
+   与矿不同的是它**不需要矿种**，所以是 `frozenset[Pos]` 而不是 `Mapping`。
 
 **每格只有一个类别，不含属性**：`health` / `level` / `attackRange` / `backpack` / `cooldown`
 一概不进来，且其中几个是"文档有、样例没有"的可选字段
@@ -40,17 +43,25 @@ ENEMY_PREFIX = "enemy:"
 #: 机器人的类别前缀。机器人不分敌我（它两边都打），但要和我方单位分开。
 ROBOT_PREFIX = "robot:"
 
+#: 三种矿的名字（与 `neutralType` / `vendorShopList.name` / 背包里的物品名**同一套词**）。
+#: 石矿是**围墙唯一的料源**（`build` 围墙要求背包里有石头）—— 铁/铜再多也砌不了墙，
+#: 所以"手上石头还不够砌墙"时只认它。三种矿各值多少钱看 `Turn.vendor_prices`。
+#: 铁/铜目前**只有一个用途：卖给小贩**（第 22 步）。
+STONE = "stone"
+IRON = "iron"
+COPPER = "copper"
+
 #: 三种矿（接口文档 §1.2.1 的 `neutralType`）。`collect` 采的就是这三种
 #: （任务书 §4.4：「需要在石矿、铁矿、铜矿周围一格内使用，每回合获取相应的石头/铁/铜*1」）。
 #: 小贩/武器商店/任务点**不是矿**，但一样挡路（它们在 `blocked` 里）。
-ORE_KINDS = frozenset({"stone", "iron", "copper"})
-
-#: 石矿。**围墙唯一的料源**（`build` 围墙要求背包里有石头）—— 铁/铜再多也砌不了墙，
-#: 所以"手上石头还不够砌墙"时只认它。三种矿各值多少钱看 `Turn.vendor_prices`。
-STONE = "stone"
+ORE_KINDS = frozenset({STONE, IRON, COPPER})
 
 #: 基地（接口文档 roleType 表）。**它是 2×2**，`pos` 只给左上角，见 `Map.__init__`。
 STATION = "station"
+
+#: 小贩（接口文档 §1.2.1 的 `neutralType`）。**卖矿那条线的目标点**（任务书 §4.4：
+#: 「在小贩周围一格内使用」）—— 与 `ORES` 是采矿线的料源对称。它一样挡路（在 `blocked` 里）。
+VENDOR = "vendor"
 
 #: 单位/角色 → `(我方字符, 敌方字符)`。**大小写区分敌我**。
 _RENDER_SIDED: dict[str, tuple[str, str]] = {
@@ -58,7 +69,9 @@ _RENDER_SIDED: dict[str, tuple[str, str]] = {
     "gatling": ("g", "G"),
     "railgun": ("r", "R"),
     "rocket": ("k", "K"),
-    # 墙是唯一的例外：用字母读起来太像单位了
+    # 墙是大小写规则的唯一例外：用字母读起来太像单位了。
+    # 第 21 步曾把 `#` 让给空地（墙改 `=`）；第 22 步用户把空地的填充撤掉、改成**空格**
+    # ⇒ `#` 空出来了，墙收回 `#`（与 `%` 一起仍是"非字母的结构符号"，一眼能从字里分出来）。
     "wall": ("#", "%"),
     "worker": ("w", "W"),
     "pioneer": ("p", "P"),
@@ -69,10 +82,10 @@ _RENDER_SIDED: dict[str, tuple[str, str]] = {
 #: 四个任务点分 `1`/`2`/`3`/`4`，因为 `zones` 里**两队任务点同时存在**（样例即如此），
 #: 挑战者与防守方同号会撞车。
 _RENDER_NEUTRAL: dict[str, str] = {
-    "stone": "o",
-    "iron": "i",
-    "copper": "c",
-    "vendor": "v",
+    STONE: "o",
+    IRON: "i",
+    COPPER: "c",
+    VENDOR: "v",
     "weaponShop": "$",
     "challengerTaskPoint1": "1",
     "challengerTaskPoint2": "2",
@@ -106,10 +119,10 @@ _NAMES: dict[str, str] = {
     "wall": "围墙",
     "worker": "工人",
     "pioneer": "开拓者",
-    "stone": "石矿",
-    "iron": "铁矿",
-    "copper": "铜矿",
-    "vendor": "小贩",
+    STONE: "石矿",
+    IRON: "铁矿",
+    COPPER: "铜矿",
+    VENDOR: "小贩",
     "weaponShop": "武器商店",
     "challengerTaskPoint1": "挑战方任务点1",
     "challengerTaskPoint2": "挑战方任务点2",
@@ -134,9 +147,16 @@ def _char(kind: str) -> str:
     唯一保证，也是 `LEGEND` 能直接拼 `f"{_char(k)}={name}"` 的前提。别引入多字符的记号。
 
     **这张表是有损的**，所以 `cells` 才是真相、`render()` 只是给人看的。
+
+    **空格子打印成空格**（第 22 步用户改定，撤销了第 21 步的铺满）：第 21 步曾把整个矩阵
+    铺成 `#`（理由是"."太轻、看不出这张图有多大），随后被撤掉 —— 风险在第 21 步的
+    "已知不确定性 #2"里就记着：空地字符越重，墙 / 矿 / 单位越不显眼，背景反而比结构抢眼。
+    留白把"背景"整个让给终端；"这张图有多大、边界在哪"由**行号槽 + 两行列标尺**负责
+    （`render()` 里本来就有，不靠填满）。`#` 空出来之后**收回给墙**（见 `_RENDER_SIDED`）。
+    ⚠️ 动因**未逐字记录**（用户手改），上面这条是按可观测后果写的，别当用户原话引。
     """
     if not kind:
-        return "."
+        return " "
     if kind.startswith(ROBOT_PREFIX):
         return _ROBOT_CHAR
     name = kind[len(ENEMY_PREFIX) :] if kind.startswith(ENEMY_PREFIX) else kind
@@ -150,14 +170,18 @@ def _legend() -> str:
     """字符对照表：`图例：s=基地 g=加特林 …`。**从 `_NAMES` 生成**，不是手写。
 
     后五项不在 `_NAMES` 里 —— 它们不是"某个类别"，而是 `_char` 的兜底与大小写规则：
-    `x`（机器人，不分敌我不分体型）、`.`（空地）、`?`（表外类别）、以及
+    `x`（机器人，不分敌我不分体型）、**空格**（空地）、`?`（表外类别）、以及
     **"大写 = 敌方"**这条只写在 `_RENDER_SIDED` 注释里的约定。`%` 要单列：
-    **墙是大小写规则的唯一例外**，不写出来没人猜得到。
+    **墙是大小写规则的唯一例外**（我方 `#` / 敌方 `%`，不走字母）—— 不写出来没人猜得到。
+
+    ⚠️ 空地那一项写的是 `空格=空地` 而不是 `f"{_char('')}=空地"`（第 22 步）：空地现在是
+    一个**空格**，`_char` 直接拼出来会是 `" =空地"` —— 看着像少打了一个字符，
+    而 `#=围墙` 那一项由 `_NAMES` 生成，两者不再撞车（第 21 步 `#` 当空地时才撞）。
 
     写在这里（`_char` 之后）而不是字符表旁边：模块级要调 `_char`，顺序不能反。
     """
     items = [f"{_char(kind)}={name}" for kind, name in _NAMES.items()]
-    items += ["x=机器人", ".=空地", "?=未知", "大写=敌方", "%=敌方围墙"]
+    items += ["x=机器人", "空格=空地", "?=未知", "大写=敌方", "%=敌方围墙"]
     chunks = [
         " ".join(items[i : i + _LEGEND_PER_LINE])
         for i in range(0, len(items), _LEGEND_PER_LINE)
@@ -191,6 +215,7 @@ class Map:
             self.cells: tuple[tuple[str, ...], ...] = ()
             self.blocked: frozenset[Pos] = frozenset()
             self.ores: Mapping[Pos, str] = MappingProxyType({})
+            self.vendors: frozenset[Pos] = frozenset()
             self.station: Pos | None = None
             return
 
@@ -217,6 +242,7 @@ class Map:
 
         blocked: set[Pos] = set()
         ores: dict[Pos, str] = {}
+        vendors: set[Pos] = set()
         for y, row in enumerate(self.cells):
             for x, kind in enumerate(row):
                 if not kind:
@@ -225,8 +251,11 @@ class Map:
                 blocked.add(pos)
                 if kind in ORE_KINDS:
                     ores[pos] = kind
+                elif kind == VENDOR:
+                    vendors.add(pos)
         self.blocked = frozenset(blocked)
         self.ores = MappingProxyType(ores)
+        self.vendors = frozenset(vendors)
 
     def render(self) -> str:
         """可打印的**整块**：两行列标尺 + 左侧行号槽 + `height` 行 × `width` 列网格。

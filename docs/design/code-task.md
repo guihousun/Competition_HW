@@ -3,37 +3,37 @@
 > 重写工程（基于 `example/` 的形态）的**逐步记录**。编码规则见 `CLAUDE.md` §编码规则。
 > 每节固定五段：**目标 / 产出 / 不做什么 / 验证 / 下一步**。
 >
-> ⚠️ 第 12 步之后按用户要求压缩过一次。口径（已写进 `CLAUDE.md` 规则 2）：**只删两样** ——
-> 与 `CLAUDE.md` 重复的规则推导、粘贴的逐条命令输出。**决策理由 / 不做什么 / 已知不确定性
-> 一条都没删** —— 那几样是重新推导代价最高的（共 62 条"不做什么" + 27 条"已知不确定性"，
-> 这也是全文压不到 300 行的原因）。
-> 压缩前的全文：`git show 53dec12:docs/design/code-task.md`。
+> ⚠️ 压缩过两次，口径见 `CLAUDE.md` 规则 2：**只删两样** —— 与 `CLAUDE.md` 重复的规则推导、
+> 粘贴的逐条命令输出（含跨步逐字重复的表）。**决策理由 / 不做什么 / 已知不确定性一条没删**
+> —— 那几样重新推导代价最高（压缩后实测：**114 条"不做什么" + 75 条"已知不确定性"**，
+> 这也是压不到 300 行的原因）。
+> 第 12 步之后压过一次（`git show 53dec12:docs/design/code-task.md`）；
+> **本次（第 20 步之后）压缩前的全文：`git show 15c43e2:docs/design/code-task.md`。**
 
 ---
 
 ## 第 1 步：能跑的空框架（HTTP 进出 + 空动作）
 
 ### 目标
-起一个"能收请求、能回合法响应"的最小骨架，**不含任何策略** —— 先把"平台 ↔ 我们"这条链路焊死。
+把"平台 ↔ 我们"这条链路焊死：能收请求、能回合法响应，**不含任何策略**。
 入口形态照抄 `example/CoreGeek/CoreGeek/`（**双层嵌套目录**）。
 
 ### 产出
-`main3.py`（**平台按 demo 的约定拉起这个名字**：读端口 → `chdir` → `src/` 进 `sys.path` → 起服务）
-/ `run.sh`（接口文档规定的 `bash run.sh <port>`；判题机是 `python3`、本地是 `py`，要逐个试并验版本）
-/ `pyproject.toml`（`dependencies = []`，判题环境只有标准库）/ `server.py` / `app.py` / `planner.py`。
-模块边界不是为"以后可能分层"预留的：这一步就是三件事 —— **HTTP 收发 / 报文与红线 / 策略**。
-**没有第四件事，所以没有第四个模块。**
+`main3.py`（读端口 → `chdir` → `src/` 进 `sys.path` → 起服务）/ `run.sh` / `pyproject.toml`
+（`dependencies = []`）/ `server.py` / `app.py` / `planner.py`。
+模块边界不是为"以后可能分层"预留的：这一步就三件事 —— **HTTP 收发 / 报文与红线 / 策略**。
+**没有第四件事，就没有第四个模块。**
 
 ### 不做什么
 - ❌ 加密日志、跨回合状态、回合幂等、并发锁 —— `handle` 是纯函数，没有状态可保护
 - ❌ `Intent` / 指令校验器 / 分层 import-lint —— 一条指令都不发，没有可校验的对象
-- ❌ 离线测试工具 —— `curl` 就够；等有真策略再上工具
+- ❌ 离线测试工具 —— `curl` 就够
 - ❌ `model.py` —— 本步不读任何字段
 
 ### 验证
-起服务 + `curl` 打样例 → 200 + 合法三字段、3ms（红线 5000ms）。四种边界都不抛异常：
-空 body / 坏 JSON / `GET /`（501，判题器只发 POST）/ 样例。
-**过程中修掉**：中文与 `→` 在 Windows 控制台被转成乱码（默认 GBK），而日志是本地唯一的观测手段
+`curl` 打样例 → 200 + 合法三字段、3ms（红线 5000ms）。四种边界都不抛异常：空 body / 坏 JSON /
+`GET /`（501，判题器只发 POST）/ 样例。
+**踩到的坑**：中文与 `→` 在 Windows 控制台被转成乱码（默认 GBK），而日志是本地唯一的观测手段
 ⇒ `run.sh` 加 `PYTHONUTF8=1`（判题机是 Linux，本就 UTF-8）。
 
 ### 下一步
@@ -45,19 +45,16 @@
 
 ### 目标
 把"解析 → 决策 → 编码 → 响应"整条管线跑通。行为刻意简单：**所有角色朝我方基地走一格**。
-> **偏离**：原计划这一步还要"夜间发 `attack`"，实际拆到第 3 步 —— `attack` 需要
-> "哪个角色操哪座武器"的配对（一人只能操一座，且要先站到武器旁边），那是**岗位分配**，
-> 混进来会让这一步既大又难验证。**宁可多走一步。**
+> **偏离**：原计划这一步还要"夜间发 `attack`"，实际拆到第 3 步 —— `attack` 需要"哪个角色操哪座武器"
+> 的配对（一人只能操一座、且要先站到武器旁），那是**岗位分配**，混进来会让这一步既大又难验证。
+> **宁可多走一步。**
 
 ### 产出
 `model.py`（payload → `Turn`，**容错解析**：字段缺失/类型不对就丢掉那一条或退化，绝不抛异常）
-+ `commands.py`（唯一知道线上指令形状的地方）。两个取舍：
++ `commands.py`（唯一知道线上指令形状的地方；第 3 步并进 `actions.py` 后删除）。两个取舍：
 - **只解析这一步真会用到的字段** —— 回合号 / 我方角色的 `id`+`pos`+`roleType` / 阻挡格。
-  血量、等级、背包、冷却、机器人类型…… 用到时再加。
 - **阻挡格** = 我方单位 + 敌方**可见**单位 + 中立元素 + 机器人，外加**基地 2×2 的另外三格**
-  （`pos` 是左上角，接口文档 §1.3.1）—— 只标一格会让角色**一头撞进基地里白扔一个回合**。
-
-`model` 读线上格式、`commands` 写线上格式，本来就是两个方向 ⇒ 模块数没有膨胀。
+  （`pos` 是左上角）—— 只标一格会让角色**一头撞进基地里白扔一个回合**。
 
 ### 不做什么
 - ❌ `attack`（要角色↔武器配对，第 3 步）
@@ -66,15 +63,14 @@
 - ❌ 跨回合状态、回合幂等、并发 —— `handle()` 仍是纯函数
 
 ### 验证
-起服务打样例：三个角色各一条 `move`，**建筑没有出现在指令里**（不是可操控单位）。
-7 条边界用例全过，最值钱的两条：
+三个角色各一条 `move`，**建筑没有出现在指令里**。7 条边界用例全过，最值钱的两条：
 - **贴着基地 ⇒ `{}`** —— 基地 4 格全被占，**不动作而不是撞进去**
 - **两个工人相邻且目标同向 ⇒ 各自认领不同格** —— `claimed` 挡的；否则按 §4.5.4
   "目标点争夺时双方都停住"，两人都会停住
 
 **踩到的坑**：`collections.abc.AbstractSet` **在 Python 3.13 已被移除** ⇒ `ImportError`，
-进程直接起不来。**只有起真服务才会暴露**（局部调用走不到那行 import）。
-> **再次印证：每一步都必须真的把服务跑起来打一次。**
+进程直接起不来。**只有起真服务才会暴露**（局部调用走不到那行 import）
+⇒ **再次印证：每一步都必须真的把服务跑起来打一次。**
 
 ### 下一步
 夜间 `attack`。两处最易写反：`roleCommandMap` 的 **key 是武器 id**、`controllerId` 才是操控角色。
@@ -129,24 +125,20 @@ game/planner → protocol/commands   ← 唯一一条"由内往外"
 
 ### 产出
 `protocol/actions.py`（新增；`commands.py` 并进来后**删除** —— 留着就是**两处写线上格式**）
-+ `game/roles.py`（`Pioneer`/`Worker`，**只认角色、建筑返回 `None`**）
-+ `tests/test_actions.py`（**`tests/` 首次出现**，8 条）。两个取舍：
++ `game/roles.py`（`Pioneer`/`Worker`，**只认角色、建筑返回 `None`**）+ `tests/test_actions.py`
+（**`tests/` 首次出现**，8 条）。两个取舍：
 - **放 `protocol/` 而不是 `game/`** —— Action 的意义就是"要发出去的那条指令"，让它自己编码才能守住
   "只有 `protocol/` 知道线上字段名"。代价是 §4.4 的权限表（游戏规则）也在这个文件里。
 - **角色类不带 `can()`** —— 校验已在 Action 构造时做了，再放一份就是**第二份真相**。
-  也不带 §4.5.2 的 HP 与背包容量 —— payload 里的 `health`/`backpack` 才是权威**当前值**，
-  把上限写成类常量只会制造矛盾。
-
-**最易改错的一处**：`station` 原本从角色列表推导，而角色列表现在只剩角色了 ⇒ 改成**单独扫原始
-`teamOur.roles`**。它同时喂给 `blocked` 和寻路目标，**扫漏了角色会一头撞进基地。**
+  也不带 §4.5.2 的 HP 与背包容量 —— payload 里的 `health`/`backpack` 才是权威**当前值**。
 
 ### 不做什么
 - ❌ **11 个未实现动作的子类**（每个落地时补 `code`/`roles`/参数/`to_wire` 四样）
 - ❌ §4.5.2 的 HP 与背包容量（没有使用者；payload 里的当前值才是权威）
 - ❌ 昼夜限制 —— `attack` 仅黑夜、`build` 仅白天是**看 `roundNo` 而非 `roleType`** 的另一个维度
 - ❌ 给建筑建模（§4.5.1）—— 建筑继续以原始形态参与 `blocked`
-- ❌ 解析 `errors` / `lastRoundRoleActionResults`（判题器唯一的反馈通道，也是"距红线还剩几条命"
-  的唯一度量）—— 本地触发不到，加了没有可断言的验证。**触发条件见"下一步"**
+- ❌ 解析 `errors` / `lastRoundRoleActionResults` —— 本地触发不到，加了没有可断言的验证
+  （**触发条件见"下一步"**）
 
 ### 验证
 单测 8 条全过（含"测试内部定义 `roles = WORKER` 的子类"来钉住**校验机制本身**）。
@@ -165,23 +157,20 @@ game/planner → protocol/commands   ← 唯一一条"由内往外"
 ## 第 4 步：解析地图中立元素，工人走向石矿（跑通全流程）
 
 ### 目标
-第 2 步发的指令**不读地图**（`Turn` 里除了角色坐标什么都没有），管线只通了一半。
-这一步让工人奔一个**真实存在于地图上**的目标（石矿），而不是写死的坐标。
+第 2 步发的指令**不读地图**，管线只通了一半。这一步让工人奔一个**真实存在于地图上**的目标（石矿）。
 策略上只是临时一步：**先跑通，不谈收益**。
 
 ### 产出
 `Turn.mines`（矿点 → 矿种；放 `Turn` 而不是让 `planner` 刨 payload —— 只有 `protocol/` 知道字段名）
 + `model._MINE_KINDS`/`_mines` + `planner` 重写为"工人各自朝最近的石矿走一格"。
 
-**关键是它没有"停在矿边"这段逻辑**：矿格本身在 `blocked` 里（任务书 L85），`step_toward` 走到
-**贴着矿的那一格**就自然返回 `None`，而那正好就是 `collect` 的站位 ⇒ **走位和站位是同一件事，
-不用各写一遍。**
+**关键是它没有"停在矿边"这段逻辑**：矿格本身在 `blocked` 里，`step_toward` 走到**贴着矿的那一格**
+就自然返回 `None`，而那正好是 `collect` 的站位 ⇒ **走位和站位是同一件事，不用各写一遍。**
 
 ⚠️ 字段名是 **`neutralType`**，不是 `zoneType` —— 直觉会先摸错。同一张表里还有小贩/武器商店/
 任务点，**它们不是矿，但一样挡路**。
 
-`claimed` 防"两个人冲同一个空格"。**不认领矿点**：两个工人挤同一座矿的不同邻格**都能采**，
-只有冲进同一格才是白扔动作。
+`claimed` 防"两个人冲同一个空格"。**不认领矿点**：两个工人挤同一座矿的不同邻格**都能采**。
 
 ### 不做什么
 - ❌ **不发 `collect`** —— 工人只是**走到**矿边
@@ -202,8 +191,7 @@ game/planner → protocol/commands   ← 唯一一条"由内往外"
 > **单帧"目标格算得对"证明不了走得过去、停得下来** —— 走歪、绕圈、贴住后抖动都只有串起来跑
 > 才看得见。跑法是用 `Turn._replace` 把上一回合的目标格喂给下一回合，**不开服务、不连判题器**。
 
-起真服务 + 手工核对响应与地图自洽：`10010` **"什么都没做"正是正确行为**（矿格挡路 +
-`step_toward` 返回 `None` 的自然结果），不是漏了。
+起真服务 + 手工核对响应与地图自洽：`10010` **"什么都没做"正是正确行为**，不是漏了。
 
 ### 下一步
 **`collect`**（工人已站到矿边却不采，管线断在这里）。之后才是夜间 `attack`。
@@ -278,26 +266,24 @@ L85 列了建筑/角色/机器人/中立单位/任务点/矿区，**唯独没有
 - 构造收**稀疏** `entries`，稠密矩阵由 `Map` 自己铺 ⇒ 铺矩阵只有这一处实现，测试也能一行造图。
 - `render()` 的字符表**是有损的**（机器人不分体型），所以 `cells` 才是真相。
 
-`Turn` 从 6 个字段瘦到 3 个（`size`→`map.size`、`blocked`→`map.blocked`、`mines`→`map.stones`
-**只留石矿**，因为只有它在被读）；**`station` 直接删掉**（只用来把基地展成 2×2，
-那件事在铺矩阵时做完 —— `CLAUDE.md` 早就标记了这条冗余）。
-`model.py`：四趟分头扫 → **一趟铺 `entries`**。**写入顺序即覆盖顺序**：中立元素先写、单位后写。
-`grid.py` 一行未动 —— `step_toward` 保持纯几何，不认识 `Map`。
+`Turn` 从 6 个字段瘦到 3 个（`mines`→`map.stones` **只留石矿**）；**`station` 直接删掉**
+（只用来把基地展成 2×2，那件事在铺矩阵时做完）。`model.py`：四趟分头扫 → **一趟铺 `entries`**，
+**写入顺序即覆盖顺序**：中立元素先写、单位后写。`grid.py` 一行未动 —— `step_toward` 保持纯几何。
 
 ### 不做什么
 - ❌ **不读单位属性**（`health`/`attackRange`/`level`/`backpack`/`cooldown`）—— 用户明确说
   "每格只是一个类别"；且其中 5 处是"文档有、样例没有"的可选字段
 - ❌ **不算可建造区** —— 公式**不在任务书里**，样例几何还与之矛盾；**没有 `build` 就没有使用者**
 - ❌ **不算视野** —— payload 已经算好了，我们只需**不撒谎**
-- ❌ **不做跨回合敌方记忆** —— "敌方单位消失 ≠ 被摧毁"（任务书 L97）**不进代码，只进 `CLAUDE.md`**
+- ❌ **不做跨回合敌方记忆** —— "敌方单位消失 ≠ 被摧毁"（任务书 L97）
 - ❌ **不加 `Map.at(pos)`** —— 没有第三个使用者
 
 ### 验证
 单测 19 条。最关键的是 `test_blocking_is_exactly_non_empty`：**独立按任务书 L85 从 payload 重算
 一遍**阻挡集合（四路来源 + 基地 2×2），**完全不走 `Map` 的代码**，再与 `map.blocked` 比对 ——
 它防的是"迁移中漏掉某一类挡路物"。
-**肉眼对一次图是唯一能发现 y 翻转的办法**（图上一切"看着像张地图"，单测和实现可能一起错）；
-核对脚本用完即删、不入库。真服务响应与第 5 步逐字节一致。
+**肉眼对一次图是唯一能发现 y 翻转的办法**（图上一切"看着像张地图"，单测和实现可能一起错）。
+真服务响应与第 5 步逐字节一致。
 **踩到的坑**：`test_render_shape` 一开始按"基地渲染成 `S`"写、挂了 —— **小写才是我方**，
 是测试写反了。已把敌方那格一并钉上，让大小写规则在测试里成对出现。
 
@@ -331,17 +317,15 @@ L85 列了建筑/角色/机器人/中立单位/任务点/矿区，**唯独没有
   level1** ⇒ 25 金币打水漂还降级，`planner` 必须避开占用格。
 - **`grid.weapon_cells(base)` / `back_weapon_cells(base, width)`**。**来源是图不是正文**
   （`docs/pic/build_map.png`）：绿色 4×4 外圈 ⇒ `x ∈ [bx-1, bx+2]`、`y ∈ [by-2, by+1]`，
-  16 − 4 = **12 格**。方向判据：**基地在左半 ⇒ 机器人从 +x 来 ⇒ 后方是 `x = bx-1`**，
-  右半取 `bx+2`（依据是示意图，**任务书正文没写刷新点**）。用**基地坐标**判而不用 `teamOur.type`：
-  换边后队伍身份不变、基地会挪，按坐标判会自动跟着翻。
+  16 − 4 = **12 格**。方向判据：**基地在左半 ⇒ 机器人从 +x 来 ⇒ 后方是 `x = bx-1`**，右半取 `bx+2`。
+  用**基地坐标**判而不用 `teamOur.type`：换边后队伍身份不变、基地会挪，按坐标判会自动跟着翻。
 - **基地 2×2 的展开从 `model` 搬进 `Map.__init__`** —— 报文层只管"station 在哪"，
   铺 4 格是**游戏规则**。展开放在铺格**之后** ⇒ 基地永远盖住任何声称站在基地里的单位。
 - **`Turn.gold` + `is_day`**（`round_no` 缺失给 -1 ⇒ 判成夜里 ⇒ 不建造）。
-- **`planner` 每回合按优先级择一**（每回合每个角色只能一个动作）：① 建武器（已在邻格就发
-  `build`，否则走一格 —— **复用 `step_toward`，天然停在邻格**，即"站位即建造位"）；
-  ② 否则朝最近石矿走一格。**金币按递减预算扣**（`budget -= 25`），不写成
-  `gold >= 25 * 待建数` —— 那样金币只剩 25 时会一座都不建。
-  `sites`（已认领建造格）与 `claimed`（本回合落脚格）**分成两个集合**（语义不同）。
+- **`planner` 每回合按优先级择一**：① 建武器（已在邻格就发 `build`，否则走一格 ——
+  **复用 `step_toward`，天然停在邻格**，即"站位即建造位"）；② 否则朝最近石矿走一格。
+  **金币按递减预算扣**（`budget -= 25`），不写成 `gold >= 25 * 待建数` —— 那样金币只剩 25 时
+  会一座都不建。`sites`（已认领建造格）与 `claimed`（本回合落脚格）**分成两个集合**（语义不同）。
   新增 `_emit` 统一收口越权：**丢这一条并告警，不连坐同回合其他角色**。
 
 ### 不做什么
@@ -358,9 +342,9 @@ L85 列了建筑/角色/机器人/中立单位/任务点/矿区，**唯独没有
 ### 验证
 单测 31 条（含"**闸门第一次真的拦住东西**"、`back_column` 左半取 `bx-1`/右半取 `bx+2`
 （**判反了不报错，只是白建三座**）、三座炮顺序对且全在后方那一列、200 金也只建 3 座、
-25 金只建一座）。`Turn` 是 `NamedTuple`，加字段会让两个合成局面的构造点**静默错位** ⇒ 一并改成
-关键字实参。合成白天开局串着打：**恰好 3 座**、顺序 `gatling/railgun/rocket`、**全部在 `x=9`**、
-75 金归零；逐条核过每个 `build` 的落点都在工人的切比雪夫 1 格内。
+25 金只建一座）。`Turn` 是 `NamedTuple`，加字段会让两个合成局面的构造点**静默错位** ⇒
+一并改成关键字实参。合成白天开局串着打：**恰好 3 座**、顺序 `gatling/railgun/rocket`、
+**全部在 `x=9`**、75 金归零；逐条核过每个 `build` 的落点都在工人的切比雪夫 1 格内。
 **踩到的坑（值得记）**：合成局面上 `build` 一条没发，看着像策略没生效 —— 实际是**端口上还挂着
 一个上一轮会话遗留的服务进程**（`netstat` 显示两个 LISTENING），Windows 允许 `SO_REUSEADDR` 并存，
 请求打到了**旧代码**上。
@@ -392,8 +376,8 @@ L85 列了建筑/角色/机器人/中立单位/任务点/矿区，**唯独没有
   与基地 4 格、武器环 12 格**零重叠**。顺序 = **正面列**（迎着机器人，从基地纵深中心向两端铺）
   → 顶行 → 底行 → **背面两角**。方向判据与 `back_weapon_cells` 同源。
 - **`Collect`**（`roles = WORKER`，第二个受限动作）。`targetPos` 是**矿石的坐标**（不是站位）。
-  **§4.4 的能力列没给它写昼夜限制**（`build`/`remove` 写"仅白天"、`attack` 写"仅黑夜"，
-  它那格空的）—— 但这一步夜里不采，昼夜门由 `planner` 把关、**不进闸门**。
+  **§4.4 的能力列没给它写昼夜限制**（`build`/`remove` 写"仅白天"、`attack` 写"仅黑夜"，它那格空的）
+  —— 但这一步夜里不采，昼夜门由 `planner` 把关、**不进闸门**。
 - **`BaseRole` 收窄成带 `stone`**（`backpack` 是物品名数组、重复即计数）。**不读 `backPackCapability`**
   （大写 P）：一天最多采 ~30 块、墙只 16 格，撞不到 100 的上限。解析不出背包 ⇒ 0 块 ⇒ 不砌墙、
   转去采矿 —— **降级方向是"少做"**。
@@ -415,7 +399,7 @@ L85 列了建筑/角色/机器人/中立单位/任务点/矿区，**唯独没有
 - ❌ **不建"建造失败重试/黑名单"**（理由同第 7 步）
 
 ### 验证
-单测 45 条（含**开拓者构造 `Collect` 抛 `PermissionError`** —— 硬约束 3：每加一个受限动作必补一条）。
+单测 45 条（含**开拓者构造 `Collect` 抛 `PermissionError`** —— 硬约束 3）。
 样例逐字节回归：第 7 步那条"逐字节不变"**按设计失效了**（`10010` 现在会朝最近的武器走），
 核对的是新预期：两条 `move`、零 `build`、零 `collect`。
 合成白天端到端：回合 4/6/7 三座武器 → 采石 30 次 → 16 格墙 → 回合 66 空指令（环满了，
@@ -440,7 +424,7 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 > **教训两条**：① 手搓 `Map` 的合成局面里**角色不在 `blocked`**，只有 `model._entries` 会把他们
 > 写进网格 —— 新用例第一版就是这么写的，于是它**连旧代码都放过去了**（反向验证时才发现），
 > 必须自己把角色铺进去；② 这类"多人互指"的死循环单帧断言看不见，得把回合串起来跑，
-> **并且反向验证一次**（退回旧实现，新用例必须挂，实证输出 `0 not greater than or equal to 2`）。
+> **并且反向验证一次**（退回旧实现，新用例必须挂）。
 
 ### 已知不确定性（别当成已验证）
 1. **可建造区公式仍来自图片**。算错 ⇒ `build` 落点非法，大概率不计异常但**未确认**。
@@ -474,8 +458,7 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 **退化成空指令只是丢一个回合（合法、不计异常），断连接是整个资格。**
 
 ### 不做什么
-- ❌ **不加开关 / 环境变量 / 日志级别配置** —— 没有"压测时想安静点"这第二个场景。
-  真要关，改 `_log` 一处
+- ❌ **不加开关 / 环境变量 / 日志级别配置** —— 没有"压测时想安静点"这第二个场景。真要关，改 `_log` 一处
 - ❌ **不写日志文件、不做轮转** —— `logs/` 是运行期产物、**绝不入库**，而判题器本来就收 stdout
 - ❌ **不给 `describe` 单写用例** —— 它已被 `HandleTest` 那条按**逐字字符串**钉住，再写一条是同一件事测两遍
 - ❌ **不在失败路径上打日志** —— 复盘日志只走成功路径
@@ -488,8 +471,8 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 ### 已知不确定性（别当成已验证）
 1. **stdout 会不会把管道写满** —— Windows 管道缓冲 64KB，判题器若**不读**子进程 stdout 就会阻塞在
    write 上 ⇒ 响应超时 ⇒ 直通红线。**本地判题环境没跑过，这是这一步唯一的实质风险。**
-   > 第 12 步把每回合从 33 行/1374 字节涨到 40 行/2262 字节（1300 回合 ≈ 2.9MB，写满从约 48
-   > 回合提前到约 29 回合）。**这条风险一直在，只是变早。**
+   > 第 12 步把每回合从 33 行/1374 字节涨到 40 行/2262 字节（写满从约 48 回合提前到约 29 回合）。
+   > **这条风险一直在，只是变早。**
 2. **`describe` 只认 `to_wire` 产出的形状**（硬读 `cmd["targetPos"][0]`）—— 它跑在 `try` 里，
    一炸就是空指令。落地 `attack` 时要顺带核一眼（**第 10 步核过了；第 11 步又因为这个炸了一次**）。
 
@@ -501,17 +484,14 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 ## 第 10 步：夜里操炮防守（`attack` 落地，三个角色各认领一座武器）
 
 ### 目标
-第 8 步把工人夜里"走到武器旁边待命"做完了，但**待命本身不产生任何效果** —— 三座炮一座都不开火，
-机器人打到基地头上只能靠围墙硬扛。而策略指导里写着"杀机器人是一个极大的得分手段"
-（小型 1 / 中型 2 / 大型 4 / BOSS 10 分）。
+第 8 步把工人夜里"走到武器旁边待命"做完了，但**待命本身不产生任何效果** —— 三座炮一座都不开火。
+而策略指导里写着"杀机器人是一个极大的得分手段"（小型 1 / 中型 2 / 大型 4 / BOSS 10 分）。
 
 用户这一步的要求：
-
 > 「晚上操作武器防守的流程，**所有角色**（上限三个）回来操作武器」
 
-注意是**所有**角色 —— §4.4 里 `attack` 的可用角色列写的就是"全部"，开拓者也得上炮位
-（第 8 步之前它一步都不走）。本次问答定下两条策略：
-**开火优先级 = 射程内血最少的机器人**（补刀；血量并列时打近的）；
+注意是**所有**角色 —— §4.4 里 `attack` 的可用角色列写的就是"全部"，开拓者也得上炮位。
+本次问答定下两条策略：**开火优先级 = 射程内血最少的机器人**（补刀；血量并列时打近的）；
 **夜里开头机器人还没走进射程时，角色站在炮位待命**（不发指令，空指令合法）。
 
 ### 产出
@@ -588,14 +568,12 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 
 **收益量级完全不同**：任务是 `任务积分奖励 + 5 × 标准回合数 / (实际完成回合 − 接取回合)`
 （**越快交完奖励越高**，以乘法计；样例两个点各 50 分 + 30 金），而杀一台机器人只有 1~10 分。
-这是当时收益最高的一条未做的线。
 
 卡点是**看懂题**：任务原文是任意文本，本地没有 LLM、没有外网。唯一确定存在的智能通道，
 就是响应里那个至今恒为空串的 `prompt` 字段 —— 发给判题器的 LLM，下一回合在 `llmResp` 里回来。
 
-用户问答定下四条：**范围 = 接任务 + LLM 求解闭环**（不做沙盒 `executeCmd`）；**不发 `executeCmd`**
-（任务原文自带"三方 API 文档"，先只走 LLM，少一个未知量）；**无状态**；**提示词 = 让题目自己说话**，
-不硬塞格式要求。
+用户问答定下四条：**范围 = 接任务 + LLM 求解闭环**（不做沙盒 `executeCmd`）；**不发 `executeCmd`**；
+**无状态**；**提示词 = 让题目自己说话**，不硬塞格式要求。
 
 **为什么改成无状态**（推翻了最初"在 `app` 里加标志位"的想法）。接口文档 L140 的原话是
 「并以之前提交过的**通过率最高的**答案计算积分与金币」—— 这句话说明**反复提交是判题器预期的用法**。
@@ -619,7 +597,7 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
   只是**指令执行失败**（不计异常），而误判成"永远接不了"会让整条任务线**静默作废**。
   所以 `isValid` **明确为 `False`** 才排除，`coldDownRounds` 缺失给 -1、按 `<= 0` 也算就绪。
 - **`AcceptTask` / `SubmitAnswer`**（**都仅开拓者**）。两者**报文里都没有 `targetPos`**
-  （领哪个点由**站位**决定），逐字对 `docs/response.txt` L51-57 的实证报文。
+  （领哪个点由**站位**决定），逐字对 `docs/response.txt` 的实证报文。
   顺带**修掉 `describe()` 的既有脆弱点**：它硬读 `cmd["targetPos"][0]`，遇到这两个动作会
   `IndexError`，而它跑在 `app.handle` 的 `try` 里 ⇒ **整回合退化成空指令**。
   改成 `point = cmd.get("targetPos") or []`（`or []` 顺手挡住"空数组"这半个同款坑），
@@ -699,25 +677,24 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
   而地图恒 41×32，**本地测不出来**。守卫用 `not self.cells` 而不是 `size`：高/宽为 0 时
   `size` 看着合法但一格都没有。新增 `_NAMES` + `_legend()` + 模块常量 `LEGEND`。
 - **`game/world.py`** —— `Turn.summary()` 3 行 + `_listed()` + 两个常量。放这里的理由与
-  `Map.render()` 在 `map.py` 完全相同：**领域对象自己格式化自己**，`app` 只管装配与红线
-  （它原本一个 `gold`/`weapons`/`robots` 字段都不碰）。
+  `Map.render()` 在 `map.py` 完全相同：**领域对象自己格式化自己**，`app` 只管装配与红线。
 - **`app.py`** —— `_log` 把**三块拼成一条**记录（摘要 / 图例 / 地图）。头部顺序是
   "**摘要 → 图例 → 图**"：摘要第一行 = 回合号（`logging` 的时间戳前缀只加在**第一条物理行**上，
   按时间翻日志时正是这一行要定位），图例紧挨着图。
-- **`tests/test_actions.py`** —— 94 → 102 条。更新 2 条、新增 6 条（含 `TurnSummaryTest`）。
+- **`tests/test_actions.py`** —— 94 → 102 条。
 
 **图例由 `_NAMES` 生成，不是手写。** 手写一份 + 一条字符串断言 = **两份真相**，
 而图例写错的症状是**复盘时看错阵营**，比看不懂更糟。生成之后断言退化成一句集合相等：
-`set(_NAMES) == set(_RENDER_SIDED) | set(_RENDER_NEUTRAL)`，多一个少一个都挂。
-`x` / `.` / `?` / `大写=敌方` / `%=敌方围墙` 五样不在 `_NAMES` 里 —— 它们不是"某个类别"，
-而是 `_char` 的兜底与大小写规则，单独钉。**`%` 必须单列**：墙是大小写规则的唯一例外。
+`set(_NAMES) == set(_RENDER_SIDED) | set(_RENDER_NEUTRAL)`。`x` / `#` / `?` / `大写=敌方` /
+`%=敌方围墙` 五样不在 `_NAMES` 里 —— 它们不是"某个类别"，而是 `_char` 的兜底与大小写规则，
+单独钉。**`%` 必须单列**：墙是大小写规则的唯一例外。
 
 **⚠️ 四个任务点按「阵营」标注，不是「我方/敌方」。** `1`/`2` 来自 `zones` 的
 **`challengerTaskPoint*`**、`3`/`4` 来自 **`defenderTaskPoint*`**，两队**同时存在**。
 样例里 `teamOur.type == "challenger"` 两套恰好重合，**写错也测不出来** ——
 第一版草稿写的正是"1/2=我方任务点"，是 Plan agent 复核时挑出来的。
 我方可接的那两个点是 `Turn.task_points`（来自 `teamOur.playerTasks`，阵营已滤好），
-与字符表里的 `1`-`4` 是两回事，所以摘要里的标签写「**可接任务点**」而不是「我方任务点」。
+与字符表里的 `1`-`4` 是两回事，所以摘要里的标签写「**可接任务点**」。
 
 **摘要的三条格式化约定**，都为了"日志必须诚实"：
 - **缺失不等于 0** —— `gold` / `round_no` 的 -1 是"字段缺失"，打成 `?`。
@@ -732,42 +709,24 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
   每格 5 字节转义 × 32 行 ≈ +6.5 KB/回合 ⇒ 8.5 MB/局，把已经贴线的字节预算打穿。
 - ❌ **不做"每格隔一个空格"**（用户已否，3.6 MB/局）。
 - ❌ **不做裁剪/缩放**（只画有内容的矩形框）—— 会裁掉远处正在逼近的机器人，而那是夜里最该看见的。
-- ❌ **不引入任何跨回合状态**。图例每回合重复打（用户选定），不搞"只在第 1 回合打"的模块级
-  标志位 —— 那正是第 11 步否决掉的那类状态。
+- ❌ **不引入任何跨回合状态**。图例每回合重复打（用户选定），不搞"只在第 1 回合打"的模块级标志位。
 - ❌ **不改字符本身**（`g`/`s`/`x`…）—— 换一套字符等于让所有既有截图与复盘笔记作废。
 - ❌ **不动 `describe()` 与「动作：」那条**，也不改 `render()` 的"空矩阵 ⇒ `""`"契约。
 
 ### 验证
-单测 94 → 102 条，全绿。**反向验证 6 条**（每条先改坏 → 确认挂了 → 复原，全部如实复现）：
-`render()` 去掉 `reversed()`（行号变递增）/ `_NAMES` 删掉 `weaponShop` / 图例写成"我方任务点1" /
+单测 94 → 102 条，全绿。**反向验证 6 条**（每条先改坏 → 确认挂了 → 复原）：
+`render()` 去掉 `reversed()` / `_NAMES` 删掉 `weaponShop` / 图例写成"我方任务点1" /
 射程 -1 直打成 `-1` / `_listed` 不截断 / `_log` 把 `summary()` 放到 `render()` 之后 —— 各自对应用例挂。
-**逐字节回归** —— 这一步只动日志，响应一个字节都不该变。`git archive HEAD`（第 11 步的提交）
+**逐字节回归** —— 这一步只动日志，响应一个字节都不该变：`git archive HEAD`（第 11 步的提交）
 抽出一份旧树跑同一个样例，两边**都是 213 字节、内容相同**。
 
-**真服务端到端**（`netstat` 确认端口空闲 → `run.sh 18085` → `curl`）：
-
-```
-2026-09-13 18:14:26,958 | 回合 85（夜里）｜ 金币 20 ｜ 武器 3/3：10020 gatling(9,24)r4 …
-我方 10010 worker(5,23)石1 ｜ 10012 worker(10,16)石1 ｜ 10011 pioneer(10,12)石0
-机器 4 台：(4,4)h40 (5,4)h60 (4,5)h500 (5,5)h800 ｜ 可接任务点 (14,14) (17,17)
-图例：s=基地 g=加特林 r=电磁狙击炮 k=火箭发射台 #=围墙 w=工人 p=开拓者 o=石矿
-      i=铁矿 c=铜矿 v=小贩 $=武器商店 1=挑战方任务点1 2=挑战方任务点2 3=防守方任务点1 4=防守方任务点2
-      x=机器人 .=空地 ?=未知 大写=敌方 %=敌方围墙
-     0         1         2         3         4
-     01234567890123456789012345678901234567890
-31 │ .........................................
-24 │ ....o....gss.............................
-12 │ ..........p..............................
-```
-
-**行号与标尺都核对过**：加特林在 `(9,24)` ⇒ `24 │` 那一行第 10 个字符正是 `g`（数标尺的个位行）。
-收尾 `taskkill`，端口确认释放。
+**真服务端到端**：行号与标尺都核对过（加特林在 `(9,24)` ⇒ `24 │` 那一行第 10 个字符正是 `g`，
+数标尺的个位行）；收尾 `taskkill`，端口确认释放。
 
 **实测字节（真跑出来的，不是估算）**：摘要 294 B / 3 行 + 图例 305 B / 3 行 +
-地图 1661 B / 34 行 = **2262 B / 40 行**（改前 1374 B / 33 行）。1300 回合 ≈ **2.9 MB**
-（改前 ≈ 1.7 MB）。⚠️ 与硬约束 5 直接相关：按 64 KB 管道缓冲算，写满从**约 48 回合提前到约 29 回合**。
-**两种设计都是死**，所以这条不构成不做这一步的理由，但**数字必须同步** ——
-留着"32 行 / 2MB"会让下一个人按错的量级估风险。
+地图 1661 B / 34 行 = **2262 B / 40 行**（改前 1374 B / 33 行）。
+⚠️ 与硬约束 5 直接相关：按 64 KB 管道缓冲算，写满从**约 48 回合提前到约 29 回合**。
+**两种设计都是死**，所以这条不构成不做这一步的理由，但**数字必须同步**。
 > 估算两次都偏低：地图按 46×34 + 换行算成 1596 字节，漏掉 `│` 是 **3 字节**（32 行 = +64）；
 > 图例估 240、实测 305。**字节数一律以实测为准。**
 
@@ -789,8 +748,7 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 > 1. 武器改为"**一台在基地后方，两台在基地前方的两角**"（这样才能维修/升级基地和武器）——
 >    **第 13 步已实现**。
 > 2. 新增采矿策略：「手里面保持能建造墙的石头量就行，然后选择**价格最高的矿**，
->    没有波动的情况下是**铜 > 铁 > 石头**」—— **仍未实现**，现在 `Map.stones` 只装石矿、
->    `planner` 只认石矿。
+>    没有波动的情况下是**铜 > 铁 > 石头**」—— **仍未实现**。
 
 ---
 
@@ -830,14 +788,13 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 
 **`tests/test_actions.py`**
 
-- `BuildGeometryTest`：两条改写成 `test_sites_face_away_from_the_robots` /
+- `BuildGeometryTest`：两条改成 `test_sites_face_away_from_the_robots` /
   `test_the_three_sites_are_the_back_cell_and_the_two_front_corners`（含右半镜像整元组）；
   **新增 `test_every_site_touches_the_base`** —— 每个落点①在 `weapon_cells` 里②与基地的最小切比雪夫距离 `== 1`。
   这条把用户那句"这样才能维修/升级"写成可执行的断言。
 - `BuildWeaponTest`：`_settle` 加 `want` 形参；`test_builds_the_three_weapons_on_their_own_sites` 用
-  **集合**断言 `{(种类, 落点)} == set(zip(WEAPONS_BY_SITE, weapon_sites(...)))`（不依赖两个工人谁先到）；
-  `test_never_builds_on_an_occupied_cell` **换成** `test_a_blocked_site_drops_only_its_own_weapon`；
-  `test_a_short_budget_builds_only_one` 里先建的那座改成 `rocket`。
+  **集合**断言（不依赖两个工人谁先到）；`test_never_builds_on_an_occupied_cell` **换成**
+  `test_a_blocked_site_drops_only_its_own_weapon`；`test_a_short_budget_builds_only_one` 里先建的那座改成 `rocket`。
 - `BuildWallTest` / `TwoWallBuildersTest` 的 `WEAPONS` 夹具**不动**：那些炮是**砌墙那条线的障碍物**，
   位置只需"在武器环上、挡路"，挪到前角反而会改动"夹缝里两格"那个死循环复现的几何。
 
@@ -845,9 +802,8 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 
 - ❌ **不动 `docs/策略指导.md`**。它是用户手改的、**且同时含两条改动**（武器落点 + 采矿选最高价矿）；
   本步只实现前一条，一起提交会让 commit 声称一件没做的事。它继续留在工作区未提交。
-- ❌ **不实现采矿那条**（"保持够砌墙的石头量，选价格最高的矿，铜 > 铁 > 石头"）。
-  那要把 `Map.stones` 从 `frozenset[Pos]` 改成"矿点 → 矿种"并重写 `_nearest_stone` / `_stones_to_mine`，
-  是独立的一步。
+- ❌ **不实现采矿那条**。那要把 `Map.stones` 从 `frozenset[Pos]` 改成"矿点 → 矿种"并重写
+  `_nearest_stone` / `_stones_to_mine`，是独立的一步。
 - ❌ **不做"升级/维修券"这条线本身**。本步只是把落点摆到够得着的位置；买券（`weaponShop`）、
   `remove`、围墙修复包一概不做。
 - ❌ **不改 `wall_cells` 的落点或顺序** —— 只换掉里面那一行判据的写法。
@@ -858,64 +814,29 @@ tuple(c for c in wall_cells(...) if c not in turn.map.blocked)
 
 ### 验证
 
-**1. 单测（102 → 103 条）**
+单测 **102 → 103 条**。`WallRingTest` 四条**一条都没改**就全绿 —— 它们是 `_front_back` 那次重构的
+等价性证明。
 
-```
-$ PYTHONUTF8=1 py -m unittest discover -s tests
-Ran 103 tests in 0.049s
-OK
-```
+**反向验证 4 条**（先改坏、确认挂了、再复原）：
 
-`WallRingTest` 四条**一条都没改**就全绿 —— 它们是 `_front_back` 那次重构的等价性证明。
-
-**2. 反向验证（先改坏、确认挂了、再复原；四次都做了）**
-
-| 故意改坏 | 结果 |
-|---|---|
-| `_front_back` 判据写成 `>=` | **8 条挂**：两个 `BuildGeometryTest` 新用例 + 三条 `WallRingTest` + `TwoWallBuildersTest` + `BuildWeaponTest` 两条 |
-| `weapon_sites` 后列挪到**围墙环**上（`near - 2d`） | **5 条挂**，含 `test_every_site_touches_the_base`（"落点必须在武器环上"） |
-| `WEAPONS_BY_SITE` 换回 `("gatling","railgun","rocket")` | 2 条挂（`test_a_blocked_site_drops_only_its_own_weapon`、`test_a_short_budget_builds_only_one`） |
-| `_slots` 改回"先滤种类、再 `zip` 落点" | **恰好 1 条挂**，就是那条判别用例；报文本身完全合法：`('rocket', (12,22)) ('gatling', (12,25))` —— **每个种类都挪到了别人家的落点上** |
+- `_front_back` 判据写成 `>=` ⇒ **8 条挂**（两个 `BuildGeometryTest` 新用例 + 三条 `WallRingTest` +
+  `TwoWallBuildersTest` + `BuildWeaponTest` 两条）
+- `weapon_sites` 后列挪到**围墙环**上（`near - 2d`）⇒ **5 条挂**，含 `test_every_site_touches_the_base`
+- `WEAPONS_BY_SITE` 换回 `("gatling","railgun","rocket")` ⇒ 2 条挂
+- `_slots` 改回"先滤种类、再 `zip` 落点" ⇒ **恰好 1 条挂**，就是那条判别用例；报文本身完全合法：
+  `('rocket', (12,22)) ('gatling', (12,25))` —— **每个种类都挪到了别人家的落点上**
 
 ⚠️ `test_every_site_touches_the_base` 对"方向判反"**不敏感**（武器环 12 格全都贴着基地，镜像过去照样贴着），
 它的价值在"落点必须落在武器环上"这一半 —— 别把它当方向守卫，方向归另外两条。
 
-**3. 真服务端到端**
-
-```
-$ PYTHONUTF8=1 bash run.sh 18085 &
-$ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
-{"roleCommandMap":{"10010":{"action":"move","targetPos":[{"x":6,"y":22}]},
- "10012":{"action":"move","targetPos":[{"x":9,"y":17}]},
- "10011":{"action":"move","targetPos":[{"x":9,"y":13}]}},"prompt":"","executeCmd":""}
-```
-
-样例响应**逐字节不变**（夜里 + 已有 3 座炮 ⇒ `_slots` 根本不会被问到）。
-
+**真服务端到端**：样例响应**逐字节不变**（夜里 + 已有 3 座炮 ⇒ `_slots` 根本不会被问到）。
 样例是 `roundNo=85` 的**中局快照**，打不到新代码，所以另外用一次性脚本（写在系统临时目录、
-**没入库**）把样例改成 `roundNo=1` / `goldNum=75` / 清空 `teamOur.roles` 里的三座炮，
-串起 40 个回合、每回合照判题器口径结算，输出：
+**没入库**）把样例改成 `roundNo=1` / `goldNum=75` / 清空三座炮，串起 40 个回合、每回合照判题器口径结算：
+回合 1 建 `rocket @ (9,23)`、回合 5 建 `gatling @ (12,22)`、回合 9 建 `railgun @ (12,25)`，金币 75 → 0；
+第 9 回合的复盘日志图上也对得上（第 23 行 `wkss` = 工人 + 火箭 + 基地两格，第 22 行 `g` 在第 12 列）。
 
-```
-回合 1：10010 建 rocket  @ (9,23)   金币剩 50
-回合 5：10010 建 gatling @ (12,22)  金币剩 25
-回合 9：10010 建 railgun @ (12,25)  金币剩 0
-```
-
-第 9 回合的复盘日志（图上也看得见：第 23 行 `wkss` = 工人 + 火箭 + 基地两格，第 22 行 `g` 在第 12 列）：
-
-```
-回合 9（白天）｜ 金币 25 ｜ 武器 2/3：200 rocket(9,23)r4 201 gatling(12,22)r4
-24 │ ....o.....ssw............................
-23 │ ........wkss.............................
-22 │ ............g............................
-```
-
-**4. 留痕**
-
-- 本步五段；`CLAUDE.md` 同步架构树、围墙那条的判据指向、"基地后方"那条改写 + 补"券要在周围一格内"，
-  进度行改到第 13 步；记忆 `futurewar-competition.md` 同步。
-- 提交**不含** `docs/策略指导.md`。
+**留痕**：`CLAUDE.md` 同步架构树、围墙那条的判据指向、"基地后方"那条改写 + 补"券要在周围一格内"；
+提交**不含** `docs/策略指导.md`。
 
 ### 已知不确定性（别假装确定）
 
@@ -930,7 +851,7 @@ $ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 4. **后列那格到底该贴哪一条边** —— 用户从三个候选里选了"贴基地下沿 `(bx-1, by-1)`"，
    另两个候选（贴基地上沿、贴基地纵深中点）没有实测数据支撑这个选择。
 5. **`_front_back` 的"只此一处"目前只在 `grid.py` 内部成立** —— `planner` 那边不直接算方向，
-   但如果以后有人在别处再写一次 `base.x * 2 < width`，这句话就又变成假的了。没有 lint 守着（也不该加，见 `CLAUDE.md`）。
+   但如果以后有人在别处再写一次 `base.x * 2 < width`，这句话就又变成假的了。没有 lint 守着（也不该加）。
 
 ### 下一步
 
@@ -954,8 +875,8 @@ $ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 1. 任务那一行是 `phase_task[:120]` 的**静默**截断 —— 任务原文一长，日志里就是一段没头没尾的
    文字，**看不出后面还有没有内容**。
 2. **判题器对任务的判决从来没被读进 `Turn`、更没进过日志。** 日志里只有"我们发了什么"，
-   没有"判题器认不认"。而接口文档 §1.7 写着 `errors` 的 **errorCode 2 就是"答案错误"
-   （`submitAnswer` 交的不正确或不完全正确）** —— 判题器一直在告诉我们原因，我们把那个字段丢了。
+   没有"判题器认不认"。而接口文档 §1.7 写着 `errors` 的 **errorCode 2 就是"答案错误"**
+   —— 判题器一直在告诉我们原因，我们把那个字段丢了。
 
 所以这一步**不是"多打点字"**，是补上整条诊断链最关键的一环：**把"判题器怎么看我们"落下来**。
 
@@ -1016,7 +937,7 @@ class Error(NamedTuple):
 - ❌ **不读 `worldNews`**。它是宝藏线（`summonTreasure`）的线索（样例那段"石门需三钥"就是），
   与任务线无关，读了也没人用。
 - ❌ **不读 `lastSummonTreasureResult`**：同上，那条线还没做。
-- ❌ **不改任何策略**。`planner` 一行没动，`cmds` 与 `prompt` 逐字节不变（样例响应已核）。
+- ❌ **不改任何策略**。`planner` 一行没动，`cmds` 与 `prompt` 逐字节不变。
 - ❌ **不建 `errorCode` 码表**（理由见上）、**不把码翻成中文塞进 `Error`**。
 - ❌ **不为"任务原文很长"引入跨回合去重状态**（"只打一次、之后打省略号"）。那样能把任务期间的
   字节数压回基线，但要给 `app` 加模块级状态，而**日志是排查工具，它必须是最可预测的那一块** ——
@@ -1025,59 +946,27 @@ class Error(NamedTuple):
 
 ### 验证
 
-**① 单测 103 → 113 条**
+单测 **103 → 113 条**，全绿。
 
-```bash
-PYTHONUTF8=1 py -m unittest discover -s tests
-# Ran 113 tests ... OK
-```
+**反向验证 5 条**（改坏 → 看对的用例挂 → 复原，全中）：`_clip` 改回静默截断 ⇒
+`test_the_task_line_shows_the_whole_text_and_marks_any_truncation`；`failed` 不 `sorted` ⇒
+`test_the_failed_ids_are_sorted_not_payload_ordered`；任务行触发条件去掉 `or turn.llm_resp` ⇒
+同第一条；`_errors` 去掉 `code < 0` 校验 ⇒ `test_an_error_without_a_code_is_dropped`；
+`_action_results` 改用 `bool(ok)` ⇒ `test_action_results_only_trust_real_booleans`。
 
-**② 反向验证**（改坏 → 看对的用例挂 → 复原，五条全中）
+**真服务端到端**：
 
-| 故意改坏 | 挂掉的用例 |
-|---|---|
-| `_clip` 改回 `text[:LOG_TEXT_MAX]`（静默截断） | `test_the_task_line_shows_the_whole_text_and_marks_any_truncation` |
-| `failed` 不 `sorted` | `test_the_failed_ids_are_sorted_not_payload_ordered` |
-| 任务行触发条件去掉 `or turn.llm_resp` | `test_the_task_line_shows_the_whole_text_and_marks_any_truncation` |
-| `_errors` 去掉 `code < 0` 的校验 | `test_an_error_without_a_code_is_dropped` |
-| `_action_results` 改用 `bool(ok)` | `test_action_results_only_trust_real_booleans` |
-
-**③ 真服务端到端**
-
-```bash
-netstat -ano | grep LISTENING | grep 18085     # 先确认为空
-PYTHONUTF8=1 bash run.sh 18085 &
-curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
-```
-
-- **样例响应逐字节不变**（这一步不碰策略）：
-  `{"roleCommandMap":{"10010":{"action":"move","targetPos":[{"x":6,"y":22}]},"10012":{"action":"move","targetPos":[{"x":9,"y":17}]},"10011":{"action":"move","targetPos":[{"x":9,"y":13}]}},"prompt":"","executeCmd":""}`
+- **样例响应逐字节不变**（这一步不碰策略）。
 - 样例日志尾（**4 条记录** —— 样例自带一条假错误与两条假未通过，`CLAUDE.md` 已声明别当真实信号读）：
-  ```
-  动作：10010 move(6,22)；10012 move(9,17)；10011 move(9,13)
-  判题器报错：2：xxx
-  上回合未通过：10010 10030
-  ```
+  `动作：…` / `判题器报错：2：xxx` / `上回合未通过：10010 10030`。
 - 再打一次**合成的"任务在身 + 判题器报错"**回合（一次性脚本写在系统临时目录、**不入库**）：
-  ```
-  判题器报错：4：指令 illegal；5：LLM quota exceeded
-  上回合未通过：10010 10030
-  任务：你是云核心网的运维工程师。请根据下面的三方 API 文档，计算把 3 个网元从北京双活切到上海时，
-        需要的最少割接窗口（单位：分钟）。补充说明：…（共 1066 字） ｜ 提交：无 ｜ 提问：有（1132 字）
-  ```
+  `判题器报错：4：指令 illegal；5：LLM quota exceeded` + 任务行。
   **截断标记与真实字数对上了**（1066 = 66 + 200×5），这一条正是"静默截断"修好的证据。
-- 收尾 `taskkill` + 确认端口释放。
 
-**④ 体量实测**（口径写进 `app._log` docstring 与 `CLAUDE.md` 硬约束 5）
-
-| 局面 | 行 | 字节 |
-|---|---|---|
-| 干净回合（没回执、没任务） | 42 | 2294 |
-| 样例（假错误 + 两条未通过） | 44 | 2459 |
-| **任务在身，两格文本都顶到 `LOG_TEXT_MAX`** | 45 | **4832** |
-
-第 12 步是 40 行 / 2262 字节。**任务期间每回合都打那条约 2.5KB 的日志**，
-所以阻塞点从 29 回合提前到 13 回合 —— 与第 12 步同一条理由：**每种设计都是死**，不构成不做的理由。
+**体量实测**（口径写进 `app._log` docstring 与 `CLAUDE.md` 硬约束 5）：干净回合 42 行 / 2294 字节；
+样例 44 / 2459；**任务在身、两格文本都顶到 `LOG_TEXT_MAX`** 45 / **4832**。
+第 12 步是 40 行 / 2262 字节 ⇒ 阻塞点从 29 回合提前到 13 回合 —— 与第 12 步同一条理由：
+**每种设计都是死**，不构成不做的理由。
 
 ### 已知不确定性（别假装确定）
 
@@ -1085,8 +974,7 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
    不等于知道是哪一条。三种可能下一场才能分开：`errors` 报 errorCode 2（答案不对）、
    errorCode 4（我们的指令非法）、或者**什么都没报**（那就是 `acceptTask` 压根没发出去 /
    开拓者没走到点位上，得看 `action_results` 是不是 `false`）。
-2. **样例的 `errors` 与 `lastRoundRoleActionResults` 都是手工示意数据**（`CLAUDE.md` 文档地图那行
-   已声明），`{"errorCode": 2, "description": "xxx"}` 里的 `"xxx"` 明显是占位符。
+2. **样例的 `errors` 与 `lastRoundRoleActionResults` 都是手工示意数据**，`"xxx"` 明显是占位符。
    所以"判题器其实一直在报答案错误"**只是最像的假设，不是结论**。
 3. **`errors` 是"本轮"的**（接口文档 §1.7 原文），也就是说它报的是**上一回合**那条指令的结果。
    这一点文档没有直说（"本轮产生的错误信息数组"里的"本轮"指哪一回合），
@@ -1118,11 +1006,9 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 
 > 手里面保持能建造墙的石头量就行，然后选择价格最高的矿，没有波动的情况下是铜 > 铁 > 石头
 
-**这句话里的"然后"是顺序，不是并列** —— 墙只吃石头，若一上来就挑最贵的铜，
-围墙永远砌不成。所以两种口径各有各的场合：
-
-- **墙上还缺石头** ⇒ 只认石矿、取最近的（"找石矿应该要去最近的"，第 8 步就有）；
-- **墙砌完了** ⇒ 才轮到按**收购价**挑最值钱的矿。
+**这句话里的"然后"是顺序，不是并列** —— 墙只吃石头，若一上来就挑最贵的铜，围墙永远砌不成。
+所以两种口径各有各的场合：**墙上还缺石头** ⇒ 只认石矿、取最近的（"找石矿应该要去最近的"，第 8 步就有）；
+**墙砌完了** ⇒ 才轮到按**收购价**挑最值钱的矿。
 
 **"保持够砌墙的量"这一半本来就已经有了** —— `_stones_to_mine` 拿"还差几格墙"当上限。
 本步的新行为只有后半句：**16 格砌完之后工人原本原地闲置，现在转去采矿**。
@@ -1131,11 +1017,11 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 
 | 文件 | 改动 |
 |---|---|
-| `game/map.py` | `Map.stones: frozenset[Pos]` → **`Map.ores: Mapping[Pos, str]`**（矿点 → 矿种）。新增 `ORE_KINDS`（三种矿）与 `STONE`（石矿）。**小贩/武器商店/任务点照旧只进 `blocked`**，不进 `ores` |
+| `game/map.py` | `Map.stones: frozenset[Pos]` → **`Map.ores: Mapping[Pos, str]`**（矿点 → 矿种）。新增 `ORE_KINDS` 与 `STONE`。**小贩/武器商店/任务点照旧只进 `blocked`**，不进 `ores` |
 | `game/world.py` | `Turn` 新增 **`vendor_prices: Mapping[str, int]`**（`vendorShopList` → 矿种→收购价，`MappingProxyType` 只读） |
-| `protocol/model.py` | 新增 **`_vendor_prices()`**：只收 `price >= 0`（`_int` 对缺字段/类型不对给 -1，而负的收购价不存在）；名字不是字符串的丢掉。`load()` 接上 |
+| `protocol/model.py` | 新增 **`_vendor_prices()`**：只收 `price >= 0`（`_int` 对缺字段/类型不对给 -1，而负的收购价不存在）；名字不是字符串的丢掉 |
 | `game/planner.py` | `_nearest_stone` → **`_pick_ore(pos, ores, prices, *, want_stone)`**；新增 **`_mine_spare_ore()`**；`_build_walls` 在 `free` 为空时改调它 |
-| `tests/test_actions.py` | 新增 `SpareOreTest`（6 条）+ `ParseTest.test_vendor_prices_come_from_the_payload_verbatim`；`test_only_stone_enters_stones_...` 重写成 `test_ores_carry_their_kind_but_everything_blocks` |
+| `tests/test_actions.py` | 新增 `SpareOreTest`（6 条）+ 一条解析用例；`test_only_stone_enters_stones_...` 重写成 `test_ores_carry_their_kind_but_everything_blocks` |
 
 **为什么 `ores` 要带矿种而不是只留坐标集。** 选矿那一步要在三种矿之间按收购价排，
 而"铜 > 铁 > 石头"**不是常量** —— 任务书 L386 明说官方消息会让价格波动
@@ -1160,58 +1046,30 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
   卖矿那条线（`sell` → `buy` 券 → `use`）是独立的一步。
 - ❌ **不加"背包快满了就不采"**。`backPackCapability` 至今没读，一座矿最多采 10 次、
   围墙只有 16 格，还到不了容量的量级 —— 没有第二个使用者就不加。
-- ❌ **不给 `_pick_ore` 加"矿被采没了怎么办"**。payload 里**没有**"剩余次数"字段
-  （`CLAUDE.md` 已记），采没了的矿下一回合自然从 `ores` 里消失，不需要跨回合计数。
+- ❌ **不给 `_pick_ore` 加"矿被采没了怎么办"**。payload 里**没有**"剩余次数"字段，
+  采没了的矿下一回合自然从 `ores` 里消失，不需要跨回合计数。
 - ❌ **不动 `_stones_to_mine` 的公式**。它本来就是"保持够砌墙的量"那一半，本步一个字没改。
 - ❌ **不改 `_defend` / 任务线 / `render()` / `_log`**。
 
 ### 验证
 
-**1. 单测：113 → 119 条，全绿。**
+单测 **113 → 119 条**，全绿。`WallRingTest` / `BuildWallTest` / `MineApproachTest` /
+`TwoWallBuildersTest` **一条没改地全绿** —— 它们是"砌墙阶段行为不变"的证据。
 
-```bash
-PYTHONUTF8=1 py -m unittest discover -s tests
-# Ran 119 tests in 0.076s
-# OK
-```
-
-`WallRingTest` / `BuildWallTest` / `MineApproachTest` / `TwoWallBuildersTest` **一条没改地全绿**
-—— 它们是"砌墙阶段行为不变"的证据。
-
-**2. 反向验证（每条先改坏、确认挂、再复原）—— 5 条全部确认。**
-
-| 故意改坏 | 挂掉的用例 |
-|---|---|
-| `_pick_ore` 把排序键换回"距离优先"（`-price` 挪到第二位） | `test_the_pricier_ore_wins_over_the_nearer_one`、`test_a_market_flip_...`、`test_a_mine_the_vendor_does_not_buy_...`、`test_the_ring_decides_...`、`test_too_late_...` |
-| `_pick_ore` 忽略 `want_stone`（砌墙阶段也按价格挑） | `test_the_ring_decides_whether_price_gets_a_vote` + 4 条砌墙既有用例（`test_day_one_mines_...` / `test_a_late_start_...` / `test_worker_walks_to_the_mine_...` / `test_walks_around_a_wall`） |
-| `_mine_spare_ore` 去掉往返预算 | `test_too_late_in_the_day_to_walk_there_and_back` |
-| `map.ores` 什么都收（不看 `ORE_KINDS`） | `test_ores_carry_their_kind_but_everything_blocks` |
-| `_vendor_prices` 不挡坏价（去掉 `price >= 0`） | `test_vendor_prices_come_from_the_payload_verbatim` |
+**反向验证 5 条全中**：`_pick_ore` 排序键换回"距离优先"⇒ 5 条挂；`_pick_ore` 忽略 `want_stone`
+⇒ `test_the_ring_decides_whether_price_gets_a_vote` + 4 条砌墙既有用例；`_mine_spare_ore` 去掉
+往返预算 ⇒ 1 条；`map.ores` 什么都收 ⇒ 1 条；`_vendor_prices` 不挡坏价 ⇒ 1 条。
 
 ⚠️ **`test_the_ring_decides_whether_price_gets_a_vote` 的第一版是假通过的**：
-它原本让工人"朝矿走一格"，而 BFS 的第一格常常**同时靠近两座矿** ——
-改坏 `want_stone` 也照样过。改成"两座矿各贴在工人一边、断言 `collect` 瞄的是哪一座"之后
-才真的挂了那一次（上面第二行）。**"走一格"这种断言测不出方向，只有坐标级别的答案测得出。**
+它原本让工人"朝矿走一格"，而 BFS 的第一格常常**同时靠近两座矿** —— 改坏 `want_stone` 也照样过。
+改成"两座矿各贴在工人一边、断言 `collect` 瞄的是哪一座"之后才真的挂了那一次。
+**"走一格"这种断言测不出方向，只有坐标级别的答案测得出。**
 
-**3. 真服务端到端。**
-
-```bash
-netstat -ano | grep LISTENING | grep 18085     # 为空 ⇒ 起服务
-PYTHONUTF8=1 bash run.sh 18085 &
-curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
-```
-
-- **样例（`roundNo=85`，夜里）响应与第 12 步逐字节一致** —— 夜里走 `_defend`，本步碰不到。
-- **合成"白天 + 16 格墙已砌满"局面**（`py` 临时脚本把样例的 `roundNo` 改成 1、
-  按 `wall_cells` 补 16 格 `wall`，**写在系统临时目录、不入库**）：
-  - 样例价目（石 1 / 铁 3 / **铜 5**）⇒ 日志 `动作：10010 move(6,22)；10012 move(11,15)`，
-    两个工人都朝**铜矿 (22,26)** 那一侧（x 增大）。
-  - **只把价目翻成 铁 9 / 铜 5**，同一份局面重发 ⇒ `move(5,24)` / `move(9,17)`，
-    两人双双掉头朝**铁矿 (8,28)**。**这才是"价格来自载荷"的端到端证据**。
-  - 同一份局面里开拓者（10011）照旧去任务点，与采矿互不干扰。
-- 收尾 `taskkill` + 确认端口释放。
-
-**4. 留痕与提交。**
+**真服务端到端**：样例（`roundNo=85`，夜里）响应与第 12 步逐字节一致 —— 夜里走 `_defend`，本步碰不到。
+**合成"白天 + 16 格墙已砌满"局面**（`py` 临时脚本，**不入库**）：
+样例价目（石 1 / 铁 3 / **铜 5**）⇒ 两个工人都朝**铜矿**那一侧；**只把价目翻成 铁 9 / 铜 5**，
+同一份局面重发 ⇒ 两人双双掉头朝**铁矿**。**这才是"价格来自载荷"的端到端证据。**
+同一份局面里开拓者照旧去任务点，与采矿互不干扰。
 
 ### 已知不确定性（别假装确定）
 
@@ -1277,7 +1135,7 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 | 文件 | 改动 |
 |---|---|
 | `game/world.py` | `Turn` 新增 **`cmd_result: str = ""`**；`llm_resp` 的 docstring 改写成"文档**没写**没发 prompt 时它是什么 ⇒ 必须按**可能粘住**设计" |
-| `protocol/model.py` | `load()` 接上 `cmd_result=_text(payload, "lastCmdResult")`；`_text` 的 docstring 补第三个使用者 |
+| `protocol/model.py` | `load()` 接上 `cmd_result=_text(payload, "lastCmdResult")` |
 | `game/planner.py` | **本步主体**：`prompt_for` 删除 → **`task_channel(turn) -> (prompt, executeCmd)`**；新增 `_asked` / `_is_tool_reply` / `_tool_command` / `_retry_note`；`TASK_PROMPT` 重写成三段式；`_answer_task` 加工具回复闸门 |
 | `app.py` | `handle` 改成 `prompt, execute = planner.task_channel(turn)` 并写进 `executeCmd`；`_log` 新增**沙盒行**；模块 docstring 与字节表同步 |
 | `tests/test_actions.py` | 119 → **135 条**：`TaskAnswerTest` → `TaskChannelTest`（19 条）、`HandleTest.test_the_task_loop_through_handle` 扩成五段、新增体量守卫 |
@@ -1290,13 +1148,14 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 2. cmd_result 非空                  → (题目+结果+纠错?, "")        # 沙盒刚交作业，只回灌
 3. 回复里取得出 <tool>…</tool>       → ("", 那条命令)               # LLM 要跑命令
 4. 纠错修饰符非空                    → (题目+纠错, "")              # 判题器说答错了
-5. 回复非空  且不是工具回复          → ("", "")                    # 已是最终答案
+5. 回复非空  且不是工具回复          → ("", "")                     # 已是最终答案
 6. 否则                            → (只带题目, "")               # 首次提问 / 畸形回复重问
 ```
 
 **为什么合成一个函数**（而不是 `prompt_for` + `execute_for`）：这两条输出共用同一串判据，
-而那条链的核心不变量正是「**两者互斥**」—— 同一轮既提问又发命令 ⇒ LLM 拿着过期结果作答 ⇒ 又要同一条命令 ⇒ 活锁。
-拆开就是把同一条链写两遍，任何一次单边修改都会造出这个 bug。这是本项目最恨的"两份真相"。
+而那条链的核心不变量正是「**两者互斥**」—— 同一轮既提问又发命令 ⇒ LLM 拿着过期结果作答 ⇒
+又要同一条命令 ⇒ 活锁。拆开就是把同一条链写两遍，任何一次单边修改都会造出这个 bug。
+这是本项目最恨的"两份真相"。
 
 **为什么判据 2 必须压在 3 前面**：接口文档 L33 给 `lastCmdResult` **专门写了一句**空值约定，
 而 L31 的 `llmResp` **一个字没写** —— 文档作者对前者明说了"不粘"，对后者没说。
@@ -1339,82 +1198,53 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
   `…（共 N 字）` 那句把"命令没输出"与"命令吐了 64KB、你只看得到头"分开。
 - ❌ **不给 `executeCmd` 加昼夜门**。L208 只写了"仅在任务期间"，任务跨夜是常态
   （开拓者夜里也钉在任务点上），加了门就把夜间那段任务线废掉。
-- ❌ **不在任务外发 `prompt`**（每游戏日只有 3 次额度，那是任务线之外的资源）。既有行为，
-  本步只是把它从"没答过就问"改成六条判据。
+- ❌ **不在任务外发 `prompt`**（每游戏日只有 3 次额度，那是任务线之外的资源）。
 - ❌ **不做 `sell` / `buy` / `use`**（采矿的收益线），不碰武器升级券。
 - ❌ **不引入任何跨回合状态**。`handle` 保持纯函数 —— 本步最重要的架构不变量，
   卡住的状态会**静默关掉整条任务线**（第 11 步为这条否决过一次"只交一次"的优化）。
 
 ### 验证
 
-**1. 单测：119 → 135 条，全绿。**
+单测 **119 → 135 条**，全绿。
 
-```bash
-PYTHONUTF8=1 py -m unittest discover -s tests
-# Ran 135 tests in 0.069s
-# OK
-```
+**反向验证 8 条全中，无假绿**（驱动脚本 `D:\tmp\reverse16.py`，临时不入库）：
+去掉判据 1 的 `phase_task` 那一半 / 去掉"开拓者还活着"那一半 / 把判据 2 挪到判据 3 之后 /
+判据 2 吞掉纠错 / 去掉 `_answer_task` 的工具回复闸门 / 判据 5 的门改回"取不出命令就当答案" /
+纠错不再排除工具回复 / 沙盒行改回"发命令那一回合也打" —— 各自对应用例挂。
 
-**2. 反向验证（每条先改坏、跑套件、确认挂、再用备份复原）—— 8 条全部被预期用例抓住，无假绿。**
-
-驱动脚本 `D:\tmp\reverse16.py`（临时，不入库）。⚠️ **还原只用备份文件，绝不用 `git checkout`** ——
-那会退到 HEAD、把本步所有未提交的改动一起抹掉（第 15 步真踩过）。还原后 `cmp` 逐文件确认干净。
-
-| 故意改坏 | 挂掉的用例 |
-|---|---|
-| 去掉判据 1 的 `phase_task` 那一半 | `test_nothing_is_sent_without_a_task` |
-| 去掉判据 1 的"开拓者还活着"那一半 | `test_a_dead_pioneer_never_touches_the_sandbox` |
-| 把判据 2 挪到判据 3 之后 | `test_a_result_already_in_hand_blocks_the_next_command`、`test_the_task_loop_through_handle` |
-| 判据 2 吞掉纠错 | `test_a_result_and_a_rejection_come_back_together` |
-| 去掉 `_answer_task` 的工具回复闸门 | `test_a_tool_call_is_never_submitted_as_an_answer` |
-| 判据 5 的门改回"取不出命令就当答案" | `test_a_broken_tool_reply_is_asked_again` |
-| 纠错不再排除工具回复 | `test_a_rejection_needs_an_answer_to_blame` |
-| 沙盒行改回"发命令那一回合也打" | `test_the_sandbox_line_only_appears_with_a_result`、`test_the_task_line_shows_the_whole_text_and_marks_any_truncation` |
+⚠️ **还原只用备份文件，绝不用 `git checkout`** —— 那会退到 HEAD、把本步所有未提交的改动一起抹掉
+（第 15 步真踩过）。还原后 `cmp` 逐文件确认干净。
 
 ⚠️ 这一轮**反向验证抓出了一处真冗余**：`_retry_note` 里原本写的是
 `return reply if reply and not _is_tool_reply(reply) else ""`，但去掉 `reply and` 行为**完全相同**
-（空回复两条路都返回 `""`，`_asked` 里那两段是"空就不占地方"的）。
-按"禁止冗余设计"**删掉了那个 `and`**，并在 docstring 里写明"这件事由返回空串天然表达，别再加一句 `if reply`"。
-同时给 `test_a_rejection_needs_an_answer_to_blame` 补了 `<tool ls`（有开无闭）的 sub-case
-—— 那才是 `not _is_tool_reply` 这条真正的守门员。
+（空回复两条路都返回 `""`）。按"禁止冗余设计"**删掉了那个 `and`**，并在 docstring 里写明
+"这件事由返回空串天然表达，别再加一句 `if reply`"。
 
-**3. 真服务端到端。**
+**真服务端到端**：样例响应**逐项不变**（三个顶层字段齐、`prompt` 与 `executeCmd` 均为空、
+三条 `move`）。**合成一整条任务链路**（`D:/tmp/rounds/r1..r4.json`，同一个 `roundNo=1` 的白天局面，
+逐回合只改 `phaseTask` / `llmResp` / `lastCmdResult` 三个顶层字段）：
 
-```bash
-netstat -ano | grep LISTENING | grep 18085     # 确认为空 ⇒ 起服务
-PYTHONUTF8=1 bash run.sh 18085 &
-curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
-```
+| 回合 | 载荷 | 响应 / 日志 |
+|---|---|---|
+| ① | `phaseTask` 非空 | `提问：有（307 字）`、`executeCmd:""` |
+| ② | `llmResp = '<tool>python -c "print(1+1)"</tool>'` | `executeCmd == 'python -c "print(1+1)"'`、`prompt:""` |
+| ③ | `lastCmdResult = "[exitCode:0]\n2"` | prompt 含 `【上一条命令的执行结果（原文）】\n[exitCode:0]\n2`、`executeCmd:""` |
+| ④ | `llmResp = "晴 26 度"` | `submitAnswer: 晴 26 度`、`prompt:""` |
 
-- **样例响应逐项不变**：三个顶层字段齐、`prompt` 与 `executeCmd` 均为空、10010/10011/10012 三条 `move`
-  （样例 `phaseTask` 为空 ⇒ 判据 1 直接返回 `("", "")`）。
-- **合成一整条任务链路**（`D:/tmp/rounds/r1..r4.json`，同一个 `roundNo=1` 的白天局面，
-  逐回合只改 `phaseTask` / `llmResp` / `lastCmdResult` 三个顶层字段）：
+日志里**沙盒行只在第 ③ 回合出现**（第 ② 回合没有 —— 发出去的命令已经印在"提交："里了）。
 
-  | 回合 | 载荷 | 响应 / 日志 |
-  |---|---|---|
-  | ① | `phaseTask` 非空 | `提问：有（307 字）`、`executeCmd:""` |
-  | ② | `llmResp = '<tool>python -c "print(1+1)"</tool>'` | `executeCmd == 'python -c "print(1+1)"'`、`prompt:""` |
-  | ③ | `lastCmdResult = "[exitCode:0]\n2"` | prompt 含 `【上一条命令的执行结果（原文）】\n[exitCode:0]\n2`、`executeCmd:""` |
-  | ④ | `llmResp = "晴 26 度"` | `submitAnswer: 晴 26 度`、`prompt:""` |
-
-  日志里**沙盒行只在第 ③ 回合出现**（第 ② 回合没有 —— 发出去的命令已经印在"提交："里了）。
-- 收尾 `taskkill` + 确认端口释放。
-
-**4. 实测字节数**（真服务，四种局面各打一回合，含 `logging` 时间戳前缀）：
+**实测字节数**（真服务，四种局面各打一回合，含 `logging` 时间戳前缀）：
 
 | 局面 | 行 | 字节 | 写满 64KB |
 |---|---|---|---|
-| 干净回合（没回执、没任务） | 41 | 2424 | 约 27 回合 |
-| 有回执（判题器报错 + 两条未通过） | 43 | 2537 | 约 25 回合 |
+| 干净回合 | 41 | 2424 | 约 27 回合 |
+| 有回执 | 43 | 2537 | 约 25 回合 |
 | 任务在身（两个字段顶到 `LOG_TEXT_MAX`） | 42 | 4893 | 约 13 回合 |
 | **任务在身 + 沙盒结果顶格（新的最坏）** | 43 | **6153** | 约 **10 回合** |
 
 新的最坏比第 14 步（约 13 回合）**提前 3 回合**。用例 `test_the_worst_round_stays_under_the_budget`
-把这一格钉成会失败的断言（上限 `< 6500`，实测 6002 → 中文三字段顶格；沙盒输出现实里基本是 ASCII）。
-**三处数字必须一致**：本表、`app._log` 的 docstring、`CLAUDE.md` 硬约束 5。
-
-**5. 留痕与提交。**
+把这一格钉成会失败的断言（上限 `< 6500`）。**三处数字必须一致**：本表、`app._log` 的 docstring、
+`CLAUDE.md` 硬约束 5。
 
 ### 已知不确定性（别假装确定）
 
@@ -1426,16 +1256,15 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
    对它什么都没说）。判据 2 压 3 是按"**可能粘住**"买的保险。
    **自检判据：日志里"沙盒：回「…」"连续两回合出现同一条** ⇒ 要么粘住了，要么判题器真的重复执行
    —— 两种都说明这条链要重新想。
-3. **`lastCmdResult` 会不会粘住**（即"未发命令时为空字符串"这句话是不是真的逐字成立）同样没实测过。
-   它若也粘，判据 2 会**每回合都命中** ⇒ 任务线永远停在"回灌结果"、再也不发新命令（也不会提交答案）
-   —— 症状同样在日志上：沙盒行每回合都打、动作里永远没有 `submitAnswer`。
+3. **`lastCmdResult` 会不会粘住**同样没实测过。它若也粘，判据 2 会**每回合都命中** ⇒ 任务线永远停在
+   "回灌结果"、再也不发新命令（也不会提交答案）—— 症状同样在日志上：沙盒行每回合都打、
+   动作里永远没有 `submitAnswer`。
 4. **沙盒执行若延迟超过一回合，判据 2 / 3 的互斥就失准**：`cmd_result` 与 `llmResp`（同一条命令）
    会错开一回合到达，我们会在等结果的回合里把那条命令**再发一遍**。判据 2 只挡住了"同回合"，
    挡不住"错一回合"。真出现只能靠日志里"同一条命令连发两回合"认出来。
-5. **任务切换那一回合，`cmd_result` 里装的是旧任务的输出**（它说的是"上回合"的执行结果，
-   而任务可能刚刚换掉）。判据 2 只认"非空"，不认"是不是本任务的" ⇒ 会把旧任务的沙盒输出
-   灌给新任务的 LLM。**已知、暂不修** —— 要修就得引入跨回合状态记住"上回合我发过什么"，
-   那违反本步最重要的架构不变量。
+5. **任务切换那一回合，`cmd_result` 里装的是旧任务的输出**。判据 2 只认"非空"，不认"是不是本任务的"
+   ⇒ 会把旧任务的沙盒输出灌给新任务的 LLM。**已知、暂不修** —— 要修就得引入跨回合状态记住
+   "上回合我发过什么"，那违反本步最重要的架构不变量。
 6. **回灌全文可能撑爆判题器 LLM 的 prompt**。沙盒输出上限是 64KB（判题器只会在**我们这边**打截断标记），
    全文回灌等于把 64KB 塞进下一轮的 prompt。用户拍板"全文回灌"，
    若实测发现 LLM 因此答不出来（症状：`executeCmd` 发出去之后没有下文），
@@ -1450,7 +1279,7 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
    出现了 ⇒ `<tool>` 协议被认；没出现而 `executeCmd` 一直在发 ⇒ 协议要换形状（这是唯一的高优先级）。
 ② 若链路通了仍报 `errorCode 2` ⇒ 改 `TASK_PROMPT` 的措辞（"不要解释"那句、以及答案格式的引导），
    `_retry_note` 已经把"你上次答错了"带回去了，日志里能直接看到 LLM 每次换没换答案。
-③ 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+③ 卖矿那条线仍未实现：`sell` → `buy` → `use`。
 
 ---
 
@@ -1479,11 +1308,10 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 
 | 文件 | 改动 |
 |---|---|
-| `game/grid.py` | `wall_cells` **16 → 14 格**（删掉背面整列；`near` / `back_x` 随之不再需要，改成 `d, far, _ = _front_back(...)`）。顺序逐格不变（正面列 → 顶行 → 底行），第 8 步"正面列 6 格全部先于顶行"那条性质不受影响。新增 **`box_cells(base)`**（36 格，`frozenset`）与 **`step_outside(pos, box, blocked, size)`**（BFS 与 `step_toward` 同构，只把终止条件从"贴着 goal"换成 **`nxt not in box`**） |
-| `game/planner.py` | 两半闸门 + 一个新函数 + 一个删除（见下） |
-| `protocol/model.py` | `_stone` 的 docstring："围墙只有 16 格" → 14（它只是**不读 `backPackCapability` 的理由**，推论不变：14 ≪ 100） |
-| `tests/test_actions.py` | **135 → 151 条**：新增 `StepOutsideTest`（4）、`WallGateTest`（6）、`StandingOnTheTargetTest`（2）；`WallRingTest` / `BuildWallTest` / `SpareOreTest` 的 16 → 14 与"背面整列一格都没有"的断言 |
-| `CLAUDE.md` / 本文件 | 领域事实 16 → 14 + 门 + 闸门；架构树补 `box_cells` / `step_outside`；工作区状态 135 → 151 |
+| `game/grid.py` | `wall_cells` **16 → 14 格**（删掉背面整列；`near` / `back_x` 随之不再需要）。顺序逐格不变（正面列 → 顶行 → 底行）。新增 **`box_cells(base)`**（36 格，`frozenset`）与 **`step_outside(pos, box, blocked, size)`**（BFS 与 `step_toward` 同构，只把终止条件从"贴着 goal"换成 **`nxt not in box`**） |
+| `game/planner.py` | 两半闸门 + 一个新增（`_step_aside`）（见下） |
+| `protocol/model.py` | `_stone` 的 docstring："围墙只有 16 格" → 14（它只是**不读 `backPackCapability` 的理由**，推论不变） |
+| `tests/test_actions.py` | **135 → 151 条**：新增 `StepOutsideTest`（4）、`WallGateTest`（6）、`StandingOnTheTargetTest`（2）；既有三个砌墙类的 16 → 14 与"背面整列一格都没有"的断言 |
 
 **闸门两半**（都在 `planner.plan` 的一次调用里，`handle` 仍是无状态纯函数）：
 
@@ -1493,8 +1321,7 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
   ⚠️ 位置在 `if not free:` **之后** —— "环上无可砌（⇒ 去采最值的矿）" 与 "闸门挡住了"
   都会让 `free` 空掉，含义却相反：前者是**砌完了**，后者是**还没砌完、这一回合不许砌**。
   混在一起就会出现"门一堵，工人掉头奔地图另一头采铜、几十回合回不来"。
-  判据是**整面墙**而不是某一格（障碍集里永远有全部 14 格墙）⇒ 一次 `any()` 就是全有或全无，
-  逐格剔除只是同一件事的啰嗦写法。
+  判据是**整面墙**而不是某一格（障碍集里永远有全部 14 格墙）⇒ 一次 `any()` 就是全有或全无。
 - **(2) 要被关住的人先走出来**（`plan` 的角色循环里，**任务钉死那一支之后**）：
   `if turn.is_day and role.id in leaving:` → `step_outside(role.pos, box, turn.map.blocked | claimed, ...)`。
   ⚠️ **两半用的是两套障碍**：`leaving` 按"假设砌满"判（将来出不去了），
@@ -1520,12 +1347,10 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 
 修法：`role.pos == target` ⇒ 这一回合只 `move`（`_step_aside`：八方向取第一个可走的邻格，
 避开 `blocked | claimed | sites`，不查边界会走出地图），**下一回合再砌**。两个方向都收敛：
-
-- 那格**砌过** ⇒ 没人站着它就现形（出候选表），下一回合去砌真正的下一格；
-- 那格**没砌过** ⇒ 下一回合从邻格稳稳砌上（`dist == 1`，本来就是标准站法）。
+那格**砌过** ⇒ 没人站着它就现形（出候选表）；那格**没砌过** ⇒ 下一回合从邻格稳稳砌上。
 
 **`_dead_ends` 实现过又删掉**（评审提的"踱步死循环"）：先实现了"避免走进死区"的候选格过滤表，
-再用一次性脚本实测 —— **它不改变任何结果**，按规则 1 删除。数字见验证 §3。
+再用一次性脚本实测 —— **它不改变任何结果**，按规则 1 删除。数字见验证。
 
 ### 不做什么
 
@@ -1538,69 +1363,41 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 - ❌ **不给闸门加"再砌一次试试"的重试或跨回合记忆**：`handle` 仍是无状态纯函数（第 11 步起的架构不变量）。
 - ❌ **不改 `_stones_to_mine` 的公式**：它的上限本来就是"还差几格墙"（`free - role.stone`），
   墙少 2 格 ⇒ 自动少采 2 块，不用动。
-- ❌ **不动任务线 / `_defend` / `_mine_spare_ore` / `render()` / `_log`**。
 - ❌ **不在本步顺手重构"砌墙"那一段**：`_build_walls` 已经很长，但这次只加了一支判据。
 
 ### 验证
 
-**1. 单测**
+单测 **135 → 151 条**，全绿。
 
-```bash
-PYTHONUTF8=1 py -m unittest discover -s tests      # Ran 151 tests … OK
-```
-
-**2. 反向验证：11 条改坏全部被抓住（无假绿）**（`D:/tmp/reverse17.py`：每条先改坏、跑套件、报挂了哪些、再**用备份 `cp` 还原**）
-
-| 故意改坏 | 挂的用例 |
-|---|---|
-| `wall_cells` 把背面两角加回去（16 格） | `test_the_back_column_is_never_walled` 等 4 条 |
-| `wall_cells` 把背面整列加回去（20 格，门没了） | `test_a_walled_box_never_holds_a_worker_in` 等 4 条 |
-| 闸门 (1) 不生效（`gated=False`） | 4 条 |
-| 闸门 (1) 的"不许砌"那半去掉 | 4 条 |
-| 闸门 (2) 去掉（不送人出去） | 4 条 |
-| 闸门 (2) 的白天门去掉（夜里也送人出去） | `test_the_night_guard_never_walks_off_its_cannon` |
-| 闸门 (2) 的障碍换成"假设砌满"（等价于永远 None） | 4 条 |
-| 闸门 (2) 漏掉 `claimed` | `test_two_workers_walking_out_never_aim_at_the_same_cell` |
-| `_trapped` 丢掉 `r.pos in box` | 8 条 |
-| `_walled` 把自己人从障碍里去掉 | `test_a_colleague_in_the_door_still_holds_the_wall_back` |
-| **站在目标格上不先挪开（`if False:`）** | `test_a_worker_on_its_own_wall_steps_aside`、`test_a_worker_on_the_last_cell_still_finishes_the_ring` |
+**反向验证 11 条改坏全部被抓住（无假绿）**（`D:/tmp/reverse17.py`：每条先改坏、跑套件、
+报挂了哪些、再**用备份 `cp` 还原**）：`wall_cells` 把背面两角加回去 / 加回整列 / 闸门 (1) 不生效 /
+闸门 (1) 的"不许砌"那半去掉 / 闸门 (2) 去掉 / 闸门 (2) 的白天门去掉 / 闸门 (2) 的障碍换成
+"假设砌满" / 闸门 (2) 漏掉 `claimed` / `_trapped` 丢掉 `r.pos in box` / `_walled` 把自己人
+从障碍里去掉 / **站在目标格上不先挪开** —— 各自对应用例挂（多数是 4 条一组）。
 
 ⚠️ **还原只用备份**（`D:/tmp/bak17/`，且**每次改完代码要重新 `cp` 一份** —— 旧备份会把新改动一起抹掉）。
 **绝不用 `git checkout <file>`**：那会退到 HEAD，把本步所有未提交的改动抹掉（第 15 步真踩过）。
 
-**3. `_dead_ends` 的判决（实现过又删掉，理由与数字一起留）**
-
-- 复现评审描述的踱步局面（真实炮位 + 机器人堵 `(9,22)`/`(12,23)` + 工人在 `(11,22)` 带 1 石，
-  `D:/tmp/pace17.py`）：**有/无 `_dead_ends` 的踪迹完全相同** ——
-  `(11,22)→(10,21)→(11,20)→(12,21)→(13,22)→build (13,23)`（第 5 回合砌上）。
-- 穷举（`D:/tmp/search17.py`：工人在盒内 36 格 + 盒外 4 格、机器人 1~2 个摆在盒内 36 格 + 门列 6 格、
-  石头 1~2 块、10 回合）⇒ **69,132 个局面，踪迹不同的 0 种**。
+**`_dead_ends` 的判决（实现过又删掉，理由与数字一起留）**：
+- 复现评审描述的踱步局面（真实炮位 + 机器人堵 `(9,22)`/`(12,23)` + 工人在 `(11,22)` 带 1 石）：
+  **有/无 `_dead_ends` 的踪迹完全相同**（第 5 回合砌上）。
+- 穷举（工人在盒内 36 格 + 盒外 4 格、机器人 1~2 个摆在盒内 36 格 + 门列 6 格、石头 1~2 块、10 回合）
+  ⇒ **69,132 个局面，踪迹不同的 0 种**。
 - `_dead_ends` 只在 **75 / 4515** 种（机器人 × 墙）配置里非空，却从不改变结果；
   它还会把"现在走得通"的格当障碍，**拉长或否决合法路径** ⇒ 按规则 1 **删除**。
   （评审说的"踱步"在当前代码上复现不出来：`| claimed` 与 `_walled` 的取舍已经把它消掉了。）
 
-**4. 真服务端到端**（`netstat` 确认端口上只有一个监听者 → `PYTHONUTF8=1 bash run.sh 18085 &`）
-
-- 样例 POST（`docs/request.txt`，夜里 ⇒ 只走 `_defend`）响应**逐字不变**：
-  `10010→(6,22)`、`10012→(9,17)`、`10011→(9,13)`，`prompt` / `executeCmd` 都是空串。
+**真服务端到端**（`netstat` 确认端口上只有一个监听者）：
+- 样例 POST（夜里 ⇒ 只走 `_defend`）响应**逐字不变**。
 - 60 回合驱动（`D:/tmp/e2e17.py`，模拟判题器逐回合把响应应用回载荷）：
-
-  ```
-  [ 7] 10012:buildPos(x=13, y=23)   ← 正面列最先
-  …
-  [37] 10012:movePos(x=10, y=20)    ← 站在刚砌好的 (11,21) 上 ⇒ 先挪开（新修的那一支）
-  [38] 10012:buildPos(x=11, y=21)   ← 下一回合从邻格砌上
-  [39] 10012:buildPos(x=10, y=21)
-  [43] 10010:buildPos(x=9, y=21)    ← 最后一格是**另一个工人**砌的
-  砌的格数: 14 （去重后 14 ）
-  与 wall_cells 顺序一致: True ｜ 正面列最先: True ｜ 含 x=8 的格: 无
-  ★ 通过
-  ```
-
-- 服务端日志的地图渲染（第 44 回合）：`x = 8` 那一列（门）**六行全是 `.`**；
-  我们的墙正好是正面列 `x=13` + 顶行 / 底行 `x=9..12`，共 14 格。
-  （同一张图里 `(5,20)` / `(5,21)` 那两格 `#` 是**样例自带的敌方围墙**，不是我们的。）
-- 收尾：`taskkill` + 确认端口释放。
+  **14 格全部砌上、与 `wall_cells` 顺序一致、正面列最先、含 `x=8` 的格：无**；
+  其中第 37 回合 `10012:movePos(x=10,y=20)` —— 站在刚砌好的 `(11,21)` 上 ⇒ 先挪开（新修的那一支），
+  第 38 回合从邻格砌上；最后一格是**另一个工人**砌的。
+- 服务端日志的地图渲染（第 44 回合）：`x = 8` 那一列（门）**六行全是空地**（当时空地打 `.`，
+  第 21 步起打 `#`）；我们的墙正好是正面列 `x=13` + 顶行 / 底行 `x=9..12`，共 14 格。
+  ⚠️ 这句原文写"同一张图里 `(5,20)`/`(5,21)` 那两格是**样例自带的敌方围墙**" —— **两头都错**：
+  它们是**我方**的（在 `teamOur.roles` 里），而且**不在环上**（样例几何是手画的示意数据）；
+  真正属于敌方的那格是 `(28,7)`。第 21 步核 payload 时订正。
 
 ⚠️ **驱动脚本第一版是错的，差点得出错误结论**：它只跟踪了 1 号工人，另外两个角色的指令被丢掉，
 于是第 40 回合"只砌了 13 格、工人掉头去采铜"看起来像策略出了 bug —— 实际是
@@ -1638,9 +1435,9 @@ PYTHONUTF8=1 py -m unittest discover -s tests      # Ran 151 tests … OK
    `<tool><tool_name>…</tool_name><tool_param>…</tool_param></tool>`、顶层 `tool_call(tool_name, tool_param)`；
    不用工具直接答完时用 `<answer>…</answer>` 包裹。Prompt 模板 =
    `# Agent定位 / # 可使用的工具 {{tool_desc}} / # 输出格式 / # 沉淀的 SOP {{SOP}}`。
-   ⚠️ **它会取代第 16 步的 `<tool>整条命令</tool>` 协议形状**（`_is_tool_reply` 判 `"<tool" in reply`）——
+   ⚠️ **它会取代第 16 步的 `<tool>整条命令</tool>` 协议形状** ——
    迁移点必须在这一步里交代清楚，否则任务线会在两个形状之间静默哑火。
-② 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+② 卖矿那条线仍未实现：`sell` → `buy` → `use`。
 ③ 第 16 步的沙盒链路仍是**唯一没被实盘验证过**的一环，下一场第一件事还是看它。
 
 ---
@@ -1669,7 +1466,7 @@ PYTHONUTF8=1 py -m unittest discover -s tests      # Ran 151 tests … OK
 
 四条拍板（`AskUserQuestion`）：
 
-1. **位置 = `src/coregeek/agent/`**（`main3.py:24` 只把 `src/` 加进 `sys.path`）。
+1. **位置 = `src/coregeek/agent/`**（`main3.py` 只把 `src/` 加进 `sys.path`）。
 2. **SOP = 进程内跨回合状态**（模块级变量，整场存活、重启清空）—— 明确接受"破掉 `handle` 是纯函数"
    这条第 11 步起的不变量。这是全项目**唯一**一处跨回合状态。
    ⚠️ **第 19 步已把它从"模块级变量"改成"单实例 `AGENT` 的实例属性"**（行为不变，形状换了）——
@@ -1683,28 +1480,15 @@ PYTHONUTF8=1 py -m unittest discover -s tests      # Ran 151 tests … OK
 
 | 文件 | 改动 |
 |---|---|
-| `src/coregeek/agent/__init__.py` | 新建：**0 字节**（与 `game`/`web`/`protocol` 的 `__init__.py` 逐字一致，`wc -c` 核实过） |
+| `src/coregeek/agent/__init__.py` | 新建：**0 字节**（与 `game`/`web`/`protocol` 的逐字一致） |
 | `src/coregeek/agent/chat.py` | 新建：`PROMPT` 四段模板 + `chat(request, *, result, retry)` + 三个谓词 `tool_of` / `looks_like_tool` / `answer_of` + 共用的 `_block` |
 | `src/coregeek/agent/tools/__init__.py` | 新建：`TOOLS` 注册表（名 → (实现, 描述)）+ `tool_call` + `tool_desc` |
 | `src/coregeek/agent/tools/cmd.py` | 新建：`executeCmd(cmd)` —— **原样返回**，一个赋值都不做 |
 | `src/coregeek/agent/tools/sop.py` | 新建：`SOP2Prompt` / `current` / `reset` / `SOP_MAX=1000` + 内容变化时一行日志 |
-| `src/coregeek/game/planner.py` | `task_channel` 换料（判据链顺序不变）；删 `TASK_PROMPT` / `_TOOL_OPEN` / `_TOOL_CLOSE` / `_asked` / `_is_tool_reply` / `_tool_command` / `_retry_note` 七个旧符号；`_answer_task` 改走 `answer_of`；模块 docstring 的形状回路换新 |
+| `src/coregeek/game/planner.py` | `task_channel` 换料（判据链顺序不变）；删 `TASK_PROMPT` / `_TOOL_OPEN` / `_TOOL_CLOSE` / `_asked` / `_is_tool_reply` / `_tool_command` / `_retry_note` 七个旧符号；`_answer_task` 改走 `answer_of` |
 | `src/coregeek/game/world.py` | 只改 `llm_resp` 的 docstring（三种可能：工具调用 / `<answer>` 包着的答案 / 都不像 ⇒ 原文即答案）。结构零改动 |
-| `src/coregeek/app.py` | 只改注释：`_log` 的字节表换成第 18 步实测（含最坏那格 6180）+ `prompt` 不打印原文那条补上"纠错 / 沉淀的 SOP" + 沙盒行那条 `<tool>…</tool>` 改成"那次工具调用（新旧形状都算）"。**逻辑一行未动** |
+| `src/coregeek/app.py` | 只改注释：`_log` 的字节表换成第 18 步实测（含最坏那格 6180）+ 两条措辞。**逻辑一行未动** |
 | `tests/test_actions.py` | **151 → 187 条**（新增 5 个类 30 条、改 12 条既有、**预算守卫换 root logger**） |
-| `CLAUDE.md` / 本文件 | 见下文"同步" |
-
-**包结构 —— `agent` 是叶子包，只依赖标准库**：
-
-```
-src/coregeek/agent/
-├── __init__.py      空
-├── chat.py          PROMPT 模板 + chat() + 三个谓词
-└── tools/
-    ├── __init__.py  TOOLS 注册表 + tool_call + tool_desc
-    ├── cmd.py       executeCmd
-    └── sop.py       SOP2Prompt / current / reset（**唯一的跨回合状态**）
-```
 
 - 依赖方向新增一条：**`game/planner.py → agent`**（第二条"由内往外"；第一条是 `planner → protocol/actions`）。
   `agent` 不认识 `game`/`protocol`/`web` —— 机械保证是 **`chat(request: str, …)` 收字符串、不收 `Turn`**。
@@ -1720,8 +1504,7 @@ src/coregeek/agent/
 （`SOP2Prompt`）与"调用不成立"（未知工具 / 空参数 / 非字符串参数），**下游不需要区分**，
 因为两者都落到判据 ⑥ 重问。注册表是唯一真相：`tool_desc()` 由 `TOOLS` 生成，加工具只改一处。
 
-**`executeCmd` 不执行任何东西**：执行者是**判题器的沙盒**（响应顶层字段，判题器本回合执行、
-限时 15 秒，故障与超时**不计异常**）。这个函数就是"把命令搬进响应字段"这一步 ——
+**`executeCmd` 不执行任何东西**：执行者是**判题器的沙盒**。这个函数就是"把命令搬进响应字段"这一步 ——
 **不做校验、不做清洗、不做解释**（换行、引号、重定向、`cat < input.txt` 里的 `<` 一律原样送）。
 
 **`SOP2Prompt` 是整段替换不是追加**（追加没有遗忘机制，几百回合会把 prompt 撑爆；
@@ -1747,7 +1530,7 @@ LLM 看到自己上次的标记被原文骂回来，行为是未定义的。
 | # | 判据 | 第 18 步的实现 |
 |---|---|---|
 | ① | 没任务 **或** 名册里没开拓者 ⇒ `("","")` | 不变（`executeCmd` 是响应顶层字段、不过角色循环也不过 `Action` 的权限闸门 ⇒ 这句"名册里得有开拓者"必须**手写**） |
-| ② | `cmd_result` 非空 ⇒ 回灌、**绝不发命令** | 不变。**必须压在 ③ 前**：文档给 `lastCmdResult` 写了"未发命令时为空字符串"（L33）、对 `llmResp` **一个字没写** ⇒ `cmd_result` 按**不粘**设计、`llm_resp` 必须按**可能粘住**设计 |
+| ② | `cmd_result` 非空 ⇒ 回灌、**绝不发命令** | 不变。**必须压在 ③ 前**：文档给 `lastCmdResult` 写了"未发命令时为空字符串"（L33）、对 `llmResp` **一个字没写** |
 | ③ | 工具给了命令 ⇒ 发命令不提问 | `command = tool_call(*tool_of(reply))` |
 | ③′ | *（新的隐式子路径）* | **完整工具调用但拿不到命令**（`SOP2Prompt` / 未知工具 / 空参数）⇒ 掉到 ⑥ 重问。**写进 docstring** |
 | ④ | `code 2` ⇒ 带纠错重问 | `retry = answer if any(e.code == 2 …)` —— 谓词换成 `answer_of`，**骂的正是交上去的那一份** |
@@ -1788,104 +1571,60 @@ LLM 看到自己上次的标记被原文骂回来，行为是未定义的。
 - ❌ **不给 SOP 落盘 / 按任务分区**：落盘要处理"判题环境能不能写、写坏怎么办"；分区要处理"任务边界在哪"。
   现在都没有第二个使用者。**副作用已知**（任务 A 的 SOP 会灌进任务 B），记进不确定性、不修。
 - ❌ **不改判据链的顺序与语义**（尤其"② 必须压在 ③ 前"、"两条通道互斥"）：第 16 步的推导一条不动。
-- ❌ **不做 `sell` / `buy` / `use`**（卖矿那条线仍未实现）、**不动策略**（砌墙 / 操炮 / 采矿）。
+- ❌ **不做 `sell` / `buy` / `use`**、**不动策略**（砌墙 / 操炮 / 采矿）。
 - ❌ **不建 `agent` 的第四个文件**（不拆 `prompt.py` / `parse.py`、不设 `registry.py`）。
 
 ### 验证
 
-**1. 单测（`PYTHONUTF8=1 py -m unittest discover -s tests`）**
-
-```
-Ran 187 tests in 0.069s
-OK
-```
-
-新增 5 个类（**每个碰 SOP 的类都在 `setUp` 里 `sop.reset()`** —— 模块级状态会跨用例串味）：
+**1. 单测：151 → 187 条，全绿。** 新增 5 个类（**每个碰 SOP 的类都在 `setUp` 里 `sop.reset()`**
+—— 模块级状态会跨用例串味）：
 
 | 类 | 钉住什么 |
 |---|---|
 | `AgentToolCallTest`（5） | `executeCmd` 原样返回（内部换行/引号不动）；`SOP2Prompt` 存下且返回 `""`；**未知工具 ⇒ `""` 不抛**；空参 / 非字符串参 ⇒ `""` **且 SOP 未被清空**（闸门在调用之前）；`tool_desc()` 覆盖 `TOOLS` 里每一个工具 |
 | `SopStateTest`（6） | 整段替换（不是追加）；超长截断且**存下来的就是截断后的**；日志同时报"存了/收到"；同内容重复存**不再打**日志（`assertNoLogs`）；含换行的 SOP 打成**一行** |
-| `ChatPromptTest`（7） | 四个小节标题逐字在、`{tool_desc}`/`{sop}` 无残留；每个工具名都在 prompt 里；输出格式段含 `<tool_name>`/`<tool_param>`/`<answer>` 三个字面量；题目原文在；两段回灌只在传了的时候出现；**存过的 SOP 出现在下一份 prompt 里**（自进化的可见证据） |
+| `ChatPromptTest`（7） | 四个小节标题逐字在、占位符无残留；每个工具名都在 prompt 里；输出格式段含三个字面量；题目原文在；两段回灌只在传了的时候出现；**存过的 SOP 出现在下一份 prompt 里**（自进化的可见证据） |
 | `ToolReplyParseTest`（7） | happy path（两侧空白去掉、**param 内部换行原样**）；一次只取第一个块；只有名字没参数 ⇒ `None`；有开无闭 ⇒ `None`；**旧形状 ⇒ `("executeCmd","ls -la")`**；`looks_like_tool` 真而 `tool_of` 空 |
 | `AnswerParseTest`（5） | `<answer>x</answer>` ⇒ `x`；空块 ⇒ `""`（**不回落成原文**）；半截 `<answer>晴` ⇒ `""`；工具回复（新旧 + 畸形）⇒ `""`；裸文本 ⇒ 原文 |
 
 改的 12 条既有用例里，两条值得单记：
-
 - **`HandleTest.test_the_task_loop_through_handle` 扩到六步**（新形状调用 → 沙盒回灌 → `<answer>` 提交 →
   纠错段 → 裸文本兜底）：端到端任务回路在**层与层的接缝上**只有这一条用例能证明。
 - **`test_the_worst_round_stays_under_the_budget` 换成 root logger**，并断言
   `sop.__name__` **必须在捕获集合里** —— 只换 `assertLogs` 而不加这句，等于把守卫放宽到"root 有没有日志"，
   新 logger 写错名字也照样绿。
 
-**2. 反向验证（`D:/tmp/reverse18.py`，临时不入库）**
-
-逐条改坏 21 处（`tool_of` 丢掉 param 配对 / 去掉旧形状兼容；`looks_like_tool` 判窄；`answer_of`
-不解包 / 让空块回落成原文 / 去掉"工具回复⇒`""`"；`tool_call` 未知工具改 `raise` / 不挡空参数；
-**`executeCmd` 改成 `subprocess.run`（这条是"不许本地执行"的守门员）**；`SOP2Prompt` 改追加 / 去上限 /
-截断不打"收到 N 字" / 每次存都打日志 / 不转义换行；模板里 `{sop}` 写死；`TOOLS` 加一项而 `tool_desc` 不跟；
-`_answer_task` 自己写一套提交逻辑；判据 ③ 改回旧形状；……）⇒ **21/21 全中，无假绿**。
-
+**2. 反向验证**（`D:/tmp/reverse18.py`，临时不入库）：逐条改坏 21 处（`tool_of` 丢掉 param 配对 /
+去掉旧形状兼容；`looks_like_tool` 判窄；`answer_of` 不解包 / 让空块回落成原文 / 去掉"工具回复⇒`""`"；
+`tool_call` 未知工具改 `raise` / 不挡空参数；**`executeCmd` 改成 `subprocess.run`（这条是"不许本地执行"
+的守门员）**；`SOP2Prompt` 改追加 / 去上限 / 截断不打"收到 N 字" / 每次存都打日志 / 不转义换行；
+模板里 `{sop}` 写死；`TOOLS` 加一项而 `tool_desc` 不跟；`_answer_task` 自己写一套提交逻辑；
+判据 ③ 改回旧形状；……）⇒ **21/21 全中，无假绿**。
 - ⚠️ **第 12 条一开始是假绿**（`tool_desc` 不再由 `TOOLS` 生成 ⇒ 挂了 0 条）：我的改坏把描述写死成
   一个**仍然包含两个工具名**的字面量 ⇒ 行为等价。修的是**用例**，不是改坏脚本 ——
-  新增 `test_a_newly_registered_tool_shows_up_everywhere`（往 `TOOLS` 注入假工具、断言 `tool_desc()`
-  含它、`tool_call` 能调到，`finally` 删除后又不含）。
+  新增 `test_a_newly_registered_tool_shows_up_everywhere`。
 - **还原**：全部用 `cp D:/tmp/bak18/rev/<file> <file>`（**没用 `git checkout`**，第 15 步的教训），
-  逐文件 `cmp` 五个文件**全 same**，再跑一次套件 `OK` 确认好状态无损。
+  逐文件 `cmp` 五个文件**全 same**，再跑一次套件 `OK`。
 
 **3. 字节预算（硬约束 5）**：最坏局面实测 **44 行 / 6180 字节**（任务在身 + 沙盒结果顶格 +
 **SOP 刚更新**），上限钉在 **6900**（抓的是结构性膨胀，不是这次的具体数字）。
 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5 的表、用例注释**三处同步**成同一组实测值
 （41/2329、43/2398、42/4770、43/6002、**44/6180**）。
 
-**4. 真服务端到端**
+**4. 真服务端到端**：样例响应**逐项不变** —— 这一条是"本步没碰既有策略"的回归证据。
 
-```bash
-netstat -ano | grep LISTENING | grep 18085     # 空（grep exit=1）⇒ 端口上没有旧进程
-PYTHONUTF8=1 bash run.sh 18085 > D:/tmp/logs18.txt 2>&1 &
-curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
-PYTHONUTF8=1 py D:/tmp/e2e18.py
-```
-
-样例响应**逐项不变**（`10010→(6,22)` / `10012→(9,17)` / `10011→(9,13)`，`prompt` 与 `executeCmd` 都是 `""`）
-—— 这一条是"本步没碰既有策略"的回归证据。
-
-`D:/tmp/e2e18.py`（临时、**不入库**）九轮：
-
-```
-[1] 提问             prompt= 597 字  executeCmd=''                         提交=None
-[2] SOP2Prompt     prompt= 630 字  executeCmd=''                         提交=None
-[3] 新形状命令         prompt=   0 字  executeCmd='python -c "print(1+1)"'   提交=None
-[4] 沙盒结果           prompt= 663 字  executeCmd=''                         提交=None
-[5] <answer>提交     prompt=   0 字  executeCmd=''                         提交='晴 26 度'
-[6] 纠错重问           prompt= 664 字  executeCmd=''                         提交='晴 26 度'
-[7] 裸文本兜底         prompt=   0 字  executeCmd=''                         提交='晴 26 度'
-[8] 旧形状兼容         prompt=   0 字  executeCmd='ls -la'                   提交=None
-[9] 畸形重问           prompt= 630 字  executeCmd=''                         提交=None
-
-★ 九轮全部通过
-```
-
-九轮里每一条都验了：① 四段标题 + 题目原文都在、不发命令不提交；② `SOP2Prompt` 不发命令
-**且存下的 SOP 立刻出现在同一轮的 prompt 里**；③ 命令=参数原文、`prompt==""`；④ 沙盒结果原文回灌；
+`D:/tmp/e2e18.py`（临时、**不入库**）九轮，每一条都验了：
+① 提问：四段标题 + 题目原文都在、不发命令不提交；② `SOP2Prompt` 不发命令**且存下的 SOP 立刻出现在
+同一轮的 prompt 里**；③ 命令 = 参数原文、`prompt==""`；④ 沙盒结果原文回灌；
 ⑤ **交上去的是块内容 `晴 26 度`，不是 `<answer>` 原文**；⑥ 纠错段含 `晴 26 度` 且**不含**
 `<answer>晴 26 度</answer>`（同一个谓词的证据）；⑦ 裸文本兜底活着；⑧ 旧形状在**真服务**上仍当命令；
 ⑨ 畸形回复**不发命令、不提交、prompt 非空**（两条通道都不哑火）。
 **全局断言**：任何一回合都没有同时出现非空 `prompt` 与非空 `executeCmd`（九轮全过）。
 
-服务端日志（`D:/tmp/logs18.txt`）：
-
-```
-SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文件名理解题意\n第三步：把字段逐个填满
-```
-
-- `grep -c "SOP 更新"` = **1**（第 2 轮存过，第 3~9 轮不再存 ⇒ 幂等检查生效）；
-- 那一行**确实是一行**（`\n` 转义生效，`wc -l` 没被它撑大）；
-- `grep -c "沙盒：回"` = **1**（只在第 4 轮有 `lastCmdResult` ⇒ **沙盒行数 = 实际跑过的命令数**这个对账关系成立）；
-- `grep -ci "traceback\|warning\|error"` = **0**；
-- 九轮共 428 行 / 25821 字节（含启动那行）。
-
-收尾 `taskkill //F //PID 35520` + `netstat` 确认端口释放（`grep exit=1`）。
+服务端日志：`SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文件名理解题意\n第三步：把字段逐个填满`
+—— `grep -c "SOP 更新"` = **1**（第 2 轮存过，第 3~9 轮不再存 ⇒ 幂等检查生效）；
+那一行**确实是一行**（`\n` 转义生效）；`grep -c "沙盒：回"` = **1**（⇒ **沙盒行数 = 实际跑过的命令数**
+这个对账关系成立）；`grep -ci "traceback\|warning\|error"` = **0**。
 
 ⚠️ **这份 e2e 里的"LLM"是我们自己写的** ⇒ 它只证明"我们的解析与编排自洽"，
 **不证明判题器认这个形状**（见不确定性 1）。
@@ -1895,9 +1634,8 @@ SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文�
 1. **最大单点风险：判题器的 LLM 认不认这个形状。** 协议形状是我们自己定的，
    本地 e2e 的"LLM"也是我们自己写的 ⇒ 那九轮**只证明解析与编排自洽**，不证明判题器认账。
    兼容层把"不认账"的后果压到"退化回第 16 步"，但"LLM 用第三种形状"仍是敞口。
-   **首场自检判据**：任务行"提交："里若**不是** `<tool_name>` 形状（而是旧形状或一团不像任何形状的文字）
-   ⇒ 形状没被采纳 ⇒ 回退只需改 `tool_of` 一处。第一优先级仍是那条：日志里有没有
-   `沙盒：回「[exitCode:N]…」`。
+   **首场自检判据**：任务行"提交："里若**不是** `<tool_name>` 形状 ⇒ 形状没被采纳 ⇒ 回退只需改
+   `tool_of` 一处。第一优先级仍是那条：日志里有没有 `沙盒：回「[exitCode:N]…」`。
 2. **SOP 一旦存错就是整场的事**（没有重置机制、没有遗忘）。最坏 = LLM 往 SOP 里灌了一段有害的"套路"，
    此后每回合 prompt 都带着它。后果是**答得差，不是异常**；上限 + 变化时的日志行是全部缓解手段。**未实测**。
 3. **SOP 不按任务分区**：任务 A 沉淀的 SOP 会灌进任务 B 的 prompt（症状：prompt 里出现与当前题目无关的方法）。
@@ -1915,7 +1653,7 @@ SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文�
 
 ### 下一步
 
-① 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+① 卖矿那条线仍未实现：`sell` → `buy` → `use`。
 ② **沙盒链路 + 新工具形状都还没经过实盘**，下一场第一件事是看日志里的
    `任务：… ｜ 提交：… ｜ 提问：有（N 字）` → `沙盒：回「[exitCode:0]…」` 这条序列，
    以及"提交："里的形状是不是 `<tool_name>` 那一种（两条判据见不确定性 1）。
@@ -1936,15 +1674,13 @@ SOP 状态是 `tools/sop.py` 里的模块级 `_current`。用户要的是**一�
 一个进程一个实例，开拓者（任务线）每次来时用的都是它，SOP 这个跨回合记忆**长在它身上**。
 
 两条拍板（`AskUserQuestion`）：
-
 1. **单实例住在 `agent/__init__.py`**：`AGENT = Agent()`，`planner` 直接 `from ..agent import AGENT`
    取它 —— 不是由 `app.py` 造、参数注入。
 2. **状态搬到实例上**：`self._sop` 是实例属性、`SOP2Prompt(SOP)` 是实例方法 ⇒
    **全项目唯一一处跨回合状态 = 这一个对象**，不再是"某个模块的全局变量"。
 
 ⚠️ **这一步不动协议、不动策略**：形状（`<tool>` / `<answer>`）、判据链六条、`executeCmd`
-"不本地执行"一个字节都不改。改的是"这些东西住在哪"。**判据 = 第 18 步 e2e 的输出表逐字重现**
-（下文的九轮表与第 18 步那张**同一组数字**，包括每一个 prompt 字数）。
+"不本地执行"一个字节都不改。改的是"这些东西住在哪"。**判据 = 第 18 步 e2e 的输出表逐字重现**。
 
 **为什么现在做**：第 18 步的 `_current` 是"状态躲在模块里"的形状 —— 读代码的人要同时记住
 "这个函数读哪个模块变量"。用户这一步要的是把它变成一个**能指着说的对象**；
@@ -1956,14 +1692,14 @@ SOP 状态是 `tools/sop.py` 里的模块级 `_current`。用户要的是**一�
 | 文件 | 改动 |
 |---|---|
 | `src/coregeek/agent/agent.py` | **新建**：`class Agent` —— `_sop` / `_tools` / `chat` / `tool_call` / `tool_desc` / `SOP2Prompt` / `sop`(property) / `reset`。第 18 步写在 `tools/__init__.py` 的"返回值即命令"铁律、三道闸门、"不加锁/不碰红线/SOP 不分区"三条代价，原文搬来这里 |
-| `src/coregeek/agent/__init__.py` | **不再是 0 字节**（与其余四个包不同，见下）：`from .agent import Agent` + **`AGENT = Agent()`** + 包结构与"为什么这个文件不是空的"的 docstring |
-| `src/coregeek/agent/chat.py` | `chat(request, *, sop, tool_desc, result="", retry="")` —— 两个新参数进签名；删 `from .tools import tool_desc` / `from .tools.sop import current`。模板、四个谓词、`_block` **一字未动** |
+| `src/coregeek/agent/__init__.py` | **不再是 0 字节**：`from .agent import Agent` + **`AGENT = Agent()`** + 包结构与"为什么这个文件不是空的"的 docstring |
+| `src/coregeek/agent/chat.py` | `chat(request, *, sop, tool_desc, result="", retry="")` —— 两个新参数进签名；删两个包内 import。模板、四个谓词、`_block` **一字未动** |
 | `src/coregeek/agent/tools/__init__.py` | 注册表与 `tool_call` / `tool_desc` 移走 ⇒ 只剩一段指向 `Agent.__init__` 的 docstring（3.4KB → 0.5KB） |
 | `src/coregeek/agent/tools/sop.py` | `SOP2Prompt` / `current` / `reset` / `_current` 删除；保留 `LOGGER`（**名字不变**）/ `SOP_MAX` + 新的 `store(current, sop)` / `describe(received, stored)` |
 | `src/coregeek/agent/tools/cmd.py` | **一字未动**（`executeCmd` 本来就是纯搬运，没有状态可搬） |
-| `src/coregeek/game/planner.py` | `from ..agent import AGENT` + 4 处调用点改 `AGENT.tool_call(...)` / `AGENT.chat(...)`；模块 docstring 三处（包头 / `task_channel` 无状态那段 / 判据 ①） |
-| `tests/test_actions.py` | **187 → 195 条**：改写约 45 处引用（`sop.reset()` → `AGENT.reset()`、`sop.SOP2Prompt` → 实例、`chat("题目")` → `self.agent.chat("题目")`、`TOOLS` → 新实例的 `_tools`），新增 7 条 |
-| `src/coregeek/app.py`、`web/`、`protocol/`、`main3.py` | **零改动**（`app` 只调 `planner.task_channel(turn)`，`Agent` 从不出现在它面前；logger 名没变 ⇒ `_log` 的字节表一个字都不用动） |
+| `src/coregeek/game/planner.py` | `from ..agent import AGENT` + 4 处调用点改 `AGENT.tool_call(...)` / `AGENT.chat(...)`；模块 docstring 三处 |
+| `tests/test_actions.py` | **187 → 195 条**：改写约 45 处引用，新增 7 条 |
+| `src/coregeek/app.py`、`web/`、`protocol/`、`main3.py` | **零改动**（`app` 只调 `planner.task_channel(turn)`；logger 名没变 ⇒ `_log` 的字节表一个字都不用动） |
 
 **`Agent` 的形状**：
 
@@ -1993,8 +1729,7 @@ class Agent:
   本地一片安静。用例 `test_the_assembly_needs_sop_and_tool_desc` 钉着这条。
 - **`answer_of` / `tool_of` / `looks_like_tool` 仍是 `chat.py` 的自由函数**，不给它们套一层
   `AGENT.`：它们是纯谓词、与状态无关，而 `_answer_task`（提交）与 `task_channel` 判据 ④/⑤
-  （回灌/判"已有答案"）**必须共用同一个** —— 第 18 步"两侧谓词不分享就是第二份真相"那条保证，
-  不能因为搬家的手抖破掉。
+  **必须共用同一个** —— 第 18 步"两侧谓词不分享就是第二份真相"那条保证，不能因为搬家的手抖破掉。
 
 **状态与规则切开的理由**：`SOP2Prompt` 的**存储规则**（整段替换 / 保头截断 / 截断留痕 /
 内容没变就静默）留在 `tools/sop.py`，收成两个纯函数 + 一个常量；`Agent.SOP2Prompt` 于是只有
@@ -2021,22 +1756,16 @@ class Agent:
 - ❌ **不改任何协议 / 判据 / 模板措辞**（含两段回灌的分界符）：这一步的验收标准就是"行为一模一样"。
 - ❌ **不给 `Agent` 上单例强制**（`__new__` / 模块级断言）：Python 不拦着谁再 `Agent()` 一个，
   真要拦是为不存在的使用者加复杂度。**记录、不修。**
-- ❌ **不动 `tools/cmd.py`**、**不做 `sell` / `buy` / `use`**、**不动策略**（砌墙 / 操炮 / 采矿）。
+- ❌ **不动 `tools/cmd.py`**、**不做 `sell` / `buy` / `use`**、**不动策略**。
 
 ### 验证
 
-**1. 单测（`PYTHONUTF8=1 py -m unittest discover -s tests`）**
+**1. 单测：187 → 195 条，全绿。** 新增 7 条（每条钉一个**只有这次改动才会坏**的性质），
+括号里是反向验证里它挂在哪条改坏上：
 
-```
-Ran 195 tests in 0.074s
-OK
-```
-
-新增 7 条（每条钉一个**只有这次改动才会坏**的性质）：
-
-| 用例 | 钉住什么 | 反向验证里挂在哪条改坏上 |
+| 用例 | 钉住什么 | 挂在 |
 |---|---|---|
-| `test_the_singleton_carries_the_sop_across_turns` | `AGENT.SOP2Prompt(x)` 之后**下一回合** `task_channel` 的 prompt 里带着 `x` —— 两回合之间**没有任何东西被传过去**，能接起来的只有同一个 `AGENT` ⇒ 这是 `from ..agent import AGENT` 那个注入点的守门员 | ① ② ③ |
+| `test_the_singleton_carries_the_sop_across_turns` | `AGENT.SOP2Prompt(x)` 之后**下一回合** `task_channel` 的 prompt 里带着 `x` —— 两回合之间**没有任何东西被传过去**，能接起来的只有同一个 `AGENT` ⇒ 这是 `from ..agent import AGENT` 那个注入点的守门员 | ①②③ |
 | `test_a_fresh_agent_starts_with_no_sop` | 新实例**不带**旧 SOP ⇒ 状态确实在**实例属性**上 | ② |
 | `test_the_sop_never_leaks_between_instances` | 两个 `Agent()` 各存各的 ⇒ 反向钉死"状态在模块级"那种退化 | ② |
 | `test_each_instance_keeps_its_own_tool_table` | **走工具表**（不是直接调方法）存 SOP ⇒ 表里那一项确实钉在各自的实例上 | ③ |
@@ -2046,79 +1775,30 @@ OK
 | `test_the_assembly_needs_sop_and_tool_desc` | `chat("题目")` 不传 `sop` / `tool_desc` ⇒ `TypeError`（那条"不给默认值"的取舍本身） | — |
 
 `test_a_newly_registered_tool_shows_up_everywhere` 顺势简化：改往**新实例**的 `_tools` 里注入，
-`finally: del` 不需要了（实例是新的，天然隔离）；末行改成 `assertNotIn("测试用工具", Agent().tool_desc())`。
+`finally: del` 不需要了（实例是新的，天然隔离）。
 
-**2. 行为等价（这一步最重要的验证）**
+**2. 行为等价（这一步最重要的验证）**：`D:/tmp/e2e18.py`（第 18 步的九轮驱动）**一个字节没改**，
+在真服务上重跑 ⇒ **与第 18 步那张表逐字一致**（597 / 630 / 0 / 663 / 0 / 664 / 0 / 0 / 630，
+命令与提交一字不差）—— 每一个字数同时证明"模板没动""SOP 段照旧填进去""两条通道互斥还在"。
+样例响应也逐项不变。服务端日志 428 行 = 与第 18 步同一个数；
+`grep -c "SOP 更新"` = **1**、`grep -c "沙盒"` = **1**、`grep -ci "traceback"` = **0**。
 
-`D:/tmp/e2e18.py`（第 18 步的九轮驱动）**一个字节没改**，在真服务上重跑：
-
-```bash
-netstat -ano | grep LISTENING | grep 18085        # 空（grep exit=1）
-PYTHONUTF8=1 bash run.sh 18085 > D:/tmp/logs19.txt 2>&1 &
-curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
-PYTHONUTF8=1 py D:/tmp/e2e18.py
-```
-
-```
-[1] 提问             prompt= 597 字  executeCmd=''                               提交=None
-[2] SOP2Prompt     prompt= 630 字  executeCmd=''                               提交=None
-[3] 新形状命令          prompt=   0 字  executeCmd='python -c "print(1+1)"'         提交=None
-[4] 沙盒结果           prompt= 663 字  executeCmd=''                               提交=None
-[5] <answer>提交     prompt=   0 字  executeCmd=''                               提交='晴 26 度'
-[6] 纠错重问           prompt= 664 字  executeCmd=''                               提交='晴 26 度'
-[7] 裸文本兜底          prompt=   0 字  executeCmd=''                               提交='晴 26 度'
-[8] 旧形状兼容          prompt=   0 字  executeCmd='ls -la'                         提交=None
-[9] 畸形重问           prompt= 630 字  executeCmd=''                               提交=None
-
-★ 九轮全部通过
-```
-
-**与第 18 步那张表逐字一致**（597 / 630 / 0 / 663 / 0 / 664 / 0 / 0 / 630，命令与提交一字不差）——
-每一个字数同时证明"模板没动""SOP 段照旧填进去""两条通道互斥还在"。样例响应也逐项不变
-（`executeCmd` 与 `prompt` 都是空，三个角色都是 `move`）。
-
-服务端日志（`D:/tmp/logs19.txt`，428 行 = 与第 18 步同一个数）：
-
-```
-2026-09-13 22:06:33,276 | SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文件名理解题意\n第三步：把字段逐个填满
-```
-
-- `grep -c "SOP 更新"` = **1**（幂等检查仍在岗）；那一行**确实是一行**（`\n` 转义生效）；
-- `grep -c "沙盒"` = **1**；`grep -ci "traceback"` = **0**；
-- 收尾 `taskkill //F //PID 24552` + `netstat` 确认端口释放（`grep exit=1`）。
-
-**3. 反向验证（`D:/tmp/reverse19.py`，临时不入库）**
-
-逐条改坏 14 处（**每处都挂住了用例，无假绿**）：
-
-| 改坏 | 挂住 |
-|---|---|
-| ① `planner` 每回合新建一个 `Agent`（`AGENT.` → `Agent().`）| 5 条（含 `test_the_singleton_carries_the_sop_across_turns`）|
-| ② SOP 状态回到模块级（实例只剩门面）| 11 条 |
-| ③ 工具表里 `SOP2Prompt` 指向自由函数（绑定错位）| 5 条（含 `test_each_instance_keeps_its_own_tool_table`）|
-| ④ `chat` 里把 `sop` 写死成空串 | 8 条 |
-| ⑤ `Agent.chat` 忘了把 `self._sop` 传下去（接线断开，与 ④ **不同的挂法**）| 8 条 |
-| ⑥ `reset()` 不生效 | `test_reset_clears_this_instance` |
-| ⑦ `store` 改追加 | 2 条 |
-| ⑧ `store` 去掉上限 | `test_an_overlong_sop_is_truncated_and_says_so` |
-| ⑨ 截断不留痕 | 同上 |
-| ⑩ 每次存都打日志 | `test_storing_the_same_text_again_is_silent` |
-| ⑪ 换行不转义 | `test_a_multiline_sop_is_logged_as_one_line` |
-| ⑫ `executeCmd` 改成 `subprocess.run`（**不许本地执行**的守门员）| 14 条 |
-| ⑬ `LOGGER` 改名 | 5 条（含 `test_the_logger_name_does_not_depend_on_the_agent`）|
-| ⑭ 提交侧换一套 `answer_of`（两侧谓词分家）| 15 条 |
+**3. 反向验证**（`D:/tmp/reverse19.py`，临时不入库）：逐条改坏 14 处，**每处都挂住了用例，无假绿**：
+① `planner` 每回合新建一个 `Agent` ⇒ 5 条；② SOP 状态回到模块级 ⇒ 11 条；
+③ 工具表里 `SOP2Prompt` 指向自由函数（绑定错位）⇒ 5 条；④ `chat` 里把 `sop` 写死成空串 ⇒ 8 条；
+⑤ `Agent.chat` 忘了把 `self._sop` 传下去（接线断开，与 ④ **不同的挂法**）⇒ 8 条；
+⑥ `reset()` 不生效 ⇒ 1 条；⑦ `store` 改追加 ⇒ 2 条；⑧ `store` 去掉上限 / ⑨ 截断不留痕 ⇒ 同一条；
+⑩ 每次存都打日志 ⇒ 1 条；⑪ 换行不转义 ⇒ 1 条；⑫ `executeCmd` 改成 `subprocess.run` ⇒ 14 条；
+⑬ `LOGGER` 改名 ⇒ 5 条；⑭ 提交侧换一套 `answer_of`（两侧谓词分家）⇒ 15 条。
 
 - ⚠️ **第一版脚本 14 条全报"没挂住"**：`FAIL_LINE` 正则漏了 `re.M` ⇒ `^` 只匹配字符串开头 ⇒
   **一条 FAIL 都没匹配上**。报告"全没抓住"和"全抓住"一样可疑 —— 先怀疑测量工具。
   改 `re.M` 后 14/14。这条与第 18 步的"假绿"是同一类教训的两个方向。
-- **还原**：全部 `cp D:/tmp/bak19/good/<file> <file>`（**没用 `git checkout`**，第 15 步的教训），
-  收尾对 8 个文件逐个 sha256 校验（等价 `cmp`）**全一致**，再跑一次套件 `OK`。
+- **还原**：全部 `cp` 备份（**没用 `git checkout`**，第 15 步的教训），收尾对 8 个文件逐个
+  sha256 校验**全一致**，再跑一次套件 `OK`。
 
-**4. 字节预算（硬约束 5）**
-
-logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180 字节**（上限 **6900** 不变，
-`D:/tmp/budget19.py` 实测 `字节 = 6180`，`logger 名集合 = ['coregeek.agent.tools.sop', 'coregeek.app']`）。
-**数字没变 ⇒ `app._log` 的 docstring、`CLAUDE.md` 硬约束 5、用例注释三处都不用改**。
+**4. 字节预算（硬约束 5）**：logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180 字节**
+（上限 **6900** 不变）。**数字没变 ⇒ 三处都不用改**。
 
 ### 已知不确定性（别假装确定）
 
@@ -2139,13 +1819,15 @@ logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180
 
 ### 下一步
 
-① 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+① 卖矿那条线仍未实现：`sell` → `buy` → `use`。
 ② **协议形状与沙盒链路都还没经过实盘**（第 18 步的敞口原封不动）：下一场先看日志里的
    `任务：… ｜ 提交：… ｜ 提问：有（N 字）` → `沙盒：回「[exitCode:0]…」` 这条序列，
    以及"提交："里的形状是不是 `<tool_name>` 那一种。
-   ⚠️ **"提问：有（N 字）"第 20 步已改成 prompt 全文**（见第 20 步的"下一步"②）。
+   ⚠️ **"提问：有（N 字）"第 20 步已改成 prompt 全文**。
 ③ SOP 是否真的自进化（`SOP 更新：存 N 字` 有没有出现、N 的分布）—— 这是"单实例 + 实例属性"
    在**实盘**上唯一能观察到的东西（本地 e2e 只能证明接线对）。
+
+---
 
 ## 第 20 步：日志打详细（动作打全字段 / prompt 打全文 / 回执列全部）+ 重新钉字节上限
 
@@ -2162,19 +1844,19 @@ logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180
 | 打什么 | 原来长什么样 | 现在长什么样 | 要回答的问题 |
 |---|---|---|---|
 | **动作打全** | `10010 move(6,22)` | `10010 move (6,22)` / `10012 build name=wall (13,23)` / `10011 submitAnswer taskAnswer=晴 26 度` | 这一回合我到底发了哪几条、字段都是什么 |
-| **prompt 打全文** | `提问：有（630 字）` | `提问：# Agent定位 …`（全文，见下） | **工具清单长什么样、"沉淀的 SOP"那个槽填进去没有、题目在不在里面** |
+| **prompt 打全文** | `提问：有（630 字）` | `提问：# Agent定位 …`（全文） | **工具清单长什么样、"沉淀的 SOP"那个槽填进去没有、题目在不在里面** |
 | **回执列全部** | `上回合未通过：10010 10030` | `上回合合法性：10010=False 10011=True …` | "这条没发指令"还是"发了但没过"（两件事下一步的做法完全相反） |
 
 两条拍板（`AskUserQuestion`）：**① 三块都打**（"摘要扩充"没选，`Turn.summary()` 保持 3 行）；
-**② 接受字节上升、重新钉上限**（不为了省字节砍内容，见"验证"里那张新表）。
+**② 接受字节上升、重新钉上限**。
 
 ### 产出
 
 | 文件 | 改动 |
 |---|---|
-| `src/coregeek/protocol/actions.py` | `describe(cmds, *, clip)` 改成**通用摊开**：`action` 之外的每个字段一律 `名=值`，`targetPos` 折成 `(x,y)`（多格 `、` 连），字符串值过 `clip`（见下） |
+| `src/coregeek/protocol/actions.py` | `describe(cmds, *, clip)` 改成**通用摊开**：`action` 之外的每个字段一律 `名=值`，`targetPos` 折成 `(x,y)`（多格 `、` 连），字符串值过 `clip` |
 | `src/coregeek/app.py` | 新增 `LOG_PROMPT_MAX = 1000`；`_clip(text, limit=LOG_TEXT_MAX)` 多一个上限参数；动作行 `clip=_clip`；回执行触发条件 `if turn.action_results:` + 全 id 升序；任务行的"提问："改打 `prompt` 全文 |
-| `tests/test_actions.py` | **195 → 198 条**：新增 `test_describe_prints_every_field_of_every_command` / `test_describe_clips_free_text_through_the_injected_clip` / `test_a_long_answer_in_the_actions_line_is_clipped` / `test_the_prompt_line_has_its_own_bigger_limit`（`test_describe_keeps_the_attack_arrow` 并入第一条）；改写 4 条断言（动作行、回执行、任务行、最坏上限 6900 → **9300**） |
+| `tests/test_actions.py` | **195 → 198 条**：新增 4 条、改写 4 条断言（动作行、回执行、任务行、最坏上限 6900 → **9300**） |
 | `CLAUDE.md` | 硬约束 5 那张表换成新数字；`describe` / `LOG_PROMPT_MAX` / 回执行 / "prompt 不打原文"那几处措辞；用例数 198 |
 
 **三个设计点（都不是随手定的）**：
@@ -2205,59 +1887,28 @@ logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180
 - ❌ **不给 `prompt` 加转义 / 不加第二套截断策略**（保头截断一条，`limit` 是参数）。
 - ❌ **不改 `LOG_TEXT_MAX`（400）本身**：它是"单个**输入字段**"的上限，`prompt` 是**组装出来的**东西
   —— 两个数不同源，不是同一件事的两个值。
-- ❌ **不动任何策略 / 协议 / 判据链**：这一步只碰日志。判据是**响应逐字不变**（下文的九轮表）。
+- ❌ **不动任何策略 / 协议 / 判据链**：这一步只碰日志。判据是**响应逐字不变**。
+- ❌ **不动任务线 / `_defend` / `_mine_spare_ore` / `render()` / `_log`**。
 
 ### 验证
 
-**1. 单测**：`PYTHONUTF8=1 py -m unittest discover -s tests` → `Ran 198 tests … OK`。
+**1. 单测**：`Ran 198 tests … OK`。
 
 **2. 响应零变化（真服务）** —— 第 18 步的 `D:/tmp/e2e18.py` **一个字节不改**重跑，
-九轮输出与第 18/19 步那张表**逐字相同**（含每个 prompt 字数）：
-
-```
-[1] 提问        prompt= 597 字  executeCmd=''                       提交=None
-[2] SOP2Prompt  prompt= 630 字  executeCmd=''                       提交=None
-[3] 新形状命令   prompt=   0 字  executeCmd='python -c "print(1+1)"' 提交=None
-[4] 沙盒结果     prompt= 663 字  executeCmd=''                       提交=None
-[5] <answer>提交 prompt=   0 字  executeCmd=''                       提交='晴 26 度'
-[6] 纠错重问     prompt= 664 字  executeCmd=''                       提交='晴 26 度'
-[7] 裸文本兜底   prompt=   0 字  executeCmd=''                       提交='晴 26 度'
-[8] 旧形状兼容   prompt=   0 字  executeCmd='ls -la'                 提交=None
-[9] 畸形重问     prompt= 630 字  executeCmd=''                       提交=None
-★ 九轮全部通过
-```
+九轮输出与第 18/19 步那张表**逐字相同**（含每个 prompt 字数：597 / 630 / 0 / 663 / 0 / 664 / 0 / 0 / 630，
+命令与提交一字不差，九轮全部通过）。
 
 **3. 日志真的变详细了**（同一个真服务的 `D:/tmp/logs20.txt`，第 4 轮"沙盒结果回灌"那一轮）——
-这一屏就是这一步的全部意义：工具清单、SOP 槽、沙盒结果段、题目原文**一次看全**：
-
+这一屏就是这一步的全部意义：工具清单、SOP 槽、沙盒结果段、题目原文**一次看全**；
+动作行与回执行同看：
 ```
-22:20:23,122 | 任务：请查询北京天气 ｜ 提交：无 ｜ 提问：# Agent定位
-…
-# 可使用的工具
-- executeCmd：在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）…
-- SOP2Prompt：把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段…
-…
-# 沉淀的 SOP
-第一步：先 ls
-第二步：按文件名理解题意
-第三步：把字段逐个填满
-
-【上一条命令的执行结果（原文）】
-[exitCode:0]
-2
-
-题目：
-请查询北京天气
+任务：请查询北京天气 ｜ 提交：无 ｜ 提问：# Agent定位 … # 可使用的工具 - executeCmd：…
+      - SOP2Prompt：… # 沉淀的 SOP 第一步：先 ls… 【上一条命令的执行结果（原文）】
+      [exitCode:0] 2 题目：请查询北京天气
+动作：10010 collect (4,24)；10012 move (9,17)；10011 submitAnswer taskAnswer=晴 26 度
+判题器报错：2：答案不正确
 ```
-
-动作行与回执行（同一份日志）：
-
-```
-22:20:23,136 | 动作：10010 collect (4,24)；10012 move (9,17)；10011 submitAnswer taskAnswer=晴 26 度
-22:20:23,154 | 判题器报错：2：答案不正确
-```
-
-全程 **0 个 Traceback**；`SOP 更新：存 33 字｜ 前 80 字：…`（换行转义成 `\n`）1 条；沙盒行 1 条。
+全程 **0 个 Traceback**；`SOP 更新` 1 条；沙盒行 1 条。
 
 **4. 字节预算重测**（`D:/tmp/budget20.py`，与用例同一份 fixture）：
 
@@ -2273,18 +1924,9 @@ logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180
 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5、用例三处**同步改成新数字**。
 
 **5. 反向验证**（`D:/tmp/reverse20.py`：改坏 → 跑套件 → `cp` 还原 → sha256 校验）**9/9 全中**：
-
-| 改坏成 | 挂住 |
-|---|---|
-| ① prompt 回到只报字数 | prompt 限额 + 任务行（2 条） |
-| ② prompt 用 `LOG_TEXT_MAX` 截 | 同上 2 条 |
-| ③ `app` 递进去的 clip 是假的 | 长答案那 1 条 |
-| ④ `_clip` 变回静默截断 | 4 条 |
-| ⑤ 回执只列未通过 | 回执行 + 样例局面（2 条） |
-| ⑥ 回执触发条件只认"有未通过" | 回执行（**第一次没挂住**，见下） |
-| ⑦ 回执不排序 | 回执行 |
-| ⑧ `describe` 只认坐标（手写清单） | 4 条 |
-| ⑨ `describe` 自己截断、不调 `clip` | 4 条 |
+① prompt 回到只报字数 / ② prompt 用 `LOG_TEXT_MAX` 截 ⇒ 各 2 条；③ `app` 递进去的 clip 是假的 ⇒ 1 条；
+④ `_clip` 变回静默截断 / ⑧ `describe` 只认坐标（手写清单）/ ⑨ `describe` 自己截断、不调 `clip` ⇒ 各 4 条；
+⑤ 回执只列未通过 / ⑥ 回执触发条件只认"有未通过" / ⑦ 回执不排序 ⇒ 回执行。
 
 ⚠️ **⑥ 第一次一条都没挂住 —— 那是真的覆盖缺口**（不是第 19 步那种"测量工具瞎了"）：
 触发条件改坏之后，只有"全 `True` 的回执"会表现不同，而当时没有任何一条用例喂过全 `True` 的回执。
@@ -2296,8 +1938,7 @@ logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180
 
 1. **最坏回合 6180 → 8574 字节，写满 64KB 从约 10 回合提前到约 7 回合**（用户拍板接受）。
    `prompt` 全文是新增的大头（≤3000 字节/回合），而它**任务期间每回合都打**。
-   判题器读不读 stdout 依旧**未实测** —— 真出事只能调小这两个上限，取舍已经记在
-   `app._log` 的 docstring 里。
+   判题器读不读 stdout 依旧**未实测** —— 真出事只能调小这两个上限。
 2. **`LOG_PROMPT_MAX = 1000` 是个估计**：SOP 长到 ~400 字之后 prompt 必被截（保头），
    那时"题目原文在不在里面"就看不见了 —— 但题目另有「任务：」那一格兜着（**有意的重叠**），
    而保头留下的正是模板 + 工具清单 + SOP 段这几样**别处看不见**的东西。
@@ -2319,3 +1960,377 @@ logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180
 ③ SOP 是否真的自进化（`SOP 更新：存 N 字` 出现几次、N 的分布）—— 这是"单实例 + 实例属性"
    在实盘上唯一能观察到的东西。
 ④ 三个提交（`5df704e` / `248069a` / `b75fa23`）与这一步一起推上 `origin`（gitcode）。
+
+---
+
+## 第 21 步：地图铺满 —— 空地打 `#`，围墙让位给 `=`
+
+### 目标
+
+用户原话（逐字）：
+
+> 打印地图的时候，打满整个矩阵，空地用#符号，这样比较显著
+
+动机是**可读性**：地图恒 41×32 而实心内容只有几十格，空地打成 `.` 时几乎融进终端的深色背景
+—— 看得见内容、看不出**这张图有多大、边界在哪**，而复盘时"机器人离我还有几格"全靠这个。
+铺满 `#` 之后内容自己从背景里浮出来。
+
+用户自己先改了一行（`_char` 的空串分支 `"." → "#"`），这一步是**把这件事做完**：
+那一行单独存在会撞上一个既有约定 —— 我方围墙的字符**也是 `#`**。
+
+**碰撞的后果（实测）**：`_char("")` 与 `_char("wall")` 都返回 `#` ⇒ 我方那一圈墙
+**沉进空地背景里整圈看不见**，而图例会同时出现 `#=围墙` 与 `#=空地`（看上去只是重复一项，
+不像 bug）。已建好的 14 格围墙是复盘时最该看见的东西之一，不能这么丢。
+
+一条拍板（`AskUserQuestion`，带真实渲染预览）：**我方围墙 `=` / 敌方围墙 `%`**。
+选 `=` 的理由：与 `%` 同属"非字母的结构符号"，一眼能从背景的 `#` 里分出来；
+另外两个候选 `+`（像砖缝但和"十字交叉"的直觉冲突）、`|`（顶行/底行用竖线表达横墙方向不对）。
+
+### 产出
+
+| 文件 | 改动 |
+|---|---|
+| `src/coregeek/game/map.py` | `_RENDER_SIDED["wall"]`：`("#", "%")` → **`("=", "%")`**（附注"不能用 `#`"的理由）；`_char` 的空串分支 → `#`，并补一段 docstring 说明**为什么**（背景填充）；`_legend()` 的 `".=空地"` → `"#=空地"`，docstring 里 `.`（空地）→ `#`（空地）、补"墙是大小写规则的唯一例外（我方 `=` / 敌方 `%`）" |
+| `tests/test_actions.py` | 3 处断言跟改（`lines[33][5]`、一处 docstring 举例、图例 token 表）；**新增 1 条**："一个字符只能代表一样东西" |
+
+**新增的那条守门员**（`test_the_legend_covers_every_category` 尾部）：
+
+```python
+chars = [_char(kind) for kind in _NAMES] + ["x", "#", "?"]
+self.assertEqual(len(set(chars)), len(chars), sorted(chars))
+```
+
+它是这一步**唯一值得加的测试**：既有那几条 `assertIn(f"{_char(kind)}=", LEGEND)` 在碰撞发生时
+**一条都不会挂**（`#=围墙` 与 `#=空地` 都"在"图例里）。两个类别共用一个字符的症状是
+**图上分不出来**，而图例看上去只是重复 —— 不专门钉就没人发现。
+
+### 不做什么
+
+- ❌ **不给墙换非 ASCII 记号**（`▉` / `█` 之类）：全角字符占 2 个显示列，而 `render()` 的列对齐
+  靠的是"**`_char` 恒返回 1 字符**"（`_char` 的 docstring 里写着）⇒ 一引入就整图错位，
+  而**地图恒 41×32、内容里一个中文都没有**这个前提正是窄字符才成立的。
+- ❌ **不改图例的分隔符**：`==围墙` 看着像两个等号，但它是 `f"{_char(kind)}={name}"` 的必然结果，
+  自洽且用户已在预览里见过。改成分隔符 `→` 要动 4 条用例的断言，换不来什么。
+- ❌ **不动 `render()` 的其余部分**（两行列标尺、行号槽宽度推导、`reversed()`、空矩阵返回 `""`）——
+  这一步只碰字符表。
+- ❌ **不动策略 / 协议 / 判据链 / 日志结构**：判据是**响应逐字节不变**。
+- ❌ **不调任何字节上限**：`#` / `.` / `=` 全是 1 字节 ASCII，**地图与图例的字节数一个都不变**
+  ⇒ 硬约束 5 那张表、`app._log` 的 docstring、`LOG_TEXT_MAX` / `LOG_PROMPT_MAX` 全都不用动。
+
+### 验证
+
+**单测 198 条全绿**（条数不变：改了 3 处断言、在一条既有用例里加了 1 个断言）。
+
+**反向验证 1 条（改坏 → 确认挂 → 用备份还原）**：把 `_RENDER_SIDED["wall"]` 改回 `("#", "%")` ⇒
+`AssertionError: 18 != 19 : ['#', '#', '$', '1', …, 'x']`，**恰好那一条挂**，
+其余 197 条照过 —— 这就是"既有断言全都抓不住"的实证。
+还原走 `cp D:/tmp/bak21/`（**没用 `git checkout`**，第 15 步的教训），
+`sha256sum` 逐文件核对**一致**，再跑一次套件 `OK`。
+
+**真服务端到端**（`netstat` 确认端口上只有一个监听者，收尾 `taskkill` 并确认释放）：
+
+```
+图例：s=基地 g=加特林 r=电磁狙击炮 k=火箭发射台 ==围墙 w=工人 p=开拓者 o=石矿
+      i=铁矿 c=铜矿 v=小贩 $=武器商店 1=挑战方任务点1 2=挑战方任务点2 3=防守方任务点1 4=防守方任务点2
+      x=机器人 #=空地 ?=未知 大写=敌方 %=敌方围墙
+31 │ #########################################
+28 │ ########i################################     ← 空地 `#`，内容自己浮出来
+25 │ #########kr##############################     ← 我方两座炮
+24 │ ####o####gss#############################     ← 石矿 / 加特林 / 基地 2×2
+23 │ #####w####ss#############################
+21 │ #####=###################################     ← 我方围墙
+20 │ #####=###################$###############
+16 │ ##########w#########v####################
+10 │ #########################i####SS#########     ← 敌方基地（大写 = 敌方）
+ 7 │ ############################%############     ← 敌方围墙
+ 5 │ ####xx###################################     ← 机器人
+ 3 │ ##############o##########################
+```
+
+**响应逐字节不变**：`{"roleCommandMap":{"10010":…"move"…"targetPos":[{"x":6,"y":22}]…}` ——
+三条 `move` 与第 20 步完全一致，254ms（`time` 实测，红线 5000ms）。
+
+**顺带订正一处留痕里的错**（核 payload 时发现的，与字符无关）：第 17 步那句
+"`(5,20)`/`(5,21)` 那两格是**样例自带的敌方围墙**"**两头都错** ——
+`teamOur.roles` 里那两格是**我方**的墙，真正属于敌方的是 `(28,7)`；
+它们也确实**不在环上**（样例几何是手画的示意数据）。已在第 17 步那节就地订正。
+
+**日志体量**：字符替换是 1 字节对 1 字节 ⇒ **不变**。这一回合实测 43 行 / 2604 字节
+（与第 20 步表里"有回执 43 / **2453**"的差来自 `lastRoundRoleActionResults` 的条目数
+—— 样例有 7 条、那份 budget fixture 更少 —— **不是这一步引入的**）。
+
+### 已知不确定性（别假装确定）
+
+1. **`=%` 这一对是靠"非字母"辨认的，不是靠形状**：`=` 和 `%` 单独看都不像"墙"，
+   只有看过图例才知道 —— 而图例**每回合都打**（第 12 步用户选定），所以代价可控。**未实测。**
+2. **满屏 `#` 之后，敌我围墙的对比度都下降了**：`#`（空地）在视觉上比 `=`/`%` 更"重"，
+   背景反而比结构显眼。若实盘看着累，最省的两条退路是：空地换成更轻的实心符（`·`/`+`），
+   或者把 `render()` 的字符表整体换成一套"背景轻、内容重"的记号 —— 后者要动所有既有截图与
+   复盘笔记（第 12 步"不改字符本身"那条取舍），**现在不动**。
+   ⚠️ **第 22 步就地订正：这条风险当天就兑现了，而且走的是第三条路** ——
+   用户把空地直接改成**空格**、`#` 收回给墙（"铺满"整个撤销），
+   即上面那句"背景反而比结构显眼"正是他不想要的效果。**这一条原文保留不删**
+   （规则 2：决策理由与已知不确定性一条都不准删），现状与理由见第 22 步那节的"订正第 21 步"。
+3. **`_char` 恒返回 1 字符这条不变量仍然没有断言守着**（第 12 步就记着）。
+   这一步没引入多字符记号，但"一个字符只能代表一样东西"那条新断言**不覆盖它** ——
+   它守的是"不重复"，不是"长度为 1"。
+4. **地图的行数与字节数与上一版完全相同**，所以"改坏了"的症状只可能是**图上的内容变了**，
+   而这一点**只能靠肉眼跟任务书的示意图对一次**（第 6 步那条：y 翻反了图上照样"像张地图"）。
+   行号槽仍是唯一的守卫，这一步没动它。
+
+### 下一步
+
+① **买矿那条线**（用户上一条要求，本步之前提的）：先按 `docs/任务书.md` §4.4 / §4.6.1 与
+   `docs/接口文档.md` 的 `sell` / `buy` 定清楚口径再动手 —— 文档里只有
+   **`sell`（小贩周围一格内批量卖矿石换金币，需指定 `name` 与 `num`）** 与
+   **`buy`（武器商店买商品/券，"不支持退回/售卖"）**，**没有"买矿"这个动作**；
+   要确认用户要的到底是"卖矿换钱"（`sell` → `buy` → `use` 那条线）还是别的。
+② 首场实盘先看新日志的三样东西（与第 20 步同）：提问全文里的**工具清单与 SOP 槽**、
+   回执行**是不是全 `True`**、以及 `沙盒：回「[exitCode:0]…」` 这条序列通没通。
+③ SOP 是否真的自进化（`SOP 更新：存 N 字` 出现几次、N 的分布）。
+
+---
+
+## 第 22 步：卖矿线（`sell`）—— 矿第一次变成金币
+
+### 目标
+
+用户原话（逐字）：
+
+> 买矿产的逻辑
+
+"买矿"这个动作**文档里没有**（§4.4 只有 `sell` 卖矿换金币、`buy` 在武器商店买商品/券），
+按上下文与已实现的采矿线取 **`sell`**：**把背包里的矿石背到小贩跟前批量卖掉换金币**。
+
+这一步之前这条线**整条都不存在**，而且断在三个地方：
+
+1. **没有动作**：`protocol/actions.py` 只有 6 个动作类，没有 `sell`。全项目 `grep '"num"'`
+   在 `src` 下零命中 —— 这是第一个带 `num` 的动作。
+2. **不知道小贩在哪**：`model._entries` 把 `neutralType` 原样写成格子类别（`"vendor"`），
+   但 `Map` 只建了 `blocked` / `ores` 两张索引，小贩只落在 `blocked` 里。
+3. **不知道背包里有几块铜**：`model._stone` 只数 `stone`，`BaseRole.stone` 是唯一的背包派生字段。
+
+**为什么现在做**：第 15 步的采矿线把工人改成"墙砌完就去采收购价最高的矿"，但那一步的收益
+**兑现不了** —— `_mine_spare_ore` 的 docstring 里就写着「别指望这一步现在就能换钱：`sell`
+还没实现」。而且**价格波动的玩法（任务书 L386 / 策略指导 L43「价格随着新闻的变化而变化」）
+本来就要靠卖矿才成立**。做完这一步，铜/铁才第一次变成金币，也为后面的 `buy`/`use`（升级券）
+留出金币来源。
+
+**行为**：工人墙砌完之后，先把背包里的矿背到小贩跟前批量卖掉；卖不动（货不值这一趟路）
+就照旧去采最值钱的矿。
+
+### 产出
+
+**`sell` 主线**（照第 15 步采矿线的既有骨架写，一个动作跨六个文件）：
+
+| 文件 | 改动 |
+|---|---|
+| `src/coregeek/protocol/actions.py` | 新增 **`Sell`**：`code = "sell"`、**`roles = ALL`**、`__init__(role_type, name, num)`、`to_wire()` → `{"action","name","num"}`。docstring 记三件事：须站在小贩周围一格内 / **可用角色是全部**（与 `build`/`collect` 相反，写错就是"本地全绿、判题器说不"）/ `num` 接口文档标的是 Int（与 `Attack.controllerId` 恰好相反，别让 str 漏进 JSON）。`describe()` **一行没动** —— 它是第 20 步的通用摊开，`name` / `num` 自己就打得出来（e2e 实测：`10010 sell name=copper num=4`） |
+| `src/coregeek/protocol/model.py` | `_stone(node) -> int` 升级成 **`_bag(node) -> Mapping[str, int]`**（`{物品名: 件数}`，非 `str` 项丢弃、背包缺失/不是数组 ⇒ 空表）；`_STONE` 常量随 `_stone` 一起删。唯一调用点 `_character` 改成 `make(role_id, pos, role_type, _bag(node))` |
+| `src/coregeek/game/roles.py` | `BaseRole.__init__(role_id, pos, bag=None)` 存 `self.bag`；**`stone` 从字段变成派生属性** `self.bag.get(STONE, 0)`。`make()` 第 4 个参数同步改名 |
+| `src/coregeek/game/map.py` | 加模块常量 `VENDOR = "vendor"`（`_RENDER_NEUTRAL` / `_NAMES` 里的字面量一并换掉）+ **`Map.vendors: frozenset[Pos]`**（与 `ores` 同一个铺格循环里收集；尺寸非法那一支补空集）。docstring 的"三个用途"补一句：`vendors` 是卖矿线的**目标点**，与 `ores` 是采矿线的料源对称 |
+| `src/coregeek/game/planner.py` | 常量 **`SELLABLE = (STONE, IRON, COPPER)`** + **`_sell_ore`** + **`_best_load`**；调用点**只有一处**（见下）。模块 docstring 的白天清单加第 4 条、夜里那条改成 5 |
+| `src/coregeek/game/world.py` | `summary()` 的 `role()` 从 `石{r.stone}` 扩成 **`石N铁N铜N`**（日志是黑盒下唯一的观察窗，"工人有铜却不去卖"的原因只有背包明细能回答） |
+| `tests/test_actions.py` | **198 → 214 条**（新增 16 条：`SellOreTest` 10 条 + `Sell` 权限 1 条 + 报文形状 1 条 + `Map.vendors` 2 条 + `_bag` 2 条），另改现有断言见下 |
+| `src/coregeek/utils.py` | **新叶子模块**，见下面第 2 小节 |
+
+**`_sell_ore` 的四条门**（任一条不成立 ⇒ 返回 `False`，调用方接着去采矿）：
+
+1. **有货** —— `_best_load` 从 `SELLABLE` 里挑**收购价最高**的那种（同价取件数多的，
+   并列再比名字 ⇒ 顺序不取决于 payload 的顺序）；**价 ≤ 0 或件数 = 0 的跳过**，
+   挑不出来就是 `("", 0)`。空价目表 ⇒ 一件都不卖（与 `_pick_ore` 同一条降级方向）。
+2. **有小贩** —— `turn.map.vendors` 为空 ⇒ `False`（`min(空集)` 会 `ValueError`，
+   而它跑在 `handle` 的 `try` 里 ⇒ 代价是整回合空指令）。
+3. **够本** —— **已经贴着小贩就跳过这一条**：`货值 < 2 × dist(role, 小贩)` ⇒ `False`。
+   只回答"值不值得走过去"；人已经站在旁边时这趟路早就付过了。
+4. **回得来** —— `dist(role,小贩) + dist(小贩,基地) > day_rounds_left − TIME_MARGIN` ⇒ `False`
+   （与 `_mine_spare_ore` 同源，只是把"工地"换成小贩）。夜里必须在炮位上，
+   黑天还在赶路 = 拿火力换矿石。
+
+然后：`dist(role, 小贩) <= 1` ⇒ `_emit(cmds, role, actions.Sell, kind, num)`（**一次卖光这一堆**
+—— 一回合一个角色只有一条指令）；否则 `_step(role, 小贩, …)`。
+小贩格**本身挡路**，`step_toward` 撞上它自然停在"周围一格" ⇒ 与采矿是同一条契约，
+不需要写两段逻辑。
+
+**调用点只有一处**（`_build_walls` 的 `if not free:`，即"14 格墙砌完了"那一支），
+改成**先卖后采**：
+
+```python
+    if not free:
+        if not _sell_ore(role, turn, cmds, claimed, sites):
+            _mine_spare_ore(role, turn, cmds, claimed, sites)
+        return
+```
+
+**为什么只挂在这一支**：`free` 为空 = 墙砌完了。墙没砌完时工人手里的石头一律有用
+（`_stones_to_mine` 的上限正是"还差几格墙"，采多了它就不采了）⇒ **`free` 非空时不存在
+"多余的石头"**，那个不变量就是"多余的石头"的定义，不需要再写一遍计数。
+同时这也天然守住策略指导的第一优先级（白天先把墙砌完）。
+
+**`_stone → _bag` 的取舍**：`backpack` 在接口文档里本来就是一个**物品名数组**，
+用三个散装 int 表示它才是那个绕的东西，而且下一步 `buy`/`use` 立刻需要第四个、第五个。
+`stone` 是**唯一**的既有消费者，变成属性之后 `_stones_to_mine` / `_build_walls` /
+`summary()` 三处调用**一字未改**。
+
+#### 2. `src/coregeek/utils.py`：`_clip` 搬出 `app`
+
+`_clip` 原来住在 `app.py`，而 `app` 是**组装根**（依赖图最上面）⇒ 任何想按同一条规则截断的
+下游只能把它**当参数递进去**（`protocol.actions.describe` 正是如此，因为
+`protocol` **不能** import `app` —— 那是反向依赖）。搬进**叶子模块**（一个包内 import 都没有）
+之后那条规则只有一个位置。
+
+⚠️ **但 `describe` 那条边仍然是注入、不是 import**：它的契约是"不认识日志"，
+给它塞一个日志默认值就等于让 `protocol` 认识日志层。
+**这个文件里不放状态、不放 logger、不放格式化函数**，只放"上限"与"截断"。
+
+#### 3. 摘要/日志格式：四个带空行的块 + 背包明细
+
+用户手改了这一块，本步把它做完并同步到文档/图例/用例：
+
+- `Turn.summary()` 从"三行"变成**四个块、块间空一行**：`【回合】… ｜ 【金币】…|【武器】… ` /
+  `【我方】` / `【机器】` / `【可接任务点】`。
+  ⚠️ **空行也是物理行** ⇒ "摘要给日志定序"那条对账关系变成"**数非空行**"
+  （用例里为此加了 `_blocks()` 助手，逐字写着"长度对不上块数时别数行"）。
+- 我方那一行打出 `石N铁N铜N`。
+
+#### 4. 订正第 21 步：地图字符表反过来（空地 = 空格，墙 = `#`）
+
+第 21 步把空地铺满 `#`、墙让位给 `=`；**用户随后手改**成空地 = **空格**、墙收回 `#`。
+第 21 步的"已知不确定性 #2"（"满屏 `#` 之后背景反而比结构显眼"）**当天就兑现了**。
+
+本步按用户手改的方向**做完**（代码 / 图例 / docstring / 用例四处）：
+`_char("")` → `" "`、`_RENDER_SIDED["wall"]` 收回 `("#", "%")`、图例多一项 `空格=空地`。
+
+⚠️ 图例那一项写的是字面量 `空格=空地` 而**不是** `f"{_char('')}=空地"` ——
+空地现在是一个空格，直接拼出来是 `" =空地"`，看着像少打了一个字符。
+第 21 步 `#=围墙` 与 `#=空地` 撞车的那个问题随之消失（`_legend` 的 docstring 记着）。
+守门用例（"一个字符只能代表一样东西"）是**通用**断言，字符值改了它照旧守着。
+
+**边界与"图有多大"仍由行号槽 + 两行列标尺负责**（`render()` 里本来就有），不靠填满。
+
+#### 5. banner + 字节上限重钉（硬约束 5）
+
+用户给 `handle` 加了分隔符 `###第N回合###`（**唯一一条不受 `_log` 管辖的日志**，
+数记录数时要单独算）。加上摘要的空行块与背包明细，最坏那一格从 66 行 / 8574 字节
+抬到 **71 行 / 8723 字节** —— 三处数字（`app._log` 的 docstring、`CLAUDE.md` 硬约束 5、
+用例 `test_the_worst_round_stays_under_the_budget`）同源更新。
+**上限仍是 9300 没动**：余量 577 字节仍小于"抓结构性膨胀"所需的一千二百字节。
+
+#### 6. 一次事故（记在案，防复发）：任务行 / 沙盒行被删又逐字恢复
+
+用户手动改 `_log` 时，把 banner 连同"任务：… ｜ 提交：… ｜ 提问：…"与"沙盒：回「…」"
+**两块一起删掉了**，连带 `LOG_PROMPT_MAX` 与 `_log(turn, cmds, prompt)` 的 `prompt` 参数
+成了死代码，5 条守着它们的用例红着。
+
+**怎么查的**：`git diff` 对照 HEAD + 扫自己这次会话的 Edit/Write/Bash 入参（转写记录），
+两边都指向"**不是我删的**" ⇒ 不静默按自己的判断补，先问用户。
+用户拍板**加回来（推荐）**，逐字恢复（含两段原注释）。
+**为什么必须记这两块**：判题器是黑盒，`prompt` 全文与沙盒回执**别处看不见**
+（本地 e2e 的"LLM"是我们自己写的，只证明解析自洽）。已在 `_log` 的 docstring 里留痕。
+
+### 不做什么
+
+- ❌ **不做 `buy` / `use` / `drop` / `remove` / `summonTreasure`** —— 用户只要 `sell`。
+  金币花不出去是**已知的**，由后面的步骤补。
+- ❌ **不给石头留底**：墙只会在夜里被砸，白天内 `free` 一旦为空就不会再变空；
+  第二天补墙由 `_stones_to_mine` 照旧重新采。**不写跨回合的"储备量"**
+  （全项目只允许 SOP 那一处跨回合状态）。
+- ❌ **不读 `worldNews`**：官方消息对价格的影响**已经体现在 `vendorShopList` 里**，
+  读新闻就是第二份会漂移的真相（`CLAUDE.md` 已有这一条）。
+- ❌ **不记价格历史 / 不做"价比高低"判断**：那是跨回合状态；没有基线就没有"涨了"这回事。
+- ❌ **不认领小贩**：两个工人一起去卖互不冲突（各卖各的背包，站位靠 `claimed` 分开），
+  不需要 `taken` 那样的独占。
+- ❌ **不动 `describe()` / `task_channel` / 夜间 `_defend` / `_trapped` / `render()` /
+  `_log` 的结构**（这一步只往 `_log` 的表里改数字）。**响应格式一个字节没变。**
+- ❌ **不给墙换非 ASCII 记号、不改图例分隔符**（第 21 步已记取舍，本步沿用）。
+- ❌ **不加分层 import-lint、不加新测试框架**（`CLAUDE.md` 明令）。
+
+### 验证
+
+**单测 214 条全绿**（`PYTHONUTF8=1 py -m unittest discover -s tests`，198 → 214）：
+
+```
+Ran 214 tests in 0.095s
+
+OK
+```
+
+**反向验证 3 条**（改坏 → 确认**恰好**对应用例挂、其余照过 → 从 `D:/tmp/planner.bak` 还原）：
+
+| 改坏什么 | 结果 |
+|---|---|
+| `SELLABLE` 去掉 `STONE`（`(IRON, COPPER)`） | 只有 `test_spare_stone_gets_sold_too` 挂（`FAILED (failures=1)`） |
+| 够本门拆掉（`if value < 2 * dist` → `if value < 0`） | 只有 `test_a_full_load_that_does_not_pay_for_the_trip_is_not_worth_walking` 挂 |
+| 回得来门拆掉（那条 `if` → `if False`） | 只有 `test_too_late_in_the_day_to_walk_there_and_back` 挂 |
+
+三条门各自**只有一条用例守着**，且都不是假通过 —— 这是"改坏能挂"的实证。
+（第一次改 `SELLABLE` 时按字符串 `("stone", …)` 找没找到，实际写的是常量 `(STONE, …)`
+—— 记一笔：改坏也得先读一眼真代码。）
+
+**真服务端到端**（`netstat -ano | grep LISTENING | grep 18085` 起手确认为空，
+收尾 `taskkill` 并确认端口释放）：
+
+① 样例 `docs/request.txt`（第 85 回合，夜里）：
+
+```
+{"roleCommandMap":{"10010":{"action":"move","targetPos":[{"x":6,"y":22}]},"10012":{"action":"move","targetPos":[{"x":9,"y":17}]},"10011":{"action":"move","targetPos":[{"x":9,"y":13}]}},"prompt":"","executeCmd":""}
+```
+
+三个顶层字段齐全；日志里 banner / 四块摘要（含 `10010 worker(5,23)石1铁1铜1`）/
+图例（`#=围墙` 与 `空格=空地`）/ 地图（空地为空格）都在。
+
+② **合成一个"工人手拿 4 块铜、站小贩正下方"的白天的局面**（样例是中局快照，工人手上
+不一定有矿，且 14 格墙没砌满就到不了卖矿那一支）—— 把 `roundNo` 改 10、金币改 0、
+14 格墙全铺进 `teamOur.roles`、`10010` 挪到 `(20,15)` 背包 `["copper"]×4`：
+
+```
+{"roleCommandMap":{"10010":{"action":"sell","name":"copper","num":4},"10012":{"action":"move","targetPos":[{"x":11,"y":15}]},"10011":{"action":"move","targetPos":[{"x":11,"y":11}]}},"prompt":"","executeCmd":""}
+```
+
+**`sell` 真的发出去了**，而且同一局面里另一个工人（离小贩 10 格、只有 1 块铜 = 5 金币 < 阈值 20）
+**没有跟去卖**，转去朝矿走 —— 够本门在真服务上按预期分流。
+日志那一行由 `describe()` 的通用摊开自动打出：`【动作】：10010 sell name=copper num=4；…`。
+
+**字节表重测**（`D:/tmp/budget20.py`，与用例同一份 fixture）：
+
+```
+干净回合（没回执、没任务）        物理行 46 ｜ 记录 3 ｜ 字节 2479 ｜ 约 26 回合写满 64KB
+有回执（判题器报错 + 未通过名单）  物理行 48 ｜ 记录 5 ｜ 字节 2621 ｜ 约 25 回合写满 64KB
+任务在身、还没答过（提问中）       物理行 70 ｜ 记录 4 ｜ 字节 6056 ｜ 约 10 回合写满 64KB
+任务在身 + 沙盒结果顶格（回灌那一轮）物理行 71 ｜ 记录 5 ｜ 字节 7325 ｜ 约 8 回合写满 64KB
+最坏（+ 一回合 SOP 调用顶格）      物理行 71 ｜ 记录 6 ｜ 字节 8723 ｜ 约 7 回合写满 64KB
+```
+
+⚠️ **第 20 步那张表（41/2329 … 66/8574）全部作废**，`app._log` 的 docstring 里已就地注明。
+
+### 已知不确定性（别假装确定）
+
+1. **「1 金币 ≈ 1 回合」（货值 ≥ 2 × 距离）是拍的**，没有任何文档依据。
+   它是这一步**唯一的调参旋钮**，首场实测后按日志里的"小贩距离 / 卖出量"回头调。
+2. **阈值可能让工人永远不动身**：样例小贩距离 10 ⇒ 阈值 20 金币 ⇒ 铜要攒 4 块。
+   若实际矿区离小贩更远，阈值会高到当天攒不满 ⇒ **卖矿线静默失效**。
+   **首场日志若出现"矿堆着却没卖过"，先看这一条。**
+3. **「贴着小贩就跳过够本门」**：人已经站在旁边时不再算这趟路值不值 ——
+   不这样写的话，工人会在小贩边上因为"只剩 1 块铜不值 20 金币"而**站着不卖**，
+   而那 1 块铜本来不需要再走路。这是**策略选择**，不是文档规定。
+4. **小贩坐标的真实数量未知**（样例只有 1 个）。`Map.vendors` 是集合、取切比雪夫最近的那个
+   （并列按坐标排），**未实测**。
+5. **`sell` 的报文形状没有实证**：`docs/response.txt` 里只有 `move`/`build`/`remove`。
+   形状从接口文档 §2.3 推的 —— `{"action","name","num"}`。
+6. **`name` 用英文矿种名还是中文没实证**：取英文（与 `neutralType` / `vendorShopList.name`
+   同一套词），理由是与载荷里其它矿种字段一致。
+7. **`num` 超出手上件数会怎样**（报错还是按实际卖）文档没写；我们只发"手上确实有的件数"，绕开这一条。
+8. **两个工人同时去卖**是否会撞在同一格，靠 `claimed` 分开，**未实测**。
+9. **`sell` 的昼夜限制**：§4.4 那一格是空的（`build`/`remove` 写"仅白天"、`attack` 写"仅黑夜"）
+   ⇒ planner 把它放在白天那一支，夜里**不卖**（夜里所有角色回炮位）。
+   这一条与 `collect` 同源，**文档没明说，是策略侧的选择**。
+
+### 下一步
+
+① **首场实盘先看三样**：`【动作】` 里出现几条 `sell`、`【我方】` 那一行的 `铜N` 有没有在涨、
+   以及"矿堆着却没卖过"（第 2 条不确定性的症状）。
+② **`buy` / `use` 那条线**（金币现在有来源了）：武器升级券 / 基地升级券 / 围墙升级券都要
+   **站在目标建筑周围一格内**并指定目标位置（任务书 L292）—— 第 13 步的"后列 1 格 + 前排两角"
+   正是为它留的位（一人站在落点上就能同时够着炮和基地）。围墙修复包要站在待修围墙
+   一格范围内（任务书 L314）。**先定清楚要买什么、钱够不够，再动手。**
+③ 阈值调参（第 1 条不确定性）。

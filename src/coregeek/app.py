@@ -25,18 +25,13 @@ from .game import planner
 from .game.map import LEGEND as map_legend
 from .game.world import Turn
 from .protocol import actions, model
+from .utils import LOG_TEXT_MAX, _clip
 from .web import server
 
 LOGGER = logging.getLogger(__name__)
 
 #: 空指令集是**合法**的，且不计异常。任何失败路径都退到这里。
 EMPTY_BODY = b'{"roleCommandMap":{},"prompt":"","executeCmd":""}'
-
-#: 日志里单个**输入字段**的**字符**上限，超了截断。**单位是字不是字节**
-#: （中文 1 字 = 3 字节，按字节数限制的话同一个数字在中英文题目下差 3 倍）。
-#: 上限存在的理由与硬约束 5 同源：日志长度**不能是"数据相关的量"**，
-#: 判题器给多长的任务原文不该决定我们写多少字节。
-LOG_TEXT_MAX = 400
 
 #: 组装出来的 `prompt` 的上限 —— **比 `LOG_TEXT_MAX` 大是有理由的**（第 20 步）：
 #: prompt 不是 payload 里的一个字段，而是「模板（591 字，含工具清单）+ 沉淀的 SOP
@@ -58,6 +53,8 @@ def handle(raw: bytes) -> bytes:
         turn = model.load(payload)
         if turn is None:
             raise ValueError("payload 不是 JSON 对象")
+        LOGGER.info(f"###################################第{turn.round_no}回合###################################")
+        # 处理Agent逻辑
         prompt, execute = planner.task_channel(turn)
         cmds = planner.plan(turn)
         _log(turn, cmds, prompt)
@@ -87,6 +84,14 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     四条各自只在有内容时出现。所以样例那种"夜里、没任务、判题器报了假错"的局面
     是 4 条，而一个干净的白天回合只有 2 条。
 
+    ⚠️ **上面这个计数是 `_log` 自己的**；`handle` 在它之前还多打**一条 banner**
+    （`######第N回合######`，用户加的分隔符）⇒ 一次 `handle` 的**总**记录数各多 1
+    （干净回合 3 条、样例那样 5 条）。banner 是唯一一条**不受本函数管辖**的日志，
+    数记录数时别把它算漏（用例 `test_a_clean_round_logs_only_the_map_and_the_actions` 钉着）。
+    **第 22 步的插曲**：用户手动改这一块时把它连同下面"任务 / 沙盒"两块一起删掉了，
+    已按用户拍板**逐字恢复**（连 `LOG_PROMPT_MAX` 与 `prompt` 参数的死活都回来了）——
+    恢复的理由是那两块是黑盒下唯一能看见 `prompt` 全文与沙盒回执的地方。
+
     三块内容**拼成一条记录**（摘要 / 图例 / 地图），不是三条 —— 用例
     `test_every_round_logs_the_map_then_the_actions` 钉着这一条，
     而且 `logging` 的时间戳前缀只加在**第一条物理行**上，
@@ -96,16 +101,24 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     这里**一点领域知识都不剩**（谁白天谁夜里、图长什么样、金币几位数全是
     `Turn` / `Map` 自己的事），本函数只做装配与截断。
 
-    ⚠️ **stdout 是会被写满的**（第 20 步重测 —— 日志详细化之后每个数字都变了；
+    ⚠️ **stdout 是会被写满的**（第 22 步重测 —— 第 20 步那一串数字作废，见下；
     "行"是**物理行**，样例 `request.txt`，每一格都从"没沉淀过 SOP"起算）：
 
     | 局面 | 行 | 字节 | 写满 64KB |
     |---|---|---|---|
-    | 干净回合（没回执、没任务） | 41 | 2329 | 约 28 回合 |
-    | 有回执（判题器报错 + 回执名单） | 43 | 2453 | 约 26 回合 |
-    | 任务在身、还没答过（**提问那一轮**） | 65 | 5907 | 约 11 回合 |
-    | 任务在身 + 沙盒结果顶格（回灌那一轮） | 66 | 7176 | 约 9 回合 |
-    | **最坏：上面全部 + 一回合 SOP 调用顶格** | 66 | **8574** | 约 **7 回合** |
+    | 干净回合（没回执、没任务） | 46 | 2479 | 约 26 回合 |
+    | 有回执（判题器报错 + 回执名单） | 48 | 2621 | 约 25 回合 |
+    | 任务在身、还没答过（**提问那一轮**） | 70 | 6056 | 约 10 回合 |
+    | 任务在身 + 沙盒结果顶格（回灌那一轮） | 71 | 7325 | 约 8 回合 |
+    | **最坏：上面全部 + 一回合 SOP 调用顶格** | 71 | **8723** | 约 **7 回合** |
+
+    第 22 步把最坏那一格从 66/8574 抬到 **71/8723**（+5 行 / +149 字节），三处相加：
+    ① `handle` 自己那条 **banner**（`###第N回合###`，第 20 步之后用户加的，约 65 字节）
+    不计进 `_log` 的记录数、也不受本函数的两个上限管；
+    ② 摘要从"三行"改成**四个带空行的块**（`【回合】`/`【我方】`/`【机器】`/`【可接任务点】`），
+    空行也是物理行 ⇒ 第 17 步那条"摘要给日志定序"的对账关系变成"数非空行"；
+    ③ 角色行多打了 `铁N铜N`（卖矿线要它 —— "工人有铜却没去卖"只有背包明细能回答）。
+    ⚠️ **banner 是本函数看不到的第一条**：数记录数时它是纯增量（干净回合 2+1=3 条）。
 
     任务线那几条是**大头**，而且**任务期间每回合都打**（同一个任务原文重复打几十遍）。
     第 20 步把 `prompt` 从"有（N 字）"改成**打全文**之后它成了最大的一块
@@ -121,15 +134,17 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     **数字与 `CLAUDE.md` 硬约束 5、以及与用例 `test_the_worst_round_stays_under_the_budget`
     三处必须一致** —— 留着旧数字会让下一个人按错的量级估风险。
 
-    ⚠️ **更早的数字（2294 / 4618 / 6014 / 6180 那一串）都作废**：第 18 步那次是
-    "prompt 只报字数"的口径量出来的（那一次改掉了更早一版对不上号的数字）。
-    现值同样是**用 `D:/tmp/budget20.py` 这份 fixture 重新跑出来的**，
-    最坏那一格与用例里那 9300 的上限同源。
+    ⚠️ **更早的数字（2294 / 4618 / 6014 / 6180 / 2329 / 8574 那一串）都作废**：
+    它们分别是"prompt 只报字数"和"改型之前"的口径量出来的（每次改都由那一次改掉了
+    更早一版对不上号的数字）。现值同样是**用 `D:/tmp/budget20.py` 这份 fixture
+    重新跑出来的**，最坏那一格与用例里那 **9300** 的上限同源 ——
+    ⚠️ **上限这次没动**：9300 − 8723 = 577 字节的余量仍在"抓结构性膨胀"
+    （少一个 `_clip` / 多一个顶格字段，那至少是 1200 字节）所需的范围内。
     """
     LOGGER.info(
         "%s\n%s\n%s", turn.summary(), map_legend, turn.map.render()
     )
-    LOGGER.info("动作：%s", actions.describe(cmds, clip=_clip))
+    LOGGER.info("【动作】：%s", actions.describe(cmds, clip=_clip))
 
     # ── 判题器的回执 ────────────────────────────────────────────────
     # 这两条**在任务线之外也该出现**，所以不放进下面那个 `if`：errorCode 4（指令错误）
@@ -147,8 +162,8 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
         # 而这两件事下一步该怎么改完全相反（补发一条 vs 换打法）。
         # 按 id 升序（不照 payload 顺序）：同一种局面必须打出同一种日志，翻日志才对得上号。
         LOGGER.info(
-            "上回合合法性：%s",
-            " ".join(f"{i}={ok}" for i, ok in sorted(turn.action_results)),
+            "【上回合合法性】：%s",
+            " | ".join(f"{i}={ok}" for i, ok in sorted(turn.action_results)),
         )
 
     # ── 任务线 ──────────────────────────────────────────────────────
@@ -181,19 +196,3 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
         # 一个要人眼看得下。`_clip` 是**保头**截断，而沙盒输出最有诊断价值的恰好是头
         # （`[exitCode:N]` / `[TIMEOUT]` / `[JUDGER_ERROR]` 全在第一行）。
         LOGGER.info("沙盒：回「%s」", _clip(turn.cmd_result))
-
-
-def _clip(text: str, limit: int = LOG_TEXT_MAX) -> str:
-    """超长文本截到 `limit` 字（`LOG_TEXT_MAX`，只有 `prompt` 用 `LOG_PROMPT_MAX`）
-    —— **并且把截断这件事说出来**。
-
-    原来那版是 `text[:120]` 的**静默**截断：任务一长，日志里就是一段没头没尾的文字，
-    看不出后面还有没有内容。第 14 步正是被这个坑叫醒的（"任务一直失败，
-    把任务信息打印出来我看看"——打印了，但打印的是被砍过的）。被砍掉多少必须写在脸上。
-
-    **`limit` 是个参数而不是两个函数**（第 20 步）：截断规则（保头 + 留痕）只有这一份，
-    唯一的差别是上限；`protocol.actions.describe` 也拿它当参数用（那边不能 import 本模块）。
-    """
-    if len(text) <= limit:
-        return text
-    return f"{text[:limit]}…（共 {len(text)} 字）"

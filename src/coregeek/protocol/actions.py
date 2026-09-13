@@ -12,10 +12,12 @@
     参数      §2.2 RoleCommand 里该动作用到的字段
     to_wire   编成 §2.2 的扁平记录
 
-> 目前有 `move` 与 `attack`（对全部角色合法）、`build` 与 `collect`（**都仅工人**）、
-> `acceptTask` 与 `submitAnswer`（**都仅开拓者**）—— 按"禁止冗余设计"，
+> 目前有 `move` / `attack` / `sell`（**对全部角色合法**）、`build` 与 `collect`
+> （**都仅工人**）、`acceptTask` 与 `submitAnswer`（**都仅开拓者**）—— 按"禁止冗余设计"，
 > 没实现的动作为空壳，等落地时再加。`build` 是**闸门第一次真的挡住东西**：
 > 把 `build` 发给开拓者，以前只是"格式合法地做错事"，现在连对象都造不出来。
+> ⚠️ 反过来也要留神：`sell` 是**全部角色**，窄成工人同样是错，只是那个方向
+> 本地测不出来（格式照样合法，只有判题器会说"不"）。
 >
 > ⚠️ 两个任务动作**没有 `targetPos`** —— 这件事只有 `describe` 需要留心，
 > 而它第 20 步起改成**通用摊开**（有什么字段打什么），不用再记着这份差别了。
@@ -44,8 +46,10 @@ def describe(cmds: dict[str, Any], *, clip: Callable[[str], str]) -> str:
     一个 `IndexError` 的代价是**整回合退化成空指令**（第 11 步踩过，见 `CLAUDE.md`）。
 
     `clip` 由**调用方传进来**（唯一使用者仍只有 `app._log`）：截断的上限与留痕格式
-    （`…（共 N 字）`）是日志层的规则，全项目只有 `app._clip` 一份；而 `protocol`
-    **不能 import `app`**（依赖方向是 `app → protocol`）。所以把"怎么截"当参数递进来，
+    （`…（共 N 字）`）是日志层的规则，全项目只有 `utils._clip` 一份。
+    ⚠️ 它第 22 步搬进了叶子模块 `coregeek.utils`（`protocol` **import 得到**了），
+    但**这条边仍然是注入而不是 import**：`describe` 的契约是"不认识日志"，
+    给它塞一个日志默认值就等于让 `protocol` 认识日志层 —— 那是反向的依赖。
     而不是在这儿复制一份截断格式。字符串值一律过它 —— 这里不必知道哪个字段是自由文本。
     """
     parts = []
@@ -193,6 +197,38 @@ class Attack(BaseAction):
             "controllerId": self.controller_id,
             "targetPos": [{"x": self.target.x, "y": self.target.y}],
         }
+
+
+class Sell(BaseAction):
+    """把矿石卖给小贩换金币。**须站在小贩周围一格内**（任务书 §4.4、§4.6.1）。
+
+    ⚠️ **可用角色是"全部"**（§4.4 最右列）—— 与 `build` / `collect` 的"仅工人"
+    **相反**。窄成 `WORKER` 的症状是"本地全绿、判题器说不"：报文格式完全合法，
+    只有判题器知道开拓者也能卖。这里 `roles = ALL`。
+
+    **§4.4 的能力列没有昼夜限制**（`build`/`remove` 写"仅白天"、`attack` 写"仅黑夜"，
+    这一格是空的）⇒ 昼夜门由 `planner` 把关，不进闸门（与 `collect` 同一条做法）。
+
+    `name` 是**矿种**（`stone` / `iron` / `copper`，与 `neutralType` 及
+    `vendorShopList.name` 同一套词），`num` 是**批量卖的件数**（接口文档 §2.2 标的是
+    **Int**，不填默认 1）。
+
+    ⚠️ **没有实证报文**：`docs/response.txt` 里只有 `move`/`build`/`remove`。
+    形状是从接口文档 §2.3 推的 —— `{"action":"sell","name":…,"num":…}`。
+    "该用英文矿种名还是中文"同样没有文档实证，取英文（与载荷里其它矿种字段一致）。
+    """
+
+    code = "sell"
+    roles = ALL
+
+    def __init__(self, role_type: str, name: str, num: int) -> None:
+        super().__init__(role_type)
+        self.name = name
+        #: 接口文档标的是 Int —— 别让 str 漏进 JSON（`Attack.controllerId` 正好相反）
+        self.num = num
+
+    def to_wire(self) -> dict[str, Any]:
+        return {"action": self.code, "name": self.name, "num": self.num}
 
 
 class AcceptTask(BaseAction):
