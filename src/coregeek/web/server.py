@@ -2,9 +2,7 @@
 
 本层**不认识任何游戏概念，也不认识 `app`** —— 处理函数由调用方注入，
 这样依赖方向只有一个（`app` → `web`），也不会出现循环 import。
-
-形态照抄官方 demo（`ThreadingHTTPServer` + `0.0.0.0`）：那条路径已被官方验证可用，
-而判题器是我们没法调试的黑盒。
+形态照抄官方 demo（`ThreadingHTTPServer` + `0.0.0.0`）。
 """
 
 from collections.abc import Callable
