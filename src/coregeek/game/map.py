@@ -80,6 +80,40 @@ _ROBOT_CHAR = "x"
 #: 表外类别。它**在网格里照样挡路**，只是画不出来。
 _UNKNOWN_CHAR = "?"
 
+#: 类别 → 中文名。**只有这一份**，`LEGEND` 由它生成。
+#:
+#: 为什么不直接把对照表手写成字符串：那样"哪个字符代表什么"就有了**两份真相**
+#: （上面的字符表 + 手写的图例），加了新中立元素没人记得改图例，而图例写错的症状是
+#: **复盘时看错阵营** —— 比看不懂更糟。生成之后断言只剩一句集合相等（见 tests）。
+#:
+#: ⚠️ 四个任务点按**阵营**命名，不是"我方/敌方"：`1`/`2` 是 `challengerTaskPoint*`、
+#: `3`/`4` 是 `defenderTaskPoint*`，两者在 `zones` 里**同时存在**（样例即如此）。
+#: 样例里 `teamOur.type == "challenger"` 两套恰好重合，**看不出区别** —— 写"我方任务点"
+#: 是一个在样例上永远测不出来的错。我们**可接**的那两个点在 `Turn.task_points`（来自
+#: `teamOur.playerTasks`，阵营已滤好），与这里的 `1`-`4` 是两回事。
+_NAMES: dict[str, str] = {
+    STATION: "基地",
+    "gatling": "加特林",
+    "railgun": "电磁狙击炮",
+    "rocket": "火箭发射台",
+    "wall": "围墙",
+    "worker": "工人",
+    "pioneer": "开拓者",
+    "stone": "石矿",
+    "iron": "铁矿",
+    "copper": "铜矿",
+    "vendor": "小贩",
+    "weaponShop": "武器商店",
+    "challengerTaskPoint1": "挑战方任务点1",
+    "challengerTaskPoint2": "挑战方任务点2",
+    "defenderTaskPoint1": "防守方任务点1",
+    "defenderTaskPoint2": "防守方任务点2",
+}
+
+#: 图例每行的**项目数**。按项目数换行而不是按显示宽度 —— 那要算"中文占 2 列"，
+#: 而为一行图例养一个宽度函数不值得（地图那边一个字符就是一格，用不上它）。
+_LEGEND_PER_LINE = 8
+
 
 def _inside(pos: Pos, size: tuple[int, int]) -> bool:
     """这一格在 `width × height` 之内吗？`size` = `(width, height)`。"""
@@ -87,7 +121,10 @@ def _inside(pos: Pos, size: tuple[int, int]) -> bool:
 
 
 def _char(kind: str) -> str:
-    """类别 → 打印用的**单个**字符（41 列刚好一行放得下）。
+    """类别 → 打印用的**单个**字符。
+
+    ⚠️ **恒返回 1 个字符**（兜底是 `?`，不是 `""`）—— 这是 `render()` 里列能对齐的
+    唯一保证，也是 `LEGEND` 能直接拼 `f"{_char(k)}={name}"` 的前提。别引入多字符的记号。
 
     **这张表是有损的**，所以 `cells` 才是真相、`render()` 只是给人看的。
     """
@@ -100,6 +137,29 @@ def _char(kind: str) -> str:
     if pair is not None:
         return pair[1] if kind.startswith(ENEMY_PREFIX) else pair[0]
     return _RENDER_NEUTRAL.get(kind, _UNKNOWN_CHAR)
+
+
+def _legend() -> str:
+    """字符对照表：`图例：s=基地 g=加特林 …`。**从 `_NAMES` 生成**，不是手写。
+
+    后五项不在 `_NAMES` 里 —— 它们不是"某个类别"，而是 `_char` 的兜底与大小写规则：
+    `x`（机器人，不分敌我不分体型）、`.`（空地）、`?`（表外类别）、以及
+    **"大写 = 敌方"**这条只写在 `_RENDER_SIDED` 注释里的约定。`%` 要单列：
+    **墙是大小写规则的唯一例外**，不写出来没人猜得到。
+
+    写在这里（`_char` 之后）而不是字符表旁边：模块级要调 `_char`，顺序不能反。
+    """
+    items = [f"{_char(kind)}={name}" for kind, name in _NAMES.items()]
+    items += ["x=机器人", ".=空地", "?=未知", "大写=敌方", "%=敌方围墙"]
+    chunks = [
+        " ".join(items[i : i + _LEGEND_PER_LINE])
+        for i in range(0, len(items), _LEGEND_PER_LINE)
+    ]
+    #: 续行缩进到与"图例："同宽，看起来是一个块
+    return "\n".join([f"图例：{chunks[0]}", *(f"      {c}" for c in chunks[1:])])
+
+
+LEGEND = _legend()
 
 
 class Map:
@@ -162,13 +222,40 @@ class Map:
         self.stones = frozenset(stones)
 
     def render(self) -> str:
-        """可打印的图：`height` 行 × `width` 列，**行自上而下 = y 由大到小**。
+        """可打印的**整块**：两行列标尺 + 左侧行号槽 + `height` 行 × `width` 列网格。
 
-        y 向上而终端从上往下印，所以这里必须翻一次。**翻反了不会让任何单测挂** ——
-        图上的一切还是"看着像张地图"（测试和实现可能一起错），只能靠肉眼跟任务书
-        的示意图对一次。
+        行自上而下 = **y 由大到小**（y 向上而终端从上往下印，这里必须翻一次）。
+        **翻反了不会让任何单测挂** —— 图上的一切还是"看着像张地图"（测试和实现可能
+        一起错），只能靠肉眼跟任务书的示意图对一次。所以行号槽是**唯一的守卫**：
+        它把 y 写进了输出，肉眼或断言都能一眼看出次序对不对。
 
-        **本模块不记日志**：唯一的使用者是 `app._log`（每回合打 32 行，
-        1300 回合约 4 万行），由它决定打不打。这里只负责把矩阵摆正。
+        **为什么标尺在 `render()` 里而不是让 `app._log` 自己拼**：列宽与缩进由 `size`
+        推导，那是**地图自己的知识**；`app` 不该知道"第几个字符才是 x=0"。
+
+        行号槽宽度**由 `height` 推导**、不写死 2 —— 写死 2 在 `height > 100` 时行号
+        会撑破槽宽、把网格整体推右一列，而**地图恒 41×32，本地测不出来**。
+        同理宽度算的是**字符数**而不是显示列数：`_char` 恒返回 1 字符，
+        中文字符一个都没有，两者相等。
+
+        尺寸非法（`cells` 为空）⇒ 空串。**这是既有契约**：没有地图可画时
+        `app._log` 那一行会退化成一个空行，而不是抛异常。
         """
-        return "\n".join("".join(_char(k) for k in row) for row in reversed(self.cells))
+        # `not self.cells` 而不是 `self.size`：`cells` 为空才是"没有一格可画"的真判据，
+        # 尺寸有效但高/宽为 0 时 `cells` 同样是空 —— 那时 `size` 看着是合法的。
+        if not self.cells:
+            return ""
+        width, height = self.size
+        label = len(str(height - 1))
+        #: 槽宽 + 分隔符，宽度与每行的行号前缀 `f"{y:>{label}} │ "` **必须**一致，
+        #: 否则标尺与网格差一列（`│` 在 UTF-8 终端占 1 列；本项目的日志恒为 UTF-8）
+        pad = " " * (label + 3)
+        tens = "".join(str(x // 10) if x % 10 == 0 else " " for x in range(width))
+        units = "".join(str(x % 10) for x in range(width))
+        rows = [pad + tens, pad + units]
+        rows += [
+            f"{y:>{label}} │ " + "".join(_char(k) for k in self.cells[y])
+            for y in range(height - 1, -1, -1)
+        ]
+        #: 各行**不等长也无所谓**（标尺十位行可能带尾随空格）：不 `rstrip`，
+        #: 免得"行尾空格"成为一个要解释的东西。列对齐靠的是前缀等宽，不是行长相等。
+        return "\n".join(rows)

@@ -8,8 +8,8 @@
 `prompt` 是**任务线唯一的对外通道**（发给判题器的 LLM，答案下一回合从 payload 的
 `llmResp` 回来），其余时候恒为空串；`executeCmd` 至今没用过。
 
-**每回合记一份复盘日志**（`_log`）：先整张地图、再本回合的动作。判题器是黑盒、不给别的视角，
-出事故时能看见当时的局面，而不是只看见一条 `move`。
+**每回合记一份复盘日志**（`_log`）：先局面（摘要 + 图例 + 地图）、再本回合的动作。
+判题器是黑盒、不给别的视角，出事故时能看见当时的局面，而不是只看见一条 `move`。
 """
 
 import json
@@ -17,6 +17,7 @@ import logging
 from typing import Any
 
 from .game import planner
+from .game.map import LEGEND as map_legend
 from .game.world import Turn
 from .protocol import actions, model
 from .web import server
@@ -55,22 +56,28 @@ def handle(raw: bytes) -> bytes:
 
 
 def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
-    """本回合的复盘日志：**先地图、后动作**，顺序固定（看着图才知道动作合不合理）。
+    """本回合的复盘日志：**先局面、后动作**，顺序固定（看着图才知道动作合不合理）。
 
     **写在 `try` 里面**：日志代码再不起眼也是代码。逃到 `do_POST` 去的话，
     `server.py` 不会接（`web/server.py:22`）—— 连接直接断掉，判题器那边正是
     "响应超时"，红线第一条。宁可日志出错退化成空指令（合法、不计异常），
     也不要一个写坏了的 `render()` 把整队资格赔进去。
 
-    地图 32 行 × 1300 回合 ≈ 四万行是**有意为之**（判题器不给我们别的视角），
-    但要注意：判题器若不读 stdout，管道写满后这里会**阻塞到超时**。
-    真出事只能改这一处。
+    三条内容**拼成一条日志记录**（摘要 / 图例 / 地图），不是三条 —— 用例
+    `test_every_round_logs_the_map_then_the_actions` 钉着"恰好 2 条记录"，
+    而且 `logging` 的时间戳前缀只加在**第一条物理行**上，
+    拆开之后地图那几十行就没有时间戳了（按时间翻日志时正是这些行要定位）。
+
+    顺序是"**头部 → 状态 → 图例 → 图**"：头部带时间戳，图例紧挨着图。
+    这里**一点领域知识都不剩**（谁白天谁夜里、图长什么样、金币几位数全是
+    `Turn` / `Map` 自己的事），本函数只做装配与截断。
+
+    ⚠️ **stdout 是会被写满的**：36~39 行 × 1300 回合 ≈ 5 万行 ≈ 2.6 MB，
+    而 Windows 管道缓冲只有 64KB —— 判题器若**不读** stdout，二十几回合后
+    这里就阻塞到响应超时。**未实测**（本地没法验证判题器读不读），真出事只能改这一处。
     """
     LOGGER.info(
-        "回合 %s（%s）\n%s",
-        turn.round_no,
-        "白天" if turn.is_day else "夜里",
-        turn.map.render(),
+        "%s\n%s\n%s", turn.summary(), map_legend, turn.map.render()
     )
     LOGGER.info("动作：%s", actions.describe(cmds))
     if turn.phase_task:

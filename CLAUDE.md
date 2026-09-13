@@ -7,7 +7,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 编码规则
 
 1. **禁止冗余设计。** 加任何东西（模块、抽象、常量、配置项、防御性分支）之前先问："**这一步**用得上吗？" 用不上就不加。判据是"现在有没有第二个使用者/第二种情况"，不是"以后可能需要"。历史教训：上一版重写前搞了四层架构 + 加密日志 + 分层 import-lint + 后台落盘线程，而当时决策逻辑只有一条经济线，绝大部分基建在交付时都没被真正用到。**宁可后续重构，不要预先抽象。**
-2. **每一步都要在 `docs/design/code-task.md` 留痕。** 固定五段：目标 / 产出（含"这个文件为什么存在"）/ 不做什么 / 验证（**实际跑过的命令与输出**）/ 下一步。不删旧节，只追加。
+2. **每一步都要在 `docs/design/code-task.md` 留痕。** 固定五段：目标 / 产出（含"这个文件为什么存在"）/ 不做什么 / 验证（**实际跑过的命令与输出**）/ 下一步。**新增一律只追加。**
+   - **已完成的小节可以压缩，但只准删两样**：与 `CLAUDE.md` 重复的规则推导、以及粘贴的逐条命令输出。
+   - **决策理由 / 不做什么 / 已知不确定性一条都不准删** —— 那几样是**重新推导代价最高**的部分，删了等于把学费再交一遍。
+   - 压缩时在文件头记一句"旧版见 git 历史哪个提交"。
 3. **红线优先于一切优雅。** 见下节——5 次异常即出局，任何设计取舍在这一条面前让步。
 4. 判题环境只有标准库：`pyproject.toml` 的 `dependencies` 保持为空，语法不得超出 3.11。
 5. `logs/` 等运行期产物**绝不入库**。
@@ -26,8 +29,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 5. **每回合的复盘日志（`app._log`）写在 `try` 里面，别挪出去。** 日志代码再不起眼也是代码，
    `web/server.py` 的 `do_POST` **不接异常**（`server.py:22` 直接 `handler(...)`）—— 逃出去连接就断了，
    判题器那边是"响应超时"（红线第一条）。放进 `try` 里，最坏只是退化成空指令（丢一个回合，合法、不计异常）。
-   ⚠️ **stdout 有被写满的风险**：32 行 × 1300 回合 ≈ 2MB，Windows 管道缓冲 64KB —— 判题器若**不读**
-   stdout，约 45 回合后 `write` 阻塞 ⇒ 响应超时 ⇒ 直通红线。**未实测**，本地没法验证判题器读不读。
+   ⚠️ **stdout 有被写满的风险**：每回合 40 行 / **2262 字节**（第 12 步实测）→ 1300 回合 ≈ **2.9MB**；
+   Windows 管道缓冲 64KB ⇒ 判题器若**不读** stdout，约 **29 回合**后 `write` 阻塞 ⇒ 响应超时 ⇒ 直通红线。
+   **未实测**（本地没法验证判题器读不读）。改前是 33 行 / 1374 字节 / 约 48 回合 —— 第 12 步把阻塞点**提前**了，
+   但两种设计都是死，所以不构成不做的理由。**数字要跟 `app._log` 的 docstring 对齐，别凭记忆写。**
 
 ## 架构
 
@@ -45,11 +50,12 @@ src/coregeek/
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
     │                 + 基地几何：`base_cells` / `weapon_cells` / `back_weapon_cells` / `wall_cells`
-    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`stones`/`station`。
+    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`stones`/`station`
+    │                 + `render()`（**带坐标标尺与行号槽的整块**）+ `LEGEND`（图例，**由 `_NAMES` 生成**）。
     │                 **纯地形**：武器名册不在这里（见 world.py），第 10 步把 `Map.weapons` 删了
     ├── roles.py      §4.5.2 的 Pioneer / Worker（各带自己的 `stone` 块数）；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（round_no / map / roles / gold / weapons / robots / **task_points / phase_task / llm_resp**）
-    │                 + `within` / `is_day` / `day_rounds_left`
+    ├── world.py      Turn（round_no / map / roles / gold / weapons / robots / task_points / phase_task / llm_resp）
+    │                 + `within` / `is_day` / `day_rounds_left` / **`summary()`（3 行关键事实摘要）**
     │                 + `Weapon`（id/kind/pos/attack_range/cooldown）与 `Robot`（pos/health）两个 NamedTuple
     └── planner.py    决策。**策略只写在这里**（白天：**开拓者去接任务**、工人建武器 → 采石砌墙；
                       夜里：**所有没被任务钉住的角色**回炮位，贴着就开火，目标 = 射程内**血最少**的机器人）
@@ -104,7 +110,8 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
   - **`prompt` → `llmResp` 是唯一的 LLM 通道**：响应顶层 `prompt` 发出去，下一回合 payload 顶层 `llmResp` 回来。**任务存续期间不限量、不计数**（接口文档 L198），但**不在任务里一次都不要发**（每游戏日只有 3 次额度，那是任务线之外的资源）。答案**原文进、原文出**、**每回合都交** —— 接口文档 L140「以之前提交过的**通过率最高的**答案计算积分与金币」说明反复提交是判题器**预期的**用法，所以整条任务线**无状态**（`handle` 仍是纯函数，跨回合标志位一旦卡住会**静默关掉整条线**）。
   - **开拓者一旦接任务就被钉死**：离开己方任务点周围一格内、超时、开拓者死亡、完成 —— 四种情形任务都结束（任务书 L377-380）。所以**它连夜里都不回炮位**，这一支写在 `plan()` 循环的**最前面**（全局最早的判据，与昼夜无关）。代价：**夜里三座炮只有两个人操，火力打折 1/3**，由任务积分覆盖。⚠️ **没有"离开后重新入环还能续上"这回事**。"周围一格"按**切比雪夫**（含对角，文档没写，与全局距离度量一致）。**"答案格式"文档完全没写**（只有"通过率 = 正确字段数 / 全量字段数" ⇒ 是多字段结构化答案），`TASK_PROMPT` 的措辞是唯一的杠杆 —— 本步最大的单点风险。
 - **`describe()` 读 `targetPos` 必须容缺**（第 11 步修）：它跑在 `app.handle` 的 `try` 里，硬读 `cmd["targetPos"][0]` 遇到 `acceptTask` / `submitAnswer`（**报文里没有这个字段**）会 `IndexError` ⇒ **整回合退化成空指令**。反向验证实证过：把它改回硬读，两条用例一起炸（含端到端那条）。**每加一个"无坐标"动作都要回头看一眼这里。**
-- **任务点 2 占两格**，相邻判定要取两格的并集；开拓者一旦领任务，**离开任务点一格内即任务作废**（等于钉死原地）。
+- **`render()` 的图例里 `1`-`4` 是「阵营」的任务点，不是「我方/敌方」**（第 12 步）：`1`/`2` 来自 `zones` 的 `challengerTaskPoint*`、`3`/`4` 来自 `defenderTaskPoint*`，两队**同时存在**。样例里 `teamOur.type == "challenger"` 两套恰好重合 ⇒ **写"我方任务点"是一个在样例上永远测不出来的错**。我方可接的那两个点是 `Turn.task_points`。**别把 `mapInfo.zones` 的这 4 个字符和 `playerTasks` 混起来。**
+- **复盘日志的体量与格式**（第 12 步）：`Turn.summary()` 的每个列表**必须有上界**（`SUMMARY_MAX_ITEMS`）—— `Turn.robots` 是逐回合全量、没有上界，日志长度不能是"数据相关的量"。摘要里 **-1 是"字段缺失"不是 0**（金币/回合号打成 `?`）。三块（摘要/图例/地图）拼成**一条**日志记录 —— `logging` 的时间戳只加在第一条物理行上，拆开地图那几十行就没时间戳了。
 
 ## 文档地图
 
@@ -122,9 +129,9 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
 `tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策四类），**不建自研测试框架**：标准库 `unittest` 够用。
-进度见 `docs/design/code-task.md`（当前到第 11 步：**开拓者做任务** —— 白天接任务 → 把题目发给判题器
-LLM（响应顶层 `prompt`）→ 答案从 payload 顶层 `llmResp` 回来 → `submitAnswer` 交回；
-第 10 步是夜里操炮防守，第 9 步是每回合复盘日志，第 8 步是采石砌墙）——**别照记忆里的进度走**。
+进度见 `docs/design/code-task.md`（当前到第 12 步：**地图可视化** —— `render()` 出坐标标尺与行号槽、
+`Turn.summary()` 出关键事实、每回合带图例；第 11 步是开拓者任务线，第 10 步是夜里操炮防守，
+第 9 步是每回合复盘日志）——**别照记忆里的进度走**。
 
 **常用命令**：
 

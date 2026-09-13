@@ -25,7 +25,14 @@ from coregeek.game.grid import (  # noqa: E402
     wall_cells,
     weapon_cells,
 )
-from coregeek.game.map import Map  # noqa: E402
+from coregeek.game.map import (  # noqa: E402
+    LEGEND,
+    _NAMES,
+    _RENDER_NEUTRAL,
+    _RENDER_SIDED,
+    Map,
+    _char,
+)
 from coregeek.game.planner import (  # noqa: E402
     TASK_PROMPT,
     TIME_MARGIN,
@@ -219,18 +226,29 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
     def test_every_round_logs_the_map_then_the_actions(self):
-        """每回合的复盘日志：**先地图、后动作**（用户指定，顺序是重点）。
+        """每回合的复盘日志：**先局面、后动作**（用户指定，顺序是重点）。
 
         判题器是黑盒、只给我们这一个视角，出事故时得能看见当时的局面 ——
         只看见一条 `move` 是没法回答"为什么走了这一格"的。
         `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那两条。
+
+        **恰好两条记录**：三块内容（摘要 / 图例 / 地图）拼成**一条**，
+        `logging` 的时间戳前缀只加在第一条物理行上 —— 拆成三条的话那几十行地图
+        就没有时间戳了，而按时间翻日志时正是这些行要定位。
         """
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(SAMPLE.read_bytes())
         head, acts = (r.getMessage() for r in caught.records)
-        self.assertEqual(head.splitlines()[0], "回合 85（夜里）")
-        #: 抬头 + 32 行地图（41×32 的图，行自上而下 = y 由大到小）
-        self.assertEqual(len(head.splitlines()), 33)
+        lines = head.splitlines()
+        #: 摘要 3 行 + 图例 3 行 + 地图 34 行（41×32 的图，行自上而下 = y 由大到小）
+        self.assertEqual(len(lines), 40)
+        #: 回合号在最前 —— 时间戳就加在这一行上
+        self.assertEqual(lines[0].split("｜")[0], "回合 85（夜里）")
+        self.assertIn("金币 20", lines[0])
+        #: 图例在摘要与地图之间（紧挨着图，看着图例看图）
+        self.assertTrue(lines[3].startswith("图例："), lines[3])
+        #: 标尺两行 + 行号槽 —— 图从第 7 行开始
+        self.assertTrue(lines[8].startswith("31 │ "), lines[8])
         self.assertEqual(acts, "动作：10010 move(6,22)；10012 move(9,17)；10011 move(9,13)")
 
     def test_attack_through_the_real_payload_path(self):
@@ -466,27 +484,171 @@ class GridTest(unittest.TestCase):
         self.assertEqual(len(self.grid.blocked), 35)
 
     def test_render_shape(self):
-        """打印出来的图给调试用 —— 错了最坑：**y 翻反了图上照样"像张地图"**。"""
-        lines = self.grid.render().splitlines()
-        self.assertEqual(len(lines), 32)
-        self.assertEqual({len(line) for line in lines}, {41})
-        # 行号 = height-1-y（y 向上、终端从上往下印）；**小写 = 我方，大写 = 敌方**
-        self.assertEqual(lines[7][10], "s")  # 我方基地左上角 (10,24)
-        self.assertEqual(lines[8][11], "s")  # 我方基地右下角 (11,23)
-        self.assertEqual(lines[7][9], "g")  # 加特林 (9,24)，与基地同一行
-        self.assertEqual(lines[6][10], "r")  # 电磁狙击炮 (10,25)，在基地方上方一行
-        self.assertEqual(lines[21][30], "S")  # 敌方基地左上角 (30,10) → 第 31-10=21 行
-        self.assertEqual(lines[7][4], "o")  # 石矿 (4,24)
-        self.assertEqual(lines[24][28], "%")  # 敌方围墙 (28,7) —— 墙是大小写规则的例外
-        self.assertEqual(lines[27][4], "x")  # 机器人 (4,4)
-        self.assertEqual(lines[31][0], ".")  # (0,0) 空地 —— 最后一行是最底下的 y=0
+        """打印出来的图给调试用 —— 错了最坑：**y 翻反了图上照样"像张地图"**。
 
-    def test_render_degrades_on_a_map_with_no_size(self):
-        """尺寸缺失 ⇒ 矩阵为空 ⇒ 不挡路也不动。**降级方向必须是"不动"**，见 `Map.__init__`。"""
-        empty = Map((-1, -1), {Pos(0, 0): "wall"})
-        self.assertEqual(empty.cells, ())
-        self.assertEqual(empty.blocked, frozenset())
-        self.assertEqual(empty.render(), "")
+        布局：2 行列标尺 + 32 行网格，每行 **46 列** = 行号槽 `len("31")` + `" │ "` + 41 列。
+        下面保留**裸下标**断言（而不是全靠行号槽）—— 下标把"字符落在第几列"钉死，
+        行号槽只能证明"这一行的标号是几"。
+        """
+        lines = self.grid.render().splitlines()
+        self.assertEqual(len(lines), 34)
+        self.assertEqual({len(line) for line in lines}, {46})
+        # 行号 = height-1-y（y 向上、终端从上往下印）；**小写 = 我方，大写 = 敌方**
+        self.assertEqual(lines[9][15], "s")  # 我方基地左上角 (10,24)
+        self.assertEqual(lines[10][16], "s")  # 我方基地右下角 (11,23)
+        self.assertEqual(lines[9][14], "g")  # 加特林 (9,24)，与基地同一行
+        self.assertEqual(lines[8][15], "r")  # 电磁狙击炮 (10,25)，在基地上方一行
+        self.assertEqual(lines[23][35], "S")  # 敌方基地左上角 (30,10) → 第 31-10=21 行
+        self.assertEqual(lines[9][9], "o")  # 石矿 (4,24)
+        self.assertEqual(lines[26][33], "%")  # 敌方围墙 (28,7) —— 墙是大小写规则的例外
+        self.assertEqual(lines[29][9], "x")  # 机器人 (4,4)
+        self.assertEqual(lines[33][5], ".")  # (0,0) 空地 —— 最后一行是最底下的 y=0
+        # 最上一行网格的行号必须是 height-1 —— 槽宽与网格对得上（差一列就全错位）
+        self.assertTrue(lines[2].startswith("31 │ "), lines[2])
+
+    def test_render_labels_every_row_with_its_y(self):
+        """每行行号自 `height-1` **递减到 0**。
+
+        这是 y 翻转最直接的守卫 —— `lines[31][0] == "."` 只能证明"最后一行是 y=0"，
+        中间那些行翻反了它照样过。
+        """
+        labels = [
+            int(line.split(" │ ")[0])
+            for line in self.grid.render().splitlines()[2:]
+        ]
+        self.assertEqual(labels, list(range(31, -1, -1)))
+
+    def test_render_degrades_when_there_are_no_cells(self):
+        """没有格子 ⇒ 空串，`blocked` 也为空 ⇒ **不挡路也不动**（见 `Map.__init__`）。
+
+        判据是 `cells` 为空而不是"尺寸非法"：高/宽为 0 时 `size` 看着合法，
+        但同样一格都没有 —— 两种情形走的是同一条早返回。
+        """
+        for size in ((-1, -1), (41, 0), (0, 32)):
+            with self.subTest(size=size):
+                empty = Map(size, {Pos(0, 0): "wall"})
+                self.assertEqual(empty.cells, ())
+                self.assertEqual(empty.blocked, frozenset())
+                self.assertEqual(empty.render(), "")
+
+    def test_the_legend_covers_every_category(self):
+        """图例必须覆盖字符表里的**每一个**类别。
+
+        它守的是"加了新中立元素却忘了往 `_NAMES` 里补" —— 漏掉的症状是复盘时
+        把新元素看成 `?`，而 `?` 在地图上到处都是（空地旁边就是），很难注意到。
+        集合相等比"循环 assertIn"更强：多一个、少一个都挂。
+        """
+        self.assertEqual(set(_NAMES), set(_RENDER_SIDED) | set(_RENDER_NEUTRAL))
+        for kind in _NAMES:
+            self.assertIn(f"{_char(kind)}=", LEGEND)
+        # 这三样不在 `_NAMES` 里 —— 它们不是"某个类别"，而是 `_char` 的兜底与大小写规则
+        for token in ("x=机器人", ".=空地", "?=未知", "大写=敌方", "%=敌方围墙"):
+            self.assertIn(token, LEGEND)
+
+    def test_the_legend_names_the_task_points_by_faction(self):
+        """`1`-`4` 是**阵营**的任务点，不是"我方/敌方"。
+
+        它们来自 `zones` 的 `challengerTaskPoint*` / `defenderTaskPoint*`，两队**同时存在**；
+        样例里我方恰好是挑战者、两套重合，所以**写错也测不出来**。
+        我们**可接**的那两个点不在字符表里（它们是 `Turn.task_points`，来自
+        `teamOur.playerTasks`，阵营已滤好）—— 别把两者混为一谈。
+        """
+        self.assertIn("挑战方任务点", LEGEND)
+        self.assertIn("防守方任务点", LEGEND)
+        self.assertNotIn("我方任务点", LEGEND)
+        self.assertNotIn("敌方任务点", LEGEND)
+
+
+class TurnSummaryTest(unittest.TestCase):
+    """`Turn.summary()` 的三行摘要。
+
+    它跑在 `app.handle` 的 `try` 里 —— **抛异常 = 整回合退化成空指令**，
+    所以"空局面不炸"与"长度有上界"和内容一样重要。
+    """
+
+    def _turn(self, **kw) -> Turn:
+        base = dict(
+            round_no=85,  # 夜里
+            map=Map((41, 32), {Pos(0, 0): "stone"}),
+            roles=(),
+            gold=20,
+        )
+        base.update(kw)
+        return Turn(**base)
+
+    def test_a_full_turn_reports_every_fact(self):
+        turn = self._turn(
+            roles=(
+                Worker(10010, Pos(5, 23), 1),
+                Worker(10012, Pos(10, 16), 1),
+                Pioneer(10011, Pos(10, 12)),
+            ),
+            gold=20,
+            weapons=(
+                Weapon(10020, "gatling", Pos(9, 24), 4, 0),
+                Weapon(10030, "railgun", Pos(10, 25), 7, 0),
+                # 火箭刚打完一发，样例里没有 `cooldown` 字段 ⇒ 这一条只能合成
+                Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 3),
+            ),
+            robots=(Robot(Pos(4, 4), 40), Robot(Pos(5, 5), 800)),
+            task_points=(Pos(14, 14), Pos(17, 17)),
+        )
+        lines = turn.summary().splitlines()
+        self.assertEqual(len(lines), 3)
+        self.assertEqual(
+            lines[0],
+            "回合 85（夜里）｜ 金币 20 ｜ 武器 3/3："
+            "10020 gatling(9,24)r4 10030 railgun(10,25)r7 10040 rocket(9,25)r∞c3",
+        )
+        self.assertEqual(
+            lines[1],
+            "我方 10010 worker(5,23)石1 ｜ 10012 worker(10,16)石1 ｜ 10011 pioneer(10,12)石0",
+        )
+        self.assertEqual(
+            lines[2],
+            "机器 2 台：(4,4)h40 (5,5)h800 ｜ 可接任务点 (14,14) (17,17)",
+        )
+
+    def test_an_empty_turn_still_prints_three_lines(self):
+        """空局面：一条事实都没有，但**每一格都得有字**（`无` / `0 台`），不能是空行。"""
+        lines = self._turn(roles=(Worker(10010, Pos(5, 23)),)).summary().splitlines()
+        self.assertEqual(len(lines), 3)
+        self.assertIn("武器 0/1：无", lines[0])
+        self.assertIn("机器 0 台：无", lines[2])
+        self.assertIn("可接任务点 无", lines[2])
+
+    def test_missing_fields_are_not_reported_as_zero(self):
+        """`-1` 是"字段缺失"，不是 0 金 / 第 -1 回合 —— 打成 `?`，别让它看着像个事实。"""
+        line = self._turn(gold=-1, round_no=-1).summary().splitlines()[0]
+        self.assertIn("回合 ?（夜里）", line)
+        self.assertIn("金币 ?", line)
+
+    def test_the_unknown_range_is_not_printed_as_a_negative_number(self):
+        """射程 -1 = 字段缺失 ⇒ 够不着 ⇒ `?`；0 也照原样打 0（不做特殊处理）。"""
+        turn = self._turn(
+            roles=(Worker(10010, Pos(5, 23)),),
+            weapons=(
+                Weapon(1, "gatling", Pos(9, 24), -1, -1),
+                Weapon(2, "gatling", Pos(9, 25), 0, 0),
+            ),
+        )
+        line = turn.summary().splitlines()[0]
+        self.assertIn("1 gatling(9,24)r?", line)
+        self.assertIn("2 gatling(9,25)r0", line)
+        # 冷却 -1 与 0 都是"没有冷却"，都不该出现 `c`
+        self.assertNotIn("c-1", line)
+        self.assertNotIn("r0c0", line)
+
+    def test_long_lists_are_capped(self):
+        """机器人是逐回合**全量**推送的 ⇒ 摘要长度必须有上界，超出的只报个数。"""
+        turn = self._turn(
+            roles=(Worker(10010, Pos(5, 23)),),
+            robots=tuple(Robot(Pos(i, 5), 10 * i) for i in range(11)),
+        )
+        line = turn.summary().splitlines()[2]
+        self.assertIn("机器 11 台：", line)
+        self.assertIn("…+3", line)  # 11 - SUMMARY_MAX_ITEMS(8) = 3
+        self.assertNotIn("(10,5)", line)  # 第 11 台没打出来
 
 
 class BuildGeometryTest(unittest.TestCase):

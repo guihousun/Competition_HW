@@ -3,7 +3,7 @@
 字段只带**当前步骤真正用到**的：血量、等级、冷却等，用到时再加（背包已按需收窄成 `BaseRole.stone`）。
 """
 
-from typing import NamedTuple
+from typing import Any, Callable, NamedTuple
 
 from .grid import Pos
 from .map import Map
@@ -18,6 +18,28 @@ DAY_ROUNDS = 70
 #: ⚠️ 与 `planner.WEAPON_ORDER` **不是一回事**：那个是"三座炮的建造先后"（策略），
 #: 这个是"哪些 roleType 算武器"（协议）。内容碰巧相同，含义不同，别合并。
 WEAPON_KINDS = frozenset({"gatling", "railgun", "rocket"})
+
+
+#: 摘要里每个列表的**项目数上限**，超出的只报个数（`…+n`）。
+#: `Turn.robots` 是**逐回合全量**推送的（接口文档 §1.5.1）、`weapons` 也没有硬上界 ——
+#: 不截断的话摘要长度就是一个**数据相关的量**，而 `CLAUDE.md` 硬约束 5 那条管道缓冲
+#: 风险最怕的正是"没有上界"。宁可少打几台机器人的坐标，也不要一个会随局面膨胀的日志。
+SUMMARY_MAX_ITEMS = 8
+
+#: 射程大到这个数就打成 `∞`。地图对角线约 52，比它大就是"够得着全图"；
+#: 样例的火箭是 `INT_MAX` —— 直打 `r2147483647` 每回合白占 10 个字节还难看。
+UNLIMITED_RANGE = 100
+
+
+def _listed(items: tuple[Any, ...], fmt: Callable[[Any], str], sep: str = " ") -> str:
+    """逐项 `fmt` 后用 `sep` 连起来，**超过 `SUMMARY_MAX_ITEMS` 只报个数**。
+
+    空元组返回空串 —— 调用方自己决定"空"怎么说（`无` / `0 台`），
+    因为这个函数不知道它在报的是武器还是机器人。
+    """
+    shown = sep.join(fmt(i) for i in items[:SUMMARY_MAX_ITEMS])
+    rest = len(items) - SUMMARY_MAX_ITEMS
+    return f"{shown} …+{rest}" if rest > 0 else shown
 
 
 class Weapon(NamedTuple):
@@ -106,3 +128,58 @@ class Turn(NamedTuple):
         所以 `handle` 仍然是纯函数。
         """
         return DAY_ROUNDS - self.within + 1 if self.is_day else 0
+
+    def summary(self) -> str:
+        """**3 行**关键事实摘要 —— 图上推不出来的那些：金币 / 武器名册与射程 / 角色背包 /
+        机器人血量 / 可接任务点。
+
+        放在这里而不是 `app._log` 里，与 `Map.render()` 在 `map.py` 是同一条分工：
+        **领域对象自己格式化自己**，`app` 只管装配与红线。下面这些字段
+        （`gold` / `weapons` / `roles` / `robots` / `task_points`）原本`app` 一个都不碰。
+
+        ⚠️ **本方法不记日志、不留状态、长度有上界**（每个列表 `SUMMARY_MAX_ITEMS` 项）。
+        它跑在 `app.handle` 的 `try` 里，抛出去的代价是**整回合退化成空指令** ——
+        所以只做字段读取与拼接，不做任何可能失败的运算（除零、索引、比较不同类型的值）。
+
+        三条格式化约定，都是为了"日志必须诚实"：
+
+        - **缺失不等于 0**：`gold` / `round_no` 的 -1 是"字段缺失"，打成 `?`；
+          若打成 0 会让人以为真的一分钱没有。
+        - **射程**：-1 ⇒ `?`（够不着），≥ `UNLIMITED_RANGE` ⇒ `∞`。
+        - **冷却**只在 `> 0` 时出现：`-1` 与 `0` 都是"没有冷却"，
+          与 `model._weapons` 的 `> 0` 判据**同源**，别在这里另立一套。
+        """
+        gold = self.gold if self.gold >= 0 else "?"
+        round_no = self.round_no if self.round_no >= 0 else "?"
+        when = "白天" if self.is_day else "夜里"
+
+        def weapon(w: Weapon) -> str:
+            span = (
+                "?"
+                if w.attack_range < 0
+                else ("∞" if w.attack_range >= UNLIMITED_RANGE else str(w.attack_range))
+            )
+            cooldown = f"c{w.cooldown}" if w.cooldown > 0 else ""
+            return f"{w.id} {w.kind}({w.pos.x},{w.pos.y})r{span}{cooldown}"
+
+        def role(r: BaseRole) -> str:
+            return f"{r.id} {r.type_name}({r.pos.x},{r.pos.y})石{r.stone}"
+
+        def robot(b: Robot) -> str:
+            return f"({b.pos.x},{b.pos.y})h{b.health}"
+
+        def point(p: Pos) -> str:
+            return f"({p.x},{p.y})"
+
+        return "\n".join(
+            [
+                #: 回合号在最前 —— `logging` 的时间戳前缀只加在**第一条物理行**上，
+                #: 按时间翻日志时要一眼看见这是哪一回合
+                f"回合 {round_no}（{when}）｜ 金币 {gold}"
+                f" ｜ 武器 {len(self.weapons)}/{len(self.roles)}："
+                f"{_listed(self.weapons, weapon) or '无'}",
+                f"我方 {_listed(self.roles, role, ' ｜ ') or '无'}",
+                f"机器 {len(self.robots)} 台：{_listed(self.robots, robot) or '无'}"
+                f" ｜ 可接任务点 {_listed(self.task_points, point) or '无'}",
+            ]
+        )
