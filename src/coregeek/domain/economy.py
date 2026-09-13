@@ -139,12 +139,18 @@ def weapons_shortfall(turn: Turn) -> int:
     return max(0, config.MAX_WEAPONS - alive)
 
 
-def next_weapon_build(turn: Turn, box) -> tuple[str, Pos] | None:
+def next_weapon_build(
+    turn: Turn, box, *, avoid: frozenset[Pos] | set[Pos] = frozenset()
+) -> tuple[str, Pos] | None:
     """下一座该建的武器 `(类型, 位置)`；不需要建/建不起/无处可建时返回 None。
 
     三个条件缺一不可：金币够、还没满 3 座、环上还有空位。
     位置取 `Box.weapon_sites()`（由正面往后）里的**第一个空位**，
     类型按 `config.WEAPON_LOADOUT` 顺序给 —— 射程短的靠正面。
+
+    `avoid` 是**本回合已被其他建造手认领**的位置。两人同时开工时必须传它，
+    否则两人会同时冲向同一个空位：一个建成了，另一个的动作白白浪费
+    （`build` 落在已被占用的格子上是什么后果，任务书没写，不值得赌）。
 
     白天没有机器人（任务书 L350），所以环上不会出现"位置被机器人占住"的情况，
     这里不必做可达性预检。
@@ -154,12 +160,14 @@ def next_weapon_build(turn: Turn, box) -> tuple[str, Pos] | None:
     alive = [r for r in turn.weapons if r.alive]
     if len(alive) >= config.MAX_WEAPONS or box is None:
         return None
-    taken = {r.pos for r in alive}
+    taken = {r.pos for r in alive} | set(avoid)
     free = [p for p in box.weapon_sites() if p not in taken]
     if not free:
         return None
     order = config.WEAPON_LOADOUT
-    kind = order[min(len(alive), len(order) - 1)]
+    # 类型按"已建成几座"给 —— 认领中的那几座还没落地，所以不与 `avoid` 挂钩：
+    # 两人同时开工时应当一个拿加特林、一个拿电磁，而不是都拿加特林。
+    kind = order[min(len(alive) + len(avoid), len(order) - 1)]
     return kind, free[0]
 
 

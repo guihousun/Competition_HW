@@ -979,12 +979,14 @@ def _sample_payload() -> dict:
 
 def _payload(*, round_no: int = 30, gold: int | None = None, place: dict | None = None,
              backpack: dict | None = None, weapons: int | None = None,
-             robots: bool = True) -> dict:
+             robots: bool = True, closed_box: bool = False) -> dict:
     """样例副本 + 定点修改。`place`/`backpack` 的 key 是角色 id。
 
     `weapons`：只保留前 N 座武器（样例有 3 座，而**开局是 0 座** —— 任务书 §4.5.1）。
     测第 1 天的行为必须显式传 `weapons=0` + `gold=75`，否则等于在测中局。
     `robots=False`：清空机器人（任务书 L350：机器人只在夜晚出现，白天为 0）。
+    `closed_box=True`：把围墙环填满（只留门），使 `_defense_pending` 为假。
+    **不传它就只能测到"两个工人都在防御线"这一种局面** —— 经济手岗位根本不会出现。
     """
     p = _sample_payload()
     p["roundNo"] = round_no
@@ -1002,6 +1004,35 @@ def _payload(*, round_no: int = 30, gold: int | None = None, place: dict | None 
         p["teamOur"]["roles"] = kept
     if not robots:
         p["robot"] = {"roles": []}
+    if closed_box:
+        from coregeek.domain import geometry
+        from coregeek.domain.grid import Pos
+
+        st = next(r for r in p["teamOur"]["roles"] if r["roleType"] == "station")
+        sp = Pos(st["pos"]["x"], st["pos"]["y"])
+        # ⚠️ 这里必须**按和 production 完全一样的方式**推盒子：`world.box_of` 会拿场上
+        #    机器人的位置覆盖先验正面（`front_from_positions`），正面一变，**门就换了一条边**，
+        #    要铺的 19 格也跟着变。早先这里不传 threat，摆出来的"满墙"和 planner 看到的
+        #    盒子差了整整一格门 —— `_defense_pending` 永远为真，经济手岗位根本叫不出来。
+        #    （机器人那个 `if not robots` 必须在**前面**，否则清空动作会晚一步。）
+        threat = tuple(
+            Pos(r["pos"]["x"], r["pos"]["y"])
+            for r in (p.get("robot") or {}).get("roles", ())
+            if r.get("health", 1) > 0
+        )
+        b = geometry.box_from_station(
+            sp, p["mapInfo"]["width"], p["mapInfo"]["height"], p["teamOur"]["type"],
+            front=geometry.front_from_positions(sp, threat),
+        )
+        # 样例自带的墙（(5,20)/(5,21) 那两面在盒子外）先清掉，只留盒子上的 19 面
+        p["teamOur"]["roles"] = [
+            r for r in p["teamOur"]["roles"] if r["roleType"] != "wall"
+        ]
+        for i, w in enumerate(b.wall_order()):
+            p["teamOur"]["roles"].append(
+                {"id": 40000 + i, "roleType": "wall", "level": 1, "health": 1000,
+                 "pos": {"x": w.x, "y": w.y}, "backpack": []}
+            )
     for r in p["teamOur"]["roles"]:
         if place and r["id"] in place:
             x, y = place[r["id"]]
@@ -1093,6 +1124,94 @@ def economy_day_one_builds_weapons_before_anything_else() -> None:
     # 三座建完之后（金币归零）才轮到墙：shortfall 归零
     eq(economy.next_weapon_build(_turn(gold=0, weapons=0, robots=False), box), None,
        "金币不够时不该再计划建武器")
+
+
+@case
+def planner_two_workers_split_the_defense_line() -> None:
+    """🔴 **用户实盘指出的问题**：第 1 天只有一个工人在动、另一个跑去挖铜。
+
+    两处都不合理，且都不是"调参"能解决的：
+
+    · **只有一个工人在动** —— 原先只派一个建造手，另一个当经济手。而第 1 天的
+      金币已经被 3 座武器吃满（75 金 → 0），挖来的矿当天换不成任何东西；
+      同时正面墙一面没砌。**该抢的是天黑前那几面正面墙，不是铜矿。**
+    · **两人不能"一个采石一个砌墙"** —— 游戏里没有转移物品的指令
+      （`drop` 只丢不捡），每个角色的背包就是自己的料仓，石头送不过去。
+      想让两人的产出叠加，唯一办法是**各挖各的、各砌各的那一段**。
+
+    所以判据是：**防御活没干完时，两个工人都是建造手，且认领不同的目标**。
+    这条用例盯的就是"认领不同"——没有它，两人会同时冲向同一个空位/缺口，
+    一个成功、另一个的动作白白浪费。
+    """
+    from coregeek.domain import planner
+    from coregeek.domain.world import box_of
+
+    # 第 1 天：武器 0 座、金币 75、无机器人
+    t = _turn(round_no=1, gold=75, weapons=0, robots=False)
+    mem = planner.PlanMemory()
+    intents = planner.plan(t, mem)
+
+    eq(set(mem.jobs.get(r) for r in (10010, 10012)), {planner.JOB_FORTIFY},
+       f"两个工人都该上防御线（第 1 天），实际 {mem.jobs}")
+    eq(mem.jobs.get(10011), planner.JOB_PIONEER, "开拓者仍是军需官")
+
+    # 三个角色**都**有指令（开拓者去夜战操控位待命，不再原地发呆）
+    eq(sorted(i.role_id for i in intents), [10010, 10011, 10012],
+       f"三个角色都该有动作，实际 {[(i.role_id, type(i).__name__) for i in intents]}")
+
+    # 两个工人的**目标必须不同**（同一回合不能抢同一个武器空位）
+    sites = [i.dest for i in intents if i.role_id in (10010, 10012)]
+    eq(len(set(sites)), 2, f"两个建造手不能去同一个位置：{[(p.x, p.y) for p in sites]}")
+
+    # 站到环上时，两人认领的是**不同的武器槽**
+    t2 = _turn(round_no=1, gold=75, weapons=0, robots=False,
+               place={10010: (8, 22), 10012: (8, 23)})
+    intents = planner.plan(t2, planner.PlanMemory())
+    builds = [(i.role_id, i.target) for i in intents if type(i).__name__ == "Build"]
+    eq(len(builds), 2, f"两人都该在建武器，实际 {[(i.role_id, type(i).__name__) for i in intents]}")
+    eq(len({tgt for _, tgt in builds}), 2, f"两人不能建在同一个格子上：{builds}")
+    eq(sorted(name for _, name in [(i.role_id, i.name) for i in intents
+                                   if type(i).__name__ == "Build"]),
+       ["gatling", "railgun"], "两人应分别建加特林与电磁（射程短的先建）")
+
+    # 缺口也是**交错**分的：正面 6 面由两人平分，正面仍然最先合拢
+    box = box_of(t)
+    from coregeek.domain.world import wall_gaps
+    gaps = wall_gaps(t, box)
+    front = set(box.sides[box.front])
+    eq(len([g for g in gaps[:6] if g in front]), 6, "wall_order 前 6 格就是整个正面")
+    eq([g.x for g in gaps[0::2][:3]], [8, 8, 8], "1 号建造手的份额仍在正面")
+    eq([g.x for g in gaps[1::2][:3]], [8, 8, 8], "2 号建造手的份额也仍在正面")
+
+
+@case
+def planner_economy_hand_appears_only_after_defense_is_done() -> None:
+    """防御活（武器 + 围墙盒）干完之后，两个工人才一起转经济手。
+
+    ⚠️ 这个岗位切换**刻意不做粘性状态**：夜里墙被拆掉后缺口重新出现，
+    第二天两人自动回到防御线；补完再一起转经济。自平衡，不需要状态机。
+    """
+    from coregeek.domain import planner
+
+    # 盒子合拢 + 武器 3 座 → 没有防御活
+    t = _turn(round_no=30, closed_box=True)
+    mem = planner.PlanMemory()
+    planner.plan(t, mem)
+    eq(set(mem.jobs.get(r) for r in (10010, 10012)), {planner.JOB_ECONOMY},
+       f"防御活干完后两个工人都该转经济，实际 {mem.jobs}")
+
+    # 夜里被打掉一面墙 → 缺口重现 → 第二天两人都回到防御线
+    p = _payload(round_no=31, closed_box=True)
+    p["teamOur"]["roles"] = [
+        r for r in p["teamOur"]["roles"]
+        if not (r["roleType"] == "wall" and r["pos"] == {"x": 8, "y": 21})
+    ]
+    from coregeek.protocol import model
+    t2 = model.load(p)
+    mem2 = planner.PlanMemory()
+    planner.plan(t2, mem2)
+    eq(set(mem2.jobs.get(r) for r in (10010, 10012)), {planner.JOB_FORTIFY},
+       f"缺口重现后两人都该回到防御线，实际 {mem2.jobs}")
 
 
 @case
@@ -1197,7 +1316,12 @@ def economy_sells_the_most_valuable_ore_first_and_keeps_wall_stone() -> None:
     # ⚠️ 必须站在小贩**旁边**而不是**上面**：(20,16) 是小贩自己占的格，
     #    中立单位不可通行（任务书 L85）。早先把角色放在格子本身，
     #    `_step` 判 `here == target` 直接 Idle —— 那是测试摆错了位置，不是策略错。
-    t = _turn(place={10012: (20, 17)}, backpack={10012: bag})
+    #
+    # ⚠️ `closed_box=True` 是把"经济手"这个岗位**叫出来**的唯一办法：
+    #    防御线还有活（武器没建满 / 盒子有缺口）时两个工人都在防御线上，
+    #    小贩旁边的工人会被派去砌墙 —— 那不是 bug，是第 1 天的正确优先级。
+    #    要单独测经济分支，就得先让防御线归零。
+    t = _turn(round_no=30, closed_box=True, place={10012: (20, 17)}, backpack={10012: bag})
     intent = _only(planner.plan(t, planner.PlanMemory()), 10012)
     eq(type(intent).__name__, "Sell", "满载 + 站在小贩旁应清仓")
     eq(intent.name, "copper", "铜单价最高，必须先卖")
@@ -1249,33 +1373,48 @@ def economy_pioneer_uses_a_voucher_before_buying_more() -> None:
 
 
 @case
-def planner_keeps_exactly_one_fortifier_and_sticks_to_it() -> None:
-    """分工必须**恰好一个**筑墙手，且跨回合粘住（两个工人不会同时去砌墙）。
+def planner_never_puts_the_pioneer_on_a_worker_job() -> None:
+    """岗位只读 `PlanMemory.jobs`，且**开拓者永远不拿工人岗位**。
 
-    ⚠️ 这里直接读 `PlanMemory.jobs`，而不是从意图**反推**岗位。
-    早先试过反推（Build→筑墙、Buy/Use→军需），但角色离目标远时产出的都是
-    `Move` —— 反推函数只能一律判成"经济手"，于是三种岗位全被认成同一个，
-    测试就变成了永远为假的断言。意图可以观测，**岗位本身就是内部分工**，
-    只能直接读。
+    ⚠️ 为什么直接读 `jobs` 而不是从意图**反推**岗位：角色离目标远时产出的都是
+    `Move`，反推函数只能一律判成同一种岗位，测试就变成永远为假的断言。
+    意图可以观测，**岗位本身就是内部分工**，只能直接读。
+
+    ⚠️ 开拓者不许拿 `fortify`/`economy`：这两个岗位产出的 `build`/`collect`/`remove`
+    都是**工人专属**（任务书 §4.4 动作表「使用者」列），开拓者发出去就是非法指令。
+    曾经靠"开拓者初始岗位恰好不是 ECONOMY"这个**巧合**挡住，现在改成显式闸门。
     """
     from coregeek.domain import planner
     from coregeek.infra import config
 
+    # 各种白天局面：开局（武器 0 座）、中局、盒子合拢。
+    # ⚠️ 夜里不在这里断言：夜晚走的是**武器配对**（`mem.assignments`），
+    #    根本不分配岗位，`mem.jobs` 是空的 —— 那是另一套分工，
+    #    由 `planner_night_gives_each_role_a_distinct_weapon` 负责。
+    for kw in (
+        dict(round_no=1, gold=75, weapons=0, robots=False),
+        dict(round_no=30),
+        dict(round_no=30, closed_box=True),
+        dict(round_no=1, gold=75, weapons=0, robots=False, place={10010: (5, 23)}),
+    ):
+        mem = planner.PlanMemory()
+        t = _turn(**kw)
+        for _ in range(3):  # 连续推演，岗位不得漂移
+            planner.plan(t, mem)
+        eq(len(mem.jobs), 3, f"三名存活角色都该有岗位：{mem.jobs}")
+        eq(mem.jobs.get(10011), planner.JOB_PIONEER,
+           f"开拓者必须是军需官（局面 {kw}），实际 {mem.jobs.get(10011)}")
+        for wid in (10010, 10012):
+            ok(mem.jobs.get(wid) in (planner.JOB_FORTIFY, planner.JOB_ECONOMY),
+               f"工人的岗位只能是 fortify/economy：{mem.jobs}")
+
+    # 行为面：建造手挪到缺口旁、备齐一批料 → 必须真的砌墙
+    from coregeek.domain.world import box_of, wall_gaps
+
     mem = planner.PlanMemory()
     t = _turn(place={10010: (5, 23), 10012: (10, 16)})
     planner.plan(t, mem)
-    jobs = dict(mem.jobs)
-    eq(len(jobs), 3, f"三名存活角色都该有岗位：{jobs}")
-    eq(list(jobs.values()).count(planner.JOB_FORTIFY), 1, f"筑墙手数量必须是 1：{jobs}")
-    eq(list(jobs.values()).count(planner.JOB_PIONEER), 1, f"开拓者岗位必须是 1：{jobs}")
-
-    fortifier = [rid for rid, j in jobs.items() if j == planner.JOB_FORTIFY][0]
-    for _ in range(5):  # 连续推演，岗位不得漂移
-        planner.plan(t, mem)
-    eq(mem.jobs.get(fortifier), planner.JOB_FORTIFY, "筑墙手的岗位必须粘住")
-
-    # 行为面：把筑墙手挪到缺口旁，它必须真的开始砌墙
-    from coregeek.domain.world import box_of, wall_gaps
+    fortifier = [rid for rid, j in mem.jobs.items() if j == planner.JOB_FORTIFY][0]
 
     box = box_of(t)
     gap = wall_gaps(t, box)[0]
@@ -1283,7 +1422,7 @@ def planner_keeps_exactly_one_fortifier_and_sticks_to_it() -> None:
     #    那不是 bug 而是料批规则在起作用（1 块只够砌 1 面，砌完就得再走一趟矿）。
     t2 = _turn(place={10010: (gap.x + 1, gap.y)}, backpack={10010: ["stone"] * config.STONE_STOCK})
     intent = _only(planner.plan(t2, mem), fortifier)
-    eq(type(intent).__name__, "Build", f"筑墙手到位且备齐一批料后应建墙，实际 {intent}")
+    eq(type(intent).__name__, "Build", f"建造手到位且备齐一批料后应建墙，实际 {intent}")
 
 
 @case
@@ -1328,10 +1467,13 @@ def planner_night_gives_each_role_a_distinct_weapon() -> None:
 
 @case
 def planner_one_round_produces_build_sell_and_buy_together() -> None:
-    """**第 5 步的验收用例**：一个白天回合同时产出建墙 / 贩卖 / 采购三条指令。
+    """**第 5 步的验收用例**：白天三条经济线（建墙 / 贩卖 / 采购）都接通。
 
-    三个人各就各位：筑墙手贴着缺口、经济手贴着小贩、军需官贴着武器商店。
-    这是"经济线真的接通了"的最小证据 —— 少了任何一条，说明对应分支没落地。
+    ⚠️ 这里**必须拆成两个回合**，不能再要求"一回合内同时产出三样"。
+    分工由**防御线是否还有活**（`_defense_pending`）全局决定：有活时**两个工人
+    都在防御线上**（用户实盘指出"第一天只有一个工人在动"），没活时才留一个做经济手。
+    所以 `sell` 与 `build` 在同一回合里**互斥** —— 那是设计，不是回归。
+    两个回合的**并集**仍是 {build, sell, buy}，覆盖目标不变。
     """
     from coregeek.domain import planner
     from coregeek.domain.world import box_of, wall_gaps
@@ -1341,27 +1483,34 @@ def planner_one_round_produces_build_sell_and_buy_together() -> None:
     probe = _turn()
     box = box_of(probe)
     gap = wall_gaps(probe, box)[0]
+    seats = {10010: (gap.x + 1, gap.y), 10012: (20, 17), 10011: (25, 21)}
+    bags = {
+        10010: ["stone"] * config.STONE_STOCK,  # 备齐一批料才会进入建墙阶段
+        10012: ["copper"] * 90,                # ≥ 背包 85% → 触发清仓
+        10011: [],
+    }
 
-    t = _turn(
-        round_no=30,
-        gold=120,
-        place={10010: (gap.x + 1, gap.y), 10012: (20, 17), 10011: (25, 21)},
-        backpack={
-            10010: ["stone"] * config.STONE_STOCK,  # 备齐一批料才会进入建墙阶段
-            10012: ["copper"] * 90,  # ≥ 背包 85% → 触发清仓
-            10011: [],
-        },
-    )
-    result = commands.encode_all(planner.plan(t, planner.PlanMemory()), t)
-    eq(result.rejected, [], f"验收回合不该有被拒指令：{result.rejected}")
+    def actions_of(**kw):
+        t = _turn(round_no=30, gold=120, place=seats, backpack=bags, **kw)
+        result = commands.encode_all(planner.plan(t, planner.PlanMemory()), t)
+        eq(result.rejected, [], f"验收回合不该有被拒指令：{result.rejected}")
+        return {c["action"]: c for c in result.commands.values()}
 
-    actions = {c["action"] for c in result.commands.values()}
-    eq(actions, {"build", "sell", "buy"}, f"三条经济线必须同时产出，实际 {actions}")
+    # 回合 A：防御线还有活 → 两个工人都在砌墙，军需官照常采购
+    a = actions_of()
+    ok("build" in a, f"防御线有活时必须有建墙指令，实际 {sorted(a)}")
+    eq(a["build"]["name"], "wall", "建墙指令的 name 必须是 'wall'")
+    ok("sell" not in a, f"两个工人都在防御线上，不该有人跑去贩卖：{sorted(a)}")
+    eq(a["buy"]["name"], "WeaponUpgradeVoucher1", "金币 120 应买武器一级升级券")
 
-    by_action = {c["action"]: c for c in result.commands.values()}
-    eq(by_action["build"]["name"], "wall", "建墙指令的 name 必须是 'wall'")
-    eq(by_action["sell"]["name"], "copper", "先卖单价最高的铜")
-    eq(by_action["buy"]["name"], "WeaponUpgradeVoucher1", "金币 120 应买武器一级升级券")
+    # 回合 B：防御线归零 → 腾出一只手做经济，贩卖上线
+    b = actions_of(closed_box=True)
+    ok("sell" in b, f"防御线归零后应有人清仓贩卖，实际 {sorted(b)}")
+    eq(b["sell"]["name"], "copper", "先卖单价最高的铜")
+    eq(b["buy"]["name"], "WeaponUpgradeVoucher1", "采购不受分工影响")
+
+    union = set(a) | set(b)
+    ok({"build", "sell", "buy"} <= union, f"三条经济线必须都接通，实际只见到 {sorted(union)}")
 
 
 @case
