@@ -16,9 +16,6 @@ from .world import Turn
 
 LOGGER = logging.getLogger(__name__)
 
-#: 石矿（接口文档 §1.2.1）。采石是第 1 天防御线的料源（任务书 §4.4 `build` 需背包有石头）。
-STONE = "stone"
-
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     cmds: dict[str, dict[str, Any]] = {}
@@ -29,12 +26,12 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
         if not isinstance(role, Worker):
             continue  # 开拓者这一步不动（见 code-task.md「不做什么」）
 
-        goal = _nearest_stone(role.pos, turn.mines)
+        goal = _nearest_stone(role.pos, turn.map.stones)
         if goal is None:
             continue  # 场上没有石矿就不动，而不是乱走
         # 矿格本身挡路（任务书 L85），所以工人走到**贴着矿的那一格**就会自动停下 ——
         # 那正是 `collect` 的位置（§4.4：矿周围一格内）。不需要单独写"停在旁边"的逻辑。
-        target = step_toward(role.pos, goal, turn.blocked | claimed, turn.size)
+        target = step_toward(role.pos, goal, turn.map.blocked | claimed, turn.map.size)
         if target is None:
             continue  # 已经贴着矿，或压根走不到
         try:
@@ -50,10 +47,12 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     return cmds
 
 
-def _nearest_stone(pos: Pos, mines: dict[Pos, str]) -> Pos | None:
+def _nearest_stone(pos: Pos, stones: frozenset[Pos]) -> Pos | None:
     """最近的石矿。距离用切比雪夫（任务书 §4.5.4）。
+
+    **按矿种筛选已经上移到 `map.Map`**（铺矩阵时顺手分拣出 `stones`），这里只认坐标。
 
     不认领矿：两个工人挤同一座矿的不同邻格**都能采**，只有"冲进同一格"才是白扔动作，
     而那件事已经由 `claimed` 挡住了。
     """
-    return min((p for p, kind in mines.items() if kind == STONE), key=pos.dist, default=None)
+    return min(stones, key=pos.dist, default=None)

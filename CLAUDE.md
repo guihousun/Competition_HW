@@ -39,8 +39,9 @@ src/coregeek/
 │   └── actions.py    BaseAction + 各动作。**创建即校验**，唯一写线上格式的地方
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
+    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `render()` 打印调试
     ├── roles.py      §4.5.2 的 Pioneer / Worker；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（roles / blocked / station / mines / size）
+    ├── world.py      Turn（round_no / map / roles）
     └── planner.py    决策。**策略只写在这里**（目前：两个工人各朝最近石矿走一格）
 ```
 
@@ -65,9 +66,12 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 - **日历**：130 回合 = 1 天（白 70 + 夜 60），10 天 1300 回合。`within = (roundNo-1) % 130 + 1`；`within <= 70` 为白天。样例 `roundNo=85`（夜晚，且场上确有机器人）已交叉验证。
 - **开局是 0 武器 + 75 金 + 3 角色**（1 开拓者 + 2 工人），恰好买满 3 座武器（25×3=75）。⚠️ `docs/request.txt` 是 `roundNo=85` 的**中局快照**（已 3 武器 + 20 金），不是开局——曾把它当开局状态，推出"造武器是死支出线"，后果是第 1 天一座武器都不造。
 - **固定 36 格防御盒子**：基地 2×2（`pos` 是**左上角**）+ 12 格武器环 + **20 格围墙环（单层，不可加厚）**。**一切坐标由己方 station 的 pos 推导，禁止绝对坐标**（上下半场换边后基地会挪）。可建造区在 `mapInfo.zones` 里**不提供**，只能这样推。
-- **中立元素的字段名是 `neutralType`，不是 `zoneType`**（接口文档 §1.2.1，在 `mapInfo.zones` 里）：`stone`/`iron`/`copper`/`vendor`/`weaponShop`/`challengerTaskPoint1|2`/`defenderTaskPoint1|2`。**只有前三种是矿**，小贩/武器商店/任务点**不是矿，但一样挡路**——`Turn.mines` 只装矿，`blocked` 全都装。
+- **中立元素的字段名是 `neutralType`，不是 `zoneType`**（接口文档 §1.2.1，在 `mapInfo.zones` 里）：`stone`/`iron`/`copper`/`vendor`/`weaponShop`/`challengerTaskPoint1|2`/`defenderTaskPoint1|2`。**只有前三种是矿**，小贩/武器商店/任务点**不是矿，但一样挡路**——`Map.stones` 只装石矿，`Map.blocked` 全都装。
+- **`Map` 的不变量：格子非空即挡路**（任务书 L85 那张清单），寻路只问 `blocked`、不问格子里是什么。类别原样取自 payload（`enemy:` / `robot:` 前缀区分来源），**未知类别也照旧挡路**——判错方向只会多挡、不会放行。`render()` 的字符表**是有损的**（机器人不分体型），`cells` 才是真相。
+- **基地 2×2 对双方都成立**（接口文档原文："**双方**基地大小为 2*2，基地对应的 pos 传递的是左上角的坐标"）。`Map` 把**敌我双方**基地都展成 4 格——曾有一版只展了我方，敌方基地只挡 1 格。
+- **`teamEnemy.roles` 是逐回合观测，不是固定名册**：敌方角色/武器离开视野就消失，**消失 ≠ 被摧毁**（任务书 L97）。敌方基地与围墙全图可见。**不要据此做跨回合战损推断**——`handle` 至今是纯函数。
 - **走向矿 = 站到采集位，是同一件事。** 矿格挡路（任务书 L85），所以工人只能停在**矿周围一格**，而那正好就是 `collect` 的站位（§4.4）。不需要写两段逻辑（"走过去"+"停在旁边"），`step_toward` 撞上矿格自然停。
-- **地图边界不在任务书 L85 的"阻挡移动"清单里**（那一列只写了建筑/角色/机器人/中立单位/任务点/矿区）。贪心挪一格时几乎撞不到，**但 BFS 会绕到图外去**，所以 `step_toward` 自己按 `Turn.size = (width, height)`（取自 `mapInfo.width/height`）挡住 `(0,0)~(width-1,height-1)` 之外。越界算"指令非法"还是"执行失败"文档没写，不走一定安全。`size` 无效（≤0）⇒ 无格可走 ⇒ **单位不动**，这是故意的降级。
+- **地图边界不在任务书 L85 的"阻挡移动"清单里**（那一列只写了建筑/角色/机器人/中立单位/任务点/矿区）。贪心挪一格时几乎撞不到，**但 BFS 会绕到图外去**，所以 `step_toward` 自己按 `Map.size = (width, height)`（取自 `mapInfo.width/height`）挡住 `(0,0)~(width-1,height-1)` 之外。越界算"指令非法"还是"执行失败"文档没写，不走一定安全。`size` 无效（≤0）⇒ `Map` 矩阵为空 ⇒ 无格可走 ⇒ **单位不动**，这是故意的降级。
 - **`step_toward` 的终点是"贴着 goal 的一格"，不是 goal 本身**——因为 goal 通常是挡路的（矿/建筑/武器操控位）。⚠️ 但 `build` 的落点是**空地**，那一步要重新过一遍这条契约，别默认沿用。
 - **没有转移物品的指令**（`drop` 只丢不捡，没有拾取）→ 每个角色的背包就是自己的料仓，"A 买 B 用"行不通。
 - **`attack` 最易写反的两处**：`roleCommandMap` 的 **key 是武器 id**，`controllerId` 才是操控角色；`targetPos` 长度 = 武器当前等级（电磁狙击炮恒为 1）。攻击**仅黑夜**可用，且需要角色站在武器周围一格内（一人只能操一座武器）。

@@ -5,21 +5,15 @@
 
 from typing import NamedTuple
 
-from .grid import Pos
+from .map import Map
 from .roles import BaseRole
 
 
 class Turn(NamedTuple):
     round_no: int
-    #: 地图尺寸 `(width, height)`（接口文档 §1.2.1）。**寻路要它挡界外**——BFS 会往远处
-    #: 探路，而任务书 L85 那张"阻挡移动"清单里没写地图边界。拿到无效值就当无格可走
-    size: tuple[int, int]
-    #: **只含角色**（开拓者/工人）。建筑不是可操控单位，见 `roles.make`
+    #: 地图信息：一张格子矩阵，每格只有一个**类别**（见 `map.Map`）。
+    #: **寻路**读 `blocked` / `size`，**打印日志调试**读 `render()`
+    map: Map
+    #: **只含角色**（开拓者/工人），带 id。建筑不是可操控单位，见 `roles.make`。
+    #: 网格里也标着角色占的格，但那只是为了挡路——**要发指令就得有 id，而 id 只在这里**
     roles: tuple[BaseRole, ...]
-    #: 阻挡移动的格子：双方建筑与角色 + 中立单位/任务点/矿区 + 机器人（任务书 L85）
-    blocked: frozenset[Pos]
-    #: 我方基地**左上角**坐标。基地 4 格都在 `blocked` 里
-    station: Pos | None
-    #: 矿点 → 矿种（`stone` / `iron` / `copper`，接口文档 §1.2.1）。
-    #: **只有矿**：小贩 / 武器商店 / 任务点这一步没有使用者，不进这里（但它们照旧挡路）。
-    mines: dict[Pos, str]

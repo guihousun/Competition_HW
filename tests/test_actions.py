@@ -17,7 +17,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.app import handle  # noqa: E402
-from coregeek.game.grid import Pos, step_toward  # noqa: E402
+from coregeek.game.grid import Pos, base_cells, step_toward  # noqa: E402
+from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.roles import Worker  # noqa: E402
 from coregeek.game.world import Turn  # noqa: E402
@@ -100,25 +101,113 @@ class ParseTest(unittest.TestCase):
         self.assertIsNotNone(turn)
         return turn
 
-    def test_turn_holds_characters_only_and_still_finds_station(self):
+    def test_turn_holds_characters_only(self):
+        """建筑（基地/武器/墙）不是可操控单位，不进 `roles` —— 它们只在地图网格里。"""
         turn = self._turn()
         self.assertEqual({r.type_name for r in turn.roles}, {"worker", "pioneer"})
         self.assertEqual(len(turn.roles), 3)
-        self.assertEqual(turn.station, Pos(10, 24))  # 基地拿的是左上角
 
     def test_map_size_is_read(self):
         """寻路靠它挡界外，读错了不会有任何症状——只会静悄悄地一步不动或走出去。"""
-        self.assertEqual(self._turn().size, (41, 32))
+        self.assertEqual(self._turn().map.size, (41, 32))
 
-    def test_mines_are_parsed_by_kind(self):
-        """石/铁/铜分开；小贩、武器商店、任务点**不是**矿，别混进来。"""
-        mines = self._turn().mines
-        self.assertEqual({p for p, k in mines.items() if k == "stone"}, {Pos(4, 24), Pos(14, 3)})
-        self.assertEqual(len(mines), 6)  # 样例里三种矿各 2 座
+    def test_only_stone_enters_stones_but_everything_blocks(self):
+        """石/铁/铜在网格里分得开，但**只有石矿进 `stones`**。
 
-    def test_mines_block_movement(self):
-        """矿格挡路（任务书 L85）——工人只能站在旁边，不能站上去。"""
-        self.assertIn(Pos(4, 24), self._turn().blocked)
+        小贩 / 武器商店 / 任务点**不是矿，却一样挡路**（任务书 L85）—— 只挑矿会让工人
+        一头撞上去，这是"以为能走"的典型。
+        """
+        grid = self._turn().map
+        self.assertEqual(grid.stones, {Pos(4, 24), Pos(14, 3)})
+        for pos, what in (
+            (Pos(25, 10), "铁"),
+            (Pos(22, 26), "铜"),
+            (Pos(20, 16), "小贩"),
+            (Pos(25, 20), "武器商店"),
+            (Pos(14, 14), "挑战者任务点1"),
+            (Pos(23, 14), "防守方任务点1"),
+        ):
+            with self.subTest(what=what):
+                self.assertIn(pos, grid.blocked, f"{what} 应当挡路")
+                self.assertNotIn(pos, grid.stones, f"{what} 不是矿")
+
+
+class GridTest(unittest.TestCase):
+    """格子矩阵本身 —— `Turn.map` 这一步的主要交付物。
+
+    **`cells` 才是真相，`render()` 只是给人看的**（那张字符表是有损的）。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.grid = model.load(json.loads(SAMPLE.read_text(encoding="utf-8"))).map
+
+    def test_station_is_expanded_to_four_cells(self):
+        """基地 2×2，`pos` 给的是**左上角** ⇒ 占 `y` 和 `y-1`。
+
+        接口文档写的是"**双方**基地大小为 2*2"，所以敌我都要展。只标一格，角色会一头
+        撞进基地里 —— 那是一条判题器不收的指令。**旧实现只展了我方**，敌方基地只挡了 1 格。
+        """
+        for corner, kind in ((Pos(10, 24), "station"), (Pos(30, 10), "enemy:station")):
+            with self.subTest(corner=corner):
+                for cell in base_cells(corner):
+                    self.assertEqual(
+                        self.grid.cells[cell.y][cell.x], kind, f"{cell} 应是基地的一部分"
+                    )
+
+    def test_enemy_is_prefixed_and_ours_is_not(self):
+        """两方都有 `wall` / `station`，不区分敌我在网格里就撞车。"""
+        self.assertEqual(self.grid.cells[20][5], "wall")  # 我方 (5,20)
+        self.assertEqual(self.grid.cells[7][28], "enemy:wall")  # 敌方 (28,7)
+        self.assertEqual(self.grid.cells[24][10], "station")  # 我方 (10,24)
+        self.assertEqual(self.grid.cells[10][30], "enemy:station")  # 敌方 (30,10)
+
+    def test_blocking_is_exactly_non_empty(self):
+        """**这一步的核心回归**：`blocked` 必须恰好等于"非空格子"。
+
+        `expected` 在这里**独立按任务书 L85 重算一遍**（四路来源 + 基地 2×2），完全不走
+        `Map` 的代码 —— 迁移中漏掉任何一类挡路物，症状都是"以为能走、其实撞墙"。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        expected: set[Pos] = set()
+
+        def add(node: dict) -> None:
+            pos = Pos(node["pos"]["x"], node["pos"]["y"])
+            # 基地 2×2 而 pos 只给左上角：与实现用的是同一个约定，但独立写一遍
+            expected.update(base_cells(pos) if node["roleType"] == "station" else (pos,))
+
+        for node in raw["mapInfo"]["zones"]:
+            expected.add(Pos(node["pos"]["x"], node["pos"]["y"]))
+        for path in ("teamOur", "teamEnemy", "robot"):
+            for node in raw[path]["roles"]:
+                add(node)
+
+        self.assertEqual(self.grid.blocked, expected)
+        # 手数一遍的交叉核对：14 zones + (我方 8 单位 + 基地 4 格) + (敌方 1 墙 + 基地 4 格) + 4 机器人
+        self.assertEqual(len(self.grid.blocked), 35)
+
+    def test_render_shape(self):
+        """打印出来的图给调试用 —— 错了最坑：**y 翻反了图上照样"像张地图"**。"""
+        lines = self.grid.render().splitlines()
+        self.assertEqual(len(lines), 32)
+        self.assertEqual({len(line) for line in lines}, {41})
+        # 行号 = height-1-y（y 向上、终端从上往下印）；**小写 = 我方，大写 = 敌方**
+        self.assertEqual(lines[7][10], "s")  # 我方基地左上角 (10,24)
+        self.assertEqual(lines[8][11], "s")  # 我方基地右下角 (11,23)
+        self.assertEqual(lines[7][9], "g")  # 加特林 (9,24)，与基地同一行
+        self.assertEqual(lines[6][10], "r")  # 电磁狙击炮 (10,25)，在基地方上方一行
+        self.assertEqual(lines[21][30], "S")  # 敌方基地左上角 (30,10) → 第 31-10=21 行
+        self.assertEqual(lines[7][4], "o")  # 石矿 (4,24)
+        self.assertEqual(lines[24][28], "%")  # 敌方围墙 (28,7) —— 墙是大小写规则的例外
+        self.assertEqual(lines[27][4], "x")  # 机器人 (4,4)
+        self.assertEqual(lines[31][0], ".")  # (0,0) 空地 —— 最后一行是最底下的 y=0
+
+    def test_render_degrades_on_a_map_with_no_size(self):
+        """尺寸缺失 ⇒ 矩阵为空 ⇒ 不挡路也不动。**降级方向必须是"不动"**，见 `Map.__init__`。"""
+        empty = Map((-1, -1), {Pos(0, 0): "wall"})
+        self.assertEqual(empty.cells, ())
+        self.assertEqual(empty.blocked, frozenset())
+        self.assertEqual(empty.render(), "")
 
 
 class MineApproachTest(unittest.TestCase):
@@ -126,15 +215,11 @@ class MineApproachTest(unittest.TestCase):
 
     MINE = Pos(4, 24)
 
-    def _turn(self, worker_pos: Pos, mines: dict[Pos, str] | None = None) -> Turn:
-        mines = {self.MINE: "stone"} if mines is None else mines
+    def _turn(self, worker_pos: Pos, mine_kind: str = "stone") -> Turn:
         return Turn(
             round_no=1,
-            size=(41, 32),
+            map=Map((41, 32), {self.MINE: mine_kind}),
             roles=(Worker(1, worker_pos),),
-            blocked=frozenset(mines),  # 矿格挡路，正如真实 payload
-            station=None,
-            mines=mines,
         )
 
     def test_worker_walks_to_the_mine_and_then_stops(self):
@@ -157,7 +242,7 @@ class MineApproachTest(unittest.TestCase):
 
     def test_no_stone_mine_means_no_action(self):
         """场上只有铁矿 → 工人原地不动，而不是随便找个矿走过去。"""
-        self.assertEqual(plan(self._turn(Pos(20, 20), {self.MINE: "iron"})), {})
+        self.assertEqual(plan(self._turn(Pos(20, 20), "iron")), {})
 
 
 class PathTest(unittest.TestCase):
@@ -183,11 +268,8 @@ class PathTest(unittest.TestCase):
         mine = Pos(5, 1)
         turn = Turn(
             round_no=1,
-            size=(12, 12),
+            map=Map((12, 12), {mine: "stone", **{p: "wall" for p in wall}}),
             roles=(Worker(1, Pos(5, 5)),),
-            blocked=frozenset(wall | {mine}),
-            station=None,
-            mines={mine: "stone"},
         )
 
         # 最短路 5 步：(5,5)→(6,4)→(7,4)→(8,3)[绕过墙]→(7,2)→(6,2)，(6,2) 距矿 1

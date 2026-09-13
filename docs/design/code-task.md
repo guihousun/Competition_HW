@@ -565,3 +565,135 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18092/
 
 > 更远一点：`build` 的落点是**空地**（不挡路），和矿不同——那时"终点是贴着 goal 的一格"
 > 这条契约要重新过一遍，别默认沿用。
+
+---
+
+## 第 6 步：把地图建成一个格子矩阵（`Turn.map`）
+
+### 目标
+
+在 `Turn` 里放一个 `Map` 字段表示当前地图信息，**每格只装一个类别（Type）**，用途是
+**打印日志调试 + 寻路**。
+
+**为什么现在做。** 第 5 步的 BFS 能绕障碍了，但 `Turn.blocked` 是个**扁平集合**：
+围墙、矿、机器人、小贩、任务点全混在里面，**看不出那一格是什么**。更糟的是
+`model.load` 对同一份 `mapInfo` **解析了两遍** —— `_BLOCKING` 扫一遍算挡路，
+`_mines` 又扫一遍挑矿。两份真相迟早对不上，而对不上的症状是**"以为能走、其实撞墙"**。
+
+**顺带修掉一个真 bug。** 基地是 2×2 而 `pos` 只给左上角（接口文档原文：
+"**双方**基地大小为 2*2，基地对应的 pos 传递的是左上角的坐标"），但旧实现**只展开了我方基地**
+（`_station` 只看 `teamOur`），敌方基地**只挡了 1 格**。现在双方都展成 4 格 ——
+`blocked` 从 32 格变成 35 格，方向是**多挡**（安全侧）。
+
+### 产出
+
+**新增 `src/coregeek/game/map.py`** —— 这个文件为什么存在：地图是**两个用途共用的一份真相**，
+不能继续散在 `Turn.blocked` + `Turn.mines` 里。
+
+```python
+Map(size, entries)     # entries = 稀疏的 {坐标: 类别}，稠密矩阵由 Map 自己铺
+  .size                # (width, height)，寻路挡界外用
+  .cells               # 完整矩阵，[y][x]，**y 向上**（与坐标同序）
+  .blocked             # 推导一次：非空格子
+  .stones              # 推导一次：其中石矿
+  .render()            # 打印用；**行自上而下 = y 由大到小**
+```
+
+- 类别取值**原样取自 payload**，不查白名单：`roleType` 原名（我方）/ `enemy:` + `roleType` /
+  `robot:` + `roleType` / `neutralType` 原名。**未知类别照旧挡路** —— 判错方向只会多挡、不会放行。
+- **不变量：非空即挡路**（任务书 L85 那张清单）。寻路只问 `blocked`，不问格子里是什么。
+- 构造收**稀疏** `entries`，稠密矩阵由 `Map` 铺：`model.load` 只做它天然会做的事
+  （扫 payload、写坐标），铺矩阵只有这一处实现；测试也能一行造图：
+  `Map((12, 12), {mine: "stone", **{p: "wall" for p in wall}})`。
+- `render()` 的字符表：我方小写、敌方大写（`wall` 是唯一例外，用 `#`/`%` —— 墙用字母太像单位），
+  中立元素用符号（`o`/`i`/`c`/`v`/`$`/`1`~`4`），机器人一律 `x`，表外 `?`。
+  **这张表是有损的**（机器人不分体型），所以 `cells` 才是真相。**刻意不接日志**：
+  每回合 32 行 × 1300 回合 = 4 万行。
+
+**改 `game/world.py`** —— `Turn` 从 6 个字段瘦到 3 个：
+
+```python
+Turn(round_no, map, roles)
+```
+
+`size`→`map.size`，`blocked`→`map.blocked`，`mines`→`map.stones`（**只留石矿**，因为只有它在被读；
+三种矿的类别都还在 `cells` 里，将来要铁/铜再筛一次即可）。
+**`station` 直接删掉** —— 它只用来把基地展成 2×2，那件事在铺矩阵时做完，
+字段本身没有读取方（`CLAUDE.md` 里早就标记了这条冗余）。
+
+**改 `protocol/model.py`** —— 四趟分头扫 → **一趟铺 `entries`**。`_BLOCKING`/`_station`/`_mines`
+三个 helper 消失，`_items`/`_pos`/`_int`/`_character`/`_size` 原样保留。
+**写入顺序即覆盖顺序**：中立元素先写、单位后写（单位压矿时显示单位，看得见比看不见强）。
+
+**改 `game/planner.py`** —— 策略一行没动，只换取数来源；`_nearest_stone(pos, stones)` 不再按矿种过滤
+（那件事上移到 `Map`），`planner.STONE` 常量随之删除。
+
+**`game/grid.py` 一行未动** —— `step_toward` 保持纯几何，不认识 `Map`。
+
+### 不做什么
+
+- ❌ **不读单位属性**（`health`/`attackPower`/`attackRange`/`level`/`backpack`/`cooldown`）。
+  用户明确说"每格只是一个类别"；且其中 5 处是"文档有、样例没有"的可选字段，读进来先得定默认值。
+- ❌ **不算可建造区**（36 格防御盒子）。公式**不在任务书里**，只来自示意图，样例几何还与它矛盾。
+  **没有 `build` 就没有使用者。**
+- ❌ **不算视野**。payload 已经算好了（`teamEnemy.roles` 就是可见集合），我们只需**不撒谎**。
+- ❌ **不做跨回合敌方记忆**。`handle` 是纯函数；"敌方单位消失 ≠ 被摧毁"（任务书 L97）
+  这件事**不进代码**，只进 `CLAUDE.md`。
+- ❌ **不加 `Map.at(pos)`**。寻路用 `blocked`、打印用 `cells`，没有第三个使用者。
+
+### 验证
+
+**1. 单测：19 条全绿**（原 15 条改写 4 条 + 新增 4 条）
+
+```bash
+PYTHONUTF8=1 py -m unittest discover -s tests -v
+# Ran 19 tests in 0.012s
+# OK
+```
+
+最关键的一条是 `test_blocking_is_exactly_non_empty`：**独立按任务书 L85 从 payload 重算一遍**
+阻挡集合（四路来源 + 基地 2×2），**完全不走 `Map` 的代码**，再与 `map.blocked` 比对，
+并交叉核对总数 35 格。它防的是"迁移中漏掉某一类挡路物"。
+
+其余三条：`test_station_is_expanded_to_four_cells`（敌我双方基地各 4 格）、
+`test_enemy_is_prefixed_and_ours_is_not`（两方都有 `wall`/`station`，不区分敌我就撞车）、
+`test_render_shape`（**y 翻反了图上照样"像张地图"，单测也照样过 —— 所以行号写死**）。
+
+**2. 肉眼对一次图**（唯一能发现 y 翻转的办法）
+
+用一次性脚本打出带坐标标尺的图，逐个核对样例里那 14 个 `zones` 与全部单位的位置：
+y 越大越靠上（我方基地 y=24 在上半、敌方基地 y=10 与那 2×2 的四只机器人都在下半），
+任务点 2 各占 2 格也如实画出来。脚本用完即删，**不入库**。
+
+**3. 真服务，响应与第 5 步逐字节一致**
+
+```bash
+bash run.sh 18085
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
+# {"roleCommandMap":{"10012":{"action":"move","targetPos":[{"x":9,"y":17}]}},"prompt":"","executeCmd":""}
+# 2026-09-13 14:57:23,780 | round 85 → 1 条指令
+curl -s -X POST --data-binary '{oops' http://127.0.0.1:18085/   # → 合法空指令
+curl -s -X POST --data-binary ''       http://127.0.0.1:18085/   # → 合法空指令
+```
+
+**逐字节一致是预期的**：敌方基地那 3 格新挡路物离这条路径很远，不影响 `10012` 的路线。
+
+> 空 body 那行日志是 `round -1 → 0 条指令` 而**不是** `fallback 空指令` —— 这是**故意的**
+> （`app.py:31`：`json.loads(...) if raw else {}`）。空 body 不是"格式错"，是**空局面**，
+> 回空指令即可，不该刷 fallback 告警。
+
+**踩到的坑**：`test_render_shape` 我一开始按"基地渲染成 `S`"写，挂了 —— 字符表里
+**小写才是我方**。实现是对的，是测试写反了；已把敌方那格（`S`/`%`）一并钉上，
+让大小写规则在测试里成对出现。
+
+### 下一步
+
+回到主线：**`collect`**。工人已经能可靠地走到矿边（且绕得过墙），但**还不采**。
+它触发第 3 步留的三件事，缺一不可：
+
+1. 加 `Collect` 子类（`roles = WORKER`，构造即校验）——**全项目第一次真正拦住东西**；
+2. 读 `errors` 与 `lastRoundRoleActionResults` 进日志（`handle` 仍是纯函数，**不做跨回合计数**）；
+3. 补一条"开拓者构造 `Collect` 抛异常"的用例。
+
+> 再往后是夜间 `attack`：那时才需要武器的 `level`/`attackRange`/`cooldown`。
+> **要读这些属性时再决定它们挂在网格上还是挂在单位对象上** —— 这一步刻意没有预设。

@@ -3,23 +3,19 @@
 **容错解析**：字段缺失或类型不对一律退化成默认值 / 丢掉那一条，绝不抛异常 ——
 判题器是没法调试的黑盒，宁可少认一个角色，也不能让响应管线崩掉。
 
-字段真值以 `docs/接口文档.md` §1 为准；`docs/request.txt` 的数值是手工示意数据，不可校准。
+字段真值以 `docs/接口文档.md` §1 为准；`docs/request.txt` 的数值是手工示意数据，不可校准
+（连几何都是手画的：样例里我方那两座墙就不在基地的 6×6 环上）。
+
+**一趟扫描铺出整张地图**（`_entries`）。以前是四趟分头扫，`blocked` 和 `mines` 各解析了一遍
+`mapInfo`——两份真相迟早对不上，而对不上的症状是"以为能走、其实撞墙"。
 """
 
 from typing import Any
 
 from ..game.grid import Pos, base_cells
+from ..game.map import ENEMY_PREFIX, ROBOT_PREFIX, STATION, Map
 from ..game.roles import BaseRole, make
 from ..game.world import Turn
-
-#: 阻挡移动的格子来源（任务书 L85）。`teamEnemy` 只含**进入视野**的单位，
-#: 但基地与围墙是全图可见的，所以敌方那一路拿到的至少是这两类。
-_BLOCKING = (
-    ("teamOur", "roles"),
-    ("teamEnemy", "roles"),
-    ("robot", "roles"),
-    ("mapInfo", "zones"),
-)
 
 
 def load(payload: Any) -> Turn | None:
@@ -27,28 +23,53 @@ def load(payload: Any) -> Turn | None:
     if not isinstance(payload, dict):
         return None
 
-    units = _items(payload, "teamOur", "roles")
-    characters = tuple(c for c in (_character(n) for n in units) if c)
-
-    # 建筑不在 characters 里（见 roles.make），所以基地要单独扫一遍原始单位列表。
-    # 它喂给 blocked（base_cells），漏了角色会一头撞进基地。
-    station = _station(units)
-    zones = _items(payload, "mapInfo", "zones")
-
-    blocked: set[Pos] = set()
-    for path in _BLOCKING:
-        blocked.update(p for p in (_pos(n) for n in _items(payload, *path)) if p)
-    if station is not None:
-        blocked.update(base_cells(station))
-
     return Turn(
         round_no=_int(payload.get("roundNo")),
-        size=_size(payload),
-        roles=characters,
-        blocked=frozenset(blocked),
-        station=station,
-        mines=_mines(zones),
+        map=Map(_size(payload), _entries(payload)),
+        # 建筑不在 characters 里（见 roles.make）——它们在地图网格里，不在这儿
+        roles=tuple(
+            c
+            for c in (_character(n) for n in _items(payload, "teamOur", "roles"))
+            if c
+        ),
     )
+
+
+# ── 铺地图 ───────────────────────────────────────────────────────────
+def _entries(payload: dict[str, Any]) -> dict[Pos, str]:
+    """铺矩阵的原料：`{坐标: 类别}`，只装**非空**格。
+
+    **写入顺序即覆盖顺序，后写的盖前面**：中立元素先写、单位后写。单位压在矿上时
+    格子显示单位——真出现那种局面说明 payload 自相矛盾，看得见比看不见强。
+
+    `roleType` / `neutralType` **一律原样写入**，不查白名单：未知类别照旧挡路，
+    判错方向只会多挡、不会放行。（`map._char` 画不出来才退化成 `?`，那只是显示。）
+    """
+    entries: dict[Pos, str] = {}
+
+    for node in _items(payload, "mapInfo", "zones"):
+        pos = _pos(node)
+        kind = node.get("neutralType") if isinstance(node, dict) else None
+        if pos is not None and isinstance(kind, str):
+            entries[pos] = kind
+
+    _units(entries, _items(payload, "teamOur", "roles"), "")
+    _units(entries, _items(payload, "teamEnemy", "roles"), ENEMY_PREFIX)
+    _units(entries, _items(payload, "robot", "roles"), ROBOT_PREFIX)
+    return entries
+
+
+def _units(entries: dict[Pos, str], nodes: list[Any], prefix: str) -> None:
+    """单位 → 格子。`prefix` 区分来源（我方给空串，敌方 / 机器人给前缀）。"""
+    for node in nodes:
+        kind = node.get("roleType") if isinstance(node, dict) else None
+        pos = _pos(node)
+        if not isinstance(kind, str) or pos is None:
+            continue
+        # 基地是 2×2 而 pos 只给左上角（接口文档：**"双方**基地大小为 2*2"）。
+        # 只标一格，角色会一头撞进基地里 —— 那是一条判题器不收的指令。
+        for cell in base_cells(pos) if kind == STATION else (pos,):
+            entries[cell] = prefix + kind
 
 
 # ── 解析小工具 ───────────────────────────────────────────────────────
@@ -98,25 +119,3 @@ def _size(payload: dict[str, Any]) -> tuple[int, int]:
     info = payload.get("mapInfo")
     info = info if isinstance(info, dict) else {}
     return _int(info.get("width")), _int(info.get("height"))
-
-
-def _station(units: list[Any]) -> Pos | None:
-    """我方基地的**左上角**（接口文档 §1.3.1 注）。"""
-    for node in units:
-        if isinstance(node, dict) and node.get("roleType") == "station":
-            return _pos(node)
-    return None
-
-
-#: 三种矿（接口文档 §1.2.1）。同一张表里还有小贩/武器商店/任务点，这一步没有使用者。
-_MINE_KINDS = ("stone", "iron", "copper")
-
-
-def _mines(zones: list[Any]) -> dict[Pos, str]:
-    out: dict[Pos, str] = {}
-    for node in zones:
-        kind = node.get("neutralType") if isinstance(node, dict) else None
-        pos = _pos(node)
-        if pos is not None and kind in _MINE_KINDS:
-            out[pos] = kind
-    return out
