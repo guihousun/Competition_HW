@@ -17,3 +17,6 @@ class Turn(NamedTuple):
     blocked: frozenset[Pos]
     #: 我方基地**左上角**坐标。基地 4 格都在 `blocked` 里
     station: Pos | None
+    #: 矿点 → 矿种（`stone` / `iron` / `copper`，接口文档 §1.2.1）。
+    #: **只有矿**：小贩 / 武器商店 / 任务点这一步没有使用者，不进这里（但它们照旧挡路）。
+    mines: dict[Pos, str]

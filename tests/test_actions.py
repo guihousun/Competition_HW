@@ -16,13 +16,19 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from coregeek.app import handle  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
-from coregeek.protocol import actions  # noqa: E402
+from coregeek.game.planner import plan  # noqa: E402
+from coregeek.game.roles import Worker  # noqa: E402
+from coregeek.game.world import Turn  # noqa: E402
+from coregeek.protocol import actions, model  # noqa: E402
 
 SAMPLE = Path(__file__).resolve().parents[1] / "docs" / "request.txt"
 
-#: 官方样例（roundNo=85）里三个角色各自朝基地走一格的落点。
-EXPECTED_MOVES = {"10010": [6, 22], "10012": [9, 17], "10011": [9, 13]}
+#: 官方样例（roundNo=85）里工人朝石矿走一格的落点。
+#: 石矿在 (4,24) / (14,3)：10010 已经在 (5,23) —— **贴着 (4,24)，所以它不动作**；
+#: 10012 从 (10,16) 朝最近的 (4,24) 走一格。开拓者 10011 这一步不发指令。
+EXPECTED_MOVES = {"10012": [9, 17]}
 
 
 class MoveWireTest(unittest.TestCase):
@@ -70,11 +76,9 @@ class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
 
     def _handle(self, raw: bytes) -> dict:
-        from coregeek.app import handle
-
         return json.loads(handle(raw).decode("utf-8"))
 
-    def test_sample_payload_produces_three_moves(self):
+    def test_sample_payload_moves_only_the_far_worker(self):
         body = self._handle(SAMPLE.read_bytes())
         self.assertEqual(set(body), {"roleCommandMap", "prompt", "executeCmd"})
         cmds = body["roleCommandMap"]
@@ -91,14 +95,64 @@ class HandleTest(unittest.TestCase):
 
 
 class ParseTest(unittest.TestCase):
-    def test_turn_holds_characters_only_and_still_finds_station(self):
-        from coregeek.protocol import model
-
+    def _turn(self) -> Turn:
         turn = model.load(json.loads(SAMPLE.read_text(encoding="utf-8")))
         self.assertIsNotNone(turn)
+        return turn
+
+    def test_turn_holds_characters_only_and_still_finds_station(self):
+        turn = self._turn()
         self.assertEqual({r.type_name for r in turn.roles}, {"worker", "pioneer"})
         self.assertEqual(len(turn.roles), 3)
         self.assertEqual(turn.station, Pos(10, 24))  # 基地拿的是左上角
+
+    def test_mines_are_parsed_by_kind(self):
+        """石/铁/铜分开；小贩、武器商店、任务点**不是**矿，别混进来。"""
+        mines = self._turn().mines
+        self.assertEqual({p for p, k in mines.items() if k == "stone"}, {Pos(4, 24), Pos(14, 3)})
+        self.assertEqual(len(mines), 6)  # 样例里三种矿各 2 座
+
+    def test_mines_block_movement(self):
+        """矿格挡路（任务书 L85）——工人只能站在旁边，不能站上去。"""
+        self.assertIn(Pos(4, 24), self._turn().blocked)
+
+
+class MineApproachTest(unittest.TestCase):
+    """合成局面：工人真的能走到矿边并停下。单帧看着对，不代表走得过去停得住。"""
+
+    MINE = Pos(4, 24)
+
+    def _turn(self, worker_pos: Pos, mines: dict[Pos, str] | None = None) -> Turn:
+        mines = {self.MINE: "stone"} if mines is None else mines
+        return Turn(
+            round_no=1,
+            roles=(Worker(1, worker_pos),),
+            blocked=frozenset(mines),  # 矿格挡路，正如真实 payload
+            station=None,
+            mines=mines,
+        )
+
+    def test_worker_walks_to_the_mine_and_then_stops(self):
+        """把回合串起来跑，看它**收敛**：走得到，且到了就不再动。
+
+        单帧"目标格算得对"证明不了这件事 —— 走歪、绕圈、贴住后反复抖动都是单帧看不出的。
+        """
+        turn = self._turn(Pos(20, 20))
+        for _ in range(40):
+            cmds = plan(turn)
+            if not cmds:
+                break
+            target = cmds["1"]["targetPos"][0]
+            turn = turn._replace(roles=(Worker(1, Pos(target["x"], target["y"])),))
+        else:
+            self.fail("40 回合还没走到矿边，说明在原地绕圈")
+
+        self.assertEqual(turn.roles[0].pos.dist(self.MINE), 1, "应该停在贴着矿的那一格")
+        self.assertEqual(plan(turn), {}, "贴着矿之后不该再动")
+
+    def test_no_stone_mine_means_no_action(self):
+        """场上只有铁矿 → 工人原地不动，而不是随便找个矿走过去。"""
+        self.assertEqual(plan(self._turn(Pos(20, 20), {self.MINE: "iron"})), {})
 
 
 if __name__ == "__main__":

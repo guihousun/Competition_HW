@@ -31,8 +31,9 @@ def load(payload: Any) -> Turn | None:
     characters = tuple(c for c in (_character(n) for n in units) if c)
 
     # 建筑不在 characters 里（见 roles.make），所以基地要单独扫一遍原始单位列表。
-    # 它同时喂给 blocked（base_cells）和寻路目标，扫漏了角色会一头撞进基地。
+    # 它喂给 blocked（base_cells），漏了角色会一头撞进基地。
     station = _station(units)
+    zones = _items(payload, "mapInfo", "zones")
 
     blocked: set[Pos] = set()
     for path in _BLOCKING:
@@ -45,6 +46,7 @@ def load(payload: Any) -> Turn | None:
         roles=characters,
         blocked=frozenset(blocked),
         station=station,
+        mines=_mines(zones),
     )
 
 
@@ -92,3 +94,17 @@ def _station(units: list[Any]) -> Pos | None:
         if isinstance(node, dict) and node.get("roleType") == "station":
             return _pos(node)
     return None
+
+
+#: 三种矿（接口文档 §1.2.1）。同一张表里还有小贩/武器商店/任务点，这一步没有使用者。
+_MINE_KINDS = ("stone", "iron", "copper")
+
+
+def _mines(zones: list[Any]) -> dict[Pos, str]:
+    out: dict[Pos, str] = {}
+    for node in zones:
+        kind = node.get("neutralType") if isinstance(node, dict) else None
+        pos = _pos(node)
+        if pos is not None and kind in _MINE_KINDS:
+            out[pos] = kind
+    return out
