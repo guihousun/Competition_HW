@@ -100,7 +100,7 @@ def _char(kind: str) -> str:
 
     ⚠️ **恒返回 1 个字符**（兜底是 `?`，不是 `""`）—— 这是 `render()` 列能对齐的唯一保证。
     这张表是**有损的**，所以 `cells` 才是真相，`render()` 只是给人看的。
-    空格子打印成**空格**；"这张图有多大、边界在哪"由行号槽 + 两行列标尺负责。
+    空格子打印成**空格**；"这张图有多大、边界在哪"由构图的那一圈 `—` 边框负责。
     """
     if not kind:
         return " "
@@ -128,7 +128,7 @@ def _legend() -> str:
         for i in range(0, len(items), _LEGEND_PER_LINE)
     ]
     #: 续行缩进到与"图例："同宽，看起来是一个块
-    return "\n".join([f"图例：{chunks[0]}", *(f"      {c}" for c in chunks[1:])])
+    return "\n".join([f"【图例】：{chunks[0]}", *(f"      {c}" for c in chunks[1:])])
 
 
 LEGEND = _legend()
@@ -194,11 +194,11 @@ class Map:
         self.vendors = frozenset(vendors)
 
     def render(self) -> str:
-        """可打印的**整块**：两行列标尺 + 左侧行号槽 + `height` 行 × `width` 列网格。
+        """可打印的**整块**：上下各一行 `—` 标尺 + `height` 行 × `width` 列网格。
 
         行自上而下 = **y 由大到小**（y 向上而终端从上往下印，这里必须翻一次）。
-        行号槽宽度由 `height` 推导、不写死 2 —— 写死在 `height > 100` 时会撑破槽宽、
-        把网格整体推右一列。标尺放这里而不是让 `app._log` 自己拼：列宽与缩进由 `size` 推导。
+        每行 = `│` + `width` 个字符 + `|`，宽度与两条标尺**必须一致**（差一列整图就错位）。
+        标尺放这里而不是让 `app._log` 自己拼：列宽由 `size` 推导。
 
         尺寸非法（`cells` 为空）⇒ 空串（既有契约：`app._log` 那一行退化成空行，而不是抛异常）。
         """
@@ -206,15 +206,12 @@ class Map:
         if not self.cells:
             return ""
         width, height = self.size
-        label = len(str(height - 1))
-        #: 槽宽 + 分隔符，宽度与每行的行号前缀 `f"{y:>{label}} │ "` **必须**一致
-        pad = " " * (label + 3)
-        tens = "".join(str(x // 10) if x % 10 == 0 else " " for x in range(width))
-        units = "".join(str(x % 10) for x in range(width))
-        rows = [pad + tens, pad + units]
+        rows = []
+        rows += ["—" * (width + 2)]  # 上标尺
         rows += [
-            f"{y:>{label}} │ " + "".join(_char(k) for k in self.cells[y])
+            f"│" + "".join(_char(k) for k in self.cells[y]) + "|"
             for y in range(height - 1, -1, -1)
         ]
+        rows += ["—" * (width + 2)]  # 下标尺
         #: 各行不等长无所谓（列对齐靠前缀等宽，不是行长相等），所以不 `rstrip`
         return "\n".join(rows)

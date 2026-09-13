@@ -29,7 +29,7 @@ def store(current: str, sop: str) -> str:
     text = raw[:SOP_MAX]
     if text == current:
         return current
-    LOGGER.info("SOP 更新：%s", describe(raw, text))
+    LOGGER.info("【SOP 更新】：%s", describe(raw, text))
     return text
 
 

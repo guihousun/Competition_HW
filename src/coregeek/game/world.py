@@ -143,9 +143,9 @@ class Turn(NamedTuple):
     def summary(self) -> str:
         """关键事实摘要 —— 图上推不出来的那些：金币 / 武器与射程 / 角色背包 / 机器人血量 / 可接任务点。
 
-        **四块，块间空一行**：`【回合】` / `【我方】` / `【机器】` / `【可接任务点】`。
-        长度对不上块数时别数行，数**非空行**。放在这里而不是 `app._log` 里：
-        **领域对象自己格式化自己**，`app` 只管装配与红线。
+        **四块，各占一行、块间不留空行**：`【回合】` / `【我方】` / `【机器】` / `【可接任务点】`。
+        首行前面那个 `\\n` 是留给 `logging` 前缀的（时间戳只加在第一条物理行上）。
+        放在这里而不是 `app._log` 里：**领域对象自己格式化自己**，`app` 只管装配与红线。
 
         ⚠️ **不记日志、不留状态、长度有上界**（每个列表 `SUMMARY_MAX_ITEMS` 项）。
         它跑在 `app.handle` 的 `try` 里，抛出去的代价是**整回合退化成空指令** ⇒
@@ -188,8 +188,8 @@ class Turn(NamedTuple):
                 f"\n【回合】 {round_no}（{when}） ｜ 【金币】 {gold} | "
                 f"【武器】 {len(self.weapons)}/{len(self.roles)}："
                 f"{_listed(self.weapons, weapon) or '无'}",
-                f"\n【我方】 {_listed(self.roles, role, ' ｜ ') or '无'}",
-                f"\n【机器】 {len(self.robots)} 台：{_listed(self.robots, robot) or '无'}"
-                f"\n【可接任务点】 {_listed(self.task_points, point) or '无'}",
+                f"【我方】 {_listed(self.roles, role, ' ｜ ') or '无'}",
+                f"【机器】 {len(self.robots)} 台：{_listed(self.robots, robot) or '无'}",
+                f"【可接任务点】 {_listed(self.task_points, point) or '无'}",
             ]
         )

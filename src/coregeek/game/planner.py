@@ -21,6 +21,7 @@ from typing import Any
 from ..agent import AGENT  # 与 LLM 说什么不在策略层
 from ..agent.chat import answer_of, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
+from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
 from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
@@ -144,7 +145,30 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     工具调度只有 `AGENT.tool_call` 一个入口，副作用（SOP 沉淀）只发生在那一行，且写在判据之前
     ⇒ 走"回灌结果"那一轮 SOP 照样生效。⚠️ **骂的那一份必须与交的那一份出自同一个谓词**
     （`answer_of`）：交上去的是解包后的答案，骂的却是原文的话，LLM 会以为我们交了一堆标签。
+
+    **本函数还负责打"本轮任务 / 上一轮模型回复 / CMD 执行结果"三样**（它们只存在于本回合的
+    payload 里，黑盒下没有第二个观察窗）。⚠️ 这几行是**本项目第二条不在 `app` 名下的日志**
+    （`LOGGER` 名是 `coregeek.game.planner`）⇒ 只盯 `coregeek.app` 的守卫看不见它们，
+    硬约束 5 的字节预算用例必须收 root。组装出来的 `prompt` 那一行由 `app._log` 打 ——
+    它拿到的是本函数**返回之后**的值。
     """
+    if turn.phase_task or turn.llm_resp:
+        # **必须记**：题目原文与 LLM 答了什么只存在于本回合的 payload 里。触发条件带上
+        # `llm_resp`：任务刚结束那一回合 `phase_task` 已经空了，而那是唯一一次能看见
+        # "判题器最后答了什么"的机会 —— 所以这一行**写在下面那道早返回之前**。
+        LOGGER.info(
+            "【本轮任务】：%s ｜ 【上一轮模型回复】：%s",
+            _clip(turn.phase_task) or "无",
+            _clip(turn.llm_resp) or "无",
+        )
+
+    if turn.cmd_result:
+        # 沙盒回执**必须记**：回灌给 LLM 的就是它，"答案为什么不对"多半得从它里面看。
+        # **只记结果、不记发出去的命令**：发命令那一回合 `llm_resp` 就是那次工具调用，
+        # 已经印在上面那行的回复里了；而且这样"沙盒行数 = 实际跑过的命令数"。
+        # 回灌给 LLM 是**全文**，这里才截断 —— 一个要正确性，一个要人眼看得下。
+        LOGGER.info("【CMD命令执行结果】：「%s」", _clip(turn.cmd_result))
+
     if not turn.phase_task or not any(isinstance(r, Pioneer) for r in turn.roles):
         return "", ""
 

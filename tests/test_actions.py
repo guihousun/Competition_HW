@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from coregeek.agent import AGENT, Agent  # noqa: E402
 from coregeek.agent.chat import PROMPT, answer_of, chat, looks_like_tool, tool_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
-from coregeek.app import LOG_PROMPT_MAX, LOG_TEXT_MAX, _clip, handle  # noqa: E402
+from coregeek.app import LOG_PROMPT_MAX, _clip, handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
     base_cells,
@@ -49,6 +49,7 @@ from coregeek.game.planner import (  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
+from coregeek.utils import LOG_TEXT_MAX  # noqa: E402
 
 SAMPLE = Path(__file__).resolve().parents[1] / "docs" / "request.txt"
 
@@ -58,6 +59,12 @@ SAMPLE = Path(__file__).resolve().parents[1] / "docs" / "request.txt"
 #: ⚠️ 这条断言**按设计改过两次**：第 7 步夜里是"朝石矿走"，第 8 步改成"回基地操炮"
 #: （当时开拓者还不发指令），**第 10 步起开拓者也上炮位** ⇒ 两条变三条。
 EXPECTED_MOVES = {"10010": [6, 22], "10012": [9, 17], "10011": [9, 13]}
+
+#: 任务线那两条日志的**行首标记**。它们由 `planner` 打（不是 `coregeek.app`）——
+#: 用例按标记取行，既不依赖日志顺序，也不依赖"哪张日志归哪个 logger"。
+TASK_LINE = "【本轮任务】："
+ASK = "【本轮提问】："
+SANDBOX = "【CMD命令执行结果】："
 
 
 def _records(kinds: dict[Pos, str], attack_range: int = 4) -> tuple[Weapon, ...]:
@@ -301,20 +308,22 @@ class HandleTest(unittest.TestCase):
         banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
         self.assertEqual(banner, f"{'#' * 35}第85回合{'#' * 35}")
         lines = head.splitlines()
-        #: 摘要 4 块（块间空行 ⇒ 7 条物理行）+ 图例 3 行 + 地图 34 行
-        self.assertEqual(len(lines), 44)
+        #: 摘要 4 块（各占一行）+ 图例 3 行 + 地图 34 行（上下各一行标尺），
+        #: 再加摘要前面留给 `logging` 前缀的那个空行
+        self.assertEqual(len(lines), 1 + 4 + 3 + 34)
         #: 回合号在最前 —— 时间戳就加在这一行上（摘要头一块前面那个空行不带时间戳）
         self.assertEqual(lines[1].split("｜")[0].rstrip(), "【回合】 85（夜里）")
         self.assertIn("【金币】 20", lines[1])
         #: 图例在摘要与地图之间（紧挨着图，看着图例看图）
-        legend_at = next(i for i, line in enumerate(lines) if line.startswith("图例："))
-        self.assertEqual(legend_at, 7, "\n".join(lines[:10]))
-        #: 标尺两行 + 行号槽 —— 图紧跟在图例（3 行）与标尺（2 行）之后
-        self.assertTrue(lines[legend_at + 5].startswith("31 │ "), lines[legend_at + 5])
+        legend_at = next(i for i, line in enumerate(lines) if line.startswith("【图例】："))
+        self.assertEqual(legend_at, 5, "\n".join(lines[:10]))
+        #: 图紧跟在图例（3 行）与一行上标尺之后 —— 标尺宽度 = 网格宽度
+        self.assertEqual(lines[legend_at + 3], "—" * 43, lines[legend_at + 3])
+        self.assertTrue(lines[legend_at + 4].startswith("│"), lines[legend_at + 4])
         self.assertEqual(
             acts, "【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
         )
-        self.assertEqual(errors, "判题器报错：2：xxx")
+        self.assertEqual(errors, "【判题器报错】：2：xxx")
         #: **按 id 排序**（不照 payload 的顺序）：`{10010: false, 10030: false}` 在样例里
         #: 恰好就是升序，靠样例**测不出**这一条 —— 所以下面那条解析用例专门打乱一次顺序。
         #: 样例那份回执里有 7 个实体 —— 现在**全都打**（第 20 步），不再只列未通过的两个
@@ -378,6 +387,9 @@ class HandleTest(unittest.TestCase):
         原来那版是 `phase_task[:120]` 的**静默**截断：任务一长，日志里就是一段没头没尾的
         文字，看不出后面还有没有内容，于是"任务一直失败"根本无从查起。
         现在：短文本原样打全；超长时截到 `LOG_TEXT_MAX` 并**明说被截了、原文共多少字**。
+
+        ⚠️ **`assertLogs` 必须收 root**：任务行由 `planner` 自己打
+        （`coregeek.game.planner`），只盯 `coregeek.app` 会把整块漏掉 —— 与 SOP 那条同一个坑。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -386,40 +398,44 @@ class HandleTest(unittest.TestCase):
         raw["phaseTask"] = "短题目"
         raw["llmResp"] = ""  # 判题器还没回话 ⇒ 这一回合会提问
 
-        def line_after_sending(**overrides):
+        def asked_after_sending(**overrides) -> tuple[str, str]:
+            """`(任务行, 提问行)` —— 两张日志归两个 logger，各自按前缀取。"""
             raw.update(overrides)
-            with self.assertLogs("coregeek.app", level="INFO") as caught:
+            with self.assertLogs(level="INFO") as caught:
                 self._handle(json.dumps(raw).encode("utf-8"))
-            return caught.records[-1].getMessage()
+            messages = [r.getMessage() for r in caught.records]
 
-        line = line_after_sending()
-        self.assertIn("任务：短题目", line)
-        self.assertIn("提交：无", line)
+            def pick(head: str) -> str:
+                return next((m for m in messages if m.startswith(head)), "")
+
+            return pick("【本轮任务】："), pick("【本轮提问】：")
+
+        task, ask = asked_after_sending()
+        self.assertIn("【本轮任务】：短题目", task)
+        self.assertIn("【上一轮模型回复】：无", task)
         #: `prompt` **打全文**（第 20 步）：模板头、工具清单、「沉淀的 SOP」那个槽、
         #: 题目原文全在这一行里 —— 这四样**实盘上只有这里看得见**（本地 e2e 的"LLM"
         #: 是我们自己写的，只证明解析自洽）。
-        self.assertIn("提问：# Agent定位", line)
-        self.assertIn("# 可使用的工具", line)
-        self.assertIn("- SOP2Prompt：", line)
-        self.assertIn("# 沉淀的 SOP", line)
-        self.assertIn("题目：\n短题目", line)
+        self.assertIn("【本轮提问】：# Agent定位", ask)
+        for piece in ("# 可使用的工具", "- SOP2Prompt：", "# 沉淀的 SOP", "题目：\n短题目"):
+            self.assertIn(piece, ask)
 
-        #: 判题器答了 ⇒ 提交那一格才有内容，而且**不再提问**（省 LLM 额度）
-        line = line_after_sending(llmResp="答案")
-        self.assertIn("提交：答案", line)
-        self.assertIn("提问：无", line)
+        #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**（省 LLM 额度）
+        task, ask = asked_after_sending(llmResp="答案")
+        self.assertIn("【上一轮模型回复】：答案", task)
+        self.assertEqual(ask, "", "已经有答案了还提问 ⇒ 白烧一次 LLM 额度")
 
         long_text = "题" * (LOG_TEXT_MAX + 7)
-        line = line_after_sending(phaseTask=long_text)
-        self.assertIn("题" * LOG_TEXT_MAX, line)
-        self.assertNotIn("题" * (LOG_TEXT_MAX + 1), line)
-        self.assertIn(f"共 {LOG_TEXT_MAX + 7} 字", line)
+        task, _ = asked_after_sending(phaseTask=long_text)
+        self.assertIn("题" * LOG_TEXT_MAX, task)
+        self.assertNotIn("题" * (LOG_TEXT_MAX + 1), task)
+        self.assertIn(f"共 {LOG_TEXT_MAX + 7} 字", task)
 
         #: **任务刚结束的那一回合**是唯一一次能看见"判题器最后答了什么"的机会
         #: （`phase_task` 已经空了）—— 所以触发条件里带着 `llm_resp`，不能只判任务。
-        line = line_after_sending(phaseTask="")
-        self.assertIn("任务：无", line)
-        self.assertIn("提交：答案", line)
+        task, _ = asked_after_sending(phaseTask="")
+        self.assertIn("【本轮任务】：无", task)
+        self.assertIn("【上一轮模型回复】：答案", task)
 
     def test_a_long_answer_in_the_actions_line_is_clipped(self):
         """`submitAnswer` 的 `taskAnswer` 是**外侧（LLM）给的自由文本**，日志这一行必须有界。
@@ -470,7 +486,8 @@ class HandleTest(unittest.TestCase):
 
         #: `planner` 组装出来的那一份（同一个 `AGENT`，同一份题目），长度应当是它自己的
         full = chat(raw["phaseTask"], sop=AGENT.sop, tool_desc=AGENT.tool_desc())
-        asked = line.split("提问：", 1)[1]
+        self.assertTrue(line.startswith(ASK), line[:20])
+        asked = line[len(ASK):]  # 去掉行首标记（`】：` 里那个括号挡着，不能用 `split("提问：")`）
         self.assertEqual(
             len(asked),
             LOG_PROMPT_MAX + len(f"…（共 {len(full)} 字）"),
@@ -672,7 +689,8 @@ class HandleTest(unittest.TestCase):
 
         反例（提问回合、发命令那一回合）**一条都不该多打**：日志字节是有预算的，
         而这条线每回合都可能触发。⚠️ 发命令那一回合之所以不打，是因为命令原文已经在
-        上面任务行的"提交："里了 —— 同一回合、同一条字符串，抄第二遍是纯浪费。
+        上面任务行的"上一轮模型回复"里了 —— 同一回合、同一条字符串，抄第二遍是纯浪费。
+        ⚠️ 这条日志由 `planner` 打 ⇒ `assertLogs` 得收 root（见上一条用例）。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -685,17 +703,17 @@ class HandleTest(unittest.TestCase):
         raw["lastCmdResult"] = ""
 
         def messages() -> list[str]:
-            with self.assertLogs("coregeek.app", level="INFO") as caught:
+            with self.assertLogs(level="INFO") as caught:
                 self._handle(json.dumps(raw).encode("utf-8"))
             return [r.getMessage() for r in caught.records]
 
         #: 发命令那一回合：任务行说明了一切，没有沙盒行
-        self.assertFalse([m for m in messages() if m.startswith("沙盒：")])
+        self.assertFalse([m for m in messages() if m.startswith(SANDBOX)])
 
         #: 有回执那一回合：多出**一条**沙盒行，且回执原文在里面
         raw["llmResp"] = ""
         raw["lastCmdResult"] = "[exitCode:0]\nhello"
-        sandbox = [m for m in messages() if m.startswith("沙盒：")]
+        sandbox = [m for m in messages() if m.startswith(SANDBOX)]
         self.assertEqual(len(sandbox), 1, sandbox)
         self.assertIn("hello", sandbox[0])
 
@@ -713,9 +731,11 @@ class HandleTest(unittest.TestCase):
         raw["phaseTask"] = "请查询北京天气"
         raw["llmResp"] = ""
         raw["lastCmdResult"] = "[exitCode:0]\n" + "y" * 9000
-        with self.assertLogs("coregeek.app", level="INFO") as caught:
+        with self.assertLogs(level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        sandbox = [r.getMessage() for r in caught.records if r.getMessage().startswith("沙盒：")]
+        sandbox = [
+            r.getMessage() for r in caught.records if r.getMessage().startswith(SANDBOX)
+        ]
         self.assertEqual(len(sandbox), 1)
         self.assertIn(f"（共 {len(raw['lastCmdResult'])} 字）", sandbox[0])
         self.assertLess(len(sandbox[0]), 1000, "截断之后这行必须是有界的")
@@ -726,15 +746,19 @@ class HandleTest(unittest.TestCase):
         原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。顶格的东西全撞在一起
         就是最坏局面：题目、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，中文 1 字 = 3 字节）、
         被回灌那一轮**顶到 `LOG_PROMPT_MAX` 的 prompt**、**再加**一条 SOP 更新行
-        —— **实测 8723 字节 / 71 行**（第 22 步；上一版是 8574 / 66 行，再上一版
-        6180 / 44 行 —— 第 22 步多出的 5 行 / 149 字节 = banner + 摘要的空行块 + 角色行的铁铜明细）。
-        上限取 9300 而不是 8723：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
+        —— **实测 8861 字节 / 71 行**（第 23 步；上一版 8723 / 71 行，再上一版 8574 / 66 行）。
+        **同一个局面在本用例上再跑一遍就是这些数**，改日志格式后必须重测（`app._log` 的
+        docstring 与 `CLAUDE.md` 硬约束 5 里有同一张表）。
+        上限取 9300 而不是 8861：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
         或者又加进来一个顶格的大字段 —— 那至少是 1200 字节），不是几个标签的字节抖动
         —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节）。
+        ⚠️ 余量只剩 **439** 字节 ⇒ 这个上限已经**不再是"抓大漏"的网**，只是"别再多打一整块"的
+        兜底；真嫌紧就调 `LOG_TEXT_MAX` / `LOG_PROMPT_MAX`。
 
-        ⚠️ **`assertLogs` 必须收 root（不写 logger 名）**：SOP 那条走的是
-        `coregeek.agent.tools.sop`，只盯 `coregeek.app` 的话它是**唯一一条绕开本守卫的输出**
-        —— 守卫看着在岗，实际漏掉一整块。第 18 步新加这一条时正是这么发现的。
+        ⚠️ **`assertLogs` 必须收 root（不写 logger 名）**：SOP 那条走
+        `coregeek.agent.tools.sop`、任务行与沙盒行走 `coregeek.game.planner`，
+        只盯 `coregeek.app` 的话它们**绕开本守卫** —— 守卫看着在岗，实际漏掉好几块。
+        第 18 步（SOP）与第 23 步（任务线搬家）正是这么发现的。
 
         数字与 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5 三处一致。
         """
@@ -1012,37 +1036,42 @@ class GridTest(unittest.TestCase):
     def test_render_shape(self):
         """打印出来的图给调试用 —— 错了最坑：**y 翻反了图上照样"像张地图"**。
 
-        布局：2 行列标尺 + 32 行网格，每行 **46 列** = 行号槽 `len("31")` + `" │ "` + 41 列。
-        下面保留**裸下标**断言（而不是全靠行号槽）—— 下标把"字符落在第几列"钉死，
-        行号槽只能证明"这一行的标号是几"。
+        布局：上下各一行 `—` 标尺 + 32 行网格，每行 **43 列** = `"│"` + 41 列 + `"|"`。
+        下面全是**裸下标**断言：它们把"字符落在第几列、第几行"钉死。
         """
         lines = self.grid.render().splitlines()
         self.assertEqual(len(lines), 34)
-        self.assertEqual({len(line) for line in lines}, {46})
-        # 行号 = height-1-y（y 向上、终端从上往下印）；**小写 = 我方，大写 = 敌方**
-        self.assertEqual(lines[9][15], "s")  # 我方基地左上角 (10,24)
-        self.assertEqual(lines[10][16], "s")  # 我方基地右下角 (11,23)
-        self.assertEqual(lines[9][14], "g")  # 加特林 (9,24)，与基地同一行
-        self.assertEqual(lines[8][15], "r")  # 电磁狙击炮 (10,25)，在基地上方一行
-        self.assertEqual(lines[23][35], "S")  # 敌方基地左上角 (30,10) → 第 31-10=21 行
-        self.assertEqual(lines[9][9], "o")  # 石矿 (4,24)
-        self.assertEqual(lines[26][33], "%")  # 敌方围墙 (28,7) —— 墙不走字母，是例外
-        self.assertEqual(lines[29][9], "x")  # 机器人 (4,4)
-        self.assertEqual(lines[33][5], " ")  # (0,0) 空地 —— 最后一行是最底下的 y=0
-        # 最上一行网格的行号必须是 height-1 —— 槽宽与网格对得上（差一列就全错位）
-        self.assertTrue(lines[2].startswith("31 │ "), lines[2])
+        self.assertEqual({len(line) for line in lines}, {43})
+        self.assertEqual(lines[0], "—" * 43, "上标尺")
+        self.assertEqual(lines[-1], "—" * 43, "下标尺")
+        # 行 = height-1-y（y 向上、终端从上往下印）；列 = 1+x（第 0 列是左边框）
+        # **小写 = 我方，大写 = 敌方**
+        self.assertEqual(lines[8][11], "s")  # 我方基地左上角 (10,24)
+        self.assertEqual(lines[9][12], "s")  # 我方基地右下角 (11,23)
+        self.assertEqual(lines[8][10], "g")  # 加特林 (9,24)，与基地同一行
+        self.assertEqual(lines[7][11], "r")  # 电磁狙击炮 (10,25)，在基地上方一行
+        self.assertEqual(lines[22][31], "S")  # 敌方基地左上角 (30,10)
+        self.assertEqual(lines[8][5], "o")  # 石矿 (4,24)
+        self.assertEqual(lines[25][29], "%")  # 敌方围墙 (28,7) —— 墙不走字母，是例外
+        self.assertEqual(lines[28][5], "x")  # 机器人 (4,4)
+        self.assertEqual(lines[32][1], " ")  # (0,0) 空地 —— 最后一行是最底下的 y=0
 
-    def test_render_labels_every_row_with_its_y(self):
-        """每行行号自 `height-1` **递减到 0**。
+    def test_render_keeps_y_pointing_up(self):
+        """**行自上而下 = y 由大到小**，且每行的列偏移 = `1+x`。
 
-        这是 y 翻转最直接的守卫 —— `lines[31][0] == " "` 只能证明"最后一行是 y=0"，
-        中间那些行翻反了它照样过。
+        这是 y 翻转最直接的守卫 —— 只钉"最后一行是 y=0"的话，中间那些行翻反了它照样过。
+        没有行号槽之后本用例改用**斜线地图**：第 y 行只有 `(y,y)` 是矿 ⇒ 每行矿的列位置
+        就等于那一行的 y，翻反或错位一格立刻挂。
         """
-        labels = [
-            int(line.split(" │ ")[0])
-            for line in self.grid.render().splitlines()[2:]
-        ]
-        self.assertEqual(labels, list(range(31, -1, -1)))
+        width, height = 4, 3
+        grid = Map((width, height), {Pos(y, y): "stone" for y in range(height)})
+        lines = grid.render().splitlines()
+        self.assertEqual(len(lines), height + 2)
+        for i, line in enumerate(lines[1:-1]):
+            y = height - 1 - i
+            self.assertEqual(line.index("o"), 1 + y, line)
+        # 左边框那一列是空的（x=-1 没有格子），最底下一行才是 (0,0)
+        self.assertEqual(lines[-2][1], "o")
 
     def test_render_degrades_when_there_are_no_cells(self):
         """没有格子 ⇒ 空串，`blocked` 也为空 ⇒ **不挡路也不动**（见 `Map.__init__`）。
