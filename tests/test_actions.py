@@ -144,6 +144,21 @@ class HandleTest(unittest.TestCase):
         body = self._handle(b"{oops")
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
+    def test_every_round_logs_the_map_then_the_actions(self):
+        """每回合的复盘日志：**先地图、后动作**（用户指定，顺序是重点）。
+
+        判题器是黑盒、只给我们这一个视角，出事故时得能看见当时的局面 ——
+        只看见一条 `move` 是没法回答"为什么走了这一格"的。
+        `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那两条。
+        """
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(SAMPLE.read_bytes())
+        head, acts = (r.getMessage() for r in caught.records)
+        self.assertEqual(head.splitlines()[0], "回合 85（夜里）")
+        #: 抬头 + 32 行地图（41×32 的图，行自上而下 = y 由大到小）
+        self.assertEqual(len(head.splitlines()), 33)
+        self.assertEqual(acts, "动作：10010 move(6,22)；10012 move(9,17)")
+
 
 class ParseTest(unittest.TestCase):
     def _turn(self) -> Turn:

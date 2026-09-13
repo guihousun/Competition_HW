@@ -1,4 +1,4 @@
-"""动作 → 线上报文。**唯一写线上格式的地方。**
+"""动作 → 线上报文。**唯一懂线上动作格式的地方**（`to_wire` 写、`describe` 读）。
 
 一条指令就是一个对象，**创建即校验**：`roleType` 传错连对象都造不出来。
 这是按红线设计的 —— 判题器把"指令非法"计为一次异常，累计 5 次该队整场不再被调度，
@@ -24,6 +24,21 @@ from ..game.grid import Pos
 WORKER = frozenset({"worker"})
 PIONEER = frozenset({"pioneer"})
 ALL = WORKER | PIONEER
+
+
+def describe(cmds: dict[str, Any]) -> str:
+    """把 `roleCommandMap` 压成**一行**日志：`10010 move(12,22)；10012 build wall(13,23)`。
+
+    放在本模块而不是 `app`：`action` / `name` / `targetPos` 这几个字段名只有这里知道
+    （`app` 只管三个顶层字段的封装）。唯一使用者是 `app._log` 的复盘日志。
+    """
+    parts = []
+    for role_id, cmd in cmds.items():
+        point = cmd["targetPos"][0]
+        name = cmd.get("name")
+        what = f"{cmd['action']} {name}" if name else cmd["action"]
+        parts.append(f"{role_id} {what}({point['x']},{point['y']})")
+    return "；".join(parts) if parts else "（空指令）"
 
 
 class BaseAction:

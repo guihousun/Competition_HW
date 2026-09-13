@@ -23,6 +23,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 闸门在 **Action 的构造函数**里（`protocol/actions.py`）：`roleType` 不对就抛 `PermissionError`，**非法动作根本造不出来**。planner 侧接住它、丢那一条并告警，不连坐同回合其他角色（抛出去会变成"每回合空指令 → 全队冻结一整局"，现象与 `main3.py` 改名事故一样难排查）。
    - 这类 bug 的特征是**本地全绿**（格式完全合法，只有判题器会说"不"），而 `collect` 被误发给开拓者会每天吃一个异常——**红线只有 5 次**。所以每加一个受限动作，都要在 `tests/test_actions.py` 补一条对应用例。
 4. 判题器侧超时：建连 > 10s 或响应 > 5s。
+5. **每回合的复盘日志（`app._log`）写在 `try` 里面，别挪出去。** 日志代码再不起眼也是代码，
+   `web/server.py` 的 `do_POST` **不接异常**（`server.py:22` 直接 `handler(...)`）—— 逃出去连接就断了，
+   判题器那边是"响应超时"（红线第一条）。放进 `try` 里，最坏只是退化成空指令（丢一个回合，合法、不计异常）。
+   ⚠️ **stdout 有被写满的风险**：32 行 × 1300 回合 ≈ 2MB，Windows 管道缓冲 64KB —— 判题器若**不读**
+   stdout，约 45 回合后 `write` 阻塞 ⇒ 响应超时 ⇒ 直通红线。**未实测**，本地没法验证判题器读不读。
 
 ## 架构
 
@@ -32,11 +37,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 main3.py              入口：读端口 → chdir → src/ 进 sys.path → 起服务。不放策略
 run.sh                接口文档规定的 bash run.sh <port>；陪跑本地（python3 / py）
 src/coregeek/
-├── app.py            组装根：handle(bytes) + run(port)。**红线所在**，异常一律退化成空指令
+├── app.py            组装根：handle(bytes) + run(port) + 每回合复盘日志 `_log`。**红线所在**，异常一律退化成空指令
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
 │   ├── model.py      payload → Turn（容错解析）
-│   └── actions.py    BaseAction + 各动作（`move` / `build`）。**创建即校验**，唯一写线上格式的地方
+│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
     │                 + 基地几何：`base_cells` / `weapon_cells` / `back_weapon_cells` / `wall_cells`
@@ -105,7 +110,7 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
 `tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策四类），**不建自研测试框架**：标准库 `unittest` 够用。
-进度见 `docs/design/code-task.md`（当前到第 8 步：`collect` 落地 + 采石砌墙，夜里走到武器旁待命）——**别照记忆里的进度走**。
+进度见 `docs/design/code-task.md`（当前到第 9 步：每回合复盘日志，先地图后动作；第 8 步是采石砌墙）——**别照记忆里的进度走**。
 
 **常用命令**：
 
