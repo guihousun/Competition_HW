@@ -101,7 +101,7 @@ class LogStore:
         self._thread.start()
 
     def close(self, timeout: float = 3.0) -> None:
-        """判题器会杀进程，因此 main.py 必须注册 atexit/SIGTERM 调它。"""
+        """判题器会杀进程，因此 main3.py 必须注册 atexit/SIGTERM 调它。"""
         if self._thread is None:
             return
         self._stop.set()

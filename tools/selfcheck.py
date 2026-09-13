@@ -398,6 +398,54 @@ def geometry_front_is_configurable() -> None:
         geometry.FORCED_FRONT_SIDE.clear()
 
 
+@case
+def geometry_front_prior_points_away_from_map_centre() -> None:
+    """正面先验 = **背向地图中心**（朝最近的那条地图边缘）。这条必须钉死。
+
+    ⚠️ 为什么它是决定性的：机器人**只在夜晚出现**（任务书 L350：夜里第一个回合
+    统一出现），所以第 1 天白天根本观测不到威胁来向，`world.box_of` 只能回落到
+    这条先验 —— 第 1 天建在哪一面的 3 座武器和正面墙，完全由它决定。
+    写成"朝向地图中心"会得到 **+x**（正好相反），等于把全部火力背对敌人。
+
+    三条独立证据都指向 -x：
+      · 样例已建成的 3 座武器在 (9,24)/(10,25)/(9,25) —— 基地 (10,24) 的 -x/-y 角；
+      · demo `_tower_sites` 按 `(_footprint_distance, x, y)` 排序 → 恒取 -x 列；
+      · 敌方基地 (30,10) 在右上，机器人从那一侧过来。
+    """
+    from coregeek.domain import geometry
+    from coregeek.domain.grid import Pos
+
+    b = geometry.box_from_station(Pos(*OUR_STATION), MAP_W, MAP_H, "challenger")
+    eq(b.front, "-x", "基地 (10,24) 偏左下 → 正面必须朝 -x")
+    eq(b.back, "+x", "背面（开门侧）朝地图中心")
+    eq(_xy(b.sides["-x"]), {(8, 21), (8, 22), (8, 23), (8, 24), (8, 25), (8, 26)}, "正面 = x=8 那一列")
+    ok(b.door.x > OUR_STATION[0], f"门要开在背面（+x 侧），实际 {b.door}")
+
+    # 武器与墙都必须**从正面开始**填 —— 顺序错了就等于把加特林放到背面
+    eq((b.weapon_sites()[0].x, b.weapon_sites()[0].y), (9, 22), "武器环第一格在正面列")
+    eq([s.x for s in b.weapon_sites()[:4]], [9, 9, 9, 9], "武器先填满正面那一列")
+    eq((b.wall_order()[0].x, b.wall_order()[0].y), (8, 21), "围墙第一格在正面")
+    eq(b.wall_order()[5].x, 8, "正面整条边（6 格）先合拢")
+
+
+@case
+def geometry_front_prior_follows_the_station_not_the_type() -> None:
+    """换边之后基地搬到 (30,10) → 正面随之翻成 **+x**，门回到 -x。
+
+    半场之间会交换出生区（基地固定坐标 (10,24)/(30,10)）。先验按"基地相对地图中心
+    的位置"算，所以换边无需任何额外配置 —— 若写成硬编码的 `-x`，下半场就会全反。
+    """
+    from coregeek.domain import geometry
+    from coregeek.domain.grid import Pos
+
+    b = geometry.box_from_station(Pos(*ENEMY_STATION), MAP_W, MAP_H, "defender")
+    eq(b.front, "+x", "(30,10) 偏右上 → 正面朝 +x")
+    ok(b.door.x < ENEMY_STATION[0], f"门在 -x 侧，实际 {b.door}")
+    # 环的跨度固定，正面在 +x 时最近的那一列是 bx+2（围墙环在 bx+3）
+    eq(b.weapon_sites()[0].x, ENEMY_STATION[0] + 2, "武器仍从正面列开始")
+    eq(b.wall_order()[0].x, ENEMY_STATION[0] + 3, "围墙仍从正面开始")
+
+
 # ══ 日历 ═════════════════════════════════════════════════════════════
 @case
 def calendar_day_night_boundaries() -> None:
@@ -850,12 +898,30 @@ def _sample_payload() -> dict:
 
 
 def _payload(*, round_no: int = 30, gold: int | None = None, place: dict | None = None,
-             backpack: dict | None = None) -> dict:
-    """样例副本 + 定点修改。`place`/`backpack` 的 key 是角色 id。"""
+             backpack: dict | None = None, weapons: int | None = None,
+             robots: bool = True) -> dict:
+    """样例副本 + 定点修改。`place`/`backpack` 的 key 是角色 id。
+
+    `weapons`：只保留前 N 座武器（样例有 3 座，而**开局是 0 座** —— 任务书 §4.5.1）。
+    测第 1 天的行为必须显式传 `weapons=0` + `gold=75`，否则等于在测中局。
+    `robots=False`：清空机器人（任务书 L350：机器人只在夜晚出现，白天为 0）。
+    """
     p = _sample_payload()
     p["roundNo"] = round_no
     if gold is not None:
         p["teamOur"]["goldNum"] = gold
+    if weapons is not None:
+        seen = 0
+        kept = []
+        for r in p["teamOur"]["roles"]:
+            if r["roleType"] in ("gatling", "railgun", "rocket"):
+                seen += 1
+                if seen > weapons:
+                    continue
+            kept.append(r)
+        p["teamOur"]["roles"] = kept
+    if not robots:
+        p["robot"] = {"roles": []}
     for r in p["teamOur"]["roles"]:
         if place and r["id"] in place:
             x, y = place[r["id"]]
@@ -886,17 +952,92 @@ def economy_worker_builds_the_highest_priority_wall_gap() -> None:
     from coregeek.domain.world import box_of, wall_gaps
     from coregeek.protocol import model
 
-    t = _turn(place={10010: (14, 21)}, backpack={10010: ["stone", "stone"]})
+    t = _turn(place={10010: (7, 21)}, backpack={10010: ["stone"] * 6})
     box = box_of(t)
     gap = wall_gaps(t, box)[0]
-    eq(gap.x, 13, "样例基地的正面是 +x，第一个缺口应落在 x=13")
+    eq(gap.x, 8, "样例基地的正面是 -x（背向地图中心），第一个缺口应落在 x=8")
     # 站到缺口旁边
-    t = _turn(place={10010: (14, gap.y)}, backpack={10010: ["stone", "stone"]})
+    t = _turn(place={10010: (7, gap.y)}, backpack={10010: ["stone"] * 6})
     intent = _only(planner.plan(t, planner.PlanMemory()), 10010)
     eq(type(intent).__name__, "Build", "缺石料已备齐时应建墙")
     eq(intent.name, "wall", "建造名必须是线上的 'wall'")
     eq(intent.target, gap, "应建在 wall_order 的第一格")
     eq(model.load(_payload()) is not None, True, "sanity")
+
+
+@case
+def economy_day_one_builds_weapons_before_anything_else() -> None:
+    """**开局回合的正确行为**：金币 75、武器 0 座 → 第一件事是建武器，不是砌墙。
+
+    ⚠️ 这是本项目最重要的一条断言。任务书 §4.5.1 三种武器**初始数量都是 0**，
+    §4.5.3 **开局金币 75**，单价 25 → 75/25 = **恰好 3 座**。
+    早期把 `docs/request.txt`（roundNo=85 的**中局**快照）当成开局状态，
+    得出"开局已送 3 座、造武器是死支出线"，于是一整天只砌墙 ——
+    当天入夜三人无武器可操控，基地赤手空拳挨整晚。用户直接指出了这一点。
+
+    注意这里必须显式 `weapons=0` + `robots=False`：默认 `_payload` 是样例的中局状态，
+    拿它测第 1 天等于什么都没测。
+    """
+    from coregeek.domain import economy, planner
+    from coregeek.domain.world import box_of
+
+    t = _turn(round_no=1, gold=75, weapons=0, robots=False)
+    eq(len(t.weapons), 0, "第 1 天开局不该有任何武器")
+    eq(t.gold, 75, "开局金币")
+    eq(economy.weapons_shortfall(t), 3, "开局还差 3 座")
+
+    box = box_of(t)
+    plan = economy.next_weapon_build(t, box)
+    ok(plan is not None, "金币 75 + 空环 → 必须有一座可以建的武器")
+    kind, site = plan
+    eq(kind, "gatling", "第一座是加特林（射程最短 → 最靠正面）")
+    eq((site.x, site.y), (9, 22), "第一座落在武器环的第一个空位（正面列）")
+
+    # 行为面 ①：人还远 → 产出的必然是一条 Move，但**理由是"建武器"**，落点在环上
+    mem = planner.PlanMemory()
+    intents = planner.plan(t, mem)
+    fortifier = [rid for rid, j in mem.jobs.items() if j == planner.JOB_FORTIFY][0]
+    intent = _only(intents, fortifier)
+    ok(intent.reason.startswith("建武器"), f"第 1 天的筑墙手必须先建武器，实际：{intent.reason}")
+    # 一回合只走一步，所以落点是**朝武器环的那一步**，不是环本身
+    eq(type(intent).__name__, "Move", "人在远处时先走过去")
+    ok(intent.dest.distance(site) < t.our_id[10010].pos.distance(site),
+       f"那一步必须是在靠近武器环：{intent.dest} vs 目标 {site}")
+
+    # 行为面 ②：人站到环上之后，必须真的产出 `build <武器名>`（端到端接通）
+    t2 = _turn(round_no=1, gold=75, weapons=0, robots=False, place={10010: (8, 22)})
+    intent = _only(planner.plan(t2, planner.PlanMemory()), 10010)
+    eq(type(intent).__name__, "Build", f"站到武器环旁应开始建武器，实际 {intent}")
+    eq(intent.name, "gatling", "第一座建的是加特林")
+
+    # 三座建完之后（金币归零）才轮到墙：shortfall 归零
+    eq(economy.next_weapon_build(_turn(gold=0, weapons=0, robots=False), box), None,
+       "金币不够时不该再计划建武器")
+
+
+@case
+def economy_weapon_budget_is_never_spent_on_a_voucher() -> None:
+    """采购阶梯**必须**给还没建满的武器预留金币，否则第一天的 75 金会被闲券挤掉。
+
+    ⚠️ 实测踩到的：第 1 天 gold=75、武器 0 座，⑥ 档围墙升级券的门槛是
+    `gold >= 60 + 10 = 70` —— 成立，于是军需官跑去买 20 金的券，剩 55 金
+    **只够再建 2 座武器**。加 `_weapon_reserve` 之后 75 − 75 = 0 可支配，阶梯全线推迟。
+    """
+    from coregeek.domain import economy
+    from coregeek.domain.world import box_of
+
+    t = _turn(round_no=1, gold=75, weapons=0, robots=False)
+    eq(economy._weapon_reserve(t), 75, "还差 3 座 → 预留 75")
+    eq(economy.purchase_wish(t), None, "预留之后可支配为 0，什么都不该买")
+
+    # 武器建满后预留归零，闲钱可以照常买券
+    t_full = _turn(round_no=1, gold=75, robots=False)
+    eq(economy._weapon_reserve(t_full), 0, "3 座齐了就不再预留")
+    ok(economy.purchase_wish(t_full) is not None, "满配后 75 金应当能买到 ⑥ 档的券")
+
+    # 环满了 → 预留必须是 0（钱不能锁成死水）
+    eq(economy._weapon_reserve(_turn(gold=75, robots=False)), 0, "3 座占满环 → 预留 0")
+    ok(box_of(t) is not None, "sanity")
 
 
 @case
@@ -908,6 +1049,60 @@ def economy_worker_without_stone_goes_to_a_stone_mine() -> None:
     intent = _only(planner.plan(t, planner.PlanMemory()), 10010)
     eq(type(intent).__name__, "Collect", "缺石料时应去采集")
     eq(t.mine_kind(intent.target), "stone", "缺石料时目标必须是石矿")
+
+
+@case
+def planner_gathers_stone_in_batches_not_one_trip_per_wall() -> None:
+    """石料是**攒一批再回去砌**，不是"挖一块→走回去砌一块→再走回来"。
+
+    ⚠️ 账要算清：一个盒子 19 面墙。逐块往返 = 38 趟，每趟至少"矿↔墙"一个来回；
+    实测第 40 回合才立起 4 面墙，正面在第 71 回合入夜前根本合不拢。
+
+    规则必须是**跨回合记住的状态**（`PlanMemory.build_mode`）：
+    手上不足一批就一直在矿区攒，攒够 `STONE_STOCK` 才切到"砌墙"档，
+    砌到一块不剩再切回"采集"档。若用无状态判据（"不足 N 就挖"），
+    砌掉一块后立刻又低于阈值，人会当场掉头回矿 —— 实测就是这个退化成 4 面墙的。
+    """
+    from coregeek.domain import planner
+    from coregeek.domain.world import box_of, wall_gaps
+    from coregeek.infra import config
+
+    box = box_of(_turn())
+    gap = wall_gaps(_turn(), box)[0]
+    stand = (gap.x - 1, gap.y)  # 站在缺口旁边（正面外侧）
+
+    # 每次推演都把人放回缺口旁：本用例验的是**档位怎么切**，
+    # 不是"从矿走回墙要几步"，位置必须固定住。
+    def step(mem, bag):
+        t = _turn(place={10010: stand}, backpack={10010: bag})
+        intent = _only(planner.plan(t, mem), 10010)
+        return intent, mem.build_mode.get(10010)
+
+    # ① 空手 → 采集档（人在缺口旁也要先去攒料，否则无料可砌）
+    mem = planner.PlanMemory()
+    intent, mode = step(mem, [])
+    eq(mode, "gather", "空手应进入采集档")
+    ok("攒建墙石料" in intent.reason, f"理由应说明在攒料，实际 {intent.reason}")
+
+    # ② 攒到一批 → 切砌墙档，人已在缺口旁，必须真的建
+    intent, mode = step(mem, ["stone"] * config.STONE_STOCK)
+    eq(mode, "build", f"攒够 {config.STONE_STOCK} 块应切到砌墙档")
+    eq(type(intent).__name__, "Build", "料够了就该砌墙")
+    eq(intent.target, gap, "砌的仍是 wall_order 的第一格")
+
+    # ③ 砌到只剩 1 块 → **不许**当场掉头回矿 —— 这是退化成"一块一趟"的那一步
+    intent, mode = step(mem, ["stone"])
+    eq(mode, "build", "档位跨回合粘住，剩 1 块仍在砌墙档")
+    eq(type(intent).__name__, "Build", f"剩 1 块应继续砌完这批，实际 {intent}")
+
+    # ④ 砌到一块不剩 → 才切回采集档
+    intent, mode = step(mem, [])
+    eq(mode, "gather", "建材用光才切回采集档")
+    eq(type(intent).__name__, "Move", "此时人要从缺口走回矿区，所以是一条 Move")
+
+    # ⑤ 新对局必须清档，否则上一局的"砌墙档"会带进新一局
+    mem.reset_match()
+    eq(mem.build_mode, {}, "reset_match 必须清掉料批状态")
 
 
 @case
@@ -984,6 +1179,7 @@ def planner_keeps_exactly_one_fortifier_and_sticks_to_it() -> None:
     只能直接读。
     """
     from coregeek.domain import planner
+    from coregeek.infra import config
 
     mem = planner.PlanMemory()
     t = _turn(place={10010: (5, 23), 10012: (10, 16)})
@@ -1003,9 +1199,11 @@ def planner_keeps_exactly_one_fortifier_and_sticks_to_it() -> None:
 
     box = box_of(t)
     gap = wall_gaps(t, box)[0]
-    t2 = _turn(place={10010: (gap.x + 1, gap.y)}, backpack={10010: ["stone"]})
+    # ⚠️ 石头必须给够 `STONE_STOCK` 一批。给 1 块的话**必然**是 Collect，
+    #    那不是 bug 而是料批规则在起作用（1 块只够砌 1 面，砌完就得再走一趟矿）。
+    t2 = _turn(place={10010: (gap.x + 1, gap.y)}, backpack={10010: ["stone"] * config.STONE_STOCK})
     intent = _only(planner.plan(t2, mem), fortifier)
-    eq(type(intent).__name__, "Build", f"筑墙手到位后应建墙，实际 {intent}")
+    eq(type(intent).__name__, "Build", f"筑墙手到位且备齐一批料后应建墙，实际 {intent}")
 
 
 @case
@@ -1013,8 +1211,10 @@ def planner_retreats_by_actual_walk_length_not_a_fixed_clock() -> None:
     """回防按**真实步数**触发：近距离的人继续干活，远距离的人提前撤。"""
     from coregeek.domain import planner
 
-    # 工人 (5,23) 离门 (8,24) 只有 3 步 —— 白天第 65 回合（还剩 6 回合）时不该撤
-    near = _turn(round_no=65, place={10010: (5, 23)})
+    # ⚠️ 门的方位随正面走：正面 -x → 背面 +x → 门在 (13,24)。
+    #    这里曾经按"门在 -x"写过 (5,23)，那是旧正面判据(+x)的残留。
+    # 工人 (12,23) 离门 (13,24) 只有 1 步 —— 白天第 65 回合（还剩 6 回合）时不该撤
+    near = _turn(round_no=65, place={10010: (12, 23)})
     intent = _only(planner.plan(near, planner.PlanMemory()), 10010)
     ok("回防" not in intent.reason, f"近处角色过早回防：{intent.reason}")
 
@@ -1055,6 +1255,7 @@ def planner_one_round_produces_build_sell_and_buy_together() -> None:
     """
     from coregeek.domain import planner
     from coregeek.domain.world import box_of, wall_gaps
+    from coregeek.infra import config
     from coregeek.protocol import commands
 
     probe = _turn()
@@ -1066,7 +1267,7 @@ def planner_one_round_produces_build_sell_and_buy_together() -> None:
         gold=120,
         place={10010: (gap.x + 1, gap.y), 10012: (20, 17), 10011: (25, 21)},
         backpack={
-            10010: ["stone", "stone"],
+            10010: ["stone"] * config.STONE_STOCK,  # 备齐一批料才会进入建墙阶段
             10012: ["copper"] * 90,  # ≥ 背包 85% → 触发清仓
             10011: [],
         },

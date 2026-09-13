@@ -10,18 +10,27 @@
 
 **一切坐标由己方 station 的 pos 推导，禁止绝对坐标**（跨半场换边后基地会挪）。
 
-❓未确认：机器人出生区在哪一侧。因此"正面"默认按"朝向地图中心"推定，
-可用 `FORCED_FRONT_SIDE` 覆盖；实盘确认后应写入习得参数。
+❓未确认：机器人出生区在哪一侧。默认先验是**背向地图中心**（朝最近边缘），
+入夜观测到机器人后由 `front_from_positions` 覆盖，也可用 `FORCED_FRONT_SIDE` 写死。
+三条支持证据见 `_infer_front` 的注释。
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from ..infra import config
 from .grid import Pos
 
-__all__ = ["Box", "SIDES", "box_from_station", "station_footprint", "OppositeSide"]
+__all__ = [
+    "Box",
+    "SIDES",
+    "box_from_station",
+    "front_from_positions",
+    "station_footprint",
+    "OppositeSide",
+]
 
 
 SIDES = ("-x", "+x", "-y", "+y")
@@ -145,7 +154,9 @@ def station_footprint(pos: Pos) -> tuple[Pos, ...]:
     )
 
 
-def box_from_station(station: Pos, map_w: int, map_h: int, our_type: str) -> Box:
+def box_from_station(
+    station: Pos, map_w: int, map_h: int, our_type: str, front: str | None = None
+) -> Box:
     """由己方 station 的 pos 推导整个盒子。
 
     station.pos 是**左上角**（✅实测），因此：
@@ -153,6 +164,8 @@ def box_from_station(station: Pos, map_w: int, map_h: int, our_type: str) -> Box
         ym, yM = by-1, by
         武器环 4×4 = x∈[xm-1, xM+1] × y∈[ym-1, yM+1]
         围墙环 6×6 = x∈[xm-2, xM+2] × y∈[ym-2, yM+2]
+
+    `front` 的优先级：显式传入（观测值）> `FORCED_FRONT_SIDE` > 先验推断。
     """
     bx, by = station.x, station.y
     xm, xM = bx, bx + 1
@@ -176,7 +189,7 @@ def box_from_station(station: Pos, map_w: int, map_h: int, our_type: str) -> Box
 
     sides = _split_sides(wall_ring, xm, xM, ym, yM)
 
-    front = FORCED_FRONT_SIDE.get(our_type) or _infer_front(map_w, map_h, bx, by)
+    front = front or FORCED_FRONT_SIDE.get(our_type) or _infer_front(map_w, map_h, bx, by)
     back = _opposite(front)
     door = _pick_door(sides[back])
 
@@ -234,13 +247,38 @@ def _pick_door(back_cells: tuple[Pos, ...]) -> Pos:
 
 
 def _infer_front(map_w: int, map_h: int, bx: int, by: int) -> str:
-    """❓出生区未确认：暂定正面 = 朝向地图中心的那一面。
+    """❓出生区未确认时的先验：正面 = **背向地图中心**（即朝最近的那条地图边缘）。
 
-    对角落的基地，这个规则给出的就是"朝地图内部"的一片，是当前信息下最合理的先验。
-    实盘确认出生区后，用 `FORCED_FRONT_SIDE` 覆盖，并把结论写进习得状态。
+    ⚠️ 这与"直觉"（朝向地图中心）**相反**，是刻意的，有三条独立证据：
+
+      1. demo 的 `_tower_sites` 按 `(x, y)` 升序取环上 3 格 → **永远落在 -x 那一列**；
+      2. `docs/request.txt` 里 3 座武器全在 -x/-y 角：(9,24) (10,25) (9,25)，
+         而基地在 (10,24)；
+      3. 同一份样例里机器人出现在 (4,4)，相对基地 (10,24) 在左上方。
+
+    ⚠️ 任务书 L350「机器人会在**夜晚第一个回合**统一出现」意味着白天看不到任何机器人，
+    所以第 1 天的武器与墙只能靠这条先验定方位。入夜后 `front_from_positions`
+    会用观测到的机器人来向覆盖它；确认后可用 `FORCED_FRONT_SIDE` 写死。
     """
-    cx, cy = map_w / 2.0, map_h / 2.0
-    dx, dy = cx - bx, cy - by
+    dx, dy = bx - map_w / 2.0, by - map_h / 2.0
     if abs(dx) >= abs(dy):
-        return "+x" if dx >= 0 else "-x"
-    return "+y" if dy >= 0 else "-y"
+        return "-x" if dx <= 0 else "+x"
+    return "-y" if dy <= 0 else "+y"
+
+
+def front_from_positions(station: Pos, threat: Iterable[Pos]) -> str | None:
+    """按**观测到的威胁位置**定正面。没有可用观测时返回 None（调用方退回先验）。
+
+    取"基地 → 各威胁"的平均方向，再吸附到主轴。机器人是朝基地走的，
+    所以它们的分布本身就指向正面；一旦观测到，这个判据比任何先验都可信。
+    """
+    pts = [p for p in threat]
+    if not pts:
+        return None
+    sx = sum(p.x - station.x for p in pts)
+    sy = sum(p.y - station.y for p in pts)
+    if sx == 0 and sy == 0:
+        return None  # 环绕基地：没有"主攻方向"可言
+    if abs(sx) >= abs(sy):
+        return "+x" if sx > 0 else "-x"
+    return "+y" if sy > 0 else "-y"

@@ -29,7 +29,7 @@ from .entities import (
     Role,
     ShopItem,
 )
-from .geometry import Box, box_from_station, station_footprint
+from .geometry import Box, box_from_station, front_from_positions, station_footprint
 from .grid import Pos
 from .path import Board
 
@@ -231,11 +231,24 @@ def board_for(turn: Turn, mover: Role | None = None) -> Board:
 
 
 def box_of(turn: Turn) -> Box | None:
-    """己方防御盒子。基地还没出现在 payload 里时返回 None（此时无从推导）。"""
+    """己方防御盒子。基地还没出现在 payload 里时返回 None（此时无从推导）。
+
+    正面优先用**观测到的机器人来向**（机器人是朝基地走的，分布本身即指向正面）。
+    白天机器人不存在（任务书 L350：夜里第一个回合才统一出现），
+    此时回落到 `geometry._infer_front` 的先验 —— 所以第 1 天武器与墙的方位
+    完全由那条先验决定，这也正是它必须写对的原因。
+    """
     station = turn.station
     if station is None:
         return None
-    return box_from_station(station.pos, turn.width, turn.height, turn.our_type)
+    threat = tuple(r.pos for r in turn.robots if r.alive)
+    return box_from_station(
+        station.pos,
+        turn.width,
+        turn.height,
+        turn.our_type,
+        front=front_from_positions(station.pos, threat),
+    )
 
 
 def wall_gaps(turn: Turn, box: Box) -> tuple[Pos, ...]:

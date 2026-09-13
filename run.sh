@@ -3,7 +3,7 @@
 #
 # 判题环境是 Linux，本地是 Windows（用 `py -3.13`）。因此：
 #   - 优先 python3（判题机），退回 python（本地 MSYS/Git-Bash）；
-#   - PYTHONPATH 兜底：万一 main.py 里的 sys.path.insert 没生效（比如判题器
+#   - PYTHONPATH 兜底：万一 main3.py 里的 sys.path.insert 没生效（比如判题器
 #     用了别的入口），仍能 import 到 coregeek；
 #   - PYTHONUNBUFFERED：日志必须实时可见，否则判题器掐进程时会丢最后几行——
 #     而最后几行往往正是崩溃原因。
@@ -36,4 +36,4 @@ export PYTHONUNBUFFERED=1
 export PYTHONPATH="$(pwd)/src${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONUTF8=1
 
-exec "$PY" main.py "$1"
+exec "$PY" main3.py "$1"

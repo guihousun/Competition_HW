@@ -6,11 +6,20 @@
 也不产出 `Intent`（那个由 planner 组装）。所有函数都是**纯函数**：
 输入 `Turn`，输出愿望，可以随便重放/单测。
 
-⚠️ §15.1 已确认的事实，它决定了整个采购阶梯的形状：
-**武器开局就有 3 座，而全局上限就是 3 座（任务书 L205）**。
-因此 `WEAPON_BUILD_COST=25` 这条支出线在武器被打掉之前是**死的**，
-金币必须投向别处 —— 升级券 ≫ 新武器。所以下面的阶梯里根本没有"造新武器"，
-它只在 `weapons_shortfall()` 里以"补建"的形式出现。
+⚠️ 开局事实（✅任务书 §4.5.1 / §4.5.3）决定整个支出顺序：
+
+    三种武器**初始数量都是 0**，全局上限 3 座，单价 25 金；**开局金币 75**。
+
+75 / 25 = 恰好 3 座 —— **第 1 天白天的第一优先动作就是把 3 座武器建满**，
+否则当天入夜三人无武器可操控，基地要赤手空拳挨整晚。建满 3 座之后，
+金币才轮到升级券（见 `purchase_wish` 的阶梯）。
+
+⚠️ 本模块早期写反过：把 `docs/request.txt`（`roundNo=85` 的**中局**快照，
+已有 3 座武器 + 20 金）误当成开局状态，于是判定"开局送满 3 座、造武器是死支出线"，
+第 1 天一座武器都不造。25×3 = 75 = 初始金币正是那条推理错误的直接反证。
+
+⚠️ `build` **仅工人、仅白天**可用（任务书 L137），所以造武器是
+`planner` 里筑墙手的职责，**不是**军需官的采购 —— 商店里不卖武器。
 """
 
 from __future__ import annotations
@@ -30,6 +39,7 @@ __all__ = [
     "purchase_wish",
     "upgrade_targets",
     "weapons_shortfall",
+    "next_weapon_build",
     "MINE_YIELD_PER_TURN",
 ]
 
@@ -120,13 +130,37 @@ def _vendor_prices(turn: Turn) -> dict[str, int]:
 
 
 def weapons_shortfall(turn: Turn) -> int:
-    """还差几座武器才回到全局上限。
+    """还差几座武器才到全局上限。
 
-    正常开局是 0（已有 3 座，上限也是 3）。只有在武器被打掉后才会 > 0，
-    此时**补建是最高优先级的花钱方式** —— 少一座武器就是少一份整晚火力。
+    **开局就是 3**（任务书 §4.5.1：初始数量 0，上限 3），不是 0 —— 这一点
+    容易写反，写反的后果是第 1 天不造武器。数值下降只发生在武器被打掉之后。
     """
     alive = len([r for r in turn.weapons if r.alive])
     return max(0, config.MAX_WEAPONS - alive)
+
+
+def next_weapon_build(turn: Turn, box) -> tuple[str, Pos] | None:
+    """下一座该建的武器 `(类型, 位置)`；不需要建/建不起/无处可建时返回 None。
+
+    三个条件缺一不可：金币够、还没满 3 座、环上还有空位。
+    位置取 `Box.weapon_sites()`（由正面往后）里的**第一个空位**，
+    类型按 `config.WEAPON_LOADOUT` 顺序给 —— 射程短的靠正面。
+
+    白天没有机器人（任务书 L350），所以环上不会出现"位置被机器人占住"的情况，
+    这里不必做可达性预检。
+    """
+    if turn.gold < config.WEAPON_BUILD_COST:
+        return None
+    alive = [r for r in turn.weapons if r.alive]
+    if len(alive) >= config.MAX_WEAPONS or box is None:
+        return None
+    taken = {r.pos for r in alive}
+    free = [p for p in box.weapon_sites() if p not in taken]
+    if not free:
+        return None
+    order = config.WEAPON_LOADOUT
+    kind = order[min(len(alive), len(order) - 1)]
+    return kind, free[0]
 
 
 def upgrade_targets(turn: Turn, name: str) -> tuple[Pos, ...]:
@@ -165,42 +199,68 @@ def upgrade_targets(turn: Turn, name: str) -> tuple[Pos, ...]:
     return ()
 
 
+def _weapon_reserve(turn: Turn) -> int:
+    """还没建满的武器要**预留**的金币 —— 武器是全部支出里优先级最高的一笔。
+
+    ⚠️ 没有它就会出现这种局面（实测）：第 1 天金币 75、武器 0 座，采购阶梯的
+    ⑥ 档（`gold >= 60 + 10 = 70`）成立，军需官于是跑去买 20 金的围墙升级券，
+    剩 55 金 —— **只够再建 2 座武器**，开局三座火力的设计意图被一张闲券挤掉。
+    预留额 = `单价 × min(还差几座, 环上空位)`，所以环满了/推不出盒子时预留为 0，
+    金币不会白白锁死。
+    """
+    from .world import box_of  # 局部 import：避免模块级循环
+
+    box = box_of(turn)
+    if box is None:
+        return 0
+    taken = {r.pos for r in turn.weapons if r.alive}
+    free = sum(1 for p in box.weapon_sites() if p not in taken)
+    return config.WEAPON_BUILD_COST * min(weapons_shortfall(turn), free)
+
+
 def purchase_wish(turn: Turn) -> PurchaseWish | None:
     """本回合**最想买**的一样东西；没有值得买的返回 None。
 
     阶梯按"每金币换到的生存力"排序，而不是按价格。已在背包里的券不再重复买
     （券不叠放，买重了只是白花金币 —— 见 `world.carried`）。
+
+    ⚠️ 比较用的是 `可支配金币 = 现有金币 − 武器预留`（见 `_weapon_reserve`）：
+    券可以晚一天买，武器空着就整晚没有火力。
     """
-    gold = turn.gold
+    gold = turn.gold - _weapon_reserve(turn)
     have = carried(turn)
 
     def want(item: str) -> int:
         return have.get(item, 0)
 
-    # ① 补建被打掉的武器。少一座 = 少一整条火线，优先级高于任何升级。
-    if weapons_shortfall(turn) > 0 and gold >= config.WEAPON_BUILD_COST:
-        return PurchaseWish("_build_weapon", f"武器只剩 {len(turn.weapons)} 座，先补建")
+    # ⚠️ 这里**没有**"造武器"这一档：商店里不卖武器，武器是工人白天在武器环上
+    #    `build` 出来的（见 `next_weapon_build`）。早期这里有一档伪商品
+    #    `_build_weapon`，但没有任何角色能执行它 —— 军需官拿到的是 Idle，
+    #    筑墙手又没有这个分支，于是**第 1 天一座武器都不造**。
+    #    支出优先级里"武器 ≫ 一切"这件事，由 planner 的筑墙手保证，不由采购阶梯保证。
 
-    # ② 基地升级：1500 → 3000 血是**单项收益最大**的一笔钱（score₃ 直接看存活）。
+    # ① 基地升级：1500 → 3000 血是**单项收益最大**的一笔钱（score₃ 直接看存活）。
     #    只在基地已受伤或已有武器满级时才排到武器券前面，否则先扩火力。
     if gold >= 100 and want("StationUpgradeVoucher1") == 0 and _station_at(turn, 1):
         if _station_hurt(turn) or not _has_weapon_at(turn, 1):
             return PurchaseWish("StationUpgradeVoucher1", "基地 1500→3000 血，生存分直接受益")
 
-    # ③ 武器升级券：一级券让伤害与射程同时翻档，是防线的核心投资。
+    # ② 武器升级券：一级券让伤害与射程同时翻档，是防线的核心投资。
+    #    ⚠️ 前提是武器已经建满 —— `_has_weapon_at` 保证了这一点，
+    #    而建满 3 座要花掉开局的 75 金，所以这条实际上是第 2 天以后的事。
     if gold >= 100 and want("WeaponUpgradeVoucher1") == 0 and _has_weapon_at(turn, 1):
         return PurchaseWish("WeaponUpgradeVoucher1", "武器 L1→L2：伤害与射程同时提升")
 
-    # ④ 基地二级
+    # ③ 基地二级
     if gold >= 150 and want("StationUpgradeVoucher2") == 0 and _station_at(turn, 2):
         return PurchaseWish("StationUpgradeVoucher2", "基地 L2→L3：3000→4500 血")
 
-    # ⑤ 武器二级
+    # ④ 武器二级
     if gold >= 150 and want("WeaponUpgradeVoucher2") == 0 and _has_weapon_at(turn, 2):
         return PurchaseWish("WeaponUpgradeVoucher2", "武器 L2→L3：满级火力")
 
-    # ⑥ 围墙修复包：全店最便宜的保险（10 金），但只在**已经有墙要守**时留一件。
-    #    开局 20 金去买它等于把升级券推迟一整轮，所以加了 gold 门槛。
+    # ⑤ 围墙修复包：全店最便宜的保险（10 金），但只在**已经有墙要守**时留一件。
+    #    开局那 75 金全部要投给 3 座武器（见模块头），所以这里加了 gold 门槛。
     if (
         gold >= config.WALLFIXER_PRICE + config.WALLFIXER_RESERVE_GOLD
         and want("WallFixer") < config.WALLFIXER_STOCK
@@ -208,7 +268,7 @@ def purchase_wish(turn: Turn) -> PurchaseWish | None:
     ):
         return PurchaseWish("WallFixer", "围墙修复包：夜间不可重建，破口只能靠它补")
 
-    # ⑦ 围墙升级券（20/30 金）：便宜，但收益是"某一段墙多 500 血"——
+    # ⑥ 围墙升级券（20/30 金）：便宜，但收益是"某一段墙多 500 血"——
     #    放在所有大件之后，用闲钱买。
     if gold >= 60 + config.WALLFIXER_PRICE and want("WallUpgradeVoucher1") == 0 and _wall_at(turn, 1):
         return PurchaseWish("WallUpgradeVoucher1", "围墙 L1→L2：闲钱换来的正面厚度")

@@ -5,7 +5,7 @@
 
     py -3.13 tools/smoke.py                    # 跑内置的全部 fixture
     py -3.13 tools/smoke.py docs/request.txt   # 用真实样例跑一次并打印报文
-    py -3.13 tools/smoke.py --serve 8080       # 起真服务（等价 python main.py 8080）
+    py -3.13 tools/smoke.py --serve 8080       # 起真服务（等价 python main3.py 8080）
 
 为什么要有它：判题器是个黑盒，我们没法"打一局试试"。这个驱动器是我们**唯一**
 能在本地断言"这一回合的响应合法、不抛异常、远快于 5 秒"的地方。

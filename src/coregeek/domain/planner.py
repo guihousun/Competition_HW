@@ -4,10 +4,16 @@
 
 分工（`_assign_jobs` 落定，跨回合粘住）：
 
-    白天 ── 工人 A「筑墙手」：挖石头 → 按 `wall_order()` 补围墙盒
+    白天 ── 工人 A「建造手」：**先建满 3 座武器** → 攒石头 → 按 `wall_order()`
+                           补围墙盒（**正面优先**）
          ── 工人 B「经济手」：挖铁/铜 → 满载后去小贩处清仓
          ── 开拓者「军需官」：去武器商店采购 → 回基地用升级券（→ 第 7 步接管任务线）
     夜晚 ── 三人各自认领一座武器，走到操控位（第 6 步在此之上加攻击目标）
+
+⚠️ **武器的优先级高于墙，且开局窗口只有第 1 天**：三种武器初始数量都是 0
+（任务书 §4.5.1），单价 25 金，开局 75 金 —— 恰好买满 3 座（§4.5.3）。
+第 1 天不把武器立起来，当天入夜三人无武器可操控，基地要赤手空拳挨整晚。
+`build` **仅工人、仅白天**可用（任务书 L137），所以这是建造手的活，不是采购。
 
 ⚠️ **为什么采购和应用必须同一个人**：物品只能进买家的背包，游戏里**没有**
 转移物品的指令（`drop` 只把东西丢在地上，没有拾取）。所以"让经济手买、军需官用"
@@ -25,7 +31,13 @@ from dataclasses import dataclass, field
 from ..infra import config
 from . import calendar
 from .assignment import Assignment, reconcile
-from .economy import mine_priority, purchase_wish, sell_plan, upgrade_targets
+from .economy import (
+    mine_priority,
+    next_weapon_build,
+    purchase_wish,
+    sell_plan,
+    upgrade_targets,
+)
 from .entities import PIONEER, WALL
 from .grid import Pos
 from .intent import Build, Buy, Collect, Idle, Intent, Move, Sell, Use
@@ -65,12 +77,19 @@ class PlanMemory:
     assignments: Assignment = field(default_factory=Assignment)
     #: 已下单但可能还没到手的商品名，防止同一张券在两个回合各买一次
     ordered: set[str] = field(default_factory=set)
+    #: 建造手的**料批状态**：role_id -> `"gather"` | `"build"`。
+    #: 为什么必须是显式状态：用"手上石头少于 N 就去挖"这种无状态判据会退化成
+    #: "挖一块 → 走回去建一块 → 再走回来挖" —— 每建一面墙少一块石头，立刻又
+    #: 低于阈值，于是掉头回矿点。一个盒子 19 面墙就是 38 趟往返，白天 70 回合
+    #: 根本不够（实测第 40 回合才建起 4 面）。见 `_builder_goal`。
+    build_mode: dict[int, str] = field(default_factory=dict)
 
     def reset_match(self) -> None:
         """换边 / 新一场。配对和分工全部作废 —— 角色 id 会变。"""
         self.jobs.clear()
         self.assignments = Assignment()
         self.ordered.clear()
+        self.build_mode.clear()
 
 
 # ── 入口 ─────────────────────────────────────────────────────────────
@@ -89,7 +108,7 @@ def plan(turn: Turn, mem: PlanMemory) -> tuple[Intent, ...]:
 # ── 白天 ─────────────────────────────────────────────────────────────
 def _plan_day(turn: Turn, mem: PlanMemory, roles: tuple, box) -> tuple[Intent, ...]:
     gaps = wall_gaps(turn, box) if box is not None else ()
-    jobs = _assign_jobs(turn, mem, roles, gaps)
+    jobs = _assign_jobs(turn, mem, roles, gaps, box)
 
     out: list[Intent] = []
     for r in roles:
@@ -100,23 +119,30 @@ def _plan_day(turn: Turn, mem: PlanMemory, roles: tuple, box) -> tuple[Intent, .
         if job == JOB_PIONEER:
             out.append(_step(turn, r, _pioneer_goal(turn, mem, r, box)))
         elif job == JOB_FORTIFY:
-            out.append(_step(turn, r, _fortify_goal(turn, r, gaps)))
+            out.append(_step(turn, r, _builder_goal(turn, mem, r, box, gaps)))
         else:
             out.append(_step(turn, r, _economy_goal(turn, r, box)))
     return tuple(out)
 
 
-def _assign_jobs(turn: Turn, mem: PlanMemory, roles: tuple, gaps: tuple[Pos, ...]) -> dict[int, str]:
+def _assign_jobs(
+    turn: Turn, mem: PlanMemory, roles: tuple, gaps: tuple[Pos, ...], box
+) -> dict[int, str]:
     """分工。**粘住**，只在前提消失时重挑。
 
-    为什么必须粘住：两个工人若每回合各自重新判断，很容易**同时**选"筑墙手"
+    为什么必须粘住：两个工人若每回合各自重新判断，很容易**同时**选"建造手"
     （或同时选"经济手"），另一条线就整天没人干。人手只有三个，分工必须显式。
 
-    岗位是**恰好一个**筑墙手：多一个就没人挖钱，少一个就跟不上机器人摧毁围墙的速度。
+    岗位是**恰好一个**建造手：多一个就没人挖钱，少一个就跟不上机器人摧毁围墙的速度。
+
+    ⚠️ "需不需要建造手"不能只看围墙缺口 —— **开局 3 座武器也是建造手的活**
+    （`build` 仅工人可用）。只看缺口的话，第 1 天没有缺口，建造手会被判成多余
+    而转去挖矿，武器就没人建了。
     """
     live = {r.id for r in roles}
-    # 现存的、还活着的筑墙手（其余角色阵亡后岗位要能自动补位）
-    has_fortifier = bool(gaps) and any(
+    need_builder = bool(gaps) or next_weapon_build(turn, box) is not None
+    # 现存的、还活着的建造手（其余角色阵亡后岗位要能自动补位）
+    has_fortifier = need_builder and any(
         rid in live and job == JOB_FORTIFY for rid, job in mem.jobs.items()
     )
 
@@ -125,34 +151,67 @@ def _assign_jobs(turn: Turn, mem: PlanMemory, roles: tuple, gaps: tuple[Pos, ...
         job = mem.jobs.get(r.id)
         if job is None:
             job = JOB_PIONEER if r.role_type == PIONEER else JOB_ECONOMY
-        if job == JOB_FORTIFY and not gaps:
-            job = JOB_ECONOMY  # 盒子合拢 → 筑墙手转经济
-        if job == JOB_ECONOMY and gaps and not has_fortifier:
+        if job == JOB_FORTIFY and not need_builder:
+            job = JOB_ECONOMY  # 武器满 + 盒子合拢 → 建造手转经济
+        if job == JOB_ECONOMY and need_builder and not has_fortifier:
             job = JOB_FORTIFY
             has_fortifier = True
         out[r.id] = job
 
-    # 清掉阵亡角色的岗位，避免 id 复用或换边后残留脏分工
+    # 清掉阵亡角色的岗位与料批状态，避免 id 复用或换边后残留脏状态
     mem.jobs = {rid: job for rid, job in mem.jobs.items() if rid in live}
     mem.jobs.update(out)
+    mem.build_mode = {rid: m for rid, m in mem.build_mode.items() if rid in live}
     return out
 
 
-def _fortify_goal(turn: Turn, role, gaps: tuple[Pos, ...]) -> Goal:
-    """筑墙手：石头不够就去挖石头，够了就去补缺口。"""
-    stone_held = role.count_item("stone")
-    if not gaps:
-        return Goal("idle", why="围墙盒已合拢，无缺口")
+def _builder_goal(turn: Turn, mem: PlanMemory, role, box, gaps: tuple[Pos, ...]) -> Goal:
+    """建造手：**先建武器，再建墙，没料就去挖最近的石矿**。
 
-    if stone_held <= 0:
+    三条的先后是硬性的，不是启发式：
+
+    ① **武器最优先**。武器是夜里唯一能造成伤害的东西，墙只是减伤。开局 75 金
+       恰好买满 3 座武器（任务书 §4.5.3：初始 0 座、单价 25、开局 75 金），
+       第 1 天不把它们立起来，当天入夜三个人就只能站在空地上挨打。
+
+    ② **石头按批攒、按批用**（`mem.build_mode`）。攒够 `STONE_STOCK` 块再回盒子，
+       建到一块不剩再回矿点。**必须用两段式状态**：任何"手上少于 N 就去挖"的
+       无状态判据都会退化成"挖一块建一块" —— 建一面墙少一块，立刻又低于阈值。
+
+    ③ 补缺口取 `wall_order()` 里最优先的一格：**正面 → 两侧 → 背面**，门除外。
+       顺序完全由几何决定，与"哪个更近"无关 —— 正面先合拢才挡得住夜里的来路。
+    """
+    plan = next_weapon_build(turn, box)
+    if plan is not None:
+        kind, site = plan
+        return Goal(
+            "build", target=site, name=kind, why=f"建武器 {kind}（{site.x},{site.y}）"
+        )
+
+    if not gaps:
+        return Goal("idle", why="武器已满且围墙盒已合拢，无缺口")
+
+    # 两段式：攒满一批 → 建到空 → 再攒。切换点必须跨回合记住。
+    held = role.count_item("stone")
+    stock = min(config.STONE_STOCK, len(gaps))
+    mode = mem.build_mode.get(role.id, "gather")
+    if mode == "gather" and held >= stock:
+        mode = "build"
+    elif mode == "build" and held <= 0:
+        mode = "gather"
+    mem.build_mode[role.id] = mode
+
+    if mode == "gather":
         mine = _best_mine(turn, role, stone_short=True)
         if mine is None:
-            return Goal("idle", why="缺石头且找不到石矿")
-        return Goal("collect", target=mine, why=f"缺建墙石料，去挖石矿 {mine.x},{mine.y}")
+            return Goal("idle", why="缺建墙石料，但场上没有可达石矿")
+        return Goal(
+            "collect",
+            target=mine,
+            why=f"攒建墙石料 {held}/{stock}，去挖最近的石矿 {mine.x},{mine.y}",
+        )
 
-    # 取 `wall_order()` 里**最优先的那一格**：正面 → 两侧 → 背面，门除外。
-    # 顺序完全由几何决定，与"哪个更近"无关 —— 正面先合拢才挡得住夜里的来路。
-    return Goal("build", target=gaps[0], name=WALL, why="按 wall_order 补缺口")
+    return Goal("build", target=gaps[0], name=WALL, why="按 wall_order 补缺口（正面优先）")
 
 
 def _economy_goal(turn: Turn, role, box) -> Goal:
@@ -189,13 +248,10 @@ def _pioneer_goal(turn: Turn, mem: PlanMemory, role, box) -> Goal:
         if targets:
             return Goal("use", target=targets[0], name=name, why=f"背包里有 {name}，就近使用")
 
-    # ② 该进货吗？
+    # ② 该进货吗？（商店里不卖武器 —— 武器由工人在武器环上 `build`，见 `_builder_goal`）
     wish = purchase_wish(turn)
     shop = turn.shop_pos
     if wish is not None and shop is not None:
-        if wish.item == "_build_weapon":
-            # 补建武器不需要商店，是工人白天在武器环上建造（见 §15.1）
-            return Goal("idle", why="需要补建武器，但缺少工人（交由筑墙手）")
         if role.count_item(wish.item) <= 0:
             mem.ordered.add(wish.item)
             return Goal("buy", target=shop, name=wish.item, why=wish.reason)
@@ -366,23 +422,50 @@ def _retreat(turn: Turn, role, box) -> Intent:
 
 # ── 找矿 ─────────────────────────────────────────────────────────────
 def _best_mine(turn: Turn, role, *, stone_short: bool) -> Pos | None:
-    """挑一个矿区格。`stone_short=True` 时无条件优先石头。
+    """挑一个矿区格。`stone_short=True` 时**无条件优先石头**，且石头之间取最近的。
 
-    评分 = `矿种优先级 − 切比雪夫距离`。用距离做减项而不是"先筛最近的"，
-    是因为"最近的恰好是不值钱的石头"很常见 —— 那会让工人整天挖 1 金的石头。
+    评分 = `矿种优先级 − 实际步数`。用路长做减项而不是"先筛最近的"，
+    是因为"最近的恰好是不值钱的石头"很常见 —— 那会让经济手整天挖 1 金的石头；
+    而 `stone_short=True` 时石头拿 10000 分，等价于"只挑最近的石矿"。
+
+    ⚠️ 用 **BFS 实际步数**而不是切比雪夫距离：矿区是**不可通行格**（任务书 L85），
+    本来就必须绕到相邻格再采；两点之间还常隔着围墙与建筑。直线距离会把
+    "看着最近、实际要绕一大圈"的矿选出来 —— 表现是工人往反方向跑。
     """
     mines = turn.mines()
     if not mines:
         return None
+
+    board = board_for(turn, role)
+    field = distance_field(board, role.pos)
+
     best: tuple[int, int, int] | None = None
     best_pos: Pos | None = None
     for m in mines:
         kind = turn.mine_kind(m)
         if kind is None:
             continue
-        score = mine_priority(kind, stone_short=stone_short) - m.distance(role.pos)
-        key = (-score, m.distance(role.pos), m.x * 1000 + m.y)
+        steps = _stand_steps(field, m)
+        if steps is None:
+            continue  # 这块矿这回合走不到，跳过
+        score = mine_priority(kind, stone_short=stone_short) - steps
+        key = (-score, steps, m.x * 1000 + m.y)
         if best is None or key < best:
             best = key
             best_pos = m
     return best_pos
+
+
+def _stand_steps(field: dict[Pos, int], target: Pos) -> int | None:
+    """走到 `target` **相邻一格**的步数。`target` 本身不可通行，所以不能只看它自己。
+
+    `Pos.neighbours()` 含自己，必须排掉 —— 否则"站在矿上"会被算成 0 步。
+    """
+    best: int | None = None
+    for p in target.neighbours():
+        if p == target:
+            continue
+        d = field.get(p)
+        if d is not None and (best is None or d < best):
+            best = d
+    return best
