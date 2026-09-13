@@ -5,9 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "coregeek-futurewar"
 version = "0.1.0"
-description = "华为云核心网第十届编程大赛《未来战争》参赛 Agent"
-# 判题环境只有标准库（无 cryptography / numpy / pytest / yaml），
-# 因此 dependencies 必须保持为空，且语法不得超出 3.11。
+description = "云核心网第十届编程大赛《未来战争》参赛 Agent"
+# 判题环境只有标准库。这里必须保持为空，语法也不得超出 3.11。
 requires-python = ">=3.11"
 dependencies = []
 
