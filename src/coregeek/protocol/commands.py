@@ -47,10 +47,11 @@ from ..domain.intent import (
     SummonTreasure,
     Use,
 )
-from .model import Role, Turn
+from .model import WORKER, PIONEER, Role, Turn
 
 __all__ = [
     "ACTION_CODES",
+    "WORKER_ONLY",
     "EncodeResult",
     "encode_all",
     "encode_one",
@@ -64,6 +65,11 @@ ACTION_CODES = frozenset(
         "acceptTask", "submitAnswer", "summonTreasure", "use", "drop", "collect",
     }
 )
+
+#: 只能由**工人**执行的动作（✅任务书 §4.4 动作表「使用者」列）。
+#: 与之相对的是 `acceptTask`/`submitAnswer`/`summonTreasure`（仅开拓者，
+#: 在下面的分支里单独判），其余动作对全部角色开放。
+WORKER_ONLY = frozenset({"build", "remove", "collect"})
 
 #: 升级券必须带 targetPos（任务书 L290：需在目标建筑周围一格内使用）
 _NEEDS_TARGET = frozenset(
@@ -199,6 +205,20 @@ def validate(cmd: Any, turn: Turn, key: int) -> str | None:
     if role is None:
         return f"角色 {key} 不在本方队伍中"
 
+    # ── 动作的角色限定（✅任务书 §4.4 动作表「使用者」列）──────────────
+    # `build`/`remove`/`collect` 三行都写着**工人**；`acceptTask`/`submitAnswer`/
+    # `summonTreasure` 写着**开拓者**；`move`/`attack`/`sell`/`buy`/`use`/`drop`
+    # 是**全部**。这一列非常容易漏读 —— 因为它写在表格最右侧、和"能不能用"的
+    # 说明隔着一整段文字。
+    #
+    # ⚠️ 实测踩过：`_pioneer_goal` 曾让**开拓者**去 `collect`（"军需空闲，顺路采矿"），
+    #    指令合法通过本校验器、发给判题器后被判非法 → 直接吃一个**异常**。
+    #    红线只有 5 次，而这是每天都会重复的动作 —— 等于定时出局。
+    #    修法有两处，缺一不可：planner 不再产生该意图（治本），
+    #    校验器在这里拦下（任何未来的同类 bug 都只丢一条指令、不吃异常）。
+    if action in WORKER_ONLY and role.role_type != WORKER:
+        return f"{action} 仅工人可用，角色 {key} 是 {role.role_type}"
+
     if action in ("move", "collect", "remove"):
         return _check_target_pos(cmd, 1)
 
@@ -228,7 +248,7 @@ def validate(cmd: Any, turn: Turn, key: int) -> str | None:
         return None
 
     if action in ("acceptTask", "submitAnswer"):
-        if role.role_type != "pioneer":
+        if role.role_type != PIONEER:
             return f"{action} 仅开拓者可用，角色 {key} 是 {role.role_type}"
         if action == "submitAnswer":
             answer = cmd.get("taskAnswer")

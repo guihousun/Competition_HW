@@ -148,12 +148,18 @@ def _assign_jobs(
 
     out: dict[int, str] = {}
     for r in roles:
+        is_worker = r.role_type != PIONEER
         job = mem.jobs.get(r.id)
         if job is None:
-            job = JOB_PIONEER if r.role_type == PIONEER else JOB_ECONOMY
-        if job == JOB_FORTIFY and not need_builder:
-            job = JOB_ECONOMY  # 武器满 + 盒子合拢 → 建造手转经济
-        if job == JOB_ECONOMY and need_builder and not has_fortifier:
+            job = JOB_ECONOMY if is_worker else JOB_PIONEER
+        # ⚠️ `fortify`/`economy` 两个岗位产出的都是**工人专属**动作
+        #    （`build`/`collect`/`remove`，任务书 §4.4 动作表「使用者」列）。
+        #    开拓者一旦被塞进这两个岗位，就会每回合发一条非法指令 → 吃异常 → 出局。
+        #    所以下面两处岗位流转**必须**加 `is_worker` 这道闸门，
+        #    而不是靠"开拓者初始岗位恰好不是 ECONOMY"这个巧合挡住。
+        if job == JOB_FORTIFY and (not is_worker or not need_builder):
+            job = JOB_ECONOMY if is_worker else JOB_PIONEER  # 武器满 + 盒子合拢 → 建造手转经济
+        if job == JOB_ECONOMY and is_worker and need_builder and not has_fortifier:
             job = JOB_FORTIFY
             has_fortifier = True
         out[r.id] = job
@@ -236,9 +242,19 @@ def _economy_goal(turn: Turn, role, box) -> Goal:
 
 
 def _pioneer_goal(turn: Turn, mem: PlanMemory, role, box) -> Goal:
-    """军需官：先把手上的券用掉，再去补货，最后才去挖矿。
+    """军需官：先把手上的券用掉，再去补货，之后**待机**。
 
     顺序不能反：背包里的券是**已经花掉的钱**，压着不用等于零收益。
+
+    ⚠️⚠️ 这里**绝对不能**有"没事干就去挖矿"的兜底分支。
+    任务书 §4.4 动作表「使用者」列写着：**`collect` 仅工人可用**（同列的
+    `build`/`remove` 也是）。早期这里有一句"军需空闲，顺路采矿"，
+    开拓者于是每天都被派去 `collect` —— 指令本身格式合法，判题器直接判
+    **非法动作**，每回合吃一个异常，而红线只有 5 次。**这是会定时出局的 bug**，
+    且现象极具误导性：本地自检全绿（我们只是没查角色的动作权限）。
+
+    开拓者的本职是任务线（第 7 步接管），白天既然无券可买、无货可补，
+    就应当**原地待机**把回合留出来，而不是去抢工人的活。
     """
     # ① 手上有没有能立刻生效的券？
     for name in _VOUCHER_ORDER:
@@ -256,11 +272,8 @@ def _pioneer_goal(turn: Turn, mem: PlanMemory, role, box) -> Goal:
             mem.ordered.add(wish.item)
             return Goal("buy", target=shop, name=wish.item, why=wish.reason)
 
-    # ③ 没事干就帮着挖矿（开拓者背包 40 格，聊胜于无）
-    mine = _best_mine(turn, role, stone_short=False)
-    if mine is None:
-        return Goal("idle", why="无可达矿区且无需采购")
-    return Goal("collect", target=mine, why="军需空闲，顺路采矿")
+    # ③ 无券可用、无货可买 → 待机。**不做 `collect`**（仅工人可用，见函数头）。
+    return Goal("idle", why="军需无事：无券可用、无需采购（任务线在第 7 步接管）")
 
 
 #: 使用顺序：先花**大件**，因为它立刻改变防线强度

@@ -771,17 +771,97 @@ def commands_encode_result_shape_is_wire_ready() -> None:
     turn = _synthetic_turn()
     r = _encode(
         [
-            I.Move(role_id=10010, dest=Pos(2, 3)),
-            I.Collect(role_id=10011, target=Pos(4, 24)),
+            # ⚠️ `collect` 必须挂在**工人** 10010 上（任务书 §4.4：仅工人可用）。
+            #    10011 是开拓者 —— 早期这里写的就是 10011，等于在测一条**非法**指令
+            #    能否编码成功，正是漏掉角色权限那一类 bug 的温床。
+            I.Collect(role_id=10010, target=Pos(4, 24)),
+            I.Move(role_id=10011, dest=Pos(2, 3)),
         ],
         turn,
     )
     text = json.dumps(r.commands, ensure_ascii=False)
     back = json.loads(text)
-    eq(back["10010"], {"action": "move", "targetPos": [{"x": 2, "y": 3}]}, "move 报文形状")
-    eq(back["10011"], {"action": "collect", "targetPos": [{"x": 4, "y": 24}]}, "collect 报文形状")
+    eq(back["10010"], {"action": "collect", "targetPos": [{"x": 4, "y": 24}]}, "collect 报文形状")
+    eq(back["10011"], {"action": "move", "targetPos": [{"x": 2, "y": 3}]}, "move 报文形状")
     # 深查"有没有 Pos 对象混进报文"。（别用 `"Pos" in text`——`targetPos` 里就有这个子串）
     ok(not _non_json_leaves(back), f"报文里不得残留非 JSON 叶子：{_non_json_leaves(back)}")
+
+
+@case
+def commands_enforces_the_role_column_of_the_action_table() -> None:
+    """🔴 **红线级用例**：`build`/`remove`/`collect` 仅**工人**可用；`acceptTask` 等仅开拓者。
+
+    任务书 §4.4 动作表的「使用者」列（L138/L143/L173）写着这三行都是**工人**。
+    这一列在表格最右侧、和"能不能用"的说明隔着一整段文字，**极易漏读** —— 实测
+    就漏了：`_pioneer_goal` 让**开拓者**去 `collect`，指令格式完全合法、
+    本地自检全绿（我们没查角色权限），发给判题器后被判**非法动作**，
+    每回合吃一个异常。红线只有 5 次，而这是每天重复的动作 —— **定时出局**。
+
+    所以这道闸门必须在校验器里，而不是靠 planner 自觉：planner 以后写错，
+    只是丢掉一条指令（少一个角色的回合），**不会**把整队的调度资格赌进去。
+    """
+    from coregeek.protocol import commands
+
+    turn = _synthetic_turn()
+    eq(turn.role(10011).role_type, "pioneer", "sanity：10011 是开拓者")
+    eq(turn.role(10010).role_type, "worker", "sanity：10010 是工人")
+
+    # 开拓者做工人专属动作 → 一律拦下
+    for cmd, what in (
+        ({"action": "collect", "targetPos": [{"x": 4, "y": 24}]}, "collect"),
+        ({"action": "build", "name": "wall", "targetPos": [{"x": 8, "y": 24}]}, "build 墙"),
+        ({"action": "build", "name": "gatling", "targetPos": [{"x": 9, "y": 22}]}, "build 武器"),
+        ({"action": "remove", "targetPos": [{"x": 8, "y": 24}]}, "remove"),
+    ):
+        err = commands.validate(cmd, turn, 10011)
+        ok(err is not None, f"开拓者发 {what} 必须被拦下，实际放行了")
+        ok("仅工人" in err, f"{what} 的拒绝理由应说明仅工人可用，实际：{err}")
+
+    # 反过来：工人做开拓者专属动作 → 同样拦下
+    err = commands.validate({"action": "acceptTask"}, turn, 10010)
+    ok(err is not None and "仅开拓者" in err, f"工人不能接任务，实际：{err}")
+
+    # 工人做工人专属动作 → 放行（别把闸门做成"一律拒绝"）
+    eq(commands.validate({"action": "collect", "targetPos": [{"x": 4, "y": 24}]}, turn, 10010),
+       None, "工人采集应当放行")
+
+    # 对**全部**角色开放的动作不得被这道闸门误伤
+    for act in ("move", "sell", "buy", "drop"):
+        c = {"action": act, "targetPos": [{"x": 4, "y": 24}]}
+        if act in ("sell", "buy"):
+            c = {"action": act, "name": "stone", "num": 1}
+        if act == "drop":
+            c = {"action": act, "name": "stone"}
+        eq(commands.validate(c, turn, 10011), None, f"{act} 对开拓者应当放行（使用者=全部）")
+        eq(commands.validate(c, turn, 10010), None, f"{act} 对工人应当放行（使用者=全部）")
+
+
+@case
+def planner_never_emits_a_worker_only_action_for_the_pioneer() -> None:
+    """**端到端**：整天的推演里，开拓者一条 `collect`/`build`/`remove` 都不许发出。
+
+    这是上一个用例的行为面。单测校验器只能证明"闸门在"，
+    这条用例证明"水源干净" —— 万一 planner 又长出个"闲着也是闲着，去挖矿"的兜底，
+    这里会立刻红，而不是等到实盘吃满 5 个异常。
+    """
+    from coregeek.domain import planner
+    from coregeek.protocol import commands
+
+    mem = planner.PlanMemory()
+    for rnd in (1, 5, 20, 40, 65, 70, 71, 100, 130, 131, 200):
+        t = _turn(round_no=rnd)
+        result = commands.encode_all(planner.plan(t, mem), t)
+        for pid in ("10011",):
+            cmd = result.commands.get(pid)
+            if cmd is None:
+                continue
+            ok(cmd["action"] not in commands.WORKER_ONLY,
+               f"第 {rnd} 回合给开拓者发了工人专属动作 {cmd['action']}：{cmd}")
+
+    # 而且**一条都不该被校验器拒**（被拒说明 planner 产出了非法意图）
+    t = _turn(round_no=30)
+    result = commands.encode_all(planner.plan(t, planner.PlanMemory()), t)
+    eq(result.rejected, [], f"planner 产出的指令不允许被校验器拒：{result.rejected}")
 
 
 @case

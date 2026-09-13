@@ -272,19 +272,31 @@ EMPTY  ：三字段全空
 
 ### 6.2 逐动作约束表
 
-| action | key 指向 | 必填 | 取值约束 |
-|---|---|---|---|
-| `move` | 角色 | `targetPos`(len=1) | 目标在 `[0,width)×[0,height)` 内；切比雪夫距离 ≤1；目标格当前无单位/建筑/矿/中立 |
-| `attack` | **武器** | `targetPos`、`controllerId` | **仅夜晚（硬门）**；见下方专表 |
-| `sell` | 角色 | `name`,`num` | `name ∈ {stone,iron,copper} ∩ 背包`；`num = clamp(1, 背包内该矿数量)`，为 0 则不发 |
-| `buy` | 角色 | `name`,`num` | `name ∈ weaponShopList[].name`（加静态白名单兜底）；`num = clamp(1, min(可负担, 背包余量))`，为 0 则不发 |
-| `build` | 角色 | `name`,`targetPos`(len=1) | **仅白天**；`name ∈ {wall,gatling,railgun,rocket}`；`wall` 需背包有 `stone`；武器需金币 ≥ 成本且武器数 <3 |
-| `remove` | 角色 | `targetPos`(len=1) | 该格存在己方 `wall`；距离 ≤1 |
-| `acceptTask` | **仅开拓者** | 无 | `phaseTask == ""`；目标任务点 `isValid && coldDownRounds==0`；开拓者与**该任务点任一格**距离 ≤1 |
-| `submitAnswer` | **仅开拓者** | `taskAnswer`(非空) | `phaseTask != ""`；SafetyMode 未禁止 |
-| `summonTreasure` | **仅开拓者** | `targetPos`(len=1), `item` | `item` ⊆ 背包且**与推断集合完全一致**（错一件=结果码3 但物品照样消耗）；本轮不启用 |
-| `drop` | 角色 | `name` | `name ∈ 背包` |
-| `collect` | **仅工人** | `targetPos`(len=1) | 该格 `neutralType ∈ {stone,iron,copper}`；距离 ≤1；背包未满 |
+⚠️ **「可用角色」一列是硬约束**（✅任务书 §4.4 动作表「使用者」列）。
+它写在任务书那张表的最右侧、与说明文字隔着一整段，**极易漏读** ——
+本设计就漏了，导致开拓者每天被派去 `collect`，实盘每回合吃一个异常（见 §19.2）。
+`commands.py` 里有 `WORKER_ONLY` 常量与对应分支**再拦一道**，
+任何 planner 侧的角色权限错误都只丢一条指令，不吃异常。
+
+| action | 可用角色 | key 指向 | 必填 | 取值约束 |
+|---|---|---|---|---|
+| `move` | 全部 | 角色 | `targetPos`(len=1) | 目标在 `[0,width)×[0,height)` 内；切比雪夫距离 ≤1；目标格当前无单位/建筑/矿/中立 |
+| `attack` | 全部 | **武器** | `targetPos`、`controllerId` | **仅夜晚（硬门）**；见下方专表 |
+| `sell` | 全部 | 角色 | `name`,`num` | `name ∈ {stone,iron,copper} ∩ 背包`；`num = clamp(1, 背包内该矿数量)`，为 0 则不发 |
+| `buy` | 全部 | 角色 | `name`,`num` | `name ∈ weaponShopList[].name`（加静态白名单兜底）；`num = clamp(1, min(可负担, 背包余量))`，为 0 则不发 |
+| `build` | **仅工人** | 角色 | `name`,`targetPos`(len=1) | **仅白天**；`name ∈ {wall,gatling,railgun,rocket}`；`wall` 需背包有 `stone`；武器需金币 ≥ 成本且武器数 <3 |
+| `remove` | **仅工人** | 角色 | `targetPos`(len=1) | 该格存在己方 `wall`；距离 ≤1 |
+| `acceptTask` | **仅开拓者** | 角色 | 无 | `phaseTask == ""`；目标任务点 `isValid && coldDownRounds==0`；开拓者与**该任务点任一格**距离 ≤1 |
+| `submitAnswer` | **仅开拓者** | 角色 | `taskAnswer`(非空) | `phaseTask != ""`；SafetyMode 未禁止 |
+| `summonTreasure` | **仅开拓者** | 角色 | `targetPos`(len=1), `item` | `item` ⊆ 背包且**与推断集合完全一致**（错一件=结果码3 但物品照样消耗）；本轮不启用 |
+| `use` | 全部 | 角色 | `name` | 见下方 `targetPos` 需求表 |
+| `drop` | 全部 | 角色 | `name` | `name ∈ 背包` |
+| `collect` | **仅工人** | 角色 | `targetPos`(len=1) | 该格 `neutralType ∈ {stone,iron,copper}`；距离 ≤1；背包未满 |
+
+**推论的岗位约束**：`build`/`collect`/`remove` 都是工人专属 →
+`planner` 里 `fortify`（建造手）与 `economy`（经济手）**两个岗位只能给工人**。
+开拓者只能拿 `pioneer` 岗位（采购 + 用券 + 任务线）。`_assign_jobs` 的岗位流转
+显式带 `is_worker` 闸门。
 
 **`attack` 专表**（最易踩坑，也是最可能产生异常的位置）：
 
@@ -907,6 +919,8 @@ demo _wall_order 产出         = 19 格 = 20 格环 − 门 (13,22)
 | 15 | **石料按批攒**（`STONE_STOCK`，跨回合记住档位），不逐块往返；附"实测第 40 回合才 4 面墙"的反例 | **§6.3**、**§4.4** |
 | 16 | **选最近的矿看真实步数**（矿区不可通行，比"走到相邻一格"的 BFS 步数） | **§4.4** |
 | 17 | **角色分工表改写**：工人 A 从"专职砌墙"改为"先建武器 → 攒石 → 砌正面墙" | §3 角色分工表 |
+| 18 | **动作的角色权限表**（任务书 §4.4 最右一列）：`build`/`remove`/`collect` 仅工人，`acceptTask`/`submitAnswer`/`summonTreasure` 仅开拓者，其余全部 → **开拓者不能采矿**，无券可买时待机 | §3 角色分工表（新增引用块）、§4.1 回合预算 |
+
 
 
 ---
@@ -936,7 +950,50 @@ demo _wall_order 产出         = 19 格 = 20 格环 − 门 (13,22)
 **推广规则**：凡 demo 里**只存在一个**的东西（入口文件名、启动方式），
 照抄不是"参考"而是"必须"。可以重写内部实现，**不要动平台看得见的那一层**。
 
-### 19.2 待办：静默失效必须有告警（源自 19.1 的排查体验）
+### 19.2 动作角色权限：任务书那张表的**最右一列**（✅ 已修复）
+
+**现象**：用户实盘反馈"显示 pioneer 进行了收集工作，直接报错了"。
+
+**根因**：任务书 §4.4 的动作表有三列 —— 动作码 / 说明 / **使用者**。
+「使用者」列规定了每个动作**谁能发**：
+
+| 动作 | 使用者 | 动作 | 使用者 |
+|---|---|---|---|
+| `move` / `attack` / `sell` / `buy` / `use` / `drop` | **全部** | `build` / `remove` / `collect` | **工人** |
+| `acceptTask` / `submitAnswer` / `summonTreasure` | **开拓者** | | |
+
+本设计读这张表时只读了前两列（动作码 + 说明），**漏掉了最右侧的使用者列** ——
+它和说明之间隔着一整段文字，扫读时几乎看不见。
+于是 `planner._pioneer_goal` 的兜底分支写着"军需空闲，顺路采矿"，
+**开拓者每天都被派去 `collect`**：指令格式完全合法 → 通过我们的校验器 →
+发给判题器 → 判**非法动作** → 吃一个异常。**红线只有 5 次，而这是每天重复的动作。**
+
+**这次比 19.1 更危险，因为本地验证全绿**：`selfcheck` 57 条全过、`smoke` ALL PASS ——
+因为我们**从来没有测过"这个角色能不能发这个动作"**。
+19.1 至少还有"进程没起来"这个外部信号可查；这次连信号都没有，
+只有实盘判题器会说"不"。
+
+**修法（两处，缺一不可）**：
+
+1. `protocol/commands.py` 加 `WORKER_ONLY = {build, remove, collect}` 闸门
+   （`acceptTask`/`submitAnswer` 的开拓者判定原本就有，改用 `PIONEER` 常量）。
+   校验器是**唯一**的合法性汇合点，所以放在这里：以后 planner 再写错，
+   代价只是**丢一条指令**，而不是把整队的调度资格赌进去。
+2. `planner._pioneer_goal` 删掉兜底采集分支，改为**待机**（开拓者的本职是任务线，
+   第 7 步接管）；`_assign_jobs` 的岗位流转加上 `is_worker` 闸门 ——
+   原先开拓者不会被派进 `fortify`/`economy` 只是"初始岗位恰好不是 ECONOMY"这个**巧合**，
+   不是设计。
+
+**推广规则**：凡任务书里的**表格**，逐列读完再动手，特别是最右一列；
+凡是"某角色专属/某角色不可用"的约束，**一律在 `commands.py` 里再拦一道**，
+不要只依赖 planner 自觉。**"权限类" bug 的共同特征是本地全绿** ——
+自检只能证明"格式对"，证明不了"这个角色有权这么做"，所以要为权限专门写用例。
+
+**附带发现的同类风险**：`_synthetic_turn` 里 10011 是开拓者，而
+`commands_encode_result_shape_is_wire_ready` 原本**正是拿 10011 发 `collect`** 做形状测试
+—— 等于在测"一条非法指令能否编码成功"。已改为工人 10010 发 `collect`、开拓者发 `move`。
+
+### 19.3 待办：静默失效必须有告警（源自 19.1 的排查体验）
 
 19.1 之所以烧掉大量时间，是因为**"回空指令"和"正常回合"在我们日志里长得一样**，
 只有 `commandCount: 0` 这一个区别。`app.py` 里至少三条路径会静默产出空指令：
