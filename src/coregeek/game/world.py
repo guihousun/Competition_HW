@@ -15,7 +15,7 @@ DAY_ROUNDS = 70
 
 #: 三种武器工事的 `roleType`（接口文档 §1.3.1）。**从 `map` 搬来的** ——
 #: 武器原本只是网格里的一个类别串，现在 `model` 要照它把带属性的武器认出来。
-#: ⚠️ 与 `planner.WEAPON_ORDER` **不是一回事**：那个是"三座炮的建造先后"（策略），
+#: ⚠️ 与 `planner.WEAPONS_BY_SITE` **不是一回事**：那个是"三座炮建在哪、各自是什么"（策略），
 #: 这个是"哪些 roleType 算武器"（协议）。内容碰巧相同，含义不同，别合并。
 WEAPON_KINDS = frozenset({"gatling", "railgun", "rocket"})
 

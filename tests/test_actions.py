@@ -19,11 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from coregeek.app import handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
-    back_weapon_cells,
     base_cells,
     step_toward,
     wall_cells,
     weapon_cells,
+    weapon_sites,
 )
 from coregeek.game.map import (  # noqa: E402
     LEGEND,
@@ -37,7 +37,7 @@ from coregeek.game.planner import (  # noqa: E402
     TASK_PROMPT,
     TIME_MARGIN,
     WALL,
-    WEAPON_ORDER,
+    WEAPONS_BY_SITE,
     plan,
     prompt_for,
 )
@@ -652,7 +652,7 @@ class TurnSummaryTest(unittest.TestCase):
 
 
 class BuildGeometryTest(unittest.TestCase):
-    """可建造区与"基地后方"。
+    """可建造区与武器落点。
 
     ⚠️ **公式的来源是图不是正文**（`docs/pic/build_map.png`）：任务书没写坐标公式，
     接口文档的 `mapInfo` 里也没有可建造区字段。算错 ⇒ `build` 落点非法 ⇒ 那 25 金币白花。
@@ -672,24 +672,48 @@ class BuildGeometryTest(unittest.TestCase):
         for pos in (Pos(9, 24), Pos(9, 25), Pos(10, 25)):
             self.assertIn(pos, cells)
 
-    def test_back_column_faces_away_from_the_robots(self):
-        """基地在左半 ⇒ 取左边那一列；在右半 ⇒ 取右边那一列。
+    def test_sites_face_away_from_the_robots(self):
+        """基地在左半 ⇒ 后列取 `bx-1`、前排两角取 `bx+2`；在右半镜像。
 
         机器人从基地**面向地图中心**的那一侧来（`docs/pic/大致地图信息.png`）。判反了
         武器就摆在迎着机器人的一侧 —— 不报错、不违规，只是白建三座。
         """
-        left = back_weapon_cells(Pos(10, 24), 41)  # 左半 ⇒ 后方 x = 10-1
-        self.assertEqual({c.x for c in left}, {9})
-        right = back_weapon_cells(Pos(30, 10), 41)  # 右半 ⇒ 后方 x = 30+2
-        self.assertEqual({c.x for c in right}, {32})
-        self.assertEqual(len(left), len(right), "两侧都该是整整齐齐一列 4 格")
+        left = weapon_sites(Pos(10, 24), 41)  # 左半 ⇒ 后列 x=9、前排 x=12
+        self.assertEqual([c.x for c in left], [9, 12, 12])
+        right = weapon_sites(Pos(30, 10), 41)  # 右半 ⇒ 后列 x=32、前排 x=29
+        self.assertEqual([c.x for c in right], [32, 29, 29])
+        self.assertEqual(len(left), len(right), "两侧都该是整整齐齐三个落点")
 
-    def test_back_column_builds_beside_the_base_first(self):
-        """同列 4 格里，和基地纵向跨度齐平的两格排前面 —— 先用基地的身体挡着。"""
+    def test_the_three_sites_are_the_back_cell_and_the_two_front_corners(self):
+        """后列**贴基地下沿**那一格 + 前排两角，顺序即建造顺序。"""
         self.assertEqual(
-            back_weapon_cells(Pos(10, 24), 41),
-            (Pos(9, 23), Pos(9, 24), Pos(9, 22), Pos(9, 25)),
+            weapon_sites(Pos(10, 24), 41),
+            (Pos(9, 23), Pos(12, 22), Pos(12, 25)),
         )
+        #: 换边后整套落点自动跟着翻 —— 按**基地坐标**判而不用 `teamOur.type`
+        self.assertEqual(
+            weapon_sites(Pos(30, 10), 41),
+            (Pos(32, 9), Pos(29, 8), Pos(29, 11)),
+        )
+
+    def test_every_site_touches_the_base(self):
+        """**这才是这个阵形的理由**：三个落点各自都与基地的一格切比雪夫距离 1。
+
+        升级券/维修包必须在**目标建筑周围一格内**使用（任务书 L292 / L314），而 `attack`
+        也要求角色站在炮旁。于是同一个角色站在落点上，**脚下的炮和旁边的基地一够就是两个**。
+        顺带钉住"落点在武器环上" —— 不在环上的话 `build` 落点非法、那 25 金币白花。
+        """
+        for base, width in ((Pos(10, 24), 41), (Pos(30, 10), 41)):
+            with self.subTest(base=base):
+                own = base_cells(base)
+                ring = weapon_cells(base)
+                for cell in weapon_sites(base, width):
+                    self.assertIn(cell, ring, "落点必须在武器环上")
+                    self.assertEqual(
+                        min(cell.dist(b) for b in own),
+                        1,
+                        f"{cell} 该贴着基地的一角，否则升级/维修券够不着",
+                    )
 
 
 class DayNightTest(unittest.TestCase):
@@ -762,7 +786,8 @@ class BuildWeaponTest(unittest.TestCase):
     结算照判题器的口径来 —— 一回合一步，建起来的武器下一回合就挡路、也占掉那个格子。
     """
 
-    BASE = Pos(10, 24)  # 后方那一列 = x=9，y ∈ 22..25
+    #: 三个落点 = (9,23) 后列 + (12,22)/(12,25) 前排两角（见 `weapon_sites`）
+    BASE = Pos(10, 24)
     MINE = Pos(4, 24)
 
     def setUp(self) -> None:
@@ -794,11 +819,12 @@ class BuildWeaponTest(unittest.TestCase):
     def _weapons(self) -> list[str]:
         return [name for name, _ in self.builds if name != WALL]
 
-    def _settle(self, round_no: int = 1, limit: int = 20) -> None:
-        """跑到**武器建满**为止。墙不归这个类管（见 `BuildWallTest`），但会顺路砌起来 ——
-        所以 `builds` 里混着墙，统计武器时要滤掉，金币也只按武器扣。"""
+    def _settle(self, round_no: int = 1, limit: int = 20, want: int | None = None) -> None:
+        """跑到**建满 `want` 座**为止（默认三座都建上）。墙不归这个类管（见 `BuildWallTest`），
+        但会顺路砌起来 —— 所以 `builds` 里混着墙，统计武器时要滤掉，金币也只按武器扣。"""
+        want = len(WEAPONS_BY_SITE) if want is None else want
         for _ in range(limit):
-            if len(self._weapons()) >= len(WEAPON_ORDER):
+            if len(self._weapons()) >= want:
                 return
             cmds = plan(self._turn(round_no))
             if not cmds:
@@ -815,7 +841,7 @@ class BuildWeaponTest(unittest.TestCase):
                         self.gold -= 25
                 else:
                     self.roles[role_id] = type(self.roles[role_id])(role_id, target)
-        self.fail(f"{limit} 回合还没把三座武器建完，说明在原地绕圈")
+        self.fail(f"{limit} 回合还没把 {want} 座武器建完，说明在原地绕圈")
 
     def _add_weapon(self, kind: str, cell: Pos) -> None:
         """照格式记一座建成的武器（id 递增即可 —— 这里没人按 id 排序）。"""
@@ -826,22 +852,29 @@ class BuildWeaponTest(unittest.TestCase):
     def _builds(self, cmds: dict) -> list[dict]:
         return [c for c in cmds.values() if c["action"] == "build"]
 
-    def test_builds_three_weapons_in_the_chosen_order(self):
-        """加特林 → 电磁狙击炮 → 火箭（用户选定），三座都落在基地后方那一列。"""
+    def test_builds_the_three_weapons_on_their_own_sites(self):
+        """三座各自落在**自己的**落点上：火箭进后列、加特林与电磁炮分居两个前角。
+
+        断言用**集合**而不是建成的先后 —— 两个工人谁先走到哪一格是路径决定的，
+        那不是这条用例要钉的东西；要钉的是"**种类 ↔ 落点**"这层绑定。
+        """
         self._settle()
-        self.assertEqual(self._weapons(), list(WEAPON_ORDER))
-        self.assertEqual({cell.x for _, cell in self.builds}, {9}, "都该在基地后方")
+        self.assertEqual(len(self._weapons()), 3)
+        self.assertEqual(
+            {(name, cell) for name, cell in self.builds},
+            set(zip(WEAPONS_BY_SITE, weapon_sites(self.BASE, 41))),
+        )
         self.assertEqual(self.gold, 0)
 
     def test_stops_at_three_even_with_lots_of_gold(self):
         """停手是因为**份额**（角色数），不是因为钱花光了 —— "建立多了没有意义"。"""
         self.gold = 200
         self._settle()
-        self.assertEqual(len(self._weapons()), 3)
+        self.assertEqual(len(self._weapons()), len(WEAPONS_BY_SITE))
         self.assertGreater(self.gold, 0, "这次不是钱见底才停的")
 
     def test_a_short_budget_builds_only_one(self):
-        """只有 25 金：**只建一座**，另一个工人转去采矿。
+        """只有 25 金：**只建一座**（后列排第一的火箭），另一个工人转去采矿。
 
         金币按**递减预算**扣。写成 `gold >= 25 * 待建数`（25 < 75 ⇒ 一座都不建）就全错了。
         """
@@ -849,22 +882,25 @@ class BuildWeaponTest(unittest.TestCase):
         cmds = plan(self._turn())
         builds = self._builds(cmds)
         self.assertEqual(len(builds), 1)
-        self.assertEqual(builds[0]["name"], "gatling")
+        self.assertEqual(builds[0]["name"], "rocket")
         self.assertEqual({c["action"] for c in cmds.values()}, {"build", "move"})
 
-    def test_never_builds_on_an_occupied_cell(self):
-        """目标格已有武器就**换个格子**：覆盖会把原武器打成 level1（§4.5.1 补充说明），
-        25 金币打水漂还倒亏一座。"""
-        self._add_weapon("gatling", Pos(9, 23))
-        self._add_weapon("railgun", Pos(9, 24))
-        builds = self._builds(plan(self._turn()))
-        self.assertEqual(len(builds), 1, "还差一座火箭")
-        self.assertEqual(builds[0]["name"], "rocket")
+    def test_a_blocked_site_drops_only_its_own_weapon(self):
+        """后列那一格被占了 ⇒ **只有火箭不建**，两座前角照落在各自的位置上。
+
+        这条钉的是 `_slots` 里"**先按种类配对、再滤**"的顺序。反过来写（先滤种类、
+        再 `zip` 落点）的话，"少一座火箭"会让 `zip` 整体前移 —— 加特林落到 (12,22)、
+        电磁炮落到 (12,25)，**每个种类都挪到了别人家的落点上**，而报文完全合法、本地全绿。
+        炮落在自己落点上时由 `have` 那道滤网挡住（同种类不会重建）；这里挡住它的是**墙**，
+        所以走的是 `blocked` 那一道 —— 顺带守住"覆盖会把原武器打成 level1"（§4.5.1 补充说明）。
+        """
+        self.walls[Pos(9, 23)] = WALL
+        self._settle(want=2)
         self.assertEqual(
-            Pos(builds[0]["targetPos"][0]["x"], builds[0]["targetPos"][0]["y"]),
-            Pos(9, 22),
-            "该躲开 (9,23)/(9,24)，取剩下的首选",
+            {(name, cell) for name, cell in self.builds},
+            {("gatling", Pos(12, 22)), ("railgun", Pos(12, 25))},
         )
+        self.assertNotIn("rocket", self._weapons(), "落点被占 ⇒ 那一座就是不建，不换地方")
 
     def test_night_builds_nothing(self):
         """夜里 `build` 不可用（任务书 §4.4）—— 0 武器、75 金也一座都不许建。"""

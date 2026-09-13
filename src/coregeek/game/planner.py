@@ -12,9 +12,9 @@
 
 **白天**（工人）：
 
-2. **建武器** —— 武器数 < 角色数、金币够。位置优先放在**基地后方**那一列，
-   让基地的 2×2 实体挡在武器与机器人之间（"建造的位置优先放在基地后面，让基地也能
-   防守一下机器人的进攻"）。三座按 加特林 → 电磁狙击炮 → 火箭发射台。
+2. **建武器** —— 武器数 < 角色数、金币够。落点见 `grid.weapon_sites`：
+   **后列 1 格 + 前排两角**（用户选定，这样人站在落点上就能同时够着炮和基地，
+   升级/维修券才用得上），种类与落点按 `WEAPONS_BY_SITE` 一一对应（按射程配）。
 3. **采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
    另外**必须在晚上到来前将墙建好，注意计算回合数**"。攒几块不写死，按**白天还剩的回合数**
    现算（见 `_stones_to_mine`）。墙砌在**面向机器人进攻的方向**（保护基地），背面留缺口。
@@ -42,17 +42,21 @@ from collections.abc import Iterator, Set
 from typing import Any
 
 from ..protocol import actions  # 唯一一条"由内往外"的依赖：指令只能经 Action 产出
-from .grid import Pos, back_weapon_cells, step_toward, wall_cells
+from .grid import Pos, step_toward, wall_cells, weapon_sites
 from .roles import BaseRole, Pioneer, Worker
 from .world import Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
-#: 三座武器的建造顺序（用户选定）。数量上限 = 角色数，正好 3 —— 与策略指导
-#: "武器只有建立三个才有意义，建立多了没有意义"一致。
+#: 三座武器的**种类，下标与 `grid.weapon_sites()` 的落点一一对应**（用户选定）：
+#: 后列 1 格 → 火箭；前排两角 → 加特林、电磁炮。
+#: **按射程配** —— 后列被基地挡住、离机器人最远，射程在那里几乎用不上，给最长的火箭最不吃亏
+#: （样例 4/7/∞ 与任务书表格 3/6/10 **两套互相矛盾的数据下都是这个结论**）；
+#: 加特林与电磁炮去主战线上的两个前角。
+#: 数量上限 = 角色数，正好 3 —— 与策略指导"武器只有建立三个才有意义，建立多了没有意义"一致。
 #: 任务书 §4.5.1 表格写"每种 ≤3"（合计 9 座）、补充说明写"**全局同时最多 3 座**"，
 #: **原文自相矛盾**，取保守的那一个。
-WEAPON_ORDER = ("gatling", "railgun", "rocket")
+WEAPONS_BY_SITE = ("rocket", "gatling", "railgun")
 
 #: 建一座武器的金币（任务书 §4.5.1，三种同价）。
 WEAPON_COST = 25
@@ -175,9 +179,15 @@ def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
     if need <= 0:
         return
 
-    kinds = [k for k in WEAPON_ORDER if k not in have]
-    free = [c for c in back_weapon_cells(station, turn.map.size[0]) if c not in turn.map.blocked]
-    yield from list(zip(kinds, free))[:need]
+    blocked = turn.map.blocked
+    #: **先按种类配对、再滤**。反过来（先滤种类、再 `zip` 落点）的话，落点会整体前移 ——
+    #: 后列那格被占时"少一座火箭"会把加特林塞进给火箭留的格子上，而**落点与种类是绑死的**
+    #: （`WEAPONS_BY_SITE` 与 `weapon_sites` 下标一一对应）。
+    yield from [
+        (kind, cell)
+        for kind, cell in zip(WEAPONS_BY_SITE, weapon_sites(station, turn.map.size[0]))
+        if kind not in have and cell not in blocked
+    ][:need]
 
 
 # ── 开拓者的任务线 ──────────────────────────────────────────────────
