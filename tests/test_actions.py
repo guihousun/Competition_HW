@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from coregeek.agent import AGENT, Agent  # noqa: E402
 from coregeek.agent.chat import PROMPT, answer_of, chat, looks_like_tool, tool_of  # noqa: E402
-from coregeek.agent.tools import TOOLS, tool_call, tool_desc  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import LOG_TEXT_MAX, handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
@@ -209,9 +209,9 @@ class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
 
     def setUp(self) -> None:
-        #: SOP 是**模块级状态**（全项目唯一一处跨回合状态），不清就会跨用例串味：
+        #: SOP 是**单实例上的跨回合状态**（全项目唯一一处），不清就会跨用例串味：
         #: 前一条用例存进去的 SOP 会出现在后一条的 prompt 里。
-        sop.reset()
+        AGENT.reset()
 
     def _handle(self, raw: bytes) -> dict:
         return json.loads(handle(raw).decode("utf-8"))
@@ -537,7 +537,7 @@ class HandleTest(unittest.TestCase):
 
         数字与 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5 三处一致。
         """
-        sop.reset()  # 模块级状态：不清的话"同内容不再打日志"会让 SOP 行整条消失
+        AGENT.reset()  # 单实例状态：不清的话"同内容不再打日志"会让 SOP 行整条消失
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
         raw["errors"] = []
@@ -2356,8 +2356,8 @@ class TaskChannelTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        #: SOP 是**模块级状态**（全项目唯一一处跨回合状态），不清就会跨用例串味。
-        sop.reset()
+        #: SOP 是**单实例上的跨回合状态**（全项目唯一一处），不清就会跨用例串味。
+        AGENT.reset()
 
     DAY = 1
     TASK = "请查询北京天气"
@@ -2494,12 +2494,12 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, "")
         self.assertIn(self.TASK, prompt)
         self.assertIn("先看目录", prompt)  # 存下的 SOP 立刻出现在同一份 prompt 里
-        self.assertEqual(sop.current(), "先看目录")
+        self.assertEqual(AGENT.sop, "先看目录")
 
     def test_the_stored_sop_rides_along_in_every_later_prompt(self):
         """**自进化的可观测证据**：存过一次之后，后面每一份 prompt 都带着它 ——
         包括"回灌沙盒结果"与"带纠错重问"这两条分支。"""
-        sop.SOP2Prompt("先 ls 再算")
+        AGENT.SOP2Prompt("先 ls 再算")
         for turn in (
             self._turn(self.TASK),
             self._turn(self.TASK, cmd_result="[exitCode:0]\nok"),
@@ -2507,6 +2507,21 @@ class TaskChannelTest(unittest.TestCase):
         ):
             with self.subTest(turn=turn):
                 self.assertIn("先 ls 再算", task_channel(turn)[0])
+
+    def test_the_singleton_carries_the_sop_across_turns(self):
+        """**单实例的接线证据**（第 19 步）：开拓者这一回合存下的 SOP，**下一回合**的提问里带着。
+
+        两回合之间**没有任何东西被传过去** —— 上一回合的 `llm_resp` 没进 payload、
+        也没有返回值被接收（`task_channel` 的返回值由 `app` 直接拼进报文）。
+        能把它接起来的只有"两次调用用的是同一个 `AGENT`"，所以这条用例就是
+        `from ..agent import AGENT` 那个注入点的守门员：
+        把它改回"每次新建一个 `Agent()`"，这里立刻挂（症状在实盘上 = **永远学不会**，
+        而日志上完全看不出来：每回合的 SOP 都恰好是空的）。
+        """
+        task_channel(self._turn(self.TASK, "<tool><tool_name>SOP2Prompt</tool_name><tool_param>先看目录</tool_param></tool>"))
+        prompt, execute = task_channel(self._turn("另一道题"))
+        self.assertEqual(execute, "")
+        self.assertIn("先看目录", prompt)
 
     def test_a_broken_tool_reply_is_asked_again(self):
         """⚠️ **半截工具调用要落回"重问"，不能两边都哑火。**
@@ -2604,6 +2619,44 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn(self.RETRY_MARK, prompt)
         self.assertIn(self.ANSWER, prompt)
         self.assertNotIn(f"<answer>{self.ANSWER}</answer>", prompt)
+
+    def test_the_two_call_sites_agree_on_what_the_answer_is(self):
+        """**期望值由测试自己算** —— 两个调用点必须落在同一份上（第 19 步的搬家守门员）。
+
+        上一份答案的**交出**（`plan` → `_answer_task`）与它被骂时**回灌**的（判据 ④）
+        在判题器那侧是**同一件事**："你上次答的 X 不对"里的 X，就是我们上次交的。
+        两处各写一份判据的后果不是崩溃，而是**LLM 去改一个并不存在的问题**
+        （它交的 `晴 26 度` 被骂成 `<answer>晴 26 度</answer>`，于是它开始往标签上使劲）。
+
+        这里对每个回复**独立地**用 `answer_of` 算出期望值，再去比两个调用点的产出 ——
+        所以 `answer_of` 若被搬进 `Agent` 自成一派（第 19 步最自然的手抖），
+        提交与回灌至少有一边会与它分家，这里立刻挂。
+        """
+        for reply in (
+            "<answer>晴 26 度</answer>",
+            "晴 26 度",
+            "  晴 26 度\n",
+            "<answer>晴 26 度</answer>\n补充一句",
+            "<tool>ls</tool>",
+            "<tool ls",
+            "",
+        ):
+            with self.subTest(reply=reply):
+                expected = answer_of(reply)
+                submitted = plan(self._turn(self.TASK, reply))
+                if expected:
+                    self.assertEqual(
+                        submitted,
+                        {"10011": {"action": "submitAnswer", "taskAnswer": expected}},
+                    )
+                else:
+                    self.assertEqual(submitted, {}, "空/工具的回复不该被交上去")
+                if expected:
+                    prompt = task_channel(
+                        self._turn(self.TASK, llm_resp=reply, errors=(Error(2, "答案不正确"),))
+                    )[0]
+                    self.assertIn(expected, prompt)
+                    self.assertNotIn(f"<answer>{expected}</answer>", prompt, "骂的必须是交的那一份，不是带标签的原文")
 
     def test_only_the_answer_error_triggers_the_retry(self):
         """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。"""
@@ -2721,17 +2774,17 @@ class TaskChannelTest(unittest.TestCase):
             )
 
 
-# ── 第 18 步：Agent 系统（`agent/` + `tools/`）──────────────────────────
+# ── 第 18 步：Agent 系统（`agent/` + `tools/`）；第 19 步：单实例 + 状态在实例上 ──
 class AgentToolCallTest(unittest.TestCase):
-    """工具注册表与顶层调度 `tool_call`。
+    """工具注册表与顶层调度 `Agent.tool_call`。
 
-    ⚠️ **`setUp` 里 `sop.reset()` 不能省**：`sop._current` 是模块级状态，
-    同一个测试进程里会跨用例串味（前一条用例存进去的 SOP 会出现在后一条的 prompt 里）。
-    碰 SOP 的类都这么办 —— 这是唯一一处需要复位的状态。
+    ⚠️ **这一类的 `setUp` 造的是 `AGENT` 之外的实例**（用户拍板：Agent 是单实例，
+    状态住在实例上 ⇒ 新实例天然干净）。所以这里的用例**不需要**复位任何东西 ——
+    复位是给"必须走包根单例"的那些用例准备的（`HandleTest` / `TaskChannelTest`）。
     """
 
     def setUp(self) -> None:
-        sop.reset()
+        self.agent = Agent()
 
     def test_execute_cmd_returns_the_command_verbatim(self):
         """`executeCmd` 就是"把命令搬进响应字段"这一步 —— **本地一个字都不执行**。
@@ -2746,7 +2799,7 @@ class AgentToolCallTest(unittest.TestCase):
             "grep -n '中文' a.txt\nwc -l a.txt",
         ):
             with self.subTest(cmd=cmd):
-                self.assertEqual(tool_call("executeCmd", cmd), cmd)
+                self.assertEqual(self.agent.tool_call("executeCmd", cmd), cmd)
 
     def test_sop2prompt_stores_the_method_and_yields_no_command(self):
         """`SOP2Prompt` 存下方法、**返回空串**（它不产出命令）。
@@ -2754,8 +2807,8 @@ class AgentToolCallTest(unittest.TestCase):
         返回值直接进响应顶层的 `executeCmd` ⇒ 返回非空就是往沙盒里丢一条命令
         （而这条命令根本不存在，只会白烧一次沙盒执行）。
         """
-        self.assertEqual(tool_call("SOP2Prompt", "第一步：先 ls"), "")
-        self.assertEqual(sop.current(), "第一步：先 ls")
+        self.assertEqual(self.agent.tool_call("SOP2Prompt", "第一步：先 ls"), "")
+        self.assertEqual(self.agent.sop, "第一步：先 ls")
 
     def test_an_unknown_tool_yields_no_command_and_no_exception(self):
         """未知工具 ⇒ 空串，**绝不抛**。
@@ -2765,7 +2818,7 @@ class AgentToolCallTest(unittest.TestCase):
         """
         for name in ("nope", "", "execute_cmd", None):
             with self.subTest(name=name):
-                self.assertEqual(tool_call(name, "ls"), "")
+                self.assertEqual(self.agent.tool_call(name, "ls"), "")
 
     def test_a_blank_or_non_string_param_never_reaches_the_tool(self):
         """空参数 / 非字符串参数 ⇒ 空串，**而且 SOP 没被清空**（闸门在调用之前）。
@@ -2773,47 +2826,52 @@ class AgentToolCallTest(unittest.TestCase):
         这条钉的是**闸门的位置**：`SOP2Prompt("")` 的语义是"清空"，
         如果校验下沉到工具里，一次空参数调用就会把整场攒下来的 SOP 抹掉。
         """
-        sop.SOP2Prompt("保住我")
+        self.agent.SOP2Prompt("保住我")
         for param in ("", "   ", "\n", None, 42, ["ls"]):
             with self.subTest(param=param):
-                self.assertEqual(tool_call("SOP2Prompt", param), "")
-        self.assertEqual(sop.current(), "保住我")
+                self.assertEqual(self.agent.tool_call("SOP2Prompt", param), "")
+        self.assertEqual(self.agent.sop, "保住我")
 
     def test_every_registered_tool_is_described_and_callable(self):
-        """`tool_desc()` 覆盖 `TOOLS` 里的每一个工具，且每个都能真的调起来。
+        """`tool_desc()` 覆盖工具表里的每一个工具，且每个都能真的调起来。
 
         注册了却没进描述（LLM 永远不知道它存在），或者描述里有、注册表里没有
         （LLM 一调就落空）—— 两种都是**只有在实盘上才会暴露**的不一致。
         """
-        desc = tool_desc()
-        for name in TOOLS:
+        desc = self.agent.tool_desc()
+        for name in self.agent._tools:
             self.assertIn(name, desc)
-        for name, (impl, text) in TOOLS.items():
+        for name, (impl, text) in self.agent._tools.items():
             with self.subTest(name=name):
                 self.assertTrue(callable(impl))
                 self.assertTrue(text.strip())
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
-        """**加一个工具只改一处**（`TOOLS`）—— 描述与调度同时跟上。
+        """**加一个工具只改一处**（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。
 
         注入一个假工具来钉这条性质（把描述写死成字面量的实现会在这里露馅）：
         漏掉的症状是"**LLM 永远不知道它存在**"，本地全绿、实盘上只是"少用了一个工具"。
+
+        ⚠️ **注入的是本类 setUp 里那个新实例的表**（第 19 步起工具表是实例属性）
+        ⇒ 不需要 `finally: del` —— 实例是这条用例私有的，跑完就没人再看得见它。
         """
-        TOOLS["测试用工具"] = (lambda param: f"命令:{param}", "只在这条用例里存在")
-        try:
-            self.assertIn("测试用工具", tool_desc())
-            self.assertIn("只在这条用例里存在", tool_desc())
-            self.assertEqual(tool_call("测试用工具", "参数"), "命令:参数")
-        finally:
-            del TOOLS["测试用工具"]
-        self.assertNotIn("测试用工具", tool_desc())
+        self.agent._tools["测试用工具"] = (lambda param: f"命令:{param}", "只在这条用例里存在")
+        self.assertIn("测试用工具", self.agent.tool_desc())
+        self.assertIn("只在这条用例里存在", self.agent.tool_desc())
+        self.assertEqual(self.agent.tool_call("测试用工具", "参数"), "命令:参数")
+        self.assertNotIn("测试用工具", Agent().tool_desc())
 
 
 class SopStateTest(unittest.TestCase):
-    """SOP 的跨回合状态 —— **全项目唯一一处**（用户拍板：进程内、整场存活、重启清空）。"""
+    """SOP 的跨回合状态 —— **全项目唯一一处**，第 19 步起住在 `Agent` 实例上。
+
+    用的是**每条用例自己的新实例**（不用包根单例）：状态在实例上 ⇒ 天然隔离，
+    这也顺带把"状态确实在实例上而不是某个模块里"钉住了（见
+    `test_a_fresh_agent_starts_with_no_sop` / `test_the_sop_never_leaks_between_instances`）。
+    """
 
     def setUp(self) -> None:
-        sop.reset()
+        self.agent = Agent()
 
     def test_it_replaces_instead_of_appending(self):
         """**整段替换**，不是追加。
@@ -2821,15 +2879,63 @@ class SopStateTest(unittest.TestCase):
         追加没有遗忘机制：几百回合下来 prompt 会被旧套路撑爆，而且"上一版不对"这件事
         LLM 自己重写一遍就能表达。
         """
-        sop.SOP2Prompt("第一版")
-        sop.SOP2Prompt("第二版")
-        self.assertEqual(sop.current(), "第二版")
+        self.agent.SOP2Prompt("第一版")
+        self.agent.SOP2Prompt("第二版")
+        self.assertEqual(self.agent.sop, "第二版")
 
     def test_it_survives_across_calls(self):
         """存下来之后**下一个调用者读得到** —— 这就是"跨回合"的全部含义。"""
-        sop.SOP2Prompt("先看 ls 的输出再算")
-        self.assertEqual(sop.current(), "先看 ls 的输出再算")
-        self.assertEqual(sop.current(), "先看 ls 的输出再算")
+        self.agent.SOP2Prompt("先看 ls 的输出再算")
+        self.assertEqual(self.agent.sop, "先看 ls 的输出再算")
+        self.assertEqual(self.agent.sop, "先看 ls 的输出再算")
+
+    def test_a_fresh_agent_starts_with_no_sop(self):
+        """新实例**不带**任何 SOP（第 19 步：状态是实例属性，不是模块里的变量）。
+
+        退化的实现（状态写回某个模块级变量）会让这条挂 —— 而那种退化在实盘上的症状是
+        "测试互相串味"，本地能看出来，但没这条用例就得等它串味了才知道。
+        """
+        self.agent.SOP2Prompt("甲的方法")
+        self.assertEqual(Agent().sop, "")
+
+    def test_the_sop_never_leaks_between_instances(self):
+        """两个实例各存各的 —— 反向钉死"状态在模块级"那种退化。"""
+        other = Agent()
+        self.agent.SOP2Prompt("甲")
+        other.SOP2Prompt("乙")
+        self.assertEqual(self.agent.sop, "甲")
+        self.assertEqual(other.sop, "乙")
+
+    def test_each_instance_keeps_its_own_tool_table(self):
+        """工具表也是实例的：`SOP2Prompt` 那一项是**绑定方法**，钉在各自的实例上。
+
+        共享一张模块级工具表、而表里那个函数去写"某个全局 SOP"是很自然的退化写法，
+        症状是"两个 Agent 的 SOP 互相覆盖" —— 这条用例用**走工具表**的路径（不是直接
+        调方法）把它挡住。
+        """
+        other = Agent()
+        self.agent.tool_call("SOP2Prompt", "甲走工具表")
+        other.tool_call("SOP2Prompt", "乙走工具表")
+        self.assertEqual(self.agent.sop, "甲走工具表")
+        self.assertEqual(other.sop, "乙走工具表")
+
+    def test_reset_clears_this_instance(self):
+        """`reset()` 是**整个测试文件赖以隔离的那个机制** —— 它必须真的清掉**自己**。
+
+        `AGENT` 是模块级的：`HandleTest` / `TaskChannelTest` 的 `setUp` 全靠它才不跨用例串味。
+        所以退化的写法有两种，这条各挡一半：
+        ① **不生效**（`return` 掉）⇒ 上一个用例存的 SOP 会灌进下一个用例的 prompt；
+        ② **清错了对象**（写成 `Agent()._sop = ""`，即清一个刚造出来的新实例）⇒ 看着像清了，
+           自己身上那份一点没动。两种在实盘上的症状都是"**改了一处代码，另一处跟着变**"，
+           而本地只有这条用例会先叫。
+        """
+        self.agent.SOP2Prompt("要清掉的东西")
+        self.agent.reset()
+        self.assertEqual(self.agent.sop, "")
+        self.assertNotIn("要清掉的东西", self.agent.chat("题目"))
+        #: 复位之后还能重新存（别把 reset 写成"把实例锁死"）
+        self.agent.SOP2Prompt("第二版")
+        self.assertIn("第二版", self.agent.chat("题目"))
 
     def test_an_overlong_sop_is_truncated_and_says_so(self):
         """超上限 ⇒ **保头截断**，而且日志同时报"收到多少 / 存了多少"。
@@ -2838,8 +2944,8 @@ class SopStateTest(unittest.TestCase):
         下一个人会以为是它只写了 1000 字。上限存在的理由是硬约束 5（prompt 每回合都发）。
         """
         with self.assertLogs(sop.__name__, level="INFO") as caught:
-            sop.SOP2Prompt("长" * 9000)
-        self.assertEqual(len(sop.current()), sop.SOP_MAX)
+            self.agent.SOP2Prompt("长" * 9000)
+        self.assertEqual(len(self.agent.sop), sop.SOP_MAX)
         line = caught.records[0].getMessage()
         self.assertIn("9000", line)
         self.assertIn(str(sop.SOP_MAX), line)
@@ -2850,9 +2956,9 @@ class SopStateTest(unittest.TestCase):
         `llm_resp` 粘住时 LLM 会把同一段 SOP 反复喂进来，每回合打一行是白花 stdout 预算
         （硬约束 5），而"又存了一遍同样的东西"不算"有事"。
         """
-        sop.SOP2Prompt("一样的内容")
+        self.agent.SOP2Prompt("一样的内容")
         with self.assertNoLogs(sop.__name__, level="INFO"):
-            sop.SOP2Prompt("一样的内容")
+            self.agent.SOP2Prompt("一样的内容")
 
     def test_a_multiline_sop_is_logged_as_one_line(self):
         """SOP 必然是多行的 ⇒ 日志必须**打成一行**（换行转义）。
@@ -2861,7 +2967,7 @@ class SopStateTest(unittest.TestCase):
         （与 `app._log` 的"三块拼成一条"同一条理由）。
         """
         with self.assertLogs(sop.__name__, level="INFO") as caught:
-            sop.SOP2Prompt("第一步：ls\r\n第二步：cat")
+            self.agent.SOP2Prompt("第一步：ls\r\n第二步：cat")
         message = caught.records[0].getMessage()
         self.assertNotIn("\n", message)
         self.assertNotIn("\r", message)
@@ -2869,11 +2975,24 @@ class SopStateTest(unittest.TestCase):
 
     def test_clearing_is_silent_about_content(self):
         """清空（= 整段替换成空串）也要留一行 —— 否则"怎么没了"无从查起。"""
-        sop.SOP2Prompt("有内容")
+        self.agent.SOP2Prompt("有内容")
         with self.assertLogs(sop.__name__, level="INFO") as caught:
-            sop.SOP2Prompt("")
-        self.assertEqual(sop.current(), "")
+            self.agent.SOP2Prompt("")
+        self.assertEqual(self.agent.sop, "")
         self.assertEqual(len(caught.records), 1)
+
+    def test_the_logger_name_does_not_depend_on_the_agent(self):
+        """SOP 那一行的 logger 名**仍然是 `coregeek.agent.tools.sop`**（第 19 步搬状态时的取舍）。
+
+        名字变了就会连带改三份东西：`app._log` 的字节表、"唯一一条不在 `app` 名下的日志"
+        那条守卫用例、`CLAUDE.md` 硬约束 5。这条用例是那个取舍的守门员
+        （把 `store` 挪进 `agent/agent.py` 就会在这里挂）。
+        """
+        #: 断的是 **`LOGGER` 的名字**（不是模块的 `__name__` —— 那个是同义反复）：
+        #: 它必须与 `app._log` 的字节表、`CLAUDE.md` 硬约束 5 里写的那个字面量一致。
+        #: 把 `LOGGER` 挪进 `agent/agent.py` ⇒ 这里 `AttributeError`（挪走了），
+        #: 只改名字 ⇒ 断言的字符串对不上。两种都挂。
+        self.assertEqual(sop.LOGGER.name, "coregeek.agent.tools.sop")
 
 
 class ChatPromptTest(unittest.TestCase):
@@ -2885,19 +3004,29 @@ class ChatPromptTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
-        sop.reset()
+        self.agent = Agent()
 
     def test_the_placeholders_are_all_filled(self):
-        prompt = chat("题目")
+        prompt = self.agent.chat("题目")
         for header in ("# Agent定位", "# 可使用的工具", "# 输出格式", "# 沉淀的 SOP"):
             self.assertIn(header, prompt)
         for leftover in ("{tool_desc}", "{sop}", "{result}", "{retry}", "{task}"):
             self.assertNotIn(leftover, prompt)
 
+    def test_the_assembly_needs_sop_and_tool_desc(self):
+        """`chat()` 的 `sop` / `tool_desc` **没有默认值**（第 19 步从模块级取值改成参数）。
+
+        这条钉的是那个取舍本身："忘了传"必须在**调用点**炸（`TypeError`），
+        而不是静默发一份空槽的 prompt 出去 —— 后者在实盘上表现为"LLM 完全不知道有什么工具"，
+        本地一片安静。
+        """
+        with self.assertRaises(TypeError):
+            chat("题目")
+
     def test_every_tool_appears_in_the_prompt(self):
-        """prompt 里的工具清单由 `TOOLS` 生成 ⇒ 每个注册的工具都得在。"""
-        prompt = chat("题目")
-        for name in TOOLS:
+        """prompt 里的工具清单由**实例的工具表**生成 ⇒ 每个注册的工具都得在。"""
+        prompt = self.agent.chat("题目")
+        for name in self.agent._tools:
             self.assertIn(name, prompt)
 
     def test_both_output_shapes_are_shown_verbatim(self):
@@ -2906,39 +3035,47 @@ class ChatPromptTest(unittest.TestCase):
         这是唯一能提高"LLM 照抄概率"的杠杆：描述得含糊一点，它就自己发明第三种形状，
         而那种失败**本地测不出来**（我们的解析自洽，判题器认不认只有实盘知道）。
         """
-        prompt = chat("题目")
+        prompt = self.agent.chat("题目")
         self.assertIn("<tool><tool_name>工具名</tool_name><tool_param>参数原文</tool_param></tool>", prompt)
         self.assertIn("<answer>答案本身</answer>", prompt)
 
     def test_the_task_text_is_there(self):
-        self.assertIn("请查询北京天气", chat("请查询北京天气"))
+        self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))
 
     def test_the_two_injections_only_appear_when_given(self):
         """回灌那两段"没有就不占地方"，而且**在第一次提问里一个都看不到**。"""
-        plain = chat("题目")
+        plain = self.agent.chat("题目")
         self.assertNotIn("【上一条命令的执行结果", plain)
         self.assertNotIn("【你上一次提交的答案", plain)
 
-        with_result = chat("题目", result="[exitCode:0]\nok")
+        with_result = self.agent.chat("题目", result="[exitCode:0]\nok")
         self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result)
 
-        with_retry = chat("题目", retry="晴 26 度")
+        with_retry = self.agent.chat("题目", retry="晴 26 度")
         self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry)
 
     def test_a_stored_sop_shows_up_in_the_next_prompt(self):
-        """**这就是"自进化"的全部可观测证据**：存过一次之后，后面每一份 prompt 都带着它。"""
-        sop.SOP2Prompt("先看目录再动手")
-        self.assertIn("先看目录再动手", chat("另一道题"))
+        """**这就是"自进化"的全部可观测证据**：存过一次之后，后面每一份 prompt 都带着它。
+
+        第 19 步起这条证据是**两个方法之间的接线**（`SOP2Prompt` 写 `self._sop`，
+        `chat` 读 `self._sop`）—— 走的是实例，不是"某个模块变量还在"
+        （跨回合那条更强的证据在 `TaskChannelTest.test_the_singleton_carries_the_sop_across_turns`）。
+        """
+        self.agent.SOP2Prompt("先看目录再动手")
+        self.assertIn("先看目录再动手", self.agent.chat("另一道题"))
 
     def test_braces_in_the_values_are_not_scanned_again(self):
         """`str.format` **只做一次** —— 替换值里的 `{}` 不能被当成占位符。
 
         题目原文与沙盒输出都是**任意文本**，python 代码片段里 `{}` 太常见了；
         二次扫描会在 `chat` 里直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。
+        SOP 是第三个替换值（第 19 步起由 `Agent` 传进来），所以三处一起钉。
         """
-        prompt = chat("题目 {task} {0} {}", result="{'a': 1}")
+        self.agent.SOP2Prompt("SOP 里有 {sop} 和 {0}")
+        prompt = self.agent.chat("题目 {task} {0} {}", result="{'a': 1}")
         self.assertIn("题目 {task} {0} {}", prompt)
         self.assertIn("{'a': 1}", prompt)
+        self.assertIn("SOP 里有 {sop} 和 {0}", prompt)
 
 
 class ToolReplyParseTest(unittest.TestCase):

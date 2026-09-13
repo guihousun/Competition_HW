@@ -1672,6 +1672,8 @@ PYTHONUTF8=1 py -m unittest discover -s tests      # Ran 151 tests … OK
 1. **位置 = `src/coregeek/agent/`**（`main3.py:24` 只把 `src/` 加进 `sys.path`）。
 2. **SOP = 进程内跨回合状态**（模块级变量，整场存活、重启清空）—— 明确接受"破掉 `handle` 是纯函数"
    这条第 11 步起的不变量。这是全项目**唯一**一处跨回合状态。
+   ⚠️ **第 19 步已把它从"模块级变量"改成"单实例 `AGENT` 的实例属性"**（行为不变，形状换了）——
+   读这一段时记着它只描述第 18 步当时的形态。
 3. **同一步把任务线切过去**：新形状**取代**第 16 步的 `<tool>整条命令</tool>`。不建"暂时没人调用"的子系统。
 4. **全覆盖兼容**：`<tool>整条命令</tool>`（块里没有 `tool_name`）照旧当 `executeCmd`；
    回复里没有 `<answer>` 就**原文当答案交**（= 第 16 步的行为）。判题器的 LLM 是黑盒，
@@ -1918,3 +1920,228 @@ SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文�
    `任务：… ｜ 提交：… ｜ 提问：有（N 字）` → `沙盒：回「[exitCode:0]…」` 这条序列，
    以及"提交："里的形状是不是 `<tool_name>` 那一种（两条判据见不确定性 1）。
 ③ 若新形状被采纳但 `SOP2Prompt` 从不被调用 ⇒ SOP 段恒空，模板白留一段（无害，但说明没触发自进化）。
+
+---
+
+## 第 19 步：Agent 从"模块级散函数"改成"单实例 + 状态在实例上"
+
+### 目标
+
+用户原话（逐字）：
+
+> 这个Agent是一个单实例的，每次开拓者来的时候，注入这个实例
+
+第 18 步落地的是**模块级散函数**：`chat()` / `tool_call()` / `tool_of()` 都是自由函数，
+SOP 状态是 `tools/sop.py` 里的模块级 `_current`。用户要的是**一个显式的 Agent 对象**：
+一个进程一个实例，开拓者（任务线）每次来时用的都是它，SOP 这个跨回合记忆**长在它身上**。
+
+两条拍板（`AskUserQuestion`）：
+
+1. **单实例住在 `agent/__init__.py`**：`AGENT = Agent()`，`planner` 直接 `from ..agent import AGENT`
+   取它 —— 不是由 `app.py` 造、参数注入。
+2. **状态搬到实例上**：`self._sop` 是实例属性、`SOP2Prompt(SOP)` 是实例方法 ⇒
+   **全项目唯一一处跨回合状态 = 这一个对象**，不再是"某个模块的全局变量"。
+
+⚠️ **这一步不动协议、不动策略**：形状（`<tool>` / `<answer>`）、判据链六条、`executeCmd`
+"不本地执行"一个字节都不改。改的是"这些东西住在哪"。**判据 = 第 18 步 e2e 的输出表逐字重现**
+（下文的九轮表与第 18 步那张**同一组数字**，包括每一个 prompt 字数）。
+
+**为什么现在做**：第 18 步的 `_current` 是"状态躲在模块里"的形状 —— 读代码的人要同时记住
+"这个函数读哪个模块变量"。用户这一步要的是把它变成一个**能指着说的对象**；
+顺带解决的问题是 `chat.py` 退回纯函数（一个包内 import 都不需要），
+"状态只有一个归处"从注释变成了结构。
+
+### 产出
+
+| 文件 | 改动 |
+|---|---|
+| `src/coregeek/agent/agent.py` | **新建**：`class Agent` —— `_sop` / `_tools` / `chat` / `tool_call` / `tool_desc` / `SOP2Prompt` / `sop`(property) / `reset`。第 18 步写在 `tools/__init__.py` 的"返回值即命令"铁律、三道闸门、"不加锁/不碰红线/SOP 不分区"三条代价，原文搬来这里 |
+| `src/coregeek/agent/__init__.py` | **不再是 0 字节**（与其余四个包不同，见下）：`from .agent import Agent` + **`AGENT = Agent()`** + 包结构与"为什么这个文件不是空的"的 docstring |
+| `src/coregeek/agent/chat.py` | `chat(request, *, sop, tool_desc, result="", retry="")` —— 两个新参数进签名；删 `from .tools import tool_desc` / `from .tools.sop import current`。模板、四个谓词、`_block` **一字未动** |
+| `src/coregeek/agent/tools/__init__.py` | 注册表与 `tool_call` / `tool_desc` 移走 ⇒ 只剩一段指向 `Agent.__init__` 的 docstring（3.4KB → 0.5KB） |
+| `src/coregeek/agent/tools/sop.py` | `SOP2Prompt` / `current` / `reset` / `_current` 删除；保留 `LOGGER`（**名字不变**）/ `SOP_MAX` + 新的 `store(current, sop)` / `describe(received, stored)` |
+| `src/coregeek/agent/tools/cmd.py` | **一字未动**（`executeCmd` 本来就是纯搬运，没有状态可搬） |
+| `src/coregeek/game/planner.py` | `from ..agent import AGENT` + 4 处调用点改 `AGENT.tool_call(...)` / `AGENT.chat(...)`；模块 docstring 三处（包头 / `task_channel` 无状态那段 / 判据 ①） |
+| `tests/test_actions.py` | **187 → 195 条**：改写约 45 处引用（`sop.reset()` → `AGENT.reset()`、`sop.SOP2Prompt` → 实例、`chat("题目")` → `self.agent.chat("题目")`、`TOOLS` → 新实例的 `_tools`），新增 7 条 |
+| `src/coregeek/app.py`、`web/`、`protocol/`、`main3.py` | **零改动**（`app` 只调 `planner.task_channel(turn)`，`Agent` 从不出现在它面前；logger 名没变 ⇒ `_log` 的字节表一个字都不用动） |
+
+**`Agent` 的形状**：
+
+```python
+class Agent:
+    def __init__(self) -> None:
+        self._sop = ""                                   # 唯一一处跨回合状态
+        self._tools = {                                  # 表由实例构造
+            "executeCmd": (executeCmd, "…"),
+            "SOP2Prompt": (self.SOP2Prompt, "…"),        # ← 绑定方法，写 self._sop
+        }
+    def chat(self, request, *, result="", retry="") -> str      # 组装上下文
+    def tool_call(self, tool_name, tool_param) -> str           # 顶层调度（返回值即命令）
+    def tool_desc(self) -> str                                  # prompt 里那段
+    def SOP2Prompt(self, sop: str) -> str                       # 写 self._sop，返回 ""
+    @property
+    def sop(self) -> str                                        # 读（用例观察状态用）
+    def reset(self) -> None                                     # 清空，**只给用例用**
+```
+
+- **表必须由实例构造**（不像第 18 步是模块级常量）：`SOP2Prompt` 写的是 `self._sop`，
+  所以它只能是**绑定方法** —— 模块级常量已经表达不了这件事。第 18 步"加一个工具只改一处"的性质
+  **保留**，只是那一处从 `tools/__init__.py` 变成 `Agent.__init__`。
+- **`SOP2Prompt` 保持用户给的一参接口名**（不改私有的 `_remember`）：它同时是注册表里的工具名。
+- **`chat` 的 `sop` / `tool_desc` 没有默认值**：为了让"忘了传"在**调用点**就炸
+  （`TypeError`），而不是静默发一份空槽的 prompt 出去 —— 后者实盘表现是"LLM 完全不知道有什么工具"，
+  本地一片安静。用例 `test_the_assembly_needs_sop_and_tool_desc` 钉着这条。
+- **`answer_of` / `tool_of` / `looks_like_tool` 仍是 `chat.py` 的自由函数**，不给它们套一层
+  `AGENT.`：它们是纯谓词、与状态无关，而 `_answer_task`（提交）与 `task_channel` 判据 ④/⑤
+  （回灌/判"已有答案"）**必须共用同一个** —— 第 18 步"两侧谓词不分享就是第二份真相"那条保证，
+  不能因为搬家的手抖破掉。
+
+**状态与规则切开的理由**：`SOP2Prompt` 的**存储规则**（整段替换 / 保头截断 / 截断留痕 /
+内容没变就静默）留在 `tools/sop.py`，收成两个纯函数 + 一个常量；`Agent.SOP2Prompt` 于是只有
+`self._sop = store(self._sop, sop); return ""` 两行。`store` **不是为抽象而抽象**：
+它有两个使用者 —— `Agent.SOP2Prompt` 与用例（直接测存储语义，不用造实例）。
+
+⚠️ **`LOGGER` 留在 `tools/sop.py` 是有意的**：logger 名 `coregeek.agent.tools.sop` 因此**不变**
+⇒ `app._log` 的字节表、"唯一一条不在 `app` 名下的日志"那条守卫用例、`CLAUDE.md` 硬约束 5
+三处都不用跟着改。搬进 `agent/agent.py` 就会变成 `coregeek.agent.agent` ——
+一次没有收益的重命名要牵动三份文档。用例 `test_the_logger_name_does_not_depend_on_the_agent`
+断的是 **`sop.LOGGER.name`**（不是模块的 `__name__`，那是同义反复）。
+
+⚠️ **"注入"在这里是什么**：`planner.task_channel` 每次都用包根那个 `AGENT`
+（`from ..agent import AGENT`），不是每次新建一个 —— 单实例是"SOP 能跨回合长出来"的前提。
+`plan(turn)` **不拿 agent**：它从不跟 LLM 说话，加进去就是"现在没有第二个使用者"的抽象（规则 1）。
+
+### 不做什么
+
+- ❌ **不把 `AGENT` 改成由 `app.py` 造、参数注入**：用户拍板包内全局单例。代价已知（见不确定性 1）。
+- ❌ **不给 `task_channel` 加 `agent=AGENT` 的默认参数**：多一个"第二使用者才需要"的注入缝，
+  而隔离问题 `Agent.reset()` 已经解决（规则 1）。
+- ❌ **不给 `Agent` 加"每回合/每任务"的生命周期钩子**：没有第二个使用者；
+  "每次开拓者来"现在就是"每次 `task_channel` 被调用"，它天然如此。
+- ❌ **不改任何协议 / 判据 / 模板措辞**（含两段回灌的分界符）：这一步的验收标准就是"行为一模一样"。
+- ❌ **不给 `Agent` 上单例强制**（`__new__` / 模块级断言）：Python 不拦着谁再 `Agent()` 一个，
+  真要拦是为不存在的使用者加复杂度。**记录、不修。**
+- ❌ **不动 `tools/cmd.py`**、**不做 `sell` / `buy` / `use`**、**不动策略**（砌墙 / 操炮 / 采矿）。
+
+### 验证
+
+**1. 单测（`PYTHONUTF8=1 py -m unittest discover -s tests`）**
+
+```
+Ran 195 tests in 0.074s
+OK
+```
+
+新增 7 条（每条钉一个**只有这次改动才会坏**的性质）：
+
+| 用例 | 钉住什么 | 反向验证里挂在哪条改坏上 |
+|---|---|---|
+| `test_the_singleton_carries_the_sop_across_turns` | `AGENT.SOP2Prompt(x)` 之后**下一回合** `task_channel` 的 prompt 里带着 `x` —— 两回合之间**没有任何东西被传过去**，能接起来的只有同一个 `AGENT` ⇒ 这是 `from ..agent import AGENT` 那个注入点的守门员 | ① ② ③ |
+| `test_a_fresh_agent_starts_with_no_sop` | 新实例**不带**旧 SOP ⇒ 状态确实在**实例属性**上 | ② |
+| `test_the_sop_never_leaks_between_instances` | 两个 `Agent()` 各存各的 ⇒ 反向钉死"状态在模块级"那种退化 | ② |
+| `test_each_instance_keeps_its_own_tool_table` | **走工具表**（不是直接调方法）存 SOP ⇒ 表里那一项确实钉在各自的实例上 | ③ |
+| `test_reset_clears_this_instance` | `reset()` 真清**自己**（不生效 / 清错对象两种退化各挡一半）—— 它是整个测试文件赖以隔离的机制 | ⑥ |
+| `test_the_two_call_sites_agree_on_what_the_answer_is` | **期望值由测试自己用 `answer_of` 算**，再去比"提交的"与"骂的"两个调用点 ⇒ `answer_of` 若被搬进 `Agent` 自成一派，至少一边对不上 | ⑭ |
+| `test_the_logger_name_does_not_depend_on_the_agent` | `sop.LOGGER.name` 必须等于 `coregeek.agent.tools.sop`（挪走 ⇒ `AttributeError`，改名 ⇒ 字面量对不上） | ⑬ |
+| `test_the_assembly_needs_sop_and_tool_desc` | `chat("题目")` 不传 `sop` / `tool_desc` ⇒ `TypeError`（那条"不给默认值"的取舍本身） | — |
+
+`test_a_newly_registered_tool_shows_up_everywhere` 顺势简化：改往**新实例**的 `_tools` 里注入，
+`finally: del` 不需要了（实例是新的，天然隔离）；末行改成 `assertNotIn("测试用工具", Agent().tool_desc())`。
+
+**2. 行为等价（这一步最重要的验证）**
+
+`D:/tmp/e2e18.py`（第 18 步的九轮驱动）**一个字节没改**，在真服务上重跑：
+
+```bash
+netstat -ano | grep LISTENING | grep 18085        # 空（grep exit=1）
+PYTHONUTF8=1 bash run.sh 18085 > D:/tmp/logs19.txt 2>&1 &
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
+PYTHONUTF8=1 py D:/tmp/e2e18.py
+```
+
+```
+[1] 提问             prompt= 597 字  executeCmd=''                               提交=None
+[2] SOP2Prompt     prompt= 630 字  executeCmd=''                               提交=None
+[3] 新形状命令          prompt=   0 字  executeCmd='python -c "print(1+1)"'         提交=None
+[4] 沙盒结果           prompt= 663 字  executeCmd=''                               提交=None
+[5] <answer>提交     prompt=   0 字  executeCmd=''                               提交='晴 26 度'
+[6] 纠错重问           prompt= 664 字  executeCmd=''                               提交='晴 26 度'
+[7] 裸文本兜底          prompt=   0 字  executeCmd=''                               提交='晴 26 度'
+[8] 旧形状兼容          prompt=   0 字  executeCmd='ls -la'                         提交=None
+[9] 畸形重问           prompt= 630 字  executeCmd=''                               提交=None
+
+★ 九轮全部通过
+```
+
+**与第 18 步那张表逐字一致**（597 / 630 / 0 / 663 / 0 / 664 / 0 / 0 / 630，命令与提交一字不差）——
+每一个字数同时证明"模板没动""SOP 段照旧填进去""两条通道互斥还在"。样例响应也逐项不变
+（`executeCmd` 与 `prompt` 都是空，三个角色都是 `move`）。
+
+服务端日志（`D:/tmp/logs19.txt`，428 行 = 与第 18 步同一个数）：
+
+```
+2026-09-13 22:06:33,276 | SOP 更新：存 33 字｜ 前 80 字：第一步：先 ls\n第二步：按文件名理解题意\n第三步：把字段逐个填满
+```
+
+- `grep -c "SOP 更新"` = **1**（幂等检查仍在岗）；那一行**确实是一行**（`\n` 转义生效）；
+- `grep -c "沙盒"` = **1**；`grep -ci "traceback"` = **0**；
+- 收尾 `taskkill //F //PID 24552` + `netstat` 确认端口释放（`grep exit=1`）。
+
+**3. 反向验证（`D:/tmp/reverse19.py`，临时不入库）**
+
+逐条改坏 14 处（**每处都挂住了用例，无假绿**）：
+
+| 改坏 | 挂住 |
+|---|---|
+| ① `planner` 每回合新建一个 `Agent`（`AGENT.` → `Agent().`）| 5 条（含 `test_the_singleton_carries_the_sop_across_turns`）|
+| ② SOP 状态回到模块级（实例只剩门面）| 11 条 |
+| ③ 工具表里 `SOP2Prompt` 指向自由函数（绑定错位）| 5 条（含 `test_each_instance_keeps_its_own_tool_table`）|
+| ④ `chat` 里把 `sop` 写死成空串 | 8 条 |
+| ⑤ `Agent.chat` 忘了把 `self._sop` 传下去（接线断开，与 ④ **不同的挂法**）| 8 条 |
+| ⑥ `reset()` 不生效 | `test_reset_clears_this_instance` |
+| ⑦ `store` 改追加 | 2 条 |
+| ⑧ `store` 去掉上限 | `test_an_overlong_sop_is_truncated_and_says_so` |
+| ⑨ 截断不留痕 | 同上 |
+| ⑩ 每次存都打日志 | `test_storing_the_same_text_again_is_silent` |
+| ⑪ 换行不转义 | `test_a_multiline_sop_is_logged_as_one_line` |
+| ⑫ `executeCmd` 改成 `subprocess.run`（**不许本地执行**的守门员）| 14 条 |
+| ⑬ `LOGGER` 改名 | 5 条（含 `test_the_logger_name_does_not_depend_on_the_agent`）|
+| ⑭ 提交侧换一套 `answer_of`（两侧谓词分家）| 15 条 |
+
+- ⚠️ **第一版脚本 14 条全报"没挂住"**：`FAIL_LINE` 正则漏了 `re.M` ⇒ `^` 只匹配字符串开头 ⇒
+  **一条 FAIL 都没匹配上**。报告"全没抓住"和"全抓住"一样可疑 —— 先怀疑测量工具。
+  改 `re.M` 后 14/14。这条与第 18 步的"假绿"是同一类教训的两个方向。
+- **还原**：全部 `cp D:/tmp/bak19/good/<file> <file>`（**没用 `git checkout`**，第 15 步的教训），
+  收尾对 8 个文件逐个 sha256 校验（等价 `cmp`）**全一致**，再跑一次套件 `OK`。
+
+**4. 字节预算（硬约束 5）**
+
+logger 名不变、SOP 行内容不变 ⇒ 最坏那一格仍是 **44 行 / 6180 字节**（上限 **6900** 不变，
+`D:/tmp/budget19.py` 实测 `字节 = 6180`，`logger 名集合 = ['coregeek.agent.tools.sop', 'coregeek.app']`）。
+**数字没变 ⇒ `app._log` 的 docstring、`CLAUDE.md` 硬约束 5、用例注释三处都不用改**。
+
+### 已知不确定性（别假装确定）
+
+1. **`from ..agent import AGENT` 让"注入点"退化成全局查找**：`planner` 手里绑的是**对象**
+   （不是模块属性）⇒ 测试**换不掉**它，只能靠 `Agent.reset()` 隔离。若将来需要"同一进程里同时跑
+   两个 Agent"（现在没有这个需求），这条边得改成 `from .. import agent` + `agent.AGENT`，
+   或者把实例当参数注入。**未发生，不预防。**
+2. **`reset()` 是生产代码里唯一一个只为用例存在的公开方法**：没有它，走 `task_channel` / `app.handle`
+   的用例会跨用例串味。**接受**：它是实例上的一个赋值，不碰红线。
+3. **`tools/__init__.py` 现在几乎是空的**（只剩一段 docstring，3.4KB → 0.5KB）：注册表搬去了
+   `Agent.__init__`。若工具多到值得把"注册"独立出去（现在 2 个），再搬回来 —— **不提前建**。
+4. **`AGENT` 在 import 期构造** ⇒ `agent/__init__.py` 有 import 期副作用（一个空串赋值，无 I/O、
+   不会抛）。若将来 `Agent.__init__` 要做重活（读文件、起线程），这条副作用会变成踩雷点 ——
+   那时应改成惰性构造。
+5. **`test_the_logger_name_does_not_depend_on_the_agent` 断的是 `LOGGER.name` 与一个字面量**：
+   若将来真的把 logger 改名，这条用例会挂 —— 那是**有意的**（改名要连带改 `app._log` 的字节表、
+   `CLAUDE.md` 硬约束 5、以及本条用例三处）。它防的不是"名字写错"，是"改名字时漏改"。
+
+### 下一步
+
+① 卖矿那条线仍未实现：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+② **协议形状与沙盒链路都还没经过实盘**（第 18 步的敞口原封不动）：下一场先看日志里的
+   `任务：… ｜ 提交：… ｜ 提问：有（N 字）` → `沙盒：回「[exitCode:0]…」` 这条序列，
+   以及"提交："里的形状是不是 `<tool_name>` 那一种。
+③ SOP 是否真的自进化（`SOP 更新：存 N 字` 有没有出现、N 的分布）—— 这是"单实例 + 实例属性"
+   在**实盘**上唯一能观察到的东西（本地 e2e 只能证明接线对）。

@@ -40,16 +40,22 @@
 任务线的另一半不在这个返回值里：`task_channel(turn)` 单独产出响应顶层的
 **`(prompt, executeCmd)`** —— 与判题器的 LLM、与它的沙盒打交道的**唯一**通道。
 
-**"说什么"与"怎么读回复"不在这个模块里**，在 `coregeek/agent/`（第 18 步）：`agent.chat`
-拿四段模板组装上下文、解析回复，`agent.tools` 是工具注册表（`executeCmd` / `SOP2Prompt`）
+**"说什么"与"怎么读回复"不在这个模块里**，在 `coregeek/agent/`（第 18 步）：`Agent.chat`
+拿四段模板组装上下文、解析回复，`Agent` 自己的工具表装着 `executeCmd` / `SOP2Prompt`
 与顶层调度 `tool_call`。切分的判据是：**"什么时候跟 LLM 说话"是策略**（判据链、纠错、
 开拓者在不在），留在这里；**"说什么、怎么解析"**与战场规则无关，搬出去 ——
 机械保证是 `chat(request: str, ...)` **收字符串、不收 `Turn`**，`agent` 只依赖标准库。
 
-> ⚠️ **`SOP2Prompt` 会写一个进程内的模块级变量**（`agent.tools.sop._current`，整场存活、
-> 重启清空），这是全项目**唯一**一处跨回合状态 —— `handle` 从第 11 步起一直是无状态纯函数，
-> 这一步用户明确拍板破例。代价与缓解写在 `sop.py` 的 docstring 里；这里只记一条：
-> 它**不碰红线**（SOP 读成空串 ⇒ prompt 里那一段是空的，报文字节照旧合法）。
+> ⚠️ **用的必须是包根那个单实例 `AGENT`**（`from ..agent import AGENT`，第 19 步用户拍板：
+> *"这个Agent是一个单实例的，每次开拓者来的时候，注入这个实例"*）。它身上带着全项目
+> **唯一一处跨回合状态** ——「沉淀的 SOP」；每回合新建一个 `Agent` 就等于每次都失忆。
+> `handle` 从第 11 步起一直是无状态纯函数，第 18 步为此破例、第 19 步把状态**收敛到这个
+> 实例上**（不再是"某个模块里藏着一个变量"）。代价与缓解写在 `agent/agent.py` 的 docstring 里；
+> 这里只记一条：它**不碰红线**（SOP 读成空串 ⇒ prompt 里那一段是空的，报文字节照旧合法）。
+
+⚠️ **`answer_of` / `tool_of` 仍然是自由函数**（不是 `AGENT.` 的方法）：它们是**纯谓词**、
+与状态无关，`Agent` 与 `planner` 共用同一份 —— 第 18 步"两侧共用谓词"那条结构性保证
+（`_answer_task` 提交的与判据 ④ 骂的必须是同一个 `answer_of`）不能因为搬家的手抖而破掉。
 
 那条通道是一条**工具调用回路**（`<tool>…</tool>` 是我们与 LLM 约定的协议）：
 
@@ -67,8 +73,8 @@ import logging
 from collections.abc import Iterator, Mapping, Set
 from typing import Any
 
-from ..agent.chat import answer_of, chat, tool_of  # 第二条"由内往外"：与 LLM 说什么不在策略层
-from ..agent.tools import tool_call
+from ..agent import AGENT  # 第二条"由内往外"：与 LLM 说什么不在策略层
+from ..agent.chat import answer_of, tool_of
 from ..protocol import actions  # 第一条"由内往外"：指令只能经 Action 产出
 from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
 from .map import STONE
@@ -185,7 +191,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     单边修改都会造成"同一轮既提问又发命令"（LLM 在没看到结果的情况下作答 ⇒ 又要一遍
     同一条命令 ⇒ 活锁）或"两边都不发"（见判据 5 的畸形回复）。两份真相迟早对不上。
 
-    **这个函数自己仍然无状态**（跨回合状态只有 `agent.tools.sop._current` 一处）。
+    **这个函数自己仍然无状态**（跨回合状态只有包根那个 `AGENT` 实例上的一处）。
     任务线要靠跨回合标志位才能跑的话，那个位一旦卡住就**静默关掉整条任务线**
     （第 11 步为这条否决过"只交一次"的优化），而且出问题时日志上什么异常都看不出来。
 
@@ -219,7 +225,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 
     ── 第 18 步换的形状，两处要说清楚 ─────────────────────────────
 
-    **① 工具调度只有一个入口**（`tool_call`），**副作用（SOP 沉淀）只发生在那一行**。
+    **① 工具调度只有一个入口**（`AGENT.tool_call`），**副作用（SOP 沉淀）只发生在那一行**。
     那一行写在四条判据**之前**，所以哪怕这一轮走的是"回灌结果"（判据 2），`SOP2Prompt`
     照样生效 —— 那是**有意的**：LLM 在等结果的同时顺手把方法沉淀下来，而下一轮的 prompt
     会带上这段新 SOP，那正是它要的回执（这个工具当回合没有别的回执可用）。
@@ -260,19 +266,19 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     reply = turn.llm_resp.strip()
     answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
     call = tool_of(reply)
-    command = tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
+    command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
     retry = answer if any(e.code == 2 for e in turn.errors) else ""
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（**必须压在 ③ 前**）
-        return chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
+        return AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
     if command:  # ③ 工具给了命令 ⇒ 交给沙盒
         return "", command
     if retry:  # ④ 判题器说答案错了 ⇒ 带上"上次答错了"重问
-        return chat(turn.phase_task, retry=retry), ""
+        return AGENT.chat(turn.phase_task, retry=retry), ""
     if answer:  # ⑤ 我们已经拿到了答案 ⇒ 都不发
         return "", ""
     # ⑥ 第一次提问 / 畸形或"不产出命令"的工具回复 ⇒ 只把题目问出去（**③′ 落在这里**）
-    return chat(turn.phase_task), ""
+    return AGENT.chat(turn.phase_task), ""
 
 
 def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:

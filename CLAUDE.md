@@ -65,13 +65,18 @@ src/coregeek/
 │   │                 与**沙盒回执** `lastCmdResult`）
 │   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack` / `acceptTask` / `submitAnswer`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）。⚠️ 后两个**没有 `targetPos`**，只有 `describe` 需要留心
 ├── agent/            **叶子包，只依赖标准库**：跟 LLM 说什么、怎么解析它的回复
-│   ├── chat.py       `PROMPT` 四段模板 + `chat(request, *, result, retry)` 组装上下文
+│   ├── __init__.py   **不再是空的**（第 19 步）：`from .agent import Agent` + **`AGENT = Agent()`**
+│   │                 —— ⚠️ **全项目唯一一处跨回合状态就在这一个实例上**（`AGENT._sop`）
+│   ├── agent.py      `class Agent`：`_sop` / `_tools`（**表由实例构造**，`SOP2Prompt` 是绑定方法）
+│   │                 + `chat` / `tool_call` / `tool_desc` / `SOP2Prompt` / `sop`(property) / `reset`
+│   ├── chat.py       `PROMPT` 四段模板 + `chat(request, *, sop, tool_desc, result, retry)` 组装上下文
+│   │                 **纯函数**（一个包内 import 都没有：状态由 `Agent` 当参数传进来）
 │   │                 + 三个谓词：`tool_of`（严格）/ `looks_like_tool`（宽）/ `answer_of`（三级兜底）
 │   └── tools/
-│       ├── __init__.py  `TOOLS` 注册表（名 → (实现, 描述)）+ 顶层 `tool_call` + `tool_desc`
+│       ├── __init__.py  只剩一段 docstring（注册表搬去 `Agent.__init__`）
 │       ├── cmd.py       `executeCmd(cmd)` —— **原样返回**（执行者是判题器的沙盒，我们不在本地跑）
-│       └── sop.py       `SOP2Prompt(sop)` / `current()` / `reset()`
-│                        ⚠️ **全项目唯一一处跨回合状态**（进程内、整场存活、重启清空）
+│       └── sop.py       `store(current, sop)` / `describe(...)` / `SOP_MAX`（**规则**，状态不在这里）
+│                        ⚠️ `LOGGER` 留在这里是有意的：logger 名 `coregeek.agent.tools.sop` **不变**
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
     │                 + 基地几何：`base_cells` / `weapon_cells` / `weapon_sites` / `wall_cells`
@@ -99,6 +104,7 @@ src/coregeek/
 app → web / protocol / game        protocol → game
 game/planner → protocol/actions    ← 第一条"由内往外"，只走指令编码
 game/planner → agent               ← 第二条"由内往外"，**只收字符串、不收 Turn**
+                                     **走包根那个单实例**：`from ..agent import AGENT`（不是 `from ..agent import agent`）
 ```
 
 - 三件事：**怎么收（web）/ 报文长什么样（protocol）/ 打什么（game）**，`app` 把它们接起来。**没有第四件事就不加第四个包**，也不提前建空目录。
@@ -107,12 +113,17 @@ game/planner → agent               ← 第二条"由内往外"，**只收字�
   收字符串、不收 `Turn`** —— 收了 `Turn`，这条边就变成双向，那时该把"什么时候说话"也搬进 agent。
 - `app.py` 与 `planner.py` 的分工是**红线 vs 策略**：`app` 管"永远回得出合法报文"，`planner` 管"该做什么"。别让策略代码有机会破坏报文格式。
 - `roleCommandMap` 的 key 用**字符串**（JSON 对象的 key 本来就是字符串）。
-- ⚠️ **`handle(raw: bytes) -> bytes` 从此**不是**严格无状态的纯函数**：`agent/tools/sop.py` 的模块级
-  `_current` 是**全项目唯一一处跨回合状态**（第 18 步用户拍板；SOP = PromptSOP 的自进化沉淀）。
-  三条账要记牢：① 它读出来是空串 ⇒ prompt 里那一段空着，**报文字节照旧合法、不碰红线** ——
-  它只影响"答得好不好"；② **不加锁**（判题器逐回合同步请求，GIL 下 `str` 赋值/读取不撕裂），
-  最坏是"某条 prompt 带着上一版 SOP"；③ 除它之外**再加任何跨回合状态之前先想清楚**是否需要、
-  以及失败时的退化路径（第 11 步那条"跨回合标志位一旦卡住会**静默关掉整条任务线**"仍然成立）。
+- ⚠️ **`handle(raw: bytes) -> bytes` 从此**不是**严格无状态的纯函数**：`agent/__init__.py` 那个
+  **单实例 `AGENT` 的 `_sop`** 是**全项目唯一一处跨回合状态**（第 18 步用户拍板；SOP = PromptSOP
+  的自进化沉淀；第 19 步用户要求"单实例、开拓者每次来注入这个实例"⇒ 状态从模块级变量
+  **收敛到实例属性**）。三条账要记牢：① 它读出来是空串 ⇒ prompt 里那一段空着，
+  **报文字节照旧合法、不碰红线** —— 它只影响"答得好不好"；② **不加锁**（判题器逐回合同步请求，
+  GIL 下 `str` 赋值/读取不撕裂），最坏是"某条 prompt 带着上一版 SOP"；③ 除它之外
+  **再加任何跨回合状态之前先想清楚**是否需要、以及失败时的退化路径（第 11 步那条
+  "跨回合标志位一旦卡住会**静默关掉整条任务线**"仍然成立）。
+- ⚠️ **单实例的代价**：`from ..agent import AGENT` 绑的是**对象**，测试**换不掉**它 ⇒
+  用例只能靠 `Agent.reset()`（生产代码里唯一一个只为用例存在的公开方法）隔离。
+  想知道"现在的 SOP 是什么"，只有 `AGENT.sop` 一个地方可去。
 - 领域对象只带**当前步骤真正用到**的字段（`BaseRole` 目前只有 id/pos/type_name）。加字段之前先问这一步用不用得上——**尤其别把 §4.5.2 的 HP/背包上限写成类常量**，payload 里的 `health`/`backpack` 才是权威的当前值。
 - **不加分层 import-lint**：现在一共 4 个子包，违规肉眼可见；上一版为此写的 ast 检查属于过度设计。
 
@@ -171,7 +182,7 @@ game/planner → agent               ← 第二条"由内往外"，**只收字�
       - **直接作答**：`<answer>答案本身</answer>`
     - **三个谓词分居宽严两端**（`agent/chat.py`，同住一个模块）：`tool_of` **严格**（成对才给 `(名, 参数)`；**两个都没有 ⇒ 整块当一条 `executeCmd` 命令** = 第 16 步旧形状的兼容层；只有其中一个 ⇒ `None`，**绝不猜部分成对**）；`looks_like_tool` **宽**（`"<tool" in reply`，与第 16 步逐字相同）；`answer_of` **三级兜底**（有 `<answer` 标记 ⇒ 只认成对块内容，空/半截 ⇒ `""`；像工具回复 ⇒ `""`；否则**原文即答案**）。
       ⚠️ **`answer_of` 是「该提交什么」与「该骂什么」的同一个谓词** —— `_answer_task` 提交它、判据 ④ 用它当纠错内容、判据 ⑤ 用它判"已经有答案了"。三者一旦分家，纠错段就会把**带 `<answer>` 标签的原文**喂回去，LLM 看到自己上次的标记被原文骂回来，行为是未定义的。
-    - **注册表是唯一真相**：`agent/tools/__init__.py` 的 `TOOLS`（名 → (实现, 描述)），`tool_desc()` 由它生成 ⇒ 加工具只改一处、prompt 里自动出现。**铁律：`tool_call` 的返回值就是那条要进 `executeCmd` 的命令**，`""` = 不产出命令（`SOP2Prompt`）/调用不成立（未知工具、空参数），**下游不需要区分**。`tool_call` 是**副作用唯一发生点**，写在判据链之前 ⇒ 走"回灌结果"那一轮 SOP 照样生效（有意为之：LLM 不该因为"结果刚好回来了"就白调一次工具）。
+    - **注册表是唯一真相**：`Agent.__init__` 里那张 `self._tools`（名 → (实现, 描述)），`AGENT.tool_desc()` 由它生成 ⇒ 加工具只改一处、prompt 里自动出现。⚠️ **表必须由实例构造**（第 19 步）：`SOP2Prompt` 写的是 `self._sop`，只能是**绑定方法**，模块级常量表达不了这件事。**铁律：`tool_call` 的返回值就是那条要进 `executeCmd` 的命令**，`""` = 不产出命令（`SOP2Prompt`）/调用不成立（未知工具、空参数），**下游不需要区分**。`AGENT.tool_call` 是**副作用唯一发生点**，写在判据链之前 ⇒ 走"回灌结果"那一轮 SOP 照样生效（有意为之：LLM 不该因为"结果刚好回来了"就白调一次工具）。
     - **`planner.task_channel(turn) -> (prompt, executeCmd)`** 是这两条通道**唯一**的产出点，从上往下先命中先返回：① 没任务**或名册里没有开拓者** ⇒ 两个都不发；② `cmd_result` 非空 ⇒ 回灌结果、**这轮绝不发命令**；③ 工具给了命令 ⇒ 发命令、不提问；③′ *（隐式子路径）* **完整调用但拿不到命令**（`SOP2Prompt` / 未知工具 / 空参数）⇒ 掉到 ⑥；④ 判题器报 `code 2` ⇒ 带"上次答错了"重问；⑤ 是答案 ⇒ 都不发；⑥ 否则只把题目问出去。
       **判据 ② 必须压在 ③ 前面**：文档给 `lastCmdResult` 专门写了"**未发命令时为空字符串**"（L33）、对 `llmResp` **一个字没写**（L31）—— 所以 `cmd_result` 按**不粘**设计、`llm_resp` 必须按**可能粘住**设计，否则同一条命令会被反复丢进沙盒。
       **纠错（④）是"修饰符"不是"分支"**：`errors` 说的是**本轮产生**的错误，与我们上轮发了什么**不同步**（发命令那轮没有 prompt，下一轮却可能同时拿到沙盒结果和更早那次 `submitAnswer` 的判决）—— 做成独立分支就会把纠错整段吞掉。触发条件是 `code == 2` **且** `answer_of` 非空。
@@ -224,9 +235,14 @@ game/planner → agent               ← 第二条"由内往外"，**只收字�
 
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
-`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**187 条**。
-进度见 `docs/design/code-task.md`（当前到第 18 步：**Agent 系统**（`src/coregeek/agent/` 叶子包 +
-其中的 `tools/` 注册表）—— 工具协议定形为 `<tool><tool_name>…</tool_name><tool_param>…</tool_param></tool>`，
+`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**195 条**。
+进度见 `docs/design/code-task.md`（当前到第 19 步：**Agent 改成单实例 + 状态在实例上** ——
+用户要的"单实例，开拓者每次来注入这个实例"落成 `agent/__init__.py` 的 `AGENT = Agent()`，
+SOP 从 `tools/sop.py` 的模块级 `_current` 搬成 `Agent._sop`，`chat.py` 因此退回**纯函数**、
+`planner` 走 `from ..agent import AGENT`；**协议 / 判据 / 模板一个字节没动**，判据是第 18 步的
+e2e 九轮输出表**逐字重现**（含每一个 prompt 字数）+ 最坏日志仍是 44 行 / 6180 字节；
+第 18 步是 **Agent 系统**（`src/coregeek/agent/` 叶子包 + 其中的 `tools/` 注册表）——
+工具协议定形为 `<tool><tool_name>…</tool_name><tool_param>…</tool_param></tool>`，
 直接作答用 `<answer>…</answer>` 包裹，`SOP2Prompt` 让 PromptSOP 逐回合自进化（**全项目唯一一处跨回合状态**），
 `planner.task_channel` 的判据链一条没改、只换了料并多出一条隐式子路径 ③′，
 旧形状 `<tool>整条命令</tool>` 与裸文本**全覆盖兼容**；

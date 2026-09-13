@@ -5,6 +5,10 @@
 全在 `planner.task_channel`），**"说什么、怎么解析回复"**与战场规则无关，搬到这里。
 机械保证就是 `chat(request: str, ...)` 的签名 —— **收字符串，不收 `Turn`**。
 
+**本模块是纯的**（第 19 步）：它**不 import 包里的任何东西**，`sop` 与 `tool_desc`
+由调用方（`Agent.chat`）**当参数传进来** —— 状态只有 `Agent` 那一个归处这件事，
+因此从注释变成了结构。想读"现在的 SOP 是什么"，只有一个地方可去。
+
 模板与三个谓词**不拆成两个模块**（`prompt.py` / `parse.py`）：它们必须一起读
 （严谨的 `tool_of`、宽的 `looks_like_tool`、带兜底的 `answer_of` 是同一份约定的三面），
 拆开就是"改一处要翻两个文件"。
@@ -17,11 +21,8 @@
   `answer_of` 留着**原文即答案**的兜底 —— 两者都是"新形状不被认账"时的退路（用户拍板全覆盖兼容）。
 """
 
-from .tools import tool_desc
-from .tools.sop import current
-
 #: 发给判题器 LLM 的模板。四段（用户定的形状）：
-#: **定位** → **工具**（由 `TOOLS` 生成）→ **输出格式** → **沉淀的 SOP**，
+#: **定位** → **工具**（由 `Agent.tool_desc()` 生成）→ **输出格式** → **沉淀的 SOP**，
 #: 后面再挂第 16 步就有的两段回灌与题目原文。
 #:
 #: ⚠️ **「沉淀的 SOP」那一段的头永远都在**，哪怕还没沉淀过任何东西：那个槽是 LLM 自己写的
@@ -61,19 +62,26 @@ _TOOL_OPEN = "<tool"
 _TOOL_CLOSE = "</tool>"
 
 
-def chat(request: str, *, result: str = "", retry: str = "") -> str:
+def chat(
+    request: str, *, sop: str, tool_desc: str, result: str = "", retry: str = ""
+) -> str:
     """组装一份上下文：四段模板 + （可选）沙盒结果 + （可选）纠错 + 题目原文。
 
     `request` = 题目原文（payload 里的 `phaseTask`）。**收字符串不收 `Turn`** 是有意的：
     收了 `Turn` 这个包就认识游戏了，"什么时候说话"与"说什么"也会跟着缠在一起。
+
+    `sop` 与 `tool_desc` 是**必填**的两个关键字（第 19 步从"模块级状态 + 模块级注册表"
+    改成参数）：填哪一段 SOP、列出哪些工具，是**调用方**（`Agent`）的事实，
+    本模块不该去别处取。它们没有默认值，正是为了让"忘了传"在调用点就炸，
+    而不是静默地发一份空槽的 prompt 出去。
 
     `result` / `retry` 没有就不占地方，但**各自带标题**：沙盒输出是**任意文本**
     （可能是 JSON、可能是报错、可能带换行），没有标题档着，LLM 分不清哪一段是题目、
     哪一段是它要的输出。两段的措辞与第 16 步**逐字一致**（用例拿它们当判据）。
     """
     return PROMPT.format(
-        tool_desc=tool_desc(),
-        sop=current(),
+        tool_desc=tool_desc,
+        sop=sop,
         result=f"\n【上一条命令的执行结果（原文）】\n{result}\n" if result else "",
         retry=(
             f"\n【你上一次提交的答案被判定为不正确】\n{retry}\n请重新作答。\n" if retry else ""
