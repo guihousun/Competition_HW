@@ -67,3 +67,42 @@ def base_cells(top_left: Pos) -> set[Pos]:
     `pos` 给的是**左上角** ⇒ x 向右增、**y 向下减**。只标一格会让角色一头撞进基地里。
     """
     return {Pos(top_left.x + dx, top_left.y - dy) for dx in (0, 1) for dy in (0, 1)}
+
+
+def weapon_cells(base: Pos) -> tuple[Pos, ...]:
+    """可建造武器的 12 格 = 基地外圈 4×4 减去基地自身。
+
+    ⚠️ **来源是图，不是正文**：任务书没有坐标公式，`docs/pic/build_map.png` 写着
+    "中间黄色 2×2：基地 / 绿色 4×4 外圈：可建造武器 / 蓝色 6×6 外圈：可建造围墙"。
+    基地 `pos` 是左上角、占 `y` 与 `y-1`，所以 4×4 环是 `x ∈ [bx-1, bx+2]`、
+    `y ∈ [by-2, by+1]`，16 − 4 = 12 格。
+
+    样例可作交叉验证：基地 `(10,24)` ⇒ 环含 `(9,24)` / `(9,25)` / `(10,25)`，
+    正是样例那三座武器所在（**样例几何整体是手画的，不能当校准依据**，但环这一处对得上）。
+    """
+    own = base_cells(base)
+    return tuple(
+        Pos(x, y)
+        for y in range(base.y - 2, base.y + 2)
+        for x in range(base.x - 1, base.x + 3)
+        if Pos(x, y) not in own
+    )
+
+
+def back_weapon_cells(base: Pos, width: int) -> tuple[Pos, ...]:
+    """武器环里**背向机器人**的那一列（4 格），紧贴基地纵深的排前面。
+
+    机器人从基地**面向地图中心**的那一侧水平逼近（`docs/pic/大致地图信息.png`：
+    蓝方基地在左、刷新点在其右、箭头向左；红方镜像）。**任务书正文没写刷新点**，
+    这是唯一依据。于是"基地后方" = 远离地图中心的那一列：
+    **基地在地图左半 ⇒ 后方 `x = bx-1`；右半 ⇒ 后方 `x = bx+2`**。
+
+    按**基地坐标**判而不用 `teamOur.type`：下半场换边后队伍身份不变、基地会挪，
+    按坐标判会自动跟着翻。
+
+    同列 4 格按"是否落在基地的纵向跨度内"排（紧贴基地的先建），并列按 y 升序。
+    """
+    back_x = base.x - 1 if base.x * 2 < width else base.x + 2
+    own_ys = {base.y, base.y - 1}
+    column = [c for c in weapon_cells(base) if c.x == back_x]
+    return tuple(sorted(column, key=lambda c: (c.y not in own_ys, c.y)))

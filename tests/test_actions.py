@@ -17,10 +17,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.app import handle  # noqa: E402
-from coregeek.game.grid import Pos, base_cells, step_toward  # noqa: E402
+from coregeek.game.grid import Pos, back_weapon_cells, base_cells, step_toward, weapon_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
-from coregeek.game.planner import plan  # noqa: E402
-from coregeek.game.roles import Worker  # noqa: E402
+from coregeek.game.planner import WEAPON_ORDER, plan  # noqa: E402
+from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Turn  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
 
@@ -45,6 +45,16 @@ class MoveWireTest(unittest.TestCase):
             with self.subTest(role_type=role_type):
                 self.assertEqual(actions.Move(role_type, Pos(0, 0)).to_wire()["action"], "move")
 
+    def test_build_wire_shape(self):
+        """`name` 是**建筑名**（与 `roleType` 同名），不是动作名；`targetPos` 永远是数组。
+
+        字段名照 `docs/response.txt` 里唯一那条 `build` —— 形状写错就是一次"指令非法"。
+        """
+        self.assertEqual(
+            actions.Build("worker", "gatling", Pos(9, 23)).to_wire(),
+            {"action": "build", "name": "gatling", "targetPos": [{"x": 9, "y": 23}]},
+        )
+
 
 class GateTest(unittest.TestCase):
     """`BaseAction` 的校验机制本身 —— 这一步的主要交付物。"""
@@ -66,6 +76,15 @@ class GateTest(unittest.TestCase):
             with self.subTest(role_type=role_type):
                 with self.assertRaises(PermissionError):
                     actions.Move(role_type, Pos(0, 0))
+
+    def test_pioneer_cannot_build(self):
+        """**闸门第一次真的挡住东西**：`build` 仅在工人那一行（任务书 §4.4 最右列）。
+
+        开拓者误发 `build` 是典型的"本地全绿"bug —— 报文格式挑不出毛病，只有判题器
+        会说"不"，而那条路直通红线（5 次异常即整场不再被调度）。
+        """
+        with self.assertRaises(PermissionError):
+            actions.Build("pioneer", "gatling", Pos(9, 23))
 
     def test_typo_role_type_is_rejected(self):
         """角色类型拼错 → 造不出动作，而不是发一条判题器认不出的指令。"""
@@ -210,6 +229,61 @@ class GridTest(unittest.TestCase):
         self.assertEqual(empty.render(), "")
 
 
+class BuildGeometryTest(unittest.TestCase):
+    """可建造区与"基地后方"。
+
+    ⚠️ **公式的来源是图不是正文**（`docs/pic/build_map.png`）：任务书没写坐标公式，
+    接口文档的 `mapInfo` 里也没有可建造区字段。算错 ⇒ `build` 落点非法 ⇒ 那 25 金币白花。
+    """
+
+    BASE = Pos(10, 24)  # 样例里的我方基地
+
+    def test_weapon_cells_are_the_ring_around_the_base(self):
+        """12 格 = 基地外圈 4×4 减去基地自己，且**一格都不和基地重叠**。"""
+        cells = weapon_cells(self.BASE)
+        own = base_cells(self.BASE)
+        self.assertEqual(len(cells), 12)
+        self.assertEqual(set(cells) & own, set(), "武器格不能落在基地身上")
+        self.assertEqual({c.x for c in cells}, {9, 10, 11, 12})
+        self.assertEqual({c.y for c in cells}, {22, 23, 24, 25})
+        # 样例那三座武器都该落在这个环上 —— 唯一的"外部"交叉验证
+        for pos in (Pos(9, 24), Pos(9, 25), Pos(10, 25)):
+            self.assertIn(pos, cells)
+
+    def test_back_column_faces_away_from_the_robots(self):
+        """基地在左半 ⇒ 取左边那一列；在右半 ⇒ 取右边那一列。
+
+        机器人从基地**面向地图中心**的那一侧来（`docs/pic/大致地图信息.png`）。判反了
+        武器就摆在迎着机器人的一侧 —— 不报错、不违规，只是白建三座。
+        """
+        left = back_weapon_cells(Pos(10, 24), 41)  # 左半 ⇒ 后方 x = 10-1
+        self.assertEqual({c.x for c in left}, {9})
+        right = back_weapon_cells(Pos(30, 10), 41)  # 右半 ⇒ 后方 x = 30+2
+        self.assertEqual({c.x for c in right}, {32})
+        self.assertEqual(len(left), len(right), "两侧都该是整整齐齐一列 4 格")
+
+    def test_back_column_builds_beside_the_base_first(self):
+        """同列 4 格里，和基地纵向跨度齐平的两格排前面 —— 先用基地的身体挡着。"""
+        self.assertEqual(
+            back_weapon_cells(Pos(10, 24), 41),
+            (Pos(9, 23), Pos(9, 24), Pos(9, 22), Pos(9, 25)),
+        )
+
+
+class DayNightTest(unittest.TestCase):
+    """日历：`build` 仅白天，判反了就会在夜里发 `build`（一次执行失败）。"""
+
+    def _turn(self, round_no: int) -> Turn:
+        return Turn(round_no=round_no, map=Map((41, 32), {}), roles=(), gold=0)
+
+    def test_is_day_boundaries(self):
+        """130 回合 1 天 = 白 70 + 夜 60（任务书 L90），`within % 130` 从 1 起数。"""
+        for round_no, day in ((1, True), (70, True), (71, False), (130, False), (131, True)):
+            with self.subTest(round_no=round_no):
+                self.assertIs(self._turn(round_no).is_day, day)
+        self.assertFalse(self._turn(-1).is_day, "roundNo 缺失 ⇒ 判成夜里 ⇒ 不建造")
+
+
 class MineApproachTest(unittest.TestCase):
     """合成局面：工人真的能走到矿边并停下。单帧看着对，不代表走得过去停得住。"""
 
@@ -220,6 +294,7 @@ class MineApproachTest(unittest.TestCase):
             round_no=1,
             map=Map((41, 32), {self.MINE: mine_kind}),
             roles=(Worker(1, worker_pos),),
+            gold=0,
         )
 
     def test_worker_walks_to_the_mine_and_then_stops(self):
@@ -243,6 +318,103 @@ class MineApproachTest(unittest.TestCase):
     def test_no_stone_mine_means_no_action(self):
         """场上只有铁矿 → 工人原地不动，而不是随便找个矿走过去。"""
         self.assertEqual(plan(self._turn(Pos(20, 20), "iron")), {})
+
+
+class BuildWeaponTest(unittest.TestCase):
+    """合成开局：白天、0 武器、基地在左半 —— 工人真的会建满三座、建在该建的地方、然后收手。
+
+    **把回合串起来跑**：单帧"目标格算得对"证明不了收不收得住（`MineApproachTest` 同理）。
+    结算照判题器的口径来 —— 一回合一步，建起来的武器下一回合就挡路、也占掉那个格子。
+    """
+
+    BASE = Pos(10, 24)  # 后方那一列 = x=9，y ∈ 22..25
+    MINE = Pos(4, 24)
+
+    def setUp(self) -> None:
+        self.gold = 75  # 开局：恰好买满三座（25×3）
+        self.entries: dict[Pos, str] = {self.BASE: "station", self.MINE: "stone"}
+        self.roles: dict[int, BaseRole] = {
+            1: Pioneer(1, Pos(20, 20)),
+            # 两个工人都**贴着**后方那一列（各差一格），第 1 回合就能动手
+            2: Worker(2, Pos(8, 23)),
+            3: Worker(3, Pos(8, 24)),
+        }
+        self.builds: list[tuple[str, Pos]] = []
+
+    def _turn(self, round_no: int = 1) -> Turn:
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), self.entries),
+            roles=tuple(self.roles.values()),
+            gold=self.gold,
+        )
+
+    def _settle(self, round_no: int = 1, limit: int = 20) -> None:
+        for _ in range(limit):
+            cmds = plan(self._turn(round_no))
+            if not cmds:
+                return
+            for key, cmd in cmds.items():
+                role_id = int(key)
+                target = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+                self.roles[role_id] = type(self.roles[role_id])(role_id, target)
+                if cmd["action"] == "build":
+                    self.builds.append((cmd["name"], target))
+                    self.entries[target] = cmd["name"]
+                    self.gold -= 25
+        self.fail(f"{limit} 回合还没安定下来，说明在原地绕圈")
+
+    def _builds(self, cmds: dict) -> list[dict]:
+        return [c for c in cmds.values() if c["action"] == "build"]
+
+    def test_builds_three_weapons_in_the_chosen_order(self):
+        """加特林 → 电磁狙击炮 → 火箭（用户选定），三座都落在基地后方那一列。"""
+        self._settle()
+        self.assertEqual([name for name, _ in self.builds], list(WEAPON_ORDER))
+        self.assertEqual({cell.x for _, cell in self.builds}, {9}, "都该在基地后方")
+        self.assertEqual(self.gold, 0)
+
+    def test_stops_at_three_even_with_lots_of_gold(self):
+        """停手是因为**份额**（角色数），不是因为钱花光了 —— "建立多了没有意义"。"""
+        self.gold = 200
+        self._settle()
+        self.assertEqual(len(self.builds), 3)
+        self.assertGreater(self.gold, 0, "这次不是钱见底才停的")
+
+    def test_a_short_budget_builds_only_one(self):
+        """只有 25 金：**只建一座**，另一个工人转去采矿。
+
+        金币按**递减预算**扣。写成 `gold >= 25 * 待建数`（25 < 75 ⇒ 一座都不建）就全错了。
+        """
+        self.gold = 25
+        cmds = plan(self._turn())
+        builds = self._builds(cmds)
+        self.assertEqual(len(builds), 1)
+        self.assertEqual(builds[0]["name"], "gatling")
+        self.assertEqual({c["action"] for c in cmds.values()}, {"build", "move"})
+
+    def test_never_builds_on_an_occupied_cell(self):
+        """目标格已有武器就**换个格子**：覆盖会把原武器打成 level1（§4.5.1 补充说明），
+        25 金币打水漂还倒亏一座。"""
+        self.entries[Pos(9, 23)] = "gatling"
+        self.entries[Pos(9, 24)] = "railgun"
+        builds = self._builds(plan(self._turn()))
+        self.assertEqual(len(builds), 1, "还差一座火箭")
+        self.assertEqual(builds[0]["name"], "rocket")
+        self.assertEqual(
+            Pos(builds[0]["targetPos"][0]["x"], builds[0]["targetPos"][0]["y"]),
+            Pos(9, 22),
+            "该躲开 (9,23)/(9,24)，取剩下的首选",
+        )
+
+    def test_night_builds_nothing(self):
+        """夜里 `build` 不可用（任务书 §4.4）—— 0 武器、75 金也一座都不许建。"""
+        self.assertNotIn("build", {c["action"] for c in plan(self._turn(round_no=85)).values()})
+
+    def test_no_base_means_no_build(self):
+        """基地没了就没有可建造区（坐标全由它推）⇒ 不建，而不是瞎猜一个坐标。"""
+        del self.entries[self.BASE]
+        self.assertNotIn("build", {c["action"] for c in plan(self._turn()).values()})
 
 
 class PathTest(unittest.TestCase):
@@ -270,6 +442,7 @@ class PathTest(unittest.TestCase):
             round_no=1,
             map=Map((12, 12), {mine: "stone", **{p: "wall" for p in wall}}),
             roles=(Worker(1, Pos(5, 5)),),
+            gold=0,
         )
 
         # 最短路 5 步：(5,5)→(6,4)→(7,4)→(8,3)[绕过墙]→(7,2)→(6,2)，(6,2) 距矿 1

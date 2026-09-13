@@ -36,13 +36,14 @@ src/coregeek/
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
 │   ├── model.py      payload → Turn（容错解析）
-│   └── actions.py    BaseAction + 各动作。**创建即校验**，唯一写线上格式的地方
+│   └── actions.py    BaseAction + 各动作（`move` / `build`）。**创建即校验**，唯一写线上格式的地方
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
-    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `render()` 打印调试
+    │                 + 基地几何：`base_cells` / `weapon_cells` / `back_weapon_cells`
+    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`stones`/`weapons`/`station`
     ├── roles.py      §4.5.2 的 Pioneer / Worker；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（round_no / map / roles）
-    └── planner.py    决策。**策略只写在这里**（目前：两个工人各朝最近石矿走一格）
+    ├── world.py      Turn（round_no / map / roles / gold）+ `is_day`
+    └── planner.py    决策。**策略只写在这里**（目前：工人先建武器，没名额才朝石矿走）
 ```
 
 依赖方向：
@@ -63,16 +64,20 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 
 以下几条是读了任务书/接口文档/样例交叉验证得到的，**重新推导一遍的代价很高**：
 
-- **日历**：130 回合 = 1 天（白 70 + 夜 60），10 天 1300 回合。`within = (roundNo-1) % 130 + 1`；`within <= 70` 为白天。样例 `roundNo=85`（夜晚，且场上确有机器人）已交叉验证。
+- **日历**：130 回合 = 1 天（白 70 + 夜 60），10 天 1300 回合。`within = (roundNo-1) % 130 + 1`；`within <= 70` 为白天（`Turn.is_day`；`round_no` 缺失是 -1 ⇒ 判成夜里 ⇒ 不建造）。样例 `roundNo=85`（夜晚，且场上确有机器人）已交叉验证。**昼夜不只是氛围**：`build` / `remove` 仅白天。
 - **开局是 0 武器 + 75 金 + 3 角色**（1 开拓者 + 2 工人），恰好买满 3 座武器（25×3=75）。⚠️ `docs/request.txt` 是 `roundNo=85` 的**中局快照**（已 3 武器 + 20 金），不是开局——曾把它当开局状态，推出"造武器是死支出线"，后果是第 1 天一座武器都不造。
 - **固定 36 格防御盒子**：基地 2×2（`pos` 是**左上角**）+ 12 格武器环 + **20 格围墙环（单层，不可加厚）**。**一切坐标由己方 station 的 pos 推导，禁止绝对坐标**（上下半场换边后基地会挪）。可建造区在 `mapInfo.zones` 里**不提供**，只能这样推。
+- **可建造区公式只存在于图里，任务书正文没有**（`docs/pic/build_map.png`）。基地 `(bx,by)` 是左上角 ⇒ **武器环 = `[bx-1, bx+2] × [by-2, by+1]` 去掉基地 4 格 = 12 格**；围墙环再往外一圈 = 20 格。实现在 `grid.weapon_cells`。样例几何整体是手画的、不可作校准，但武器环这一处对得上（样例三座武器都落在环上）。**算错 ⇒ `build` 落点非法、那 25 金币白花。**
+- **"基地后方" = 远离地图中心那一列**：机器人从基地**面向地图中心**的那一侧水平逼近（`docs/pic/大致地图信息.png`，**正文没写刷新点**）。基地在左半 ⇒ 后方是 `x = bx-1` 那一列；右半 ⇒ `bx+2`。实现在 `grid.back_weapon_cells`，**只此一处**，首场比赛后按实测翻转。按基地坐标判而不用 `teamOur.type`——换边后队伍身份不变、基地会挪。
+- **`build` 的三条硬规则**：① **仅工人 + 仅白天**（§4.4；夜里发 `build` 是一次执行失败）；② 目标须在**自身切比雪夫 ≤1** 内（"站位即建造位"——`step_toward` 恰好把人停在贴着目标的一格，不用先挪开）；③ 建武器 **25 金/座**，新建**一律 level1**，**目标格已有武器则原武器被覆盖降级** ⇒ 必须避开占用格，否则 25 金币打水漂还倒亏一座。
+- **武器上限原文自相矛盾**：§4.5.1 表格写"每种 ≤3"（合计 9 座），补充说明写"**全局同时最多 3 座**"。取**保守的全局 ≤3**（与"武器只有建立三个才有意义"一致）。落点用 `map.weapons` 按类别数，份额 = `len(roles)`。
 - **中立元素的字段名是 `neutralType`，不是 `zoneType`**（接口文档 §1.2.1，在 `mapInfo.zones` 里）：`stone`/`iron`/`copper`/`vendor`/`weaponShop`/`challengerTaskPoint1|2`/`defenderTaskPoint1|2`。**只有前三种是矿**，小贩/武器商店/任务点**不是矿，但一样挡路**——`Map.stones` 只装石矿，`Map.blocked` 全都装。
 - **`Map` 的不变量：格子非空即挡路**（任务书 L85 那张清单），寻路只问 `blocked`、不问格子里是什么。类别原样取自 payload（`enemy:` / `robot:` 前缀区分来源），**未知类别也照旧挡路**——判错方向只会多挡、不会放行。`render()` 的字符表**是有损的**（机器人不分体型），`cells` 才是真相。
 - **基地 2×2 对双方都成立**（接口文档原文："**双方**基地大小为 2*2，基地对应的 pos 传递的是左上角的坐标"）。`Map` 把**敌我双方**基地都展成 4 格——曾有一版只展了我方，敌方基地只挡 1 格。
 - **`teamEnemy.roles` 是逐回合观测，不是固定名册**：敌方角色/武器离开视野就消失，**消失 ≠ 被摧毁**（任务书 L97）。敌方基地与围墙全图可见。**不要据此做跨回合战损推断**——`handle` 至今是纯函数。
 - **走向矿 = 站到采集位，是同一件事。** 矿格挡路（任务书 L85），所以工人只能停在**矿周围一格**，而那正好就是 `collect` 的站位（§4.4）。不需要写两段逻辑（"走过去"+"停在旁边"），`step_toward` 撞上矿格自然停。
 - **地图边界不在任务书 L85 的"阻挡移动"清单里**（那一列只写了建筑/角色/机器人/中立单位/任务点/矿区）。贪心挪一格时几乎撞不到，**但 BFS 会绕到图外去**，所以 `step_toward` 自己按 `Map.size = (width, height)`（取自 `mapInfo.width/height`）挡住 `(0,0)~(width-1,height-1)` 之外。越界算"指令非法"还是"执行失败"文档没写，不走一定安全。`size` 无效（≤0）⇒ `Map` 矩阵为空 ⇒ 无格可走 ⇒ **单位不动**，这是故意的降级。
-- **`step_toward` 的终点是"贴着 goal 的一格"，不是 goal 本身**——因为 goal 通常是挡路的（矿/建筑/武器操控位）。⚠️ 但 `build` 的落点是**空地**，那一步要重新过一遍这条契约，别默认沿用。
+- **`step_toward` 的终点是"贴着 goal 的一格"，不是 goal 本身**——因为 goal 通常是挡路的（矿/建筑/武器操控位）。⚠️ `build` 的落点是**空地**（第 7 步回头核过这条契约）：**结论是不用改** —— 建造格在环上是空的，BFS 只在可通行格上展开、并停在距 goal 一格处，那正好就是 `build` 要求的站位。建墙同理。
 - **没有转移物品的指令**（`drop` 只丢不捡，没有拾取）→ 每个角色的背包就是自己的料仓，"A 买 B 用"行不通。
 - **`attack` 最易写反的两处**：`roleCommandMap` 的 **key 是武器 id**，`controllerId` 才是操控角色；`targetPos` 长度 = 武器当前等级（电磁狙击炮恒为 1）。攻击**仅黑夜**可用，且需要角色站在武器周围一格内（一人只能操一座武器）。
 - **`attackRange` 以 payload 为准**：任务书等级表与样例数据矛盾（样例 gatling L1=4 / railgun=7 / rocket=INT_MAX，表格是 3/6/10）。
@@ -94,7 +99,8 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
-`tests/` 只有 `test_actions.py` 一个文件（权限用例），**不建自研测试框架**：标准库 `unittest` 够用。
+`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策四类），**不建自研测试框架**：标准库 `unittest` 够用。
+进度见 `docs/design/code-task.md`（当前到第 7 步：`build` 落地）——**别照记忆里的进度走**。
 
 **常用命令**：
 
@@ -103,5 +109,10 @@ bash run.sh 18085                                          # 起服务（自动�
 curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 PYTHONUTF8=1 py -m unittest discover -s tests -v           # 跑用例；不加 PYTHONUTF8 中文会乱码
 ```
+
+⚠️ **起服务前先确认端口上只有一个监听者**：`netstat -ano | grep LISTENING | grep 18085`。
+Windows 允许 `SO_REUSEADDR` 并存，上一轮遗留的进程会继续吃请求 —— **症状是"改了代码没反应"，
+本地怎么调都是旧行为**（第 7 步真踩过：合成局面上 `build` 一条不发，其实是旧进程在答）。
+杀干净再起：`netstat -ano | grep 18085 | awk '{print $5}' | xargs -n1 taskkill //F //PID`。
 
 本地 **`python` 是 3.7.1**（Anaconda），必须用 `py`（3.13）；`run.sh` 已处理这个坑。

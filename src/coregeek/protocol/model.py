@@ -12,8 +12,8 @@
 
 from typing import Any
 
-from ..game.grid import Pos, base_cells
-from ..game.map import ENEMY_PREFIX, ROBOT_PREFIX, STATION, Map
+from ..game.grid import Pos
+from ..game.map import ENEMY_PREFIX, ROBOT_PREFIX, Map
 from ..game.roles import BaseRole, make
 from ..game.world import Turn
 
@@ -32,6 +32,7 @@ def load(payload: Any) -> Turn | None:
             for c in (_character(n) for n in _items(payload, "teamOur", "roles"))
             if c
         ),
+        gold=_gold(payload),
     )
 
 
@@ -60,16 +61,17 @@ def _entries(payload: dict[str, Any]) -> dict[Pos, str]:
 
 
 def _units(entries: dict[Pos, str], nodes: list[Any], prefix: str) -> None:
-    """单位 → 格子。`prefix` 区分来源（我方给空串，敌方 / 机器人给前缀）。"""
+    """单位 → 格子。`prefix` 区分来源（我方给空串，敌方 / 机器人给前缀）。
+
+    **基地只写左上角那一格**：2×2 的展开是**游戏规则**（`grid.base_cells`），
+    由 `map.Map` 铺格时统一做 —— 报文层只管"station 这个坐标在哪"。
+    """
     for node in nodes:
         kind = node.get("roleType") if isinstance(node, dict) else None
         pos = _pos(node)
         if not isinstance(kind, str) or pos is None:
             continue
-        # 基地是 2×2 而 pos 只给左上角（接口文档：**"双方**基地大小为 2*2"）。
-        # 只标一格，角色会一头撞进基地里 —— 那是一条判题器不收的指令。
-        for cell in base_cells(pos) if kind == STATION else (pos,):
-            entries[cell] = prefix + kind
+        entries[pos] = prefix + kind
 
 
 # ── 解析小工具 ───────────────────────────────────────────────────────
@@ -108,6 +110,17 @@ def _character(node: Any) -> BaseRole | None:
     if pos is None or role_id < 0 or not isinstance(role_type, str):
         return None
     return make(role_id, pos, role_type)
+
+
+def _gold(payload: dict[str, Any]) -> int:
+    """我方金币 `teamOur.goldNum`（接口文档 §1.3.1）。
+
+    缺失给 -1（`_int` 的容错默认）⇒ 建不起武器 ⇒ 不建造。**降级方向是"不动"**，
+    与 `_size` 同一条思路：宁可少做，不可乱花。
+    """
+    team = payload.get("teamOur")
+    team = team if isinstance(team, dict) else {}
+    return _int(team.get("goldNum"))
 
 
 def _size(payload: dict[str, Any]) -> tuple[int, int]:

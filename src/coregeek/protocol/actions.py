@@ -12,9 +12,9 @@
     参数      §2.2 RoleCommand 里该动作用到的字段
     to_wire   编成 §2.2 的扁平记录
 
-> 目前只有 `move` —— 按"禁止冗余设计"，没实现的动作为空壳，等落地时再加。
-> 因此**这一步的校验在真实运行中拦不到东西**（`move` 对全部角色合法），
-> 它交付的是机制本身。第一次真正拦住东西，要等第一个受限动作（`build`/`collect`）。
+> 目前有 `move`（对全部角色合法）与 `build`（**仅工人**）—— 按"禁止冗余设计"，
+> 没实现的动作为空壳，等落地时再加。`build` 是**闸门第一次真的挡住东西**：
+> 把 `build` 发给开拓者，以前只是"格式合法地做错事"，现在连对象都造不出来。
 """
 
 from typing import Any, ClassVar
@@ -55,5 +55,36 @@ class Move(BaseAction):
     def to_wire(self) -> dict[str, Any]:
         return {
             "action": self.code,
+            "targetPos": [{"x": self.target.x, "y": self.target.y}],
+        }
+
+
+class Build(BaseAction):
+    """建造一座建筑。**仅工人**，且**仅白天**（任务书 §4.4）。
+
+    白天那半边**不在闸门里**：它是"什么时候"而不是"谁"，闸门只管"谁"
+    （`role_type` 是 `build` 唯一能自证的权限）。昼夜判断在 `game.world.Turn.is_day`。
+
+    `name` 取 `roleType` 同名（`wall` / `gatling` / `railgun` / `rocket`）—— 严格说
+    **只有 `wall` 有实证**（`docs/response.txt` 里唯一一条 `build`），武器名是从
+    `roleType` 取值表推的。见 `docs/design/code-task.md` 的已知不确定性。
+
+    目标必须是**空的可建造格**：落在已有武器上的话，原武器会被**覆盖**成 level1
+    （任务书 §4.5.1 补充说明）—— 25 金币打水漂还降级，所以 `planner` 侧要避开占用格。
+    """
+
+    code = "build"
+    roles = WORKER
+
+    def __init__(self, role_type: str, name: str, target: Pos) -> None:
+        super().__init__(role_type)
+        self.name = name
+        self.target = target
+
+    def to_wire(self) -> dict[str, Any]:
+        # **key 是工人自己的 id**（与 `move` 相同）；`targetPos` 是数组，即使只有一个点
+        return {
+            "action": self.code,
+            "name": self.name,
             "targetPos": [{"x": self.target.x, "y": self.target.y}],
         }
