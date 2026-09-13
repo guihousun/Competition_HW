@@ -10,7 +10,7 @@
 1. **寻路** —— 只问 `blocked`，不问格子里是什么。**不变量：非空即挡路**（任务书 L85 那张清单）。
 2. **打印日志调试** —— `render()` 出图。出事故时能看见当时的地形，而不是只看见一条 `move`。
 3. **建造** —— `station` 给出可建造环的原点（接口文档里**没有**可建造区字段，只能这样推）。
-   `stones` 是采石那条线的料源。
+   `ores` 是采矿那条线的料源（**矿点 → 矿种**，三种矿各值多少钱在 `Turn.vendor_prices`）。
 
 **每格只有一个类别，不含属性**：`health` / `level` / `attackRange` / `backpack` / `cooldown`
 一概不进来，且其中几个是"文档有、样例没有"的可选字段
@@ -24,6 +24,7 @@
 """
 
 from collections.abc import Mapping
+from types import MappingProxyType
 
 from .grid import Pos, base_cells
 
@@ -39,7 +40,13 @@ ENEMY_PREFIX = "enemy:"
 #: 机器人的类别前缀。机器人不分敌我（它两边都打），但要和我方单位分开。
 ROBOT_PREFIX = "robot:"
 
-#: 石矿。`stones` 只挑它 —— 采石是第 1 天防御线的料源（`build` 需背包有石头）。
+#: 三种矿（接口文档 §1.2.1 的 `neutralType`）。`collect` 采的就是这三种
+#: （任务书 §4.4：「需要在石矿、铁矿、铜矿周围一格内使用，每回合获取相应的石头/铁/铜*1」）。
+#: 小贩/武器商店/任务点**不是矿**，但一样挡路（它们在 `blocked` 里）。
+ORE_KINDS = frozenset({"stone", "iron", "copper"})
+
+#: 石矿。**围墙唯一的料源**（`build` 围墙要求背包里有石头）—— 铁/铜再多也砌不了墙，
+#: 所以"手上石头还不够砌墙"时只认它。三种矿各值多少钱看 `Turn.vendor_prices`。
 STONE = "stone"
 
 #: 基地（接口文档 roleType 表）。**它是 2×2**，`pos` 只给左上角，见 `Map.__init__`。
@@ -183,7 +190,7 @@ class Map:
         if width <= 0 or height <= 0:
             self.cells: tuple[tuple[str, ...], ...] = ()
             self.blocked: frozenset[Pos] = frozenset()
-            self.stones: frozenset[Pos] = frozenset()
+            self.ores: Mapping[Pos, str] = MappingProxyType({})
             self.station: Pos | None = None
             return
 
@@ -209,17 +216,17 @@ class Map:
         self.station = station
 
         blocked: set[Pos] = set()
-        stones: set[Pos] = set()
+        ores: dict[Pos, str] = {}
         for y, row in enumerate(self.cells):
             for x, kind in enumerate(row):
                 if not kind:
                     continue
                 pos = Pos(x, y)
                 blocked.add(pos)
-                if kind == STONE:
-                    stones.add(pos)
+                if kind in ORE_KINDS:
+                    ores[pos] = kind
         self.blocked = frozenset(blocked)
-        self.stones = frozenset(stones)
+        self.ores = MappingProxyType(ores)
 
     def render(self) -> str:
         """可打印的**整块**：两行列标尺 + 左侧行号槽 + `height` 行 × `width` 列网格。

@@ -18,6 +18,10 @@
 3. **采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
    另外**必须在晚上到来前将墙建好，注意计算回合数**"。攒几块不写死，按**白天还剩的回合数**
    现算（见 `_stones_to_mine`）。墙砌在**面向机器人进攻的方向**（保护基地），背面留缺口。
+   **墙砌完之后不再闲置**：转去采**收购价最高**的矿（见 `_mine_spare_ore` / `_pick_ore`）
+   —— 「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」。顺序不能反：
+   墙只吃石头，先挑最贵的铜就永远砌不成墙。价目取自载荷 `vendorShopList`（`Turn.vendor_prices`），
+   **不写死"铜 > 铁 > 石头"**（那只是样例的价目，官方消息会让它波动）。
 
 **夜里**（还没被任务钉住的角色 —— §4.4 里 `attack` 的可用角色列写的就是"全部"）：
 
@@ -38,11 +42,12 @@
 """
 
 import logging
-from collections.abc import Iterator, Set
+from collections.abc import Iterator, Mapping, Set
 from typing import Any
 
 from ..protocol import actions  # 唯一一条"由内往外"的依赖：指令只能经 Action 产出
 from .grid import Pos, step_toward, wall_cells, weapon_sites
+from .map import STONE
 from .roles import BaseRole, Pioneer, Worker
 from .world import Turn, Weapon
 
@@ -244,16 +249,25 @@ def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) ->
 def _build_walls(
     role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
 ) -> None:
-    """白天：先攒石头，再把墙砌到优先级最高的那一格上。
+    """白天：先攒石头，再把墙砌到优先级最高的那一格上；**砌完了就去采最值钱的矿**。
 
     每回合独立判定，**不存任何跨回合状态** —— 所以矿采没了、墙被别人砌了、
     白天快过完了，下一回合都能自动跟着变。
+
+    用户策略指导那条的后半句在这里兑现（「手里面保持能建造墙的石头量就行，
+    然后选择价格最高的矿」）：
+    **"保持够砌墙的量"这一半本来就有** —— `_stones_to_mine` 拿"还差几格墙"当上限；
+    补上的是"然后"：16 格砌完之后工人原本**原地闲置**，现在转去采矿。
     """
     free = [c for c in _ring(turn) if c not in sites]
     if not free:
-        return  # 16 格砌满了：不再采（手里剩的石头留给第二天补墙）
+        # 墙砌满了。手里剩的石头留给第二天补墙（**没有转移物品的指令**，给不了别人），
+        # 人不再闲着 —— 白天不采，夜里就只是站在炮位上。
+        _mine_spare_ore(role, turn, cmds, claimed, sites)
+        return
     target = free[0]  # `_ring` 已按建造优先级排好
-    mine = _nearest_stone(role.pos, turn.map.stones)
+    #: **只认石矿**：墙只吃石头（`build` 围墙要求背包里有石头），铁/铜再多也砌不了墙。
+    mine = _pick_ore(role.pos, turn.map.ores, turn.vendor_prices, want_stone=True)
     want = _stones_to_mine(role, turn, target, mine, len(free))
 
     if want > 0 and mine is not None:
@@ -332,15 +346,67 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
     return max(0, min(budget // ROUNDS_PER_STONE, free - role.stone))
 
 
-def _nearest_stone(pos: Pos, stones: frozenset[Pos]) -> Pos | None:
-    """最近的石矿（**只要石头** —— 铁/铜不计入 `Map.stones`，墙不吃它们）。
+def _mine_spare_ore(
+    role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
+) -> None:
+    """墙砌完了 ⇒ 白天不再闲着，去采**收购价最高**的矿（用户：「然后选择价格最高的矿」）。
 
-    策略指导：「找石矿应该要去**最近的**」。
+    这一趟**没有工地可回**，参照点换成**基地**（夜里的炮位就在基地四周）：白天不够走个
+    来回就不动身 —— 黑天里还在赶路等于拿火力换矿石。`TIME_MARGIN` 与 `_stones_to_mine`
+    同源，只是把"工地"换成了基地。
+
+    **拿不到收购价就哪儿也不去**（`vendorPrices` 缺失、或三种矿小贩都不收）：
+    "价格最高"在没有价格时无从谈起，与 `_gold` / `_size` / `_stone` 同一条降级方向。
+
+    ⚠️ **别指望这一步现在就能换钱**：`sell`（小贩周围一格内把石头/铁/铜换成金币）
+    还没实现，采回来的矿现在只是压在背包里 —— 它的价值等那条线做出来才兑现。
+    在那之前这一步的收益是"工人反正闲着"，代价是背包占用与离炮位更远。
+    """
+    station = turn.map.station
+    mine = _pick_ore(role.pos, turn.map.ores, turn.vendor_prices, want_stone=False)
+    if station is None or mine is None:
+        return
+    if role.pos.dist(mine) + mine.dist(station) > turn.day_rounds_left - TIME_MARGIN:
+        return
+    if role.pos.dist(mine) <= 1:
+        _emit(cmds, role, actions.Collect, mine)
+        return
+    _step(role, mine, turn, cmds, claimed, sites)
+
+
+def _pick_ore(
+    pos: Pos, ores: Mapping[Pos, str], prices: Mapping[str, int], *, want_stone: bool
+) -> Pos | None:
+    """挑一座矿。两种口径（用户策略指导里的两句各占一条）：
+
+    - `want_stone`（手上石头还不够砌完剩下的墙）⇒ **只认石矿，取最近的**
+      —— 策略指导：「找石矿应该要去**最近的**」。铁/铜砌不了墙，价格再高也不看一眼。
+    - 否则 ⇒ 三种矿里**按小贩收购价从高到低**，同价再取近的（「选择价格最高的矿」）。
+      价目表里没有的矿种按 0 算：**小贩不收的矿不值得为它多走一步**，
+      顺带也就实现了"一张空价目表 ⇒ 谁也不采"。
+
+    价格取自载荷 `Turn.vendor_prices`（`vendorShopList`），**不写死"铜 > 铁 > 石头"**
+    —— 那是样例的价目，而任务书 L386 明说官方消息会让价格波动。
+
+    并列按坐标排：与 `_defend` 的 `(dist, id)` 同一条理由 —— 先后不能取决于 payload
+    里的顺序，否则用例复现不了。
 
     不认领矿：两个工人挤同一座矿的**不同邻格都能采**，只有"冲进同一格"才是白扔动作，
     而那件事已经由 `claimed` 挡住了。
     """
-    return min(stones, key=pos.dist, default=None)
+    if want_stone:
+        return min(
+            (p for p, kind in ores.items() if kind == STONE),
+            key=lambda p: (pos.dist(p), p),
+            default=None,
+        )
+    #: `(取负的价, 距离, 坐标)` —— **价排第一**，`min` 出来就是"价最高、同价取近的、再同取坐标最小"
+    best = min(
+        ((-prices.get(kind, 0), pos.dist(p), p) for p, kind in ores.items()),
+        default=None,
+    )
+    # 价 0 ⇒ 小贩不收，不为它多走一步；一张空价目表也就自然落成"谁也不采"
+    return best[2] if best is not None and best[0] < 0 else None
 
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────

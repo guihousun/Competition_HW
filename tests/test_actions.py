@@ -452,6 +452,28 @@ class ParseTest(unittest.TestCase):
             [(4, 4, 40), (4, 5, 500), (5, 4, 60), (5, 5, 800)],
         )
 
+    def test_vendor_prices_come_from_the_payload_verbatim(self):
+        """价目**照抄载荷**，不写死 —— 样例是 1/3/5，事件期间会变（任务书 L386）。
+
+        字段坏掉的整条丢掉，**尤其不能把"解析不出来"的 -1 当成一个价格** ——
+        `_int` 对缺字段/类型不对给 -1，而负的收购价不存在。混进来会让挑矿那一步
+        选出一座**倒贴钱**的矿，或者反过来把整张表判成"没有价"（`_pick_ore` 滤掉 <= 0）。
+        """
+        self.assertEqual(
+            dict(self._turn().vendor_prices), {"stone": 1, "iron": 3, "copper": 5}
+        )
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["vendorShopList"] = [
+            {"name": "stone", "price": 9},  # 价格会变
+            {"name": "iron"},  # 没价格 ⇒ 丢
+            {"name": "copper", "price": "5"},  # 类型不对 ⇒ 丢
+            {"price": 2},  # 没名字 ⇒ 丢
+            "不是对象",  # 整条不成形 ⇒ 丢
+        ]
+        self.assertEqual(dict(model.load(raw).vendor_prices), {"stone": 9})
+        raw.pop("vendorShopList")
+        self.assertEqual(dict(model.load(raw).vendor_prices), {}, "整份缺失 ⇒ 空表 ⇒ 不去采")
+
     def test_a_destroyed_weapon_is_not_operated(self):
         """`health == 0` 的炮**丢掉** —— 已毁的炮不该再被操控（demo 的 `alive()` 也是 `> 0`）。
 
@@ -487,17 +509,27 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(len(turn.roles), 3)
         self.assertEqual(len(turn.weapons), 3)
 
-    def test_only_stone_enters_stones_but_everything_blocks(self):
-        """石/铁/铜在网格里分得开，但**只有石矿进 `stones`**。
+    def test_ores_carry_their_kind_but_everything_blocks(self):
+        """石/铁/铜**各自带矿种**进 `ores`；小贩 / 武器商店 / 任务点不是矿，却一样挡路。
 
-        小贩 / 武器商店 / 任务点**不是矿，却一样挡路**（任务书 L85）—— 只挑矿会让工人
-        一头撞上去，这是"以为能走"的典型。
+        `ores` 装的是"矿点 → 矿种"而不是坐标集：选矿那一步要在三种矿之间按**收购价**排
+        （铜未必比铁贵，见 `Turn.vendor_prices`），只留坐标就答不出"这是哪种矿"。
+
+        后四项**不是矿**（任务书 L85）—— 只挑矿会让工人一头撞上去，这是"以为能走"的典型。
         """
         grid = self._turn().map
-        self.assertEqual(grid.stones, {Pos(4, 24), Pos(14, 3)})
+        self.assertEqual(
+            grid.ores,
+            {
+                Pos(4, 24): "stone",
+                Pos(14, 3): "stone",
+                Pos(25, 10): "iron",
+                Pos(8, 28): "iron",
+                Pos(22, 26): "copper",
+                Pos(7, 2): "copper",
+            },
+        )
         for pos, what in (
-            (Pos(25, 10), "铁"),
-            (Pos(22, 26), "铜"),
             (Pos(20, 16), "小贩"),
             (Pos(25, 20), "武器商店"),
             (Pos(14, 14), "挑战者任务点1"),
@@ -505,7 +537,7 @@ class ParseTest(unittest.TestCase):
         ):
             with self.subTest(what=what):
                 self.assertIn(pos, grid.blocked, f"{what} 应当挡路")
-                self.assertNotIn(pos, grid.stones, f"{what} 不是矿")
+                self.assertNotIn(pos, grid.ores, f"{what} 不是矿")
 
 
 class GridTest(unittest.TestCase):
@@ -1113,8 +1145,13 @@ class BuildWallTest(unittest.TestCase):
         self.assertLess(early_cell.dist(self.MINE), pos.dist(self.MINE), "白天还长 ⇒ 继续朝矿走")
         self.assertGreater(late_cell.dist(self.MINE), pos.dist(self.MINE), "时间不够 ⇒ 掉头去工地")
 
-    def test_a_finished_ring_stops_the_mining(self):
-        """16 格都砌满了 ⇒ 不再采石（多采的石头只会压在背包里），也不再发任何指令。"""
+    def test_a_finished_ring_stops_the_stone_mining(self):
+        """16 格都砌满了 ⇒ 不再采**石头**（多采的只会压在背包里）。
+
+        这一支现在会转去采最值钱的矿（`SpareOreTest`），而本夹具**没有价目表**
+        （`vendor_prices` 缺省为空）⇒ 挑不出"最值钱的矿" ⇒ 一条都不发。这是有意的降级方向：
+        没有价格就无从挑，宁可不动，与 `_gold` / `_size` 同源。
+        """
         self.entries.update({c: WALL for c in wall_cells(self.BASE, 41)})
         self.assertEqual(plan(self._turn(stone=0)), {})
 
@@ -1122,6 +1159,135 @@ class BuildWallTest(unittest.TestCase):
         """基地没了就没有围墙环（坐标全由它推）⇒ 连矿都不去采，而不是瞎找一个坐标。"""
         del self.entries[self.BASE]
         self.assertEqual(plan(self._turn(stone=0)), {})
+
+
+class SpareOreTest(unittest.TestCase):
+    """墙砌满之后的白天：**去采收购价最高的矿**（`docs/策略指导.md` 那条的后半句）。
+
+    「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」—— 那个"然后"是**顺序**：
+    砌墙阶段只认石矿（铜再贵也砌不了墙），**砌完之后**才轮到按价格挑。顺序反了的话墙永远
+    砌不上，而症状是"工人一直在采铜、围墙一格没有"。
+
+    价目取自载荷 `vendorShopList`（`Turn.vendor_prices`），**不写死"铜 > 铁 > 石头"**：
+    样例那三档 1/3/5 只是**样例**，任务书 L386 明说官方消息会让价格波动（铁矿塌方 ⇒
+    铁稀缺 ⇒ 收购价上涨）。所以这里专门把顺序翻过来测 —— 谁把铜写死在最前，哪一条就挂。
+    """
+
+    BASE = Pos(10, 24)
+    #: 三座武器先摆好 —— 否则名额/金币会先把工人抽去建武器（那是 `BuildWeaponTest` 的事）
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+    #: 16 格全砌满 ⇒ `_ring` 空 ⇒ 进入"墙砌完了"那一支
+    RING = {c: WALL for c in wall_cells(Pos(10, 24), 41)}
+    #: 一近一远两座矿，**近的便宜、远的贵** —— 远近与贵贱分开，才测得出按哪个排
+    NEAR_IRON = Pos(34, 24)
+    FAR_COPPER = Pos(20, 24)
+    #: 样例的价目（`vendorShopList`）：铜 5 > 铁 3 > 石 1
+    SAMPLE_PRICES = {"stone": 1, "iron": 3, "copper": 5}
+
+    def _turn(
+        self,
+        pos: Pos,
+        prices: dict[str, int],
+        *,
+        ring: bool = True,
+        round_no: int = 1,
+        ores: dict[Pos, str] | None = None,
+    ) -> Turn:
+        entries = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station"},
+            self.RING if ring else {},
+            ores if ores is not None else {self.NEAR_IRON: "iron", self.FAR_COPPER: "copper"},
+        )
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), entries),
+            roles=(Worker(1, pos, 0),),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=prices,
+        )
+
+    def _move_to(self, turn: Turn) -> Pos:
+        """本回合那条 `move` 的落点。不是 `move` 就挂 —— 这几条只关心往哪边走。"""
+        cmd = plan(turn)["1"]
+        self.assertEqual(cmd["action"], "move", "这一回合该是赶路，不是别的")
+        spot = cmd["targetPos"][0]
+        return Pos(spot["x"], spot["y"])
+
+    def _collect_at(self, turn: Turn) -> Pos:
+        """本回合那条 `collect` 瞄的是哪座矿 —— **比"朝哪边走一格"结实得多**。"""
+        cmd = plan(turn)["1"]
+        self.assertEqual(cmd["action"], "collect", "这一回合该是采集，不是别的")
+        spot = cmd["targetPos"][0]
+        return Pos(spot["x"], spot["y"])
+
+    def test_the_pricier_ore_wins_over_the_nearer_one(self):
+        """铜 5 > 铁 3 ⇒ 走远的铜，不走近的铁。按"最近"挑（砌墙阶段的口径）会挑中铁。"""
+        start = Pos(30, 24)
+        step = self._move_to(self._turn(start, self.SAMPLE_PRICES))
+        self.assertLess(step.dist(self.FAR_COPPER), start.dist(self.FAR_COPPER), "该朝铜矿走")
+        self.assertGreater(step.dist(self.NEAR_IRON), start.dist(self.NEAR_IRON), "不该朝铁矿走")
+
+    def test_a_market_flip_changes_which_mine_we_walk_to(self):
+        """**铁矿塌方 ⇒ 铁稀缺 ⇒ 收购价涨过铜**：同一个局面，走的方向必须反过来。
+
+        谁把"铜 > 铁 > 石头"当常量写进代码，这一条就挂 —— 而事件期间那个常量恰好是错的。
+        """
+        start = Pos(30, 24)
+        step = self._move_to(self._turn(start, {"stone": 1, "iron": 9, "copper": 5}))
+        self.assertLess(step.dist(self.NEAR_IRON), start.dist(self.NEAR_IRON), "该朝铁矿走")
+
+    def test_a_mine_the_vendor_does_not_buy_is_not_worth_a_step(self):
+        """小贩不收的矿**一步都不为它走**（查不到的名字按 0 算）：宁可多走几步去那座收的。
+
+        近的那座铜矿不在价目表里 ⇒ 它的价是 0，而 `_pick_ore` 把价 0 的整座丢掉 ——
+        "离得近"不构成理由，卖不出钱的矿走过去也是白走。三座都不收 ⇒ 一条指令都不发
+        （与 `_gold` / `_size` / `_stone` 同一条降级方向：宁可少做）。
+        """
+        start = Pos(30, 24)
+        step = self._move_to(self._turn(start, {"iron": 3}))  # 只有铁有价，铜按 0 算
+        self.assertLess(step.dist(self.NEAR_IRON), start.dist(self.NEAR_IRON), "该舍近求远")
+        for prices in ({}, {"stone": 1}):  # 场上这两种矿，小贩一种都不收
+            with self.subTest(prices=prices):
+                self.assertEqual(plan(self._turn(start, prices)), {}, "谁也不收 ⇒ 哪儿也不去")
+
+    def test_too_late_in_the_day_to_walk_there_and_back(self):
+        """白天不够走个来回了 ⇒ 不动身。参照点是**基地**（夜里的炮位就在它四周）。
+
+        临走一头扎进远处的矿、黑天里还在赶路 = 拿火力换矿石。同一个局面只差 `roundNo`，
+        `roundNo=60` 时 `day_rounds_left - TIME_MARGIN` = 6，而这一趟来回要 20 回合。
+        """
+        start = Pos(30, 24)
+        early = plan(self._turn(start, self.SAMPLE_PRICES, round_no=1))
+        late = plan(self._turn(start, self.SAMPLE_PRICES, round_no=60))
+        self.assertIn("1", early, "白天还长 ⇒ 该动身")
+        self.assertEqual(late, {}, "时间不够来回 ⇒ 哪儿也不去")
+
+    def test_the_ring_decides_whether_price_gets_a_vote(self):
+        """**同一个局面**，只差围墙砌没砌满：砌着 ⇒ 只认石矿，砌完了 ⇒ 才按价格挑。
+
+        这就是「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」里那个"然后"。
+        两座矿**都贴在工人身边**（一边一座），所以两种口径给的是**一左一右**、无从含糊 ——
+        比"朝哪边走一格"结实：走一格常常同时靠近两座矿，那种写法会**假通过**。
+        """
+        stone, copper = Pos(21, 24), Pos(19, 24)
+        start = Pos(20, 24)
+        self.assertEqual(start.dist(stone), 1, "石矿得贴着工人")
+        self.assertEqual(start.dist(copper), 1, "铜矿也得贴着 —— 两边都有得选才测得出东西")
+        prices = {"stone": 1, "copper": 5}  # 铜更贵
+        ores = {stone: "stone", copper: "copper"}
+
+        self.assertEqual(
+            self._collect_at(self._turn(start, prices, ring=False, ores=ores)),
+            stone,
+            "墙还没砌完 ⇒ 只认石矿，铜再贵也不看一眼",
+        )
+        self.assertEqual(
+            self._collect_at(self._turn(start, prices, ring=True, ores=ores)),
+            copper,
+            "墙砌完了 ⇒ 才轮到最值钱的铜",
+        )
 
 
 class TwoWallBuildersTest(unittest.TestCase):

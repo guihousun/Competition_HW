@@ -3,6 +3,8 @@
 字段只带**当前步骤真正用到**的：血量、等级、冷却等，用到时再加（背包已按需收窄成 `BaseRole.stone`）。
 """
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any, Callable, NamedTuple
 
 from .grid import Pos
@@ -118,6 +120,14 @@ class Turn(NamedTuple):
     #: 判题器 LLM 的回复（接口文档 L31）= **我们要提交的答案原文**。
     #: 上一回合的响应里发过 `prompt` 才有值。
     llm_resp: str = ""
+    #: 小贩的**收购价** `{矿种: 单价}`（接口文档 §1.1 `vendorShopList`，元素 `{name, price}`）。
+    #: 采哪座矿按它排序 —— **不写死"铜 > 铁 > 石头"**：那三档只是**样例**的价目（1/3/5），
+    #: 而任务书 L386 明说官方消息会让价格波动（示例：铁矿塌方 ⇒ 铁稀缺 ⇒ 回收价上涨），
+    #: 写死的排序在事件期间恰好是错的。查不到的矿种按 0 算（**不去采它**）。
+    #: 缺失 ⇒ 空表 ⇒ 不去采"最值钱的矿"：**没有价格就无从挑**，
+    #: 与 `_gold` / `_size` 同一条降级方向（宁可少做）。
+    #: 只读（`MappingProxyType`）—— 它是逐回合从 payload 抄来的事实，不是我们攒的状态。
+    vendor_prices: Mapping[str, int] = MappingProxyType({})
     #: 判题器**本轮**报的错（接口文档 §1.7，顶层 `errors`）。空元组 = 本轮没报错。
     #: **这是"任务为什么一直失败"唯一的答案来源**：errorCode 2 = 答案错误
     #:（`submitAnswer` 交的不对或不完全对）、1 = 任务超时、4 = 指令错误、5 = LLM 额度超限。

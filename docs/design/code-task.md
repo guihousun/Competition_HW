@@ -1107,3 +1107,138 @@ curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 ② 按实测结果改任务线：若是答案不对 ⇒ 改 `TASK_PROMPT` 措辞；若是指令非法 ⇒ 查 `acceptTask`/`submitAnswer`
    的报文与站位；若什么都没报 ⇒ 查开拓者到底有没有走到任务点（`_take_task`）。
 ③ 采矿那条仍未实现（用户策略指导里的第二条），见第 13 步的"下一步"①。
+
+---
+
+## 第 15 步：采矿落实（"保持够砌墙的石头量，然后选价格最高的矿"）
+
+### 目标
+
+兑现 `docs/策略指导.md`（用户手改）里的第二条：
+
+> 手里面保持能建造墙的石头量就行，然后选择价格最高的矿，没有波动的情况下是铜 > 铁 > 石头
+
+**这句话里的"然后"是顺序，不是并列** —— 墙只吃石头，若一上来就挑最贵的铜，
+围墙永远砌不成。所以两种口径各有各的场合：
+
+- **墙上还缺石头** ⇒ 只认石矿、取最近的（"找石矿应该要去最近的"，第 8 步就有）；
+- **墙砌完了** ⇒ 才轮到按**收购价**挑最值钱的矿。
+
+**"保持够砌墙的量"这一半本来就已经有了** —— `_stones_to_mine` 拿"还差几格墙"当上限。
+本步的新行为只有后半句：**16 格砌完之后工人原本原地闲置，现在转去采矿**。
+
+### 产出
+
+| 文件 | 改动 |
+|---|---|
+| `game/map.py` | `Map.stones: frozenset[Pos]` → **`Map.ores: Mapping[Pos, str]`**（矿点 → 矿种）。新增 `ORE_KINDS`（三种矿）与 `STONE`（石矿）。**小贩/武器商店/任务点照旧只进 `blocked`**，不进 `ores` |
+| `game/world.py` | `Turn` 新增 **`vendor_prices: Mapping[str, int]`**（`vendorShopList` → 矿种→收购价，`MappingProxyType` 只读） |
+| `protocol/model.py` | 新增 **`_vendor_prices()`**：只收 `price >= 0`（`_int` 对缺字段/类型不对给 -1，而负的收购价不存在）；名字不是字符串的丢掉。`load()` 接上 |
+| `game/planner.py` | `_nearest_stone` → **`_pick_ore(pos, ores, prices, *, want_stone)`**；新增 **`_mine_spare_ore()`**；`_build_walls` 在 `free` 为空时改调它 |
+| `tests/test_actions.py` | 新增 `SpareOreTest`（6 条）+ `ParseTest.test_vendor_prices_come_from_the_payload_verbatim`；`test_only_stone_enters_stones_...` 重写成 `test_ores_carry_their_kind_but_everything_blocks` |
+
+**为什么 `ores` 要带矿种而不是只留坐标集。** 选矿那一步要在三种矿之间按收购价排，
+而"铜 > 铁 > 石头"**不是常量** —— 任务书 L386 明说官方消息会让价格波动
+（示例：铁矿塌方 ⇒ 铁稀缺 ⇒ 小贩回收价上涨）。只留一个 `frozenset[Pos]`
+就答不出"这是哪种矿"，只能写死一个顺序，而那个顺序在事件期间**恰好是错的**。
+
+**为什么价格从载荷读而不是写死。** 同上：写死等于多一份会跟文档漂移的第二真相，
+且样例那三档（1/3/5）只是**样例**。`vendor_prices` 缺省为空表 ⇒
+"最值钱的矿"无从谈起 ⇒ **哪儿也不去**，与 `_gold` / `_size` / `_stone` 同一条降级方向（宁可少做）。
+
+`_pick_ore` 的两条口径用 `want_stone` 一个开关切换，不拆成两个函数：两条路径共用
+"在 `ores` 里挑一个坐标、不认领矿"的骨架，只有排序键不同。
+
+**`_mine_spare_ore` 的往返预算参照点换成基地**（不是工地）—— 墙砌完之后没有工地可回了，
+而夜里的炮位就在基地四周：白天不够走个来回就不动身，黑天里还在赶路等于拿火力换矿石。
+
+### 不做什么
+
+- ❌ **不做 `sell`**。用户那句"选价格最高的矿"在**换钱**上才闭环，而 `sell`
+  （小贩周围一格内把石头/铁/铜换成金币）**还没实现** ⇒ **采回来的铜/铁现在只是压在背包里**。
+  这一步兑现的是"工人白天不再闲置"和"挑哪座矿"，**不是"采到就赚钱"**。
+  卖矿那条线（`sell` → `buy` 券 → `use`）是独立的一步。
+- ❌ **不加"背包快满了就不采"**。`backPackCapability` 至今没读，一座矿最多采 10 次、
+  围墙只有 16 格，还到不了容量的量级 —— 没有第二个使用者就不加。
+- ❌ **不给 `_pick_ore` 加"矿被采没了怎么办"**。payload 里**没有**"剩余次数"字段
+  （`CLAUDE.md` 已记），采没了的矿下一回合自然从 `ores` 里消失，不需要跨回合计数。
+- ❌ **不动 `_stones_to_mine` 的公式**。它本来就是"保持够砌墙的量"那一半，本步一个字没改。
+- ❌ **不改 `_defend` / 任务线 / `render()` / `_log`**。
+
+### 验证
+
+**1. 单测：113 → 119 条，全绿。**
+
+```bash
+PYTHONUTF8=1 py -m unittest discover -s tests
+# Ran 119 tests in 0.076s
+# OK
+```
+
+`WallRingTest` / `BuildWallTest` / `MineApproachTest` / `TwoWallBuildersTest` **一条没改地全绿**
+—— 它们是"砌墙阶段行为不变"的证据。
+
+**2. 反向验证（每条先改坏、确认挂、再复原）—— 5 条全部确认。**
+
+| 故意改坏 | 挂掉的用例 |
+|---|---|
+| `_pick_ore` 把排序键换回"距离优先"（`-price` 挪到第二位） | `test_the_pricier_ore_wins_over_the_nearer_one`、`test_a_market_flip_...`、`test_a_mine_the_vendor_does_not_buy_...`、`test_the_ring_decides_...`、`test_too_late_...` |
+| `_pick_ore` 忽略 `want_stone`（砌墙阶段也按价格挑） | `test_the_ring_decides_whether_price_gets_a_vote` + 4 条砌墙既有用例（`test_day_one_mines_...` / `test_a_late_start_...` / `test_worker_walks_to_the_mine_...` / `test_walks_around_a_wall`） |
+| `_mine_spare_ore` 去掉往返预算 | `test_too_late_in_the_day_to_walk_there_and_back` |
+| `map.ores` 什么都收（不看 `ORE_KINDS`） | `test_ores_carry_their_kind_but_everything_blocks` |
+| `_vendor_prices` 不挡坏价（去掉 `price >= 0`） | `test_vendor_prices_come_from_the_payload_verbatim` |
+
+⚠️ **`test_the_ring_decides_whether_price_gets_a_vote` 的第一版是假通过的**：
+它原本让工人"朝矿走一格"，而 BFS 的第一格常常**同时靠近两座矿** ——
+改坏 `want_stone` 也照样过。改成"两座矿各贴在工人一边、断言 `collect` 瞄的是哪一座"之后
+才真的挂了那一次（上面第二行）。**"走一格"这种断言测不出方向，只有坐标级别的答案测得出。**
+
+**3. 真服务端到端。**
+
+```bash
+netstat -ano | grep LISTENING | grep 18085     # 为空 ⇒ 起服务
+PYTHONUTF8=1 bash run.sh 18085 &
+curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
+```
+
+- **样例（`roundNo=85`，夜里）响应与第 12 步逐字节一致** —— 夜里走 `_defend`，本步碰不到。
+- **合成"白天 + 16 格墙已砌满"局面**（`py` 临时脚本把样例的 `roundNo` 改成 1、
+  按 `wall_cells` 补 16 格 `wall`，**写在系统临时目录、不入库**）：
+  - 样例价目（石 1 / 铁 3 / **铜 5**）⇒ 日志 `动作：10010 move(6,22)；10012 move(11,15)`，
+    两个工人都朝**铜矿 (22,26)** 那一侧（x 增大）。
+  - **只把价目翻成 铁 9 / 铜 5**，同一份局面重发 ⇒ `move(5,24)` / `move(9,17)`，
+    两人双双掉头朝**铁矿 (8,28)**。**这才是"价格来自载荷"的端到端证据**。
+  - 同一份局面里开拓者（10011）照旧去任务点，与采矿互不干扰。
+- 收尾 `taskkill` + 确认端口释放。
+
+**4. 留痕与提交。**
+
+### 已知不确定性（别假装确定）
+
+1. **`sell` 没做，所以采到的铜/铁现在换不成钱。** 这一步的真实收益只有
+   "工人白天不再闲置"+ "背包里攒着将来的货"；代价是**离炮位更远**（白天走到远处采矿，
+   夜里要往回赶）以及背包占用。**在 `sell` 落地之前，这一步的价值是负还是正无法判断** ——
+   只有实测（比如"围墙砌满后还剩多少白天、夜里有几人能及时回炮位"）才知道。
+2. **"墙砌完了"是常态还是例外完全不知道。** 第 8 步的回合预算只保证"白天结束前砌完"，
+   没说会不会提前很多。若 16 格一般在第 40 回合就砌完，那这一步每天能多出 30 个回合的劳作；
+   若拖到第 68 回合才砌完，它基本不会触发（`_mine_spare_ore` 的往返预算会把远矿全否掉）。
+3. **`vendorShopList` 是"收购价"这件事是**推断**（接口文档 §1.1 只给了元素形状 `{name, price}`）。
+   若它其实是**售价**，那"按价排序选矿"仍然成立（贵的东西一般也卖得贵），但
+   "价 0 的矿不去采"这条会误伤（售价为 0 的矿可能照样能卖）。**下一场实测时对一下金币数**。
+4. **挖矿点的"采满 10 次就消失"没有计数**（payload 没有剩余次数字段）。
+   真跑起来若发现工人对着空矿位一直 `collect`，症状是 `action_results` 里翻 `false`
+   —— 那时再想跨回合计数的办法，**现在加就是预先抽象**。
+5. **同价矿的取舍只按坐标排**（`_pick_ore` 的 `(取负的价, 距离, 坐标)`）。
+   两个工人可能挑中同一座矿的相邻格，这是允许的（矿不认领），但会让两个人整天黏在一起
+   —— 若实测发现"两个工人总是同进同出"，再考虑按工人 id 错开。
+
+### 下一步
+
+① **用户的实测发现（本步提交后立刻查）**：任务失败的病根可能不在答案内容，而在
+   **响应顶层 `executeCmd`** —— 用户判断那个字段是"让判题器执行的 shell 命令，由 LLM 回复生成"，
+   所以任务线要**和 LLM 交互**：给它一个 `executeCmd` 工具（用 `<tool></tool>` 包裹来识别工具调用），
+   把生成的命令放进响应顶层 `executeCmd`，**拿到执行结果之后才知道任务要什么**。
+   本步提交后按 `docs/任务书.md` / `docs/接口文档.md` 核对这条推断，再决定怎么改任务线
+   （这是现在**唯一的高优先级**）。
+② 卖矿那条线：`sell`（小贩周围一格内批量卖矿石）→ `buy`（武器商店买券）→ `use`。
+   它一落地，本步采回来的铜/铁才开始产生收益。

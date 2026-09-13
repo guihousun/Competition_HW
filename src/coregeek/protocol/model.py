@@ -14,6 +14,8 @@
 一张表喂两个方向完全不同的领域对象（角色带背包、武器带射程），合成一趟只会立刻再拆开。
 """
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any
 
 from ..game.grid import Pos
@@ -44,6 +46,7 @@ def load(payload: Any) -> Turn | None:
         llm_resp=_text(payload, "llmResp"),
         errors=_errors(payload),
         action_results=_action_results(payload),
+        vendor_prices=_vendor_prices(payload),
     )
 
 
@@ -207,6 +210,26 @@ def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
         if pos is not None and _int(node.get("coldDownRounds")) <= 0:
             out.append(pos)
     return tuple(out)
+
+
+def _vendor_prices(payload: dict[str, Any]) -> Mapping[str, int]:
+    """`vendorShopList` → `{矿种: 收购价}`（接口文档 §1.1 元素 `{name, price}`，小贩收购矿石）。
+
+    **不硬编码"铜 > 铁 > 石头"**：那三档只是**样例**的价目（1/3/5），而任务书 L386
+    明说官方消息会让价格波动（示例：铁矿塌方 ⇒ 铁稀缺 ⇒ 小贩回收铁的价格上涨）——
+    写死的排序在事件期间恰好是错的，且那是一份会跟文档漂移的第二真相。
+
+    只收 `price >= 0`：`_int` 对**字段缺失 / 类型不对**给 -1，而"负的收购价"不存在，
+    混进来会让挑矿那一步选出一座**倒贴钱**的矿。名字不是字符串的同样丢掉。
+    """
+    out: dict[str, int] = {}
+    for node in _items(payload, "vendorShopList"):
+        if not isinstance(node, dict):
+            continue
+        name, price = node.get("name"), _int(node.get("price"))
+        if isinstance(name, str) and price >= 0:
+            out[name] = price
+    return MappingProxyType(out)
 
 
 def _errors(payload: dict[str, Any]) -> tuple[Error, ...]:
