@@ -21,9 +21,13 @@ from .grid import Pos
 class BaseRole:
     type_name: ClassVar[str]
 
-    def __init__(self, role_id: int, pos: Pos) -> None:
+    def __init__(self, role_id: int, pos: Pos, stone: int = 0) -> None:
         self.id = role_id
         self.pos = pos
+        #: 背包里**石头的块数**（`backpack` 是物品名数组，重复即计数）。
+        #: 只有工人用得上（围墙代价 石头×1，从建造者自己的背包扣）。
+        #: 解析不出背包 ⇒ 0 块 ⇒ 不砌墙、转去采矿 —— 降级方向是"少做"。
+        self.stone = stone
 
 
 class Pioneer(BaseRole):
@@ -41,11 +45,11 @@ class Worker(BaseRole):
 _KINDS: dict[str, type[BaseRole]] = {Pioneer.type_name: Pioneer, Worker.type_name: Worker}
 
 
-def make(role_id: int, pos: Pos, role_type: str) -> BaseRole | None:
+def make(role_id: int, pos: Pos, role_type: str, stone: int = 0) -> BaseRole | None:
     """`roleType` → 角色。不是角色（建筑）则返回 `None`。
 
     调用方须先确认 `role_type` 是 `str` —— 这里用 `dict.get`，不可哈希的 key 会抛
     `TypeError`（`model._character` 已经挡在前面）。
     """
     kind = _KINDS.get(role_type)
-    return None if kind is None else kind(role_id, pos)
+    return None if kind is None else kind(role_id, pos, stone)

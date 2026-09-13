@@ -12,7 +12,7 @@
     参数      §2.2 RoleCommand 里该动作用到的字段
     to_wire   编成 §2.2 的扁平记录
 
-> 目前有 `move`（对全部角色合法）与 `build`（**仅工人**）—— 按"禁止冗余设计"，
+> 目前有 `move`（对全部角色合法）、`build` 与 `collect`（**都仅工人**）—— 按"禁止冗余设计"，
 > 没实现的动作为空壳，等落地时再加。`build` 是**闸门第一次真的挡住东西**：
 > 把 `build` 发给开拓者，以前只是"格式合法地做错事"，现在连对象都造不出来。
 """
@@ -86,5 +86,35 @@ class Build(BaseAction):
         return {
             "action": self.code,
             "name": self.name,
+            "targetPos": [{"x": self.target.x, "y": self.target.y}],
+        }
+
+
+class Collect(BaseAction):
+    """采集矿石。**仅工人**（任务书 §4.4）。
+
+    **§4.4 的能力列没有昼夜限制** —— `build` / `remove` 写"仅白天"、`attack` 写"仅黑夜"，
+    `collect` 那一格什么都没写。所以夜里采也大概率合法；但**这一步夜里不采**
+    （用户选定：夜里回基地操炮），昼夜门由 `planner` 把关，不进闸门 —— 闸门只管"谁"。
+
+    `targetPos` 是**矿石的坐标**（接口文档 §2.3），不是自己的站位。需要站在矿的
+    **切比雪夫 ≤1** 内：矿格本身挡路（任务书 L85），所以"站在矿上"不可能发生，
+    `<= 1` 就够了，不用再排掉 0。一次采 1 块；**一座矿采满 10 次就消失**（任务书 L79），
+    但 payload 里**没有"剩余次数"字段**，采没了只是下一回合换最近的一座。
+
+    ⚠️ **没有实证报文**：`docs/response.txt` 里只有 `move`/`build`/`remove`。
+    形状是从接口文档 §2.2 推的 —— 与 `move` 同形（只有 `action` + `targetPos`）。
+    """
+
+    code = "collect"
+    roles = WORKER
+
+    def __init__(self, role_type: str, target: Pos) -> None:
+        super().__init__(role_type)
+        self.target = target
+
+    def to_wire(self) -> dict[str, Any]:
+        return {
+            "action": self.code,
             "targetPos": [{"x": self.target.x, "y": self.target.y}],
         }

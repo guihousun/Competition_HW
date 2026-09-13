@@ -89,6 +89,35 @@ def weapon_cells(base: Pos) -> tuple[Pos, ...]:
     )
 
 
+def wall_cells(base: Pos, width: int) -> tuple[Pos, ...]:
+    """可砌围墙的 **16 格，按建造优先级排**（背面列中间留 4 格缺口）。
+
+    环 = 6×6 边框（`build_map.png` 的蓝圈），即 `x ∈ [bx-2, bx+3]`、`y ∈ [by-3, by+2]`
+    里既不属于基地 4 格、也不属于武器环 12 格的格子 —— 再往外那一圈与武器环**零重叠**。
+
+    **方向判据与 `back_weapon_cells` 同源**（`docs/pic/大致地图信息.png`）：基地在地图左半 ⇒
+    机器人从 `+x` 来 ⇒ **正面（迎着机器人）是 `x = bx+3`、背面是 `x = bx-2`**；右半镜像。
+    顺序 = 正面列（从基地纵深中心向两端铺，正对基地的先砌）→ 顶行 → 底行 → 背面两角。
+
+    **背面列中间 4 格留空**（用户选定）：环一闭合，工人就进出不得了 —— 既采不了矿，
+    也回不到环内操炮。留一段 4 格宽的口子，正面仍完整；钻进来的机器人紧贴着武器列
+    （`x = bx-1`）与基地，等于直接撞在火力上。
+    """
+    front_x, back_x = (base.x + 3, base.x - 2) if base.x * 2 < width else (base.x - 2, base.x + 3)
+    ys = list(range(base.y - 3, base.y + 3))  # 6 格
+    xs = list(range(base.x - 2, base.x + 4))  # 6 格
+    #: 基地纵深中心的 2 倍 —— 用整数比大小，避免浮点
+    center = 2 * base.y - 1
+
+    front = sorted(ys, key=lambda y: (abs(2 * y - center), y))
+    order = [Pos(front_x, y) for y in front]
+    # `xs[1:-1]` 正好排除两端的正面列与背面列；`reversed` = 从正面往背面铺
+    for row_y in (ys[-1], ys[0]):
+        order += [Pos(x, row_y) for x in reversed(xs[1:-1])]
+    order += [Pos(back_x, y) for y in (ys[0], ys[-1])]  # 背面只剩两角，中间是缺口
+    return tuple(order)
+
+
 def back_weapon_cells(base: Pos, width: int) -> tuple[Pos, ...]:
     """武器环里**背向机器人**的那一列（4 格），紧贴基地纵深的排前面。
 

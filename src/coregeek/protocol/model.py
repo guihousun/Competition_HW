@@ -109,7 +109,7 @@ def _character(node: Any) -> BaseRole | None:
     pos, role_id, role_type = _pos(node), _int(node.get("id")), node.get("roleType")
     if pos is None or role_id < 0 or not isinstance(role_type, str):
         return None
-    return make(role_id, pos, role_type)
+    return make(role_id, pos, role_type, _stone(node))
 
 
 def _gold(payload: dict[str, Any]) -> int:
@@ -121,6 +121,24 @@ def _gold(payload: dict[str, Any]) -> int:
     team = payload.get("teamOur")
     team = team if isinstance(team, dict) else {}
     return _int(team.get("goldNum"))
+
+
+_STONE = "stone"
+
+
+def _stone(node: dict[str, Any]) -> int:
+    """背包里石头的**块数**（接口文档 §1.3.1：`backpack` 是**物品名数组**，重复即计数）。
+
+    **只数 `stone`** —— 这一步只有围墙用它（代价 石头×1）。
+
+    **不读 `backPackCapability`**（注意大写 P）：一座矿最多采 10 次、围墙只有 16 格，
+    一天实际到不了 100 的容量上限，先不加。
+
+    背包缺失或不是数组 ⇒ 0 块 ⇒ 不砌墙、转去采矿。**降级方向是"少做"**，
+    与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发 `build`。
+    """
+    bag = node.get("backpack")
+    return sum(1 for item in bag if item == _STONE) if isinstance(bag, list) else 0
 
 
 def _size(payload: dict[str, Any]) -> tuple[int, int]:

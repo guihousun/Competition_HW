@@ -1,6 +1,6 @@
 """局面的领域表示。由 `protocol.model` 从 payload 构造，策略只读它。
 
-字段只带**当前步骤真正用到**的：血量、等级、背包、冷却等，用到时再加。
+字段只带**当前步骤真正用到**的：血量、等级、冷却等，用到时再加（背包已按需收窄成 `BaseRole.stone`）。
 """
 
 from typing import NamedTuple
@@ -26,10 +26,27 @@ class Turn(NamedTuple):
     gold: int
 
     @property
+    def within(self) -> int:
+        """本回合在"一天"里的序号（1..130）。`round_no` 缺失时是 -1 ⇒ 129。
+
+        两个使用者（`is_day` 与 `day_rounds_left`），所以从 `is_day` 里提出来。
+        """
+        return (self.round_no - 1) % ROUNDS_PER_DAY + 1
+
+    @property
     def is_day(self) -> bool:
         """白天吗？`build` / `remove` **仅白天**可用（任务书 §4.4）。
 
-        `within = (roundNo-1) % 130 + 1`，`within <= 70` 为白天（任务书 L90）。
-        `round_no` 缺失时是 -1 ⇒ `within` = 129 ⇒ 判成夜晚 ⇒ 不建造。
+        `within <= 70` 为白天（任务书 L90）。`round_no` 缺失 ⇒ 129 ⇒ 判成夜晚 ⇒ 不建造。
         """
-        return (self.round_no - 1) % ROUNDS_PER_DAY + 1 <= DAY_ROUNDS
+        return self.within <= DAY_ROUNDS
+
+    @property
+    def day_rounds_left(self) -> int:
+        """白天还剩几回合，**含本回合**；夜里为 0。
+
+        `planner` 拿它算"这一趟还该采几块石头" —— 策略指导唯一的时间硬约束是
+        「必须在晚上到来前将墙建好，注意计算回合数」。按回合计而**不记任何跨回合状态**，
+        所以 `handle` 仍然是纯函数。
+        """
+        return DAY_ROUNDS - self.within + 1 if self.is_day else 0
