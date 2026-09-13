@@ -9,13 +9,18 @@
 
 1. **寻路** —— 只问 `blocked`，不问格子里是什么。**不变量：非空即挡路**（任务书 L85 那张清单）。
 2. **打印日志调试** —— `render()` 出图。出事故时能看见当时的地形，而不是只看见一条 `move`。
-3. **建造** —— `station` 给出可建造环的原点（接口文档里**没有**可建造区字段，只能这样推），
-   `weapons` 数已建了几座、分别在哪一类。`stones` 同理，是采石那条线的料源。
+3. **建造** —— `station` 给出可建造环的原点（接口文档里**没有**可建造区字段，只能这样推）。
+   `stones` 是采石那条线的料源。
 
 **每格只有一个类别，不含属性**：`health` / `level` / `attackRange` / `backpack` / `cooldown`
-一概不进来——目前没有任何决策读它们，且其中几个是"文档有、样例没有"的可选字段
-（`cooldown` / `PlayerTask.coldDownRounds` / `timeoutRounds` / `RobotRole.targetTeam`），
-读进来就得先替它们定默认值。等真有消费者再加。
+一概不进来，且其中几个是"文档有、样例没有"的可选字段
+（`PlayerTask.coldDownRounds` / `timeoutRounds` / `RobotRole.targetTeam`），
+读进来就得先替它们定默认值。等真有消费者再加 —— `attackRange` / `cooldown` 第 10 步有了
+消费者，它们落在 `world.Weapon` 上（**带 id 的名册**），不是这里的网格。
+
+⚠️ **这里曾经有一个 `Map.weapons`（`dict[类别, 坐标集]`），第 10 步删了。** 它没有 id、
+没有射程、没有冷却，而 `attack` 三样都要；留着就是"哪些武器是我们的"存在两份真相。
+现在 `Map` 只回答"这一格是什么地形"，武器名册归 `Turn.weapons`（`world.py`）。
 """
 
 from collections.abc import Mapping
@@ -39,10 +44,6 @@ STONE = "stone"
 
 #: 基地（接口文档 roleType 表）。**它是 2×2**，`pos` 只给左上角，见 `Map.__init__`。
 STATION = "station"
-
-#: 可建造的武器类别（任务书 §4.5.1）。`Map.weapons` 按它们分组 —— 敌方的带 `enemy:` 前缀，
-#: 落不进那张表。
-WEAPON_KINDS = ("gatling", "railgun", "rocket")
 
 #: 单位/角色 → `(我方字符, 敌方字符)`。**大小写区分敌我**。
 _RENDER_SIDED: dict[str, tuple[str, str]] = {
@@ -123,7 +124,6 @@ class Map:
             self.cells: tuple[tuple[str, ...], ...] = ()
             self.blocked: frozenset[Pos] = frozenset()
             self.stones: frozenset[Pos] = frozenset()
-            self.weapons: dict[str, frozenset[Pos]] = {}
             self.station: Pos | None = None
             return
 
@@ -150,7 +150,6 @@ class Map:
 
         blocked: set[Pos] = set()
         stones: set[Pos] = set()
-        weapons: dict[str, set[Pos]] = {}
         for y, row in enumerate(self.cells):
             for x, kind in enumerate(row):
                 if not kind:
@@ -159,11 +158,8 @@ class Map:
                 blocked.add(pos)
                 if kind == STONE:
                     stones.add(pos)
-                elif kind in WEAPON_KINDS:
-                    weapons.setdefault(kind, set()).add(pos)
         self.blocked = frozenset(blocked)
         self.stones = frozenset(stones)
-        self.weapons = {k: frozenset(v) for k, v in weapons.items()}
 
     def render(self) -> str:
         """可打印的图：`height` 行 × `width` 列，**行自上而下 = y 由大到小**。

@@ -41,14 +41,17 @@ src/coregeek/
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
 │   ├── model.py      payload → Turn（容错解析）
-│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）
+│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）
 └── game/             领域与策略
     ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
     │                 + 基地几何：`base_cells` / `weapon_cells` / `back_weapon_cells` / `wall_cells`
-    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`stones`/`weapons`/`station`
+    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`stones`/`station`。
+    │                 **纯地形**：武器名册不在这里（见 world.py），第 10 步把 `Map.weapons` 删了
     ├── roles.py      §4.5.2 的 Pioneer / Worker（各带自己的 `stone` 块数）；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（round_no / map / roles / gold）+ `within` / `is_day` / `day_rounds_left`
-    └── planner.py    决策。**策略只写在这里**（工人：建武器 → 白天采石砌墙 / 夜里走到武器旁待命）
+    ├── world.py      Turn（round_no / map / roles / gold / **weapons / robots**）+ `within` / `is_day` / `day_rounds_left`
+    │                 + `Weapon`（id/kind/pos/attack_range/cooldown）与 `Robot`（pos/health）两个 NamedTuple
+    └── planner.py    决策。**策略只写在这里**（白天：工人建武器 → 采石砌墙；夜里：**所有角色**回炮位，
+                      贴着就开火，目标 = 射程内**血最少**的机器人）
 ```
 
 依赖方向：
@@ -78,7 +81,7 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 - **手搓 `Map` 的合成局面里"角色不在 `blocked` 里"**：只有 `protocol.model._entries` 会把我方角色写进网格。所以涉及"别人挡路/自己站位"的用例必须自己把角色铺进 `entries`（`{**地形, **{r.pos: "worker" ...}}`）——第 8 步的新用例第一版漏了这一点，于是**它连旧代码都放过去了**。写完可疑用例要**反向验证**：退回旧实现，用例必须挂。
 - **"基地后方" = 远离地图中心那一列**：机器人从基地**面向地图中心**的那一侧水平逼近（`docs/pic/大致地图信息.png`，**正文没写刷新点**）。基地在左半 ⇒ 后方是 `x = bx-1` 那一列；右半 ⇒ `bx+2`。实现在 `grid.back_weapon_cells`，**只此一处**，首场比赛后按实测翻转。按基地坐标判而不用 `teamOur.type`——换边后队伍身份不变、基地会挪。
 - **`build` 的三条硬规则**：① **仅工人 + 仅白天**（§4.4；夜里发 `build` 是一次执行失败）；② 目标须在**自身切比雪夫 ≤1** 内（"站位即建造位"——`step_toward` 恰好把人停在贴着目标的一格，不用先挪开）；③ 建武器 **25 金/座**，新建**一律 level1**，**目标格已有武器则原武器被覆盖降级** ⇒ 必须避开占用格，否则 25 金币打水漂还倒亏一座。
-- **武器上限原文自相矛盾**：§4.5.1 表格写"每种 ≤3"（合计 9 座），补充说明写"**全局同时最多 3 座**"。取**保守的全局 ≤3**（与"武器只有建立三个才有意义"一致）。落点用 `map.weapons` 按类别数，份额 = `len(roles)`。
+- **武器上限原文自相矛盾**：§4.5.1 表格写"每种 ≤3"（合计 9 座），补充说明写"**全局同时最多 3 座**"。取**保守的全局 ≤3**（与"武器只有建立三个才有意义"一致）。落点按类别数、份额 = `len(roles)`，两处都读 **`Turn.weapons`**（网格里那份 `Map.weapons` 第 10 步删了）。
 - **中立元素的字段名是 `neutralType`，不是 `zoneType`**（接口文档 §1.2.1，在 `mapInfo.zones` 里）：`stone`/`iron`/`copper`/`vendor`/`weaponShop`/`challengerTaskPoint1|2`/`defenderTaskPoint1|2`。**只有前三种是矿**，小贩/武器商店/任务点**不是矿，但一样挡路**——`Map.stones` 只装石矿，`Map.blocked` 全都装。
 - **`Map` 的不变量：格子非空即挡路**（任务书 L85 那张清单），寻路只问 `blocked`、不问格子里是什么。类别原样取自 payload（`enemy:` / `robot:` 前缀区分来源），**未知类别也照旧挡路**——判错方向只会多挡、不会放行。`render()` 的字符表**是有损的**（机器人不分体型），`cells` 才是真相。
 - **基地 2×2 对双方都成立**（接口文档原文："**双方**基地大小为 2*2，基地对应的 pos 传递的是左上角的坐标"）。`Map` 把**敌我双方**基地都展成 4 格——曾有一版只展了我方，敌方基地只挡 1 格。
@@ -89,9 +92,11 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 - **地图边界不在任务书 L85 的"阻挡移动"清单里**（那一列只写了建筑/角色/机器人/中立单位/任务点/矿区）。贪心挪一格时几乎撞不到，**但 BFS 会绕到图外去**，所以 `step_toward` 自己按 `Map.size = (width, height)`（取自 `mapInfo.width/height`）挡住 `(0,0)~(width-1,height-1)` 之外。越界算"指令非法"还是"执行失败"文档没写，不走一定安全。`size` 无效（≤0）⇒ `Map` 矩阵为空 ⇒ 无格可走 ⇒ **单位不动**，这是故意的降级。
 - **`step_toward` 的终点是"贴着 goal 的一格"，不是 goal 本身**——因为 goal 通常是挡路的（矿/建筑/武器操控位）。⚠️ `build` 的落点是**空地**（第 7 步回头核过这条契约）：**结论是不用改** —— 建造格在环上是空的，BFS 只在可通行格上展开、并停在距 goal 一格处，那正好就是 `build` 要求的站位。建墙同理。
 - **没有转移物品的指令**（`drop` 只丢不捡，没有拾取）→ 每个角色的背包就是自己的料仓，"A 买 B 用"行不通。
-- **`attack` 最易写反的两处**：`roleCommandMap` 的 **key 是武器 id**，`controllerId` 才是操控角色；`targetPos` 长度 = 武器当前等级（电磁狙击炮恒为 1）。攻击**仅黑夜**可用，且需要角色站在武器周围一格内（一人只能操一座武器）。
-- **`attackRange` 以 payload 为准**：任务书等级表与样例数据矛盾（样例 gatling L1=4 / railgun=7 / rocket=INT_MAX，表格是 3/6/10）。
-- 夜里**不能建墙**（`build` 仅工人、仅白天）→ 墙一旦被拆，整夜都是缺口，所以夜间第一优先级是**预防性修复**而非爆了再补。**夜里工人的动线 = 走到最近的一座还没被本回合别的工人认领的武器旁边待命**（一人只能操一座），"贴着武器（切比雪夫 ≤1）"这个站位与 `attack` 的要求是同一条 —— `attack` 落地时只需在那里补一条 emit。
+- **`attack` 最易写反的两处**：`roleCommandMap` 的 **key 是武器 id**，`controllerId` 才是操控角色；`targetPos` 长度 = 武器当前等级（电磁狙击炮恒为 1）。攻击**仅黑夜**可用，且需要角色站在武器周围一格内（一人只能操一座武器）。**可用角色是"全部"**（开拓者也上炮位）。
+  - **已毁的炮与阵亡的角色都不该收到指令**：`model._weapons` 丢掉 `health == 0` 的炮，`model._character` 同理丢掉阵亡角色（用 `== 0` 而非 `<= 0`：字段缺失是 -1，别当成死）。
+  - **`roundNo` 缺失时 `attack` 一条都不发**（`planner._defend` 的硬门）：缺失的回合号被 `is_day` 判成**夜里** —— 对"白天不许建造"安全，对"白天开火非法"就是反的。
+- **`attackRange` / `cooldown` 都以 payload 为准**：任务书等级表与样例数据矛盾（样例 gatling L1=4 / railgun=7 / rocket=INT_MAX，表格是 3/6/10）；`cooldown`（火箭发射后 3 回合空窗）**样例三座炮都没有这个字段** ⇒ 解析成 -1 ⇒ 不当成冷却。**缺省方向与射程相反**：射程 -1 ⇒ 够不着 ⇒ 不开火；冷却 -1 ⇒ 照打。
+- 夜里**不能建墙**（`build` 仅工人、仅白天）→ 墙一旦被拆，整夜都是缺口，所以夜间第一优先级是**预防性修复**而非爆了再补。**夜里所有角色（含开拓者）的动线 = 走到最近的一座还没被本回合别人认领的武器旁边**（一人只能操一座），贴着（切比雪夫 ≤1）就开火；**没敌人 / 炮在冷却 / 够不着 ⇒ 站在炮位待命，什么都不发**（空指令合法）。**不换炮**：站哪座炮是走到位那一刻定下的，每回合重挑会让角色在炮位之间来回走。已知代价：**角色数 < 武器数时火力打折**。
 - **任务点 2 占两格**，相邻判定要取两格的并集；开拓者一旦领任务，**离开任务点一格内即任务作废**（等于钉死原地）。
 
 ## 文档地图
@@ -110,7 +115,8 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
 `tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策四类），**不建自研测试框架**：标准库 `unittest` 够用。
-进度见 `docs/design/code-task.md`（当前到第 9 步：每回合复盘日志，先地图后动作；第 8 步是采石砌墙）——**别照记忆里的进度走**。
+进度见 `docs/design/code-task.md`（当前到第 10 步：夜里操炮防守，**所有角色**回炮位打射程内血最少的机器人；
+第 9 步是每回合复盘日志，第 8 步是采石砌墙）——**别照记忆里的进度走**。
 
 **常用命令**：
 

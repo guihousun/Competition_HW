@@ -5,6 +5,7 @@
 
 from typing import NamedTuple
 
+from .grid import Pos
 from .map import Map
 from .roles import BaseRole
 
@@ -12,11 +13,50 @@ from .roles import BaseRole
 ROUNDS_PER_DAY = 130
 DAY_ROUNDS = 70
 
+#: 三种武器工事的 `roleType`（接口文档 §1.3.1）。**从 `map` 搬来的** ——
+#: 武器原本只是网格里的一个类别串，现在 `model` 要照它把带属性的武器认出来。
+#: ⚠️ 与 `planner.WEAPON_ORDER` **不是一回事**：那个是"三座炮的建造先后"（策略），
+#: 这个是"哪些 roleType 算武器"（协议）。内容碰巧相同，含义不同，别合并。
+WEAPON_KINDS = frozenset({"gatling", "railgun", "rocket"})
+
+
+class Weapon(NamedTuple):
+    """我方一座武器工事 —— 开火要用到的全部信息（接口文档 §1.3.1 的 `Role`）。
+
+    **没有 `level`**：`targetPos` 的数量 = 武器等级数，而我们的武器永远是 L1
+    （没有买升级券这条线，敌人也升不了我们的炮）⇒ 永远只传 1 个目标。
+    加 `level` 等于给下一个人递一个"该按等级传多个目标"的钩子，真升到 L2 再回来加。
+    **没有 `health`**：只在解析时用它筛掉已毁的炮，存下来没人读。
+    """
+
+    id: int
+    """**线上那条指令的 key 就是它** —— 不是操控角色的 id（见 `actions.Attack`）。"""
+    kind: str
+    pos: Pos
+    attack_range: int
+    """以**切比雪夫距离**计的射程（任务书 L230），取自 payload 的 `attackRange`。
+    任务书等级表写的是 3/6/10，样例给的是 4/7/INT_MAX —— **以 payload 为准**。"""
+    cooldown: int
+    """冷却**剩余回合数**；只有火箭发射台有（发射后 3 回合空窗），加特林/电磁炮恒 0。
+    样例里没有这个字段 ⇒ `model._int` 给 -1 ⇒ `> 0` 为假 ⇒ 照打。"""
+
+
+class Robot(NamedTuple):
+    """一台机器人（接口文档 §1.5.1）。**只留这一步用得上的**：打谁只看血量。
+
+    `id` / `roleType` / `abnormalState` / `targetTeam` 都不存 —— 目标位置用的是**坐标**，
+    按类型排优先级是另一种打法（用户选定的是"补刀"），眩晕不影响"能不能打"。
+    """
+
+    pos: Pos
+    health: int
+
 
 class Turn(NamedTuple):
     round_no: int
     #: 地图信息：一张格子矩阵，每格只有一个**类别**（见 `map.Map`）。
-    #: **寻路**读 `blocked` / `size`，**建造**读 `station` / `weapons`，**打印日志**读 `render()`
+    #: **寻路**读 `blocked` / `size`，**建造**读 `station`，**打印日志**读 `render()`。
+    #: 武器**不在**这里 —— 它得带 id 与射程，见下面的 `weapons`。
     map: Map
     #: **只含角色**（开拓者/工人），带 id。建筑不是可操控单位，见 `roles.make`。
     #: 网格里也标着角色占的格，但那只是为了挡路——**要发指令就得有 id，而 id 只在这里**
@@ -24,6 +64,11 @@ class Turn(NamedTuple):
     #: 我方金币（接口文档 `teamOur.goldNum`）。建一座武器 25 金，是这一步唯一的支出。
     #: 缺失时 `model._int` 给 -1 ⇒ 买不起 ⇒ 不建造，**这是故意的降级方向**。
     gold: int
+    #: 我方三座武器的**名册**（不是网格里的类别串）。带默认值"空"：开局确实一座都没有，
+    #: 也不关心武器的用例（寻路、昼夜）不必写它。由 `teamOur.roles` 解析而来。
+    weapons: tuple[Weapon, ...] = ()
+    #: 场上**全部**机器人（`robot.roles`，全图可见、逐回合全量）。白天是空的。
+    robots: tuple[Robot, ...] = ()
 
     @property
     def within(self) -> int:

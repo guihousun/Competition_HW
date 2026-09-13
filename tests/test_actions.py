@@ -28,17 +28,37 @@ from coregeek.game.grid import (  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import TIME_MARGIN, WALL, WEAPON_ORDER, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import Turn  # noqa: E402
+from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
 
 SAMPLE = Path(__file__).resolve().parents[1] / "docs" / "request.txt"
 
-#: 官方样例（roundNo=85）的落点。**样例是夜里**，所以两个工人都朝最近的武器走一格：
-#: 10010 在 (5,23) → 最近的是 (9,24)（切比雪夫 4）；10012 在 (10,16) → 同样是 (9,24)（距离 8）。
-#: 开拓者 10011 不发指令；夜里 `build`/`collect` 一条都不该有（`build` 仅白天）。
-#: ⚠️ 第 7 步这里是 `{"10012": [9, 17]}`（那时夜里的兜底是"朝石矿走"，而 10010 正好贴着矿）——
-#: **这条断言按设计变了**：夜里改成"回基地操炮"。
-EXPECTED_MOVES = {"10010": [6, 22], "10012": [9, 17]}
+#: 官方样例（roundNo=85）的落点。**样例是夜里**，所以三个角色都朝最近的一座炮走一格：
+#: 10010 在 (5,23) → (9,24)（切比雪夫 4）；10012 在 (10,16) → (9,24) 已被认领 ⇒ (10,25)（9）；
+#: 10011 在 (10,12) → 前两座都被认领 ⇒ (9,25)（13）。夜里 `build`/`collect` 一条都不该有。
+#: ⚠️ 这条断言**按设计改过两次**：第 7 步夜里是"朝石矿走"，第 8 步改成"回基地操炮"
+#: （当时开拓者还不发指令），**第 10 步起开拓者也上炮位** ⇒ 两条变三条。
+EXPECTED_MOVES = {"10010": [6, 22], "10012": [9, 17], "10011": [9, 13]}
+
+
+def _records(kinds: dict[Pos, str], attack_range: int = 4) -> tuple[Weapon, ...]:
+    """`{落点: 类别}` → 武器名册。**夹具的唯一真相是记录，地形由它推。**
+
+    方向与 `protocol.model` 一致（单位 → 网格），不是反过来从网格里的类别串凭空造记录 ——
+    第 8 步踩过"夹具与真实路径不同形、于是连旧代码都放过去"的坑。
+    """
+    return tuple(
+        Weapon(id=100 + i, kind=kind, pos=pos, attack_range=attack_range, cooldown=0)
+        for i, (pos, kind) in enumerate(kinds.items())
+    )
+
+
+def _terrain(weapons: tuple[Weapon, ...], *layers: dict[Pos, str]) -> dict[Pos, str]:
+    """名册 → 网格里那几格（武器一样挡路）。与 `_records` 配套，方向只有这一个。"""
+    grid: dict[Pos, str] = {w.pos: w.kind for w in weapons}
+    for layer in layers:
+        grid.update(layer)
+    return grid
 
 
 class MoveWireTest(unittest.TestCase):
@@ -74,6 +94,26 @@ class MoveWireTest(unittest.TestCase):
             actions.Collect("worker", Pos(4, 24)).to_wire(),
             {"action": "collect", "targetPos": [{"x": 4, "y": 24}]},
         )
+
+    def test_attack_wire_shape(self):
+        """逐字对照 `docs/response.txt` 里那条实证报文（**唯一一条 `attack`**）。
+
+        与其它动作**反着来**：这个对象是"武器 10020 由角色 10010 操控"，
+        而 `to_wire()` 编出来的是**挂在武器 id 下的那条记录**（key 由 `planner._emit` 给）。
+        字段名 `controllerId` 写错（`controllerID` / `roleId`）就是一次"指令非法"。
+        """
+        wire = actions.Attack("worker", "10010", Pos(29, 7)).to_wire()
+        self.assertEqual(
+            wire,
+            {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 29, "y": 7}]},
+        )
+        self.assertIsInstance(wire["controllerId"], str, "接口文档标的是 String")
+
+    def test_attack_target_pos_is_always_one_point(self):
+        """`targetPos` 数量 = 武器**等级数**。我们的武器永远是 L1（没有升级券这条线）。"""
+        for role_type in ("worker", "pioneer"):
+            with self.subTest(role_type=role_type):
+                self.assertEqual(len(actions.Attack(role_type, "7", Pos(1, 1)).to_wire()["targetPos"]), 1)
 
 
 class GateTest(unittest.TestCase):
@@ -121,6 +161,15 @@ class GateTest(unittest.TestCase):
         with self.assertRaises(PermissionError):
             actions.Move("workre", Pos(0, 0))
 
+    def test_attack_is_allowed_for_both_roles(self):
+        """§4.4 里 `attack` 的可用角色是**全部** —— 开拓者也上炮位，别误窄成工人。
+
+        反过来的那种 bug（把开拓者挡在门外）本地全绿，只是整夜少一门火力。
+        """
+        for role_type in ("worker", "pioneer"):
+            with self.subTest(role_type=role_type):
+                self.assertEqual(actions.Attack(role_type, "10010", Pos(1, 1)).to_wire()["action"], "attack")
+
 
 class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
@@ -128,7 +177,7 @@ class HandleTest(unittest.TestCase):
     def _handle(self, raw: bytes) -> dict:
         return json.loads(handle(raw).decode("utf-8"))
 
-    def test_sample_payload_moves_both_workers_to_a_weapon(self):
+    def test_sample_payload_moves_all_three_roles_to_a_weapon(self):
         body = self._handle(SAMPLE.read_bytes())
         self.assertEqual(set(body), {"roleCommandMap", "prompt", "executeCmd"})
         cmds = body["roleCommandMap"]
@@ -136,8 +185,11 @@ class HandleTest(unittest.TestCase):
             {k: [v["targetPos"][0]["x"], v["targetPos"][0]["y"]] for k, v in cmds.items()},
             EXPECTED_MOVES,
         )
-        # 样例是**夜里**：两个工人都只走一格，没有 build / collect（`build` 仅白天）
+        # 样例是**夜里**：三个角色都只走一格，没有 build / collect（`build` 仅白天）
         self.assertEqual({v["action"] for v in cmds.values()}, {"move"})
+        # 三个角色离三座炮都还有十几格 ⇒ 本回合**一发都不该有**（没人贴着炮，
+        # `_fire` 根本不会被调到），于是 key 全落在角色 id 上、没有一个是武器 id
+        self.assertEqual(set(cmds), {"10010", "10011", "10012"})
 
     def test_bad_json_falls_back_to_empty_commands(self):
         """红线兜底：任何失败都退化成**合法空指令**（空指令合法且不计异常）。"""
@@ -157,7 +209,31 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(head.splitlines()[0], "回合 85（夜里）")
         #: 抬头 + 32 行地图（41×32 的图，行自上而下 = y 由大到小）
         self.assertEqual(len(head.splitlines()), 33)
-        self.assertEqual(acts, "动作：10010 move(6,22)；10012 move(9,17)")
+        self.assertEqual(acts, "动作：10010 move(6,22)；10012 move(9,17)；10011 move(9,13)")
+
+    def test_attack_through_the_real_payload_path(self):
+        """端到端**唯一**一条：从真实 payload 到线上报文。
+
+        用样例改成"夜里、一个工人贴着炮、射程内一只机器人"，验证两件只有整条链路才看得见的事：
+        `roleCommandMap` 的 **key 是武器 id**（不是角色 id），`controllerId` 才是角色 id。
+        写反的话——`{"10010": {...}}`——判题器看到的是"角色 10010 在操炮"，
+        而角色 id 根本不是武器，属于"指令非法"（红线）。单测 `to_wire()` 看不出这一点。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 85  # 夜
+        # 10010 挪到加特林 (9,24) 旁边；射程内放一只机器人（加特林射程 4 ⇒ 放 (9,21)）
+        for node in raw["teamOur"]["roles"]:
+            if node["id"] == 10010:
+                node["pos"] = {"x": 9, "y": 23}
+        raw["robot"]["roles"] = [{"id": 9001, "pos": {"x": 9, "y": 21}, "health": 30}]
+
+        cmds = self._handle(json.dumps(raw).encode("utf-8"))["roleCommandMap"]
+        self.assertIn("10020", cmds, "加特林 10020 该由 10010 开火 —— key 是武器 id")
+        self.assertEqual(
+            cmds["10020"],
+            {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 9, "y": 21}]},
+        )
+        self.assertNotIn("10010", cmds, "角色 id 不能当 attack 的 key")
 
 
 class ParseTest(unittest.TestCase):
@@ -175,6 +251,71 @@ class ParseTest(unittest.TestCase):
     def test_map_size_is_read(self):
         """寻路靠它挡界外，读错了不会有任何症状——只会静悄悄地一步不动或走出去。"""
         self.assertEqual(self._turn().map.size, (41, 32))
+
+    def test_weapons_and_robots_come_from_the_payload(self):
+        """武器名册与机器人来自 `teamOur.roles` / `robot.roles`（`turn.weapons` / `turn.robots`）。
+
+        `attackRange` 取**样例**的 4/7/INT_MAX，而不是任务书 §4.5.1 表格里的 3/6/10 ——
+        两处矛盾，以 payload 为准（见 `CLAUDE.md`）。`cooldown` 三座炮**都没有这个字段**
+        ⇒ 全 -1 ⇒ 不当成"冷却中"（否则火箭整晚一炮不开）。
+
+        顺带钉一件事：**地图网格里还留着这三格**（武器一样挡路），
+        但"哪座炮能开火"只认这份名册 —— 第 10 步把 `Map.weapons` 删掉之后，
+        网格那份旧真相与这份新真相在这里对一次。
+        """
+        turn = self._turn()
+        by_id = {w.id: w for w in turn.weapons}
+        self.assertEqual(set(by_id), {10020, 10030, 10040})
+        self.assertEqual(
+            {i: (w.kind, w.pos, w.attack_range, w.cooldown) for i, w in by_id.items()},
+            {
+                10020: ("gatling", Pos(9, 24), 4, -1),
+                10030: ("railgun", Pos(10, 25), 7, -1),
+                10040: ("rocket", Pos(9, 25), 2**31 - 1, -1),
+            },
+        )
+        for weapon in turn.weapons:
+            self.assertEqual(turn.map.cells[weapon.pos.y][weapon.pos.x], weapon.kind)
+
+        self.assertEqual(
+            sorted((r.pos.x, r.pos.y, r.health) for r in turn.robots),
+            [(4, 4, 40), (4, 5, 500), (5, 4, 60), (5, 5, 800)],
+        )
+
+    def test_a_destroyed_weapon_is_not_operated(self):
+        """`health == 0` 的炮**丢掉** —— 已毁的炮不该再被操控（demo 的 `alive()` 也是 `> 0`）。
+
+        样例三座炮的 `health` 都是 1000，这里手改成 0 复现"被打掉一座"。
+        `map.cells` 里它还在（地形由地图层管），但**名册里没有它** ⇒ 不会被发 `attack`。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        for node in raw["teamOur"]["roles"]:
+            if node["id"] == 10020:
+                node["health"] = 0
+        turn = model.load(raw)
+        self.assertEqual({w.id for w in turn.weapons}, {10030, 10040})
+
+    def test_a_destroyed_role_gets_no_command(self):
+        """**阵亡的角色不该再收到指令**（`health == 0`）—— 与"操纵已毁的炮"同一类风险。
+
+        死单位可能仍留在 `teamOur.roles` 里（官方 demo 的 `alive()` 就为此而写）。
+        给尸体发 `move` / `collect` 判题器会怎么算文档没写，但没必要赌。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        for node in raw["teamOur"]["roles"]:
+            if node["id"] == 10012:
+                node["health"] = 0
+        turn = model.load(raw)
+        self.assertEqual({r.id for r in turn.roles}, {10010, 10011})
+
+    def test_a_missing_health_is_not_a_death(self):
+        """`health` **字段缺失**（`_int` 给 -1）与"声明阵亡"（0）要分开 —— 别用 `<= 0`。"""
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        for node in raw["teamOur"]["roles"]:
+            node.pop("health", None)
+        turn = model.load(raw)
+        self.assertEqual(len(turn.roles), 3)
+        self.assertEqual(len(turn.weapons), 3)
 
     def test_only_stone_enters_stones_but_everything_blocks(self):
         """石/铁/铜在网格里分得开，但**只有石矿进 `stones`**。
@@ -391,7 +532,13 @@ class BuildWeaponTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.gold = 75  # 开局：恰好买满三座（25×3）
-        self.entries: dict[Pos, str] = {self.BASE: "station", self.MINE: "stone"}
+        #: 已建成的武器**名册** —— 唯一真相，地形由它推（见 `_terrain`）。
+        #: 直接往 `entries` 里塞一把 `"gatling"` 的话，`turn.weapons` 是空的、
+        #: 名额永远算成"还差三座"，而那一格又挡路 —— 夹具与真实局面不同形。
+        self.weapons: list[Weapon] = []
+        self.walls: dict[Pos, str] = {}
+        #: 静态地形（基地 + 矿），删掉基地就等于"基地没了"那个降级局面
+        self.ground: dict[Pos, str] = {self.BASE: "station", self.MINE: "stone"}
         self.roles: dict[int, BaseRole] = {
             1: Pioneer(1, Pos(20, 20)),
             # 两个工人都**贴着**后方那一列（各差一格），第 1 回合就能动手
@@ -403,9 +550,10 @@ class BuildWeaponTest(unittest.TestCase):
     def _turn(self, round_no: int = 1) -> Turn:
         return Turn(
             round_no=round_no,
-            map=Map((41, 32), self.entries),
+            map=Map((41, 32), _terrain(tuple(self.weapons), self.walls, self.ground)),
             roles=tuple(self.roles.values()),
             gold=self.gold,
+            weapons=tuple(self.weapons),
         )
 
     def _weapons(self) -> list[str]:
@@ -425,12 +573,20 @@ class BuildWeaponTest(unittest.TestCase):
                 target = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
                 if cmd["action"] == "build":
                     self.builds.append((cmd["name"], target))
-                    self.entries[target] = cmd["name"]
-                    if cmd["name"] != WALL:
+                    if cmd["name"] == WALL:
+                        self.walls[target] = WALL
+                    else:
+                        self._add_weapon(cmd["name"], target)
                         self.gold -= 25
                 else:
                     self.roles[role_id] = type(self.roles[role_id])(role_id, target)
         self.fail(f"{limit} 回合还没把三座武器建完，说明在原地绕圈")
+
+    def _add_weapon(self, kind: str, cell: Pos) -> None:
+        """照格式记一座建成的武器（id 递增即可 —— 这里没人按 id 排序）。"""
+        self.weapons.append(
+            Weapon(id=200 + len(self.weapons), kind=kind, pos=cell, attack_range=4, cooldown=0)
+        )
 
     def _builds(self, cmds: dict) -> list[dict]:
         return [c for c in cmds.values() if c["action"] == "build"]
@@ -464,8 +620,8 @@ class BuildWeaponTest(unittest.TestCase):
     def test_never_builds_on_an_occupied_cell(self):
         """目标格已有武器就**换个格子**：覆盖会把原武器打成 level1（§4.5.1 补充说明），
         25 金币打水漂还倒亏一座。"""
-        self.entries[Pos(9, 23)] = "gatling"
-        self.entries[Pos(9, 24)] = "railgun"
+        self._add_weapon("gatling", Pos(9, 23))
+        self._add_weapon("railgun", Pos(9, 24))
         builds = self._builds(plan(self._turn()))
         self.assertEqual(len(builds), 1, "还差一座火箭")
         self.assertEqual(builds[0]["name"], "rocket")
@@ -481,7 +637,7 @@ class BuildWeaponTest(unittest.TestCase):
 
     def test_no_base_means_no_build(self):
         """基地没了就没有可建造区（坐标全由它推）⇒ 不建，而不是瞎猜一个坐标。"""
-        del self.entries[self.BASE]
+        del self.ground[self.BASE]
         self.assertNotIn("build", {c["action"] for c in plan(self._turn()).values()})
 
 
@@ -540,11 +696,15 @@ class BuildWallTest(unittest.TestCase):
 
     BASE = Pos(10, 24)
     MINE = Pos(4, 24)  # 基地左侧的石矿
-    #: 三座武器先摆好 —— 否则金币/名额会先把工人抽去建武器（那是 `BuildWeaponTest` 的事）
-    WEAPONS = {Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"}
+    #: 三座武器先摆好 —— 否则金币/名额会先把工人抽去建武器（那是 `BuildWeaponTest` 的事）。
+    #: **记录是唯一真相**（`_records`），地形由 `_terrain` 推 —— 只有网格没有名册的话，
+    #: "还差几座"会算成还差三座，而降级方向恰好也是"不建"（金币 0），症状就藏起来了。
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
 
     def setUp(self) -> None:
-        self.entries: dict[Pos, str] = {self.BASE: "station", self.MINE: "stone", **self.WEAPONS}
+        self.entries: dict[Pos, str] = _terrain(
+            self.WEAPONS, {self.BASE: "station", self.MINE: "stone"}
+        )
         self.worker = Worker(1, Pos(6, 24))
 
     def _turn(self, round_no: int = 1, stone: int = 0, pos: Pos | None = None) -> Turn:
@@ -554,6 +714,7 @@ class BuildWallTest(unittest.TestCase):
             map=Map((41, 32), self.entries),
             roles=(self.worker,),
             gold=0,
+            weapons=self.WEAPONS,
         )
 
     def test_day_one_mines_then_walls_the_whole_ring_in_order(self):
@@ -628,12 +789,14 @@ class TwoWallBuildersTest(unittest.TestCase):
 
     BASE = Pos(10, 24)
     MINE = Pos(4, 24)
-    WEAPONS = {Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"}
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
     #: 死循环当时的局面：正面列已砌三格，两个工人卡在基地与正面列之间的夹缝里
     FRONT_BUILT = {Pos(13, 22): WALL, Pos(13, 23): WALL, Pos(13, 24): WALL}
 
     def test_two_workers_keep_building_in_the_pocket(self):
-        entries = {self.BASE: "station", self.MINE: "stone", **self.WEAPONS, **self.FRONT_BUILT}
+        entries = _terrain(
+            self.WEAPONS, {self.BASE: "station", self.MINE: "stone"}, self.FRONT_BUILT
+        )
         roles = {
             10010: Worker(10010, Pos(13, 21), 14),
             10012: Worker(10012, Pos(11, 22), 13),
@@ -642,7 +805,13 @@ class TwoWallBuildersTest(unittest.TestCase):
         for rnd in range(1, 7):  # 6 回合足够砌完剩下的正面列（死循环下一次都砌不上）
             # 角色压在静态层之上 —— 与 `model._entries` 的写入顺序一致（单位盖过地形）
             grid = {**entries, **{r.pos: "worker" for r in roles.values()}}
-            turn = Turn(round_no=rnd, map=Map((41, 32), grid), roles=tuple(roles.values()), gold=0)
+            turn = Turn(
+                round_no=rnd,
+                map=Map((41, 32), grid),
+                roles=tuple(roles.values()),
+                gold=0,
+                weapons=self.WEAPONS,
+            )
             for key, cmd in plan(turn).items():
                 role_id = int(key)
                 cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
@@ -664,22 +833,68 @@ class TwoWallBuildersTest(unittest.TestCase):
 
 
 class NightWeaponTest(unittest.TestCase):
-    """夜里：工人回基地、走到武器旁边待命。`attack`（真的开火）是**下一步**。"""
+    """夜里：**所有角色**（含开拓者）回炮位、开火打**射程内血最少**的机器人。
+
+    `attack` **仅黑夜**可用、`build`/`collect` 仅工人（任务书 §4.4），所以夜里
+    除了 `move` 就只该有 `attack`。
+    """
 
     BASE = Pos(10, 24)
     NIGHT = 85
-    NEAR, FAR = Pos(12, 25), Pos(9, 22)
+    NEAR, FAR = Pos(12, 25), Pos(9, 22)  # 两座加特林
+    REACH = 4  # 加特林 L1 的射程，**取自样例 payload**（任务书表格写的是 3）
+    GUN = 10020  # `_manned` 那座炮的 id —— `attack` 的 key 就是它
 
-    def _turn(self, *workers: Worker, weapons: tuple[Pos, ...] | None = None) -> Turn:
+    def _turn(
+        self,
+        *roles: BaseRole,
+        weapons: tuple[Weapon, ...] | None = None,
+        robots: tuple[Robot, ...] = (),
+        round_no: int | None = None,
+    ) -> Turn:
         # `weapons=None` 才是"用默认的两座"；**不能用 `or`** —— 空元组也是假值，
         # 那样 `test_no_weapons_means_nothing_to_do` 会静默拿到两座武器、白测一场。
-        weapons = (self.NEAR, self.FAR) if weapons is None else weapons
+        weapons = self._guns(self.NEAR, self.FAR) if weapons is None else weapons
         return Turn(
-            round_no=self.NIGHT,
-            map=Map((41, 32), {self.BASE: "station", **{p: "gatling" for p in weapons}}),
-            roles=workers,
+            round_no=self.NIGHT if round_no is None else round_no,
+            map=Map((41, 32), _terrain(weapons, {self.BASE: "station"})),
+            roles=roles,
             gold=0,
+            weapons=weapons,
+            robots=robots,
         )
+
+    def _guns(self, *cells: Pos) -> tuple[Weapon, ...]:
+        """按样例的 L1 加特林造记录（射程 4、无冷却），id 从 `GUN` 起编号 ——
+        断言里要能一眼看出"开火的是哪一座"，所以第一座就取 `GUN`。"""
+        return tuple(
+            Weapon(id=self.GUN + i, kind="gatling", pos=cell, attack_range=self.REACH, cooldown=0)
+            for i, cell in enumerate(cells)
+        )
+
+    def _manned(
+        self,
+        *robots: Robot,
+        reach: int | None = None,
+        cooldown: int = 0,
+        round_no: int | None = None,
+    ) -> Turn:
+        """一名工人**已经贴着**那座加特林（切比雪夫 1）—— 开火与否只看目标与冷却。"""
+        gun = Weapon(
+            id=self.GUN,
+            kind="gatling",
+            pos=self.NEAR,
+            attack_range=self.REACH if reach is None else reach,
+            cooldown=cooldown,
+        )
+        return self._turn(
+            Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots, round_no=round_no
+        )
+
+    def _only_cmd(self, turn: Turn) -> dict:
+        cmds = plan(turn)
+        self.assertEqual(len(cmds), 1, f"应当恰好一条指令，实际 {cmds}")
+        return next(iter(cmds.values()))
 
     def test_walks_toward_the_nearest_weapon_and_never_builds(self):
         """夜里 `build` 不可用（任务书 §4.4）—— 一条 `build`/`collect` 都不该有。"""
@@ -689,17 +904,117 @@ class NightWeaponTest(unittest.TestCase):
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(13, 25), "朝最近的 (12,25) 迈一步，停在它旁边")
 
-    def test_two_workers_do_not_share_a_weapon(self):
-        """一人只能操一座武器 —— 两个工人都挤同一座，等于白白少一座火力。"""
+    def test_two_roles_do_not_share_a_weapon(self):
+        """一人只能操一座武器 —— 两个角色都挤同一座，等于白白少一门火力。"""
         cmds = plan(self._turn(Worker(1, Pos(14, 26)), Worker(2, Pos(14, 24))))
         second = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
-        # 两个工人到 (12,25) 都是 2 格，最近的**都是它**；没有去重的话 2 号也会奔它去
+        # 两个角色到 (12,25) 都是 2 格，最近的**都是它**；没有去重的话 2 号也会奔它去
         self.assertGreater(second.dist(self.NEAR), 1, "2 号必须换一座，不能也去挤 (12,25)")
         self.assertLess(second.dist(self.FAR), 5, "换的那座该是下一近的 (9,22)")
 
     def test_no_weapons_means_nothing_to_do(self):
         """武器全没了 ⇒ 不动（空指令合法），而不是瞎走。"""
         self.assertEqual(plan(self._turn(Worker(1, Pos(14, 26)), weapons=())), {})
+
+    def test_the_pioneer_also_mans_a_weapon(self):
+        """**开拓者也在炮位上**（§4.4 里 `attack` 的可用角色是"全部"）。
+
+        用户这一步的原话是"**所有**角色（上限三个）回来操作武器"。开拓者漏掉的话
+        本地全绿，只是整夜少一门火力 —— 而它恰恰是离炮最远的那个。
+        """
+        cmds = plan(
+            self._turn(
+                Pioneer(1, Pos(12, 24)),  # 贴着 NEAR
+                Worker(2, Pos(9, 21)),  # 贴着 FAR（射程内没有敌人 ⇒ 它不开火）
+                robots=(Robot(Pos(12, 27), 40),),
+            )
+        )
+        self.assertEqual(set(cmds), {str(self.GUN)}, "开拓者开的那一炮在不在？")
+        self.assertEqual(cmds[str(self.GUN)]["controllerId"], "1", "操控者是开拓者")
+
+    def test_the_command_hangs_on_the_weapon_id(self):
+        """⚠️ **`attack` 的 key 是武器 id**，操控角色在 `controllerId` 里（`docs/response.txt`）。
+
+        写成 `{"1": …}`（角色 id）本地照样绿，判题器看到的却是"角色 1 在操炮" —— 一次"指令非法"。
+        """
+        cmd = self._only_cmd(self._manned(Robot(Pos(12, 27), 40)))
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["controllerId"], "1", "操控者是角色 id（字符串）")
+        self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 27}])
+
+    def test_picks_the_weakest_not_the_nearest(self):
+        """用户选定：**射程内血最少的**（补刀优先）—— 不是最近的那只。"""
+        cmd = self._only_cmd(
+            self._manned(Robot(Pos(12, 26), 900), Robot(Pos(14, 26), 40))
+        )
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}], "该打 40 血那只，哪怕它更远")
+
+    def test_distance_breaks_the_health_tie(self):
+        """血量并列时打**近**的（同血量下先打完近的，远处的下一回合再补）。"""
+        cmd = self._only_cmd(
+            self._manned(Robot(Pos(15, 25), 40), Robot(Pos(13, 26), 40))
+        )
+        self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 26}])
+
+    def test_ignores_the_weakest_when_it_is_out_of_range(self):
+        """**先按射程过滤、再取血最少的** —— 顺序写反就成了"拿全场最弱、但打不着的当目标"。"""
+        weak = Robot(Pos(12, 31), 10)  # 距 (12,25) 是 6，够不着
+        cmd = self._only_cmd(self._manned(weak, Robot(Pos(13, 25), 900)))
+        self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 25}], "10 血那只够不着，只能打 900 的")
+
+    def test_range_boundary_is_chebyshev(self):
+        """射程用**切比雪夫**（任务书 L230），边界取 `<=`：对角 4 格打得到，5 格打不到。
+
+        写成欧氏/曼哈顿，或把 `<=` 写成 `<`，都会在边界上静静地少打一发。
+        """
+        edge = self._manned(Robot(Pos(16, 29), 40))  # 对角 (+4,+4) ⇒ 切比雪夫 4
+        self.assertEqual(self._only_cmd(edge)["targetPos"], [{"x": 16, "y": 29}])
+        self.assertEqual(plan(self._manned(Robot(Pos(17, 30), 40))), {}, "5 格超出射程")
+
+    def test_attack_range_comes_from_the_payload(self):
+        """射程取自记录（payload 的 `attackRange`），**不是代码里的常数**。
+
+        同一个目标：射程 4 够不着、射程 7 够得着 —— 任务书 §4.5.1 的表格写 3/6/10，
+        与样例 payload 的 4/7/INT_MAX 矛盾，**以 payload 为准**。
+        """
+        far = Robot(Pos(17, 30), 40)  # 切比雪夫 5
+        self.assertEqual(plan(self._manned(far, reach=4)), {})
+        self.assertEqual(self._only_cmd(self._manned(far, reach=7))["targetPos"], [{"x": 17, "y": 30}])
+
+    def test_a_cooling_rocket_holds_fire(self):
+        """火箭发射台发射后有 3 回合空窗（`cooldown`）⇒ 冷却中**一炮不发**，
+        而且**不换炮**（换炮会让角色在炮位之间周期性来回走）。"""
+        robot = Robot(Pos(12, 26), 40)
+        self.assertEqual(plan(self._manned(robot, cooldown=2)), {})
+        self.assertEqual(self._only_cmd(self._manned(robot, cooldown=0))["action"], "attack")
+
+    def test_a_missing_cooldown_means_no_cooldown(self):
+        """`cooldown` 缺失时 `model` 给 -1 ⇒ **不算冷却中**。
+
+        样例三座炮都没有这个字段 —— 把缺省值写成"冷却中"的话，火箭整晚一炮不开，
+        而日志上什么都看不出来。
+        """
+        self.assertEqual(self._only_cmd(self._manned(Robot(Pos(12, 26), 40), cooldown=-1))["action"], "attack")
+
+    def test_a_dead_robot_is_not_worth_a_shot(self):
+        """`health == 0` 的机器人（尸体）不占目标 —— 打空处白耗一次冷却。"""
+        self.assertEqual(plan(self._manned(Robot(Pos(12, 26), 0))), {})
+
+    def test_no_robot_in_range_means_hold_fire(self):
+        """用户选定：机器人还没走进射程时**站在炮位待命**（不发指令，空指令合法）。"""
+        self.assertEqual(plan(self._manned()), {}, "没敌人 ⇒ 什么都不发")
+        self.assertEqual(
+            plan(self._manned(Robot(Pos(12, 31), 40))), {}, "敌人还在射程外 ⇒ 也不发"
+        )
+
+    def test_missing_round_no_never_fires(self):
+        """`roundNo` 缺失 ⇒ `within = 129` ⇒ `is_day` 判成**夜里**。
+
+        那个降级方向对"白天不许建造"是安全的，对 `attack` 就反了：**白天开火是非法的**。
+        所以 `round_no < 0` 时一条都不发 —— 代价只是这一个回合不动。
+        """
+        turn = self._manned(Robot(Pos(12, 26), 40), round_no=-1)
+        self.assertEqual(plan(turn), {})
 
 
 class PathTest(unittest.TestCase):

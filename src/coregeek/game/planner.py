@@ -1,19 +1,27 @@
 """决策入口：`Turn` → `roleCommandMap`。**策略只写在这里。**
 
-工人每回合按 `docs/策略指导.md` 的优先级**择一**（每回合每个角色只能一个动作，任务书 L177）：
+角色每回合按 `docs/策略指导.md` 的优先级**择一**（每回合每个角色只能一个动作，任务书 L177）。
+昼夜是两条不同的线 —— **白天只动工人，夜里所有角色都上炮位**：
 
-1. **建武器** —— 白天、武器数 < 角色数、金币够。位置优先放在**基地后方**那一列，
+**白天**（工人）：
+
+1. **建武器** —— 武器数 < 角色数、金币够。位置优先放在**基地后方**那一列，
    让基地的 2×2 实体挡在武器与机器人之间（"建造的位置优先放在基地后面，让基地也能
    防守一下机器人的进攻"）。三座按 加特林 → 电磁狙击炮 → 火箭发射台。
-2. **白天：采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
+2. **采石砌墙** —— "工人最先建立武器，然后找石矿建墙，找石矿应该要去**最近的**，
    另外**必须在晚上到来前将墙建好，注意计算回合数**"。攒几块不写死，按**白天还剩的回合数**
    现算（见 `_stones_to_mine`）。墙砌在**面向机器人进攻的方向**（保护基地），背面留缺口。
-3. **夜里：走到武器旁边待命** —— `attack` 还没落地，这一步只把"就位"做完（站位要求与
-   `step_toward` 停在一格外的契约一致，`attack` 落地时只需在这里补一条 emit）。
 
-开拓者这一步不发指令。
+开拓者白天不发指令（任务线还没做）。
+
+**夜里**（**所有角色，含开拓者** —— §4.4 里 `attack` 的可用角色列写的就是"全部"）：
+
+3. **回炮位操炮** —— 走到最近的一座还没被本回合别人认领的武器旁，贴着就开火（见 `_defend`）；
+   够不着/没敌人/炮在冷却就**站在炮位待命，什么都不发**（空指令合法且不计异常）。
+   火力目标 = **射程内血最少的机器人**（补刀）。
 
 返回 `{角色ID: 指令}`，key 用**字符串** —— JSON 对象的 key 本来就是字符串。
+⚠️ **`attack` 那条是唯一的例外**：它的 key 是**武器 id**，操控者在 `controllerId` 里。
 """
 
 import logging
@@ -23,7 +31,7 @@ from typing import Any
 from ..protocol import actions  # 唯一一条"由内往外"的依赖：指令只能经 Action 产出
 from .grid import Pos, back_weapon_cells, step_toward, wall_cells
 from .roles import BaseRole, Worker
-from .world import Turn
+from .world import Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,8 +69,13 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     slots = _slots(turn)
 
     for role in turn.roles:
+        if not turn.is_day:
+            # 夜里**所有**角色回炮位 —— 开拓者也上（§4.4 的 attack 可用角色就是"全部"）
+            _defend(role, turn, cmds, claimed, taken)
+            continue
+
         if not isinstance(role, Worker):
-            continue  # 开拓者这一步不动（见 code-task.md「不做什么」）
+            continue  # 白天开拓者不动（任务线未做，见 code-task.md「不做什么」）
 
         slot = next(slots, None)
         if slot is not None and budget >= WEAPON_COST:
@@ -83,10 +96,7 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
                     continue
             # 建不了 / 走不到 → 落到下面，别杵着
 
-        if turn.is_day:
-            _build_walls(role, turn, cmds, claimed, sites)
-        else:
-            _to_weapon(role, turn, cmds, claimed, taken)
+        _build_walls(role, turn, cmds, claimed, sites)
 
     return cmds
 
@@ -109,12 +119,12 @@ def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
     if station is None:
         return
 
-    have = turn.map.weapons
-    need = len(turn.roles) - sum(len(positions) for positions in have.values())
+    have = {w.kind for w in turn.weapons}  # 名册在 `Turn.weapons`（网格里那份第 10 步删了）
+    need = len(turn.roles) - len(turn.weapons)
     if need <= 0:
         return
 
-    kinds = [k for k in WEAPON_ORDER if not have.get(k)]
+    kinds = [k for k in WEAPON_ORDER if k not in have]
     free = [c for c in back_weapon_cells(station, turn.map.size[0]) if c not in turn.map.blocked]
     yield from list(zip(kinds, free))[:need]
 
@@ -222,33 +232,72 @@ def _nearest_stone(pos: Pos, stones: frozenset[Pos]) -> Pos | None:
     return min(stones, key=pos.dist, default=None)
 
 
-# ── 夜里：走到武器旁边待命 ──────────────────────────────────────────
-def _to_weapon(
-    role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], taken: set[Pos]
+# ── 夜里：回炮位、开火 ──────────────────────────────────────────────
+def _defend(
+    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], taken: set[Pos]
 ) -> None:
-    """夜里：走到最近的一座**还没被本回合别的工人认领**的武器旁边。
+    """夜里：走到最近的一座**还没被本回合别的角色认领**的武器旁，贴着就开火。
 
-    一人只能操一座武器，所以用 `taken` 去重 —— 两个工人挤同一座，等于有一个白站。
-    贴着武器（切比雪夫 ≤ 1）就停手：`attack` 的站位要求正是这个距离，
-    下一步只需在这里补一条 emit。
+    **所有角色都走这里**（含开拓者）—— §4.4 里 `attack` 的可用角色是"全部"。
 
-    场上没有武器 ⇒ 不动（空指令合法）。
+    **回合号缺失（`round_no < 0`）时一发不发。** `is_day` 把缺失的回合号判成夜里
+    （`within = 129`）—— 那个降级方向对"白天不许建造"是**安全**的（少建一座），
+    对 `attack` 就反过来了：**白天开火是非法的**（任务书 L122 / 接口文档 L229）。
+    同一个降级方向，这里必须掰回来。
+
+    选炮：最近的、没人认领的；**同距离按 `id` 排** —— `Weapon` 带 id，顺手补成全序，
+    否则并列时的先后取决于 payload 里的顺序，用例复现不了。
+
+    贴着炮（切比雪夫 ≤1）就**认领并停在这里**，开不开火交给 `_fire`。**不换炮**：
+    站哪座炮是走到位那一刻定下的事，每回合重挑一遍会让角色在炮位之间周期性来回走
+    （第 8 步 `_ring` 那个死循环的同一类坑）。一人同时只能操一座，所以用 `taken` 去重 ——
+    两个角色挤同一座等于有一个白站。
+
+    场上没有武器 ⇒ 不动（空指令合法且不计异常）。
     """
-    for cell in sorted(_weapons(turn) - taken, key=role.pos.dist):
-        if role.pos.dist(cell) <= 1:
-            taken.add(cell)
-            return  # 已就位。`attack` 落地前不发任何指令
-        step = step_toward(role.pos, cell, turn.map.blocked | claimed, turn.map.size)
+    if turn.round_no < 0:
+        return
+    for weapon in sorted(turn.weapons, key=lambda w: (role.pos.dist(w.pos), w.id)):
+        if weapon.pos in taken:
+            continue
+        if role.pos.dist(weapon.pos) <= 1:
+            taken.add(weapon.pos)
+            _fire(role, weapon, turn, cmds)  # 打不了就不发，但人已经站住了
+            return
+        step = step_toward(role.pos, weapon.pos, turn.map.blocked | claimed, turn.map.size)
         if step is None or not _emit(cmds, role, actions.Move, step):
             continue  # 走不到 / 发不出去 → 换下一座，别为一棵树放弃整片林子
-        taken.add(cell)  # 认领发生在迈步之后：没走成才轮到下一座
+        taken.add(weapon.pos)  # 认领发生在迈步之后：没走成才轮到下一座
         claimed.add(step)
         return
 
 
-def _weapons(turn: Turn) -> set[Pos]:
-    """我方全部武器的落点（不分类别 —— 夜里只关心"哪一座最近"）。"""
-    return {cell for positions in turn.map.weapons.values() for cell in positions}
+def _fire(role: BaseRole, weapon: Weapon, turn: Turn, cmds: dict[str, dict[str, Any]]) -> bool:
+    """贴着炮了：能打就打一发，返回发没发出去。**打不了就什么都不发** ——
+    空指令合法且不计异常（`CLAUDE.md` 硬约束 2）。
+
+    - **冷却中不打**：火箭发射台发射后有 3 回合空窗（接口文档 L99）。**字段缺失时不算冷却**
+      （`cooldown = -1`；样例三座炮都没有这个字段）—— 否则火箭整晚一炮不开。
+    - **射程内没有机器人不打**：打空处是"指令执行失败"（任务书 L508），不致命，
+      但白耗一次冷却，还看不出是"没敌人"还是"瞄错了"。
+    - 目标 = **射程内血最少的**（用户选定：补刀优先，**距离作平手判定**）。
+      ⚠️ **必须先按射程过滤、再取 min** —— 顺序写反就成了"拿全场最弱、但打不着的那个当目标"。
+    - **不按"本回合已被别人瞄过"去重**：用户选的就是补刀 = 集火，摊开火力正好相反。
+    - 机器人 `health` 缺失（-1）时**按"还活着"算**（`!= 0`，与 `model._destroyed` 同源）：
+      打空处只是执行失败，而"一律不打"会让整晚一炮不开 —— 降级方向选前者。
+    """
+    if weapon.cooldown > 0:
+        return False
+    reach = [
+        r
+        for r in turn.robots
+        if r.health != 0 and weapon.pos.dist(r.pos) <= weapon.attack_range
+    ]
+    if not reach:
+        return False
+    target = min(reach, key=lambda r: (r.health, weapon.pos.dist(r.pos)))
+    # **key 是武器 id**，操控角色在报文的 `controllerId` 里（`actions.Attack`）
+    return _emit(cmds, role, actions.Attack, str(role.id), target.pos, key=str(weapon.id))
 
 
 # ── 发指令 ──────────────────────────────────────────────────────────
@@ -273,16 +322,24 @@ def _step(
 
 
 def _emit(
-    cmds: dict[str, dict[str, Any]], role: BaseRole, cls: type[actions.BaseAction], *args: Any
+    cmds: dict[str, dict[str, Any]],
+    role: BaseRole,
+    cls: type[actions.BaseAction],
+    *args: Any,
+    key: str | None = None,
 ) -> bool:
     """造一条指令放进 `cmds`，成功返回 True。
+
+    默认挂在 `str(role.id)` 下 —— **只有 `attack` 例外**：它的 key 是**武器 id**，
+    操控者在报文的 `controllerId` 里（`actions.Attack`）。所以这里开一个 keyword-only 的
+    口子，**只有 `_fire` 那一处传 `key`**；`PermissionError` 的兜底保持"只此一处"，不另开出口。
 
     **越权只丢这一条并告警**，不连坐同回合其他角色 —— 若越权是系统性的，抛出去会变成
     "每回合空指令 → 全队冻结一整局"，现象与 `main3.py` 改名事故一样难排查
     （`CLAUDE.md` 硬约束 3）。`role_type` 是 Action 唯一能自证的权限，所以闸门只能在这里。
     """
     try:
-        cmds[str(role.id)] = cls(role.type_name, *args).to_wire()
+        cmds[key if key is not None else str(role.id)] = cls(role.type_name, *args).to_wire()
     except PermissionError as exc:
         LOGGER.warning("拦下越权动作：角色 %s(%s) %s", role.id, role.type_name, exc)
         return False

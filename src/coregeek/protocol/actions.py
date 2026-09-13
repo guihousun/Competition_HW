@@ -12,7 +12,7 @@
     参数      §2.2 RoleCommand 里该动作用到的字段
     to_wire   编成 §2.2 的扁平记录
 
-> 目前有 `move`（对全部角色合法）、`build` 与 `collect`（**都仅工人**）—— 按"禁止冗余设计"，
+> 目前有 `move` 与 `attack`（对全部角色合法）、`build` 与 `collect`（**都仅工人**）—— 按"禁止冗余设计"，
 > 没实现的动作为空壳，等落地时再加。`build` 是**闸门第一次真的挡住东西**：
 > 把 `build` 发给开拓者，以前只是"格式合法地做错事"，现在连对象都造不出来。
 """
@@ -29,14 +29,23 @@ ALL = WORKER | PIONEER
 def describe(cmds: dict[str, Any]) -> str:
     """把 `roleCommandMap` 压成**一行**日志：`10010 move(12,22)；10012 build wall(13,23)`。
 
+    `attack` 多带一个操控者：`10020 attack←10010(4,4)` —— 那条指令的 key 是**武器 id**，
+    不带上角色就看不出来是谁在开炮。**只加这一个字段**：日志每回合都打，
+    体量已经贴着管道缓冲那条风险线了（`CLAUDE.md` 硬约束 5）。
+
     放在本模块而不是 `app`：`action` / `name` / `targetPos` 这几个字段名只有这里知道
     （`app` 只管三个顶层字段的封装）。唯一使用者是 `app._log` 的复盘日志。
     """
     parts = []
     for role_id, cmd in cmds.items():
         point = cmd["targetPos"][0]
+        what = cmd["action"]
         name = cmd.get("name")
-        what = f"{cmd['action']} {name}" if name else cmd["action"]
+        if name:
+            what = f"{what} {name}"
+        controller = cmd.get("controllerId")
+        if controller:
+            what = f"{what}←{controller}"
         parts.append(f"{role_id} {what}({point['x']},{point['y']})")
     return "；".join(parts) if parts else "（空指令）"
 
@@ -131,5 +140,41 @@ class Collect(BaseAction):
     def to_wire(self) -> dict[str, Any]:
         return {
             "action": self.code,
+            "targetPos": [{"x": self.target.x, "y": self.target.y}],
+        }
+
+
+class Attack(BaseAction):
+    """操作武器打**一个格子**。**仅黑夜**，且**全部角色**都能做（任务书 §4.4 最右列）——
+    开拓者也在炮位上，别把 `roles` 误窄成工人。
+
+    ⚠️ **报文形状与其它动作是反的，最易写错**：`roleCommandMap` 的 **key 是武器 id**，
+    操控者在 `controllerId` 里 —— 所以 `planner` 那边发射要用 `_emit(..., key=str(weapon.id))`。
+    实证报文（`docs/response.txt`，那条 key `10020` 就是一座加特林）：
+    `{"action":"attack","controllerId":"10010","targetPos":[{"x":29,"y":7}]}`
+
+    判题器侧的两条站位硬规则（不满足是"指令执行失败"，**不计**异常，但白打一发）：
+    操控者须站在武器**周围一格内**（**切比雪夫 ≤1**），且**一人同时只能操控一座**武器。
+    目标格须在射程内 —— **打空处 = 执行失败**（任务书 L508）。多目标
+    （`targetPos` 数量 = 武器等级数）这一步不做：我们的武器永远是 L1。
+
+    白天那半边**不在闸门里**（闸门只管"谁"，而 §4.4 是"全部"）—— 由 `planner` 的
+    `turn.is_day` 把关，与 `build` 的白天门同一条做法。但要留意「**缺失回合号被判成夜里**」
+    这个降级方向对 `attack` 是**危险**的（白天开火非法），所以 `_defend` 另有 `round_no < 0` 的硬门。
+    """
+
+    code = "attack"
+    roles = ALL
+
+    def __init__(self, role_type: str, controller_id: str, target: Pos) -> None:
+        super().__init__(role_type)
+        #: 接口文档标的是 String —— 在这里定死，别让 int 漏进 JSON
+        self.controller_id = str(controller_id)
+        self.target = target
+
+    def to_wire(self) -> dict[str, Any]:
+        return {
+            "action": self.code,
+            "controllerId": self.controller_id,
             "targetPos": [{"x": self.target.x, "y": self.target.y}],
         }

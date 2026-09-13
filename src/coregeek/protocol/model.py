@@ -8,6 +8,10 @@
 
 **一趟扫描铺出整张地图**（`_entries`）。以前是四趟分头扫，`blocked` 和 `mines` 各解析了一遍
 `mapInfo`——两份真相迟早对不上，而对不上的症状是"以为能走、其实撞墙"。
+
+**我方角色与武器混在同一张 `teamOur.roles` 里**（**没有** `teamOur.weapons` 这个 key），
+靠 `roleType` 分流：`_character` 认角色、`_weapons` 认三种武器。两遍扫描是有意的 ——
+一张表喂两个方向完全不同的领域对象（角色带背包、武器带射程），合成一趟只会立刻再拆开。
 """
 
 from typing import Any
@@ -15,7 +19,7 @@ from typing import Any
 from ..game.grid import Pos
 from ..game.map import ENEMY_PREFIX, ROBOT_PREFIX, Map
 from ..game.roles import BaseRole, make
-from ..game.world import Turn
+from ..game.world import WEAPON_KINDS, Robot, Turn, Weapon
 
 
 def load(payload: Any) -> Turn | None:
@@ -33,6 +37,8 @@ def load(payload: Any) -> Turn | None:
             if c
         ),
         gold=_gold(payload),
+        weapons=_weapons(payload),
+        robots=_robots(payload),
     )
 
 
@@ -104,12 +110,78 @@ def _character(node: Any) -> BaseRole | None:
 
     先确认 `role_type` 是 `str` 再交给 `make()` —— 那里用 `dict.get`，不可哈希的 key 会抛。
     """
-    if not isinstance(node, dict):
+    if not isinstance(node, dict) or _destroyed(node):
         return None
     pos, role_id, role_type = _pos(node), _int(node.get("id")), node.get("roleType")
     if pos is None or role_id < 0 or not isinstance(role_type, str):
         return None
     return make(role_id, pos, role_type, _stone(node))
+
+
+def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
+    """我方武器名册 —— `attack` 唯一的目标表（key 就是这里的 `id`）。
+
+    武器和角色**混在 `teamOur.roles` 里**，靠 `roleType` 认（`world.WEAPON_KINDS`）。
+    只扫我方：敌方那三座炮在 `teamEnemy.roles` 里，而它们本来就带 `enemy:` 前缀、
+    也不该被我们操控。
+
+    两条丢掉的规则，都对着"别发出非法指令"：
+    - **`id < 0`（字段缺失）⇒ 丢** —— 否则 key 会变成 `"-1"`，判题器看到不存在的单位
+      可能直接算"指令非法"，而红线只有 5 次。`_character` 早就这么防了，照抄。
+    - **已毁 ⇒ 丢**（见 `_destroyed`）—— 已毁的炮不该再被操纵。
+
+    `attackRange` / `cooldown` 解析不出来 ⇒ `-1`，方向是**故意分开**的：
+    射程 -1 ⇒ 谁都够不着 ⇒ **不开火**（少做，不是乱做）；
+    冷却 -1 ⇒ `> 0` 为假 ⇒ **照打**（样例三座炮就都没有这个字段，
+    缺了当"没有冷却"，与加特林/电磁炮恒为 0 的事实一致）。
+    """
+    out = []
+    for node in _items(payload, "teamOur", "roles"):
+        if not isinstance(node, dict) or _destroyed(node):
+            continue
+        kind, pos, role_id = node.get("roleType"), _pos(node), _int(node.get("id"))
+        if not isinstance(kind, str) or kind not in WEAPON_KINDS:
+            continue
+        if pos is None or role_id < 0:
+            continue
+        out.append(
+            Weapon(
+                id=role_id,
+                kind=kind,
+                pos=pos,
+                attack_range=_int(node.get("attackRange")),
+                cooldown=_int(node.get("cooldown")),
+            )
+        )
+    return tuple(out)
+
+
+def _robots(payload: dict[str, Any]) -> tuple[Robot, ...]:
+    """场上**全部**机器人（`robot.roles`）：全图可见、逐回合全量，白天为空。
+
+    只留 `pos` + `health` —— 打谁只看血量（用户选定的"补刀"）。
+    **不按 `targetTeam` 过滤**：文档声明了字段，但**样例里没有**，
+    靠它过滤会让"字段缺失"变成"一台都不打"。射程本身已经把远处那批筛掉了。
+    """
+    out = []
+    for node in _items(payload, "robot", "roles"):
+        pos = _pos(node)
+        if pos is None:
+            continue
+        out.append(Robot(pos=pos, health=_int(node.get("health"))))
+    return tuple(out)
+
+
+def _destroyed(node: dict[str, Any]) -> bool:
+    """这一条**明确**声明自己已毁 / 已阵亡吗？`health == 0` 才算。
+
+    **用 `== 0` 而不是 `<= 0`**：`_int` 对**字段缺失**给 -1，
+    "声明已毁"（该丢）与"没这个字段"（照旧用）要分开。
+
+    两个使用者：`_character`（别给尸体发 `move` / `collect`）、`_weapons`（别操纵已毁的炮）。
+    机器人**不走这里** —— 它的 `health` 在开火时判（`planner._fire`），规则同源但方向不同。
+    """
+    return _int(node.get("health")) == 0
 
 
 def _gold(payload: dict[str, Any]) -> int:
