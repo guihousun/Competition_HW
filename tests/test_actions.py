@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.app import handle  # noqa: E402
-from coregeek.game.grid import Pos  # noqa: E402
+from coregeek.game.grid import Pos, step_toward  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.roles import Worker  # noqa: E402
 from coregeek.game.world import Turn  # noqa: E402
@@ -106,6 +106,10 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(len(turn.roles), 3)
         self.assertEqual(turn.station, Pos(10, 24))  # 基地拿的是左上角
 
+    def test_map_size_is_read(self):
+        """寻路靠它挡界外，读错了不会有任何症状——只会静悄悄地一步不动或走出去。"""
+        self.assertEqual(self._turn().size, (41, 32))
+
     def test_mines_are_parsed_by_kind(self):
         """石/铁/铜分开；小贩、武器商店、任务点**不是**矿，别混进来。"""
         mines = self._turn().mines
@@ -126,6 +130,7 @@ class MineApproachTest(unittest.TestCase):
         mines = {self.MINE: "stone"} if mines is None else mines
         return Turn(
             round_no=1,
+            size=(41, 32),
             roles=(Worker(1, worker_pos),),
             blocked=frozenset(mines),  # 矿格挡路，正如真实 payload
             station=None,
@@ -153,6 +158,55 @@ class MineApproachTest(unittest.TestCase):
     def test_no_stone_mine_means_no_action(self):
         """场上只有铁矿 → 工人原地不动，而不是随便找个矿走过去。"""
         self.assertEqual(plan(self._turn(Pos(20, 20), {self.MINE: "iron"})), {})
+
+
+class PathTest(unittest.TestCase):
+    """寻路：BFS 最短路。**这两个局面上贪心版都会挂** —— 换掉它的理由就在这。"""
+
+    def _walk(self, turn: Turn, limit: int) -> tuple[int, Turn]:
+        """把回合串起来走，返回 `(实际走了几步, 走完的局面)`。"""
+        for moves in range(limit + 1):
+            cmds = plan(turn)
+            if not cmds:
+                return moves, turn
+            t = cmds["1"]["targetPos"][0]
+            turn = turn._replace(roles=(Worker(1, Pos(t["x"], t["y"])),))
+        self.fail(f"{limit} 回合还没走到，说明在原地绕圈或卡死")
+
+    def test_walks_around_a_wall(self):
+        """一堵横墙把直路封死，只能绕到墙的右端过去。
+
+        贪心会在 `(4,4)` 停死：那里**没有任何一格更近**（更近的三格全在 y=3 的墙上），
+        而它只会挑"确实更近"的格子。BFS 绕得过。
+        """
+        wall = {Pos(x, 3) for x in range(8)}  # x=0..7 一整行
+        mine = Pos(5, 1)
+        turn = Turn(
+            round_no=1,
+            size=(12, 12),
+            roles=(Worker(1, Pos(5, 5)),),
+            blocked=frozenset(wall | {mine}),
+            station=None,
+            mines={mine: "stone"},
+        )
+
+        # 最短路 5 步：(5,5)→(6,4)→(7,4)→(8,3)[绕过墙]→(7,2)→(6,2)，(6,2) 距矿 1
+        moves, final = self._walk(turn, 20)
+        self.assertEqual(moves, 5, "步数不等于最短路 ⇒ 找的不是最短路")
+        self.assertEqual(final.roles[0].pos.dist(mine), 1, "绕过去了但没停在矿边")
+
+    def test_never_leaves_the_map(self):
+        """地图边界**不在任务书 L85 的阻挡清单里**，得自己挡。
+
+        整列 `x=1` 封死，工人被关在 `x=0` 这一列；能到达的格子没有一个贴着目标。
+        **去掉边界检查这里会返回 `(-1,4)`** —— 一条走出地图的指令。
+        """
+        goal = Pos(0, 1)
+        blocked = {Pos(1, y) for y in range(10)}  # 整列封死
+        blocked |= {Pos(0, y) for y in (2, 3, 4)}  # 再堵掉本列的直路
+        blocked.add(goal)
+
+        self.assertIsNone(step_toward(Pos(0, 5), goal, frozenset(blocked), (10, 10)))
 
 
 if __name__ == "__main__":

@@ -34,9 +34,9 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             continue  # 场上没有石矿就不动，而不是乱走
         # 矿格本身挡路（任务书 L85），所以工人走到**贴着矿的那一格**就会自动停下 ——
         # 那正是 `collect` 的位置（§4.4：矿周围一格内）。不需要单独写"停在旁边"的逻辑。
-        target = step_toward(role.pos, goal, turn.blocked | claimed)
+        target = step_toward(role.pos, goal, turn.blocked | claimed, turn.size)
         if target is None:
-            continue  # 已经贴着矿，或绕不过去
+            continue  # 已经贴着矿，或压根走不到
         try:
             action = actions.Move(role.type_name, target)
         except PermissionError as exc:

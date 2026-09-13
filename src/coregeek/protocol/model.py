@@ -43,6 +43,7 @@ def load(payload: Any) -> Turn | None:
 
     return Turn(
         round_no=_int(payload.get("roundNo")),
+        size=_size(payload),
         roles=characters,
         blocked=frozenset(blocked),
         station=station,
@@ -86,6 +87,17 @@ def _character(node: Any) -> BaseRole | None:
     if pos is None or role_id < 0 or not isinstance(role_type, str):
         return None
     return make(role_id, pos, role_type)
+
+
+def _size(payload: dict[str, Any]) -> tuple[int, int]:
+    """地图尺寸 `(width, height)`（接口文档 §1.2.1）。
+
+    缺失时 `_int` 给 -1 ⇒ **没有任何格子算在地图内** ⇒ 寻路一步都走不出来、单位不动。
+    **这是故意的**：拿不到尺寸就别动，比走出地图边界吃一条异常划算。
+    """
+    info = payload.get("mapInfo")
+    info = info if isinstance(info, dict) else {}
+    return _int(info.get("width")), _int(info.get("height"))
 
 
 def _station(units: list[Any]) -> Pos | None:

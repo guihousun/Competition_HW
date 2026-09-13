@@ -38,9 +38,9 @@ src/coregeek/
 │   ├── model.py      payload → Turn（容错解析）
 │   └── actions.py    BaseAction + 各动作。**创建即校验**，唯一写线上格式的地方
 └── game/             领域与策略
-    ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / step_toward
+    ├── grid.py       Pos / 8 方向 / 切比雪夫距离 / `step_toward`（**BFS 最短路**）
     ├── roles.py      §4.5.2 的 Pioneer / Worker；`make()` 只认角色，建筑返回 None
-    ├── world.py      Turn（roles / blocked / station / mines）
+    ├── world.py      Turn（roles / blocked / station / mines / size）
     └── planner.py    决策。**策略只写在这里**（目前：两个工人各朝最近石矿走一格）
 ```
 
@@ -67,6 +67,8 @@ game/planner → protocol/actions    ← 唯一一条"由内往外"，只走指�
 - **固定 36 格防御盒子**：基地 2×2（`pos` 是**左上角**）+ 12 格武器环 + **20 格围墙环（单层，不可加厚）**。**一切坐标由己方 station 的 pos 推导，禁止绝对坐标**（上下半场换边后基地会挪）。可建造区在 `mapInfo.zones` 里**不提供**，只能这样推。
 - **中立元素的字段名是 `neutralType`，不是 `zoneType`**（接口文档 §1.2.1，在 `mapInfo.zones` 里）：`stone`/`iron`/`copper`/`vendor`/`weaponShop`/`challengerTaskPoint1|2`/`defenderTaskPoint1|2`。**只有前三种是矿**，小贩/武器商店/任务点**不是矿，但一样挡路**——`Turn.mines` 只装矿，`blocked` 全都装。
 - **走向矿 = 站到采集位，是同一件事。** 矿格挡路（任务书 L85），所以工人只能停在**矿周围一格**，而那正好就是 `collect` 的站位（§4.4）。不需要写两段逻辑（"走过去"+"停在旁边"），`step_toward` 撞上矿格自然停。
+- **地图边界不在任务书 L85 的"阻挡移动"清单里**（那一列只写了建筑/角色/机器人/中立单位/任务点/矿区）。贪心挪一格时几乎撞不到，**但 BFS 会绕到图外去**，所以 `step_toward` 自己按 `Turn.size = (width, height)`（取自 `mapInfo.width/height`）挡住 `(0,0)~(width-1,height-1)` 之外。越界算"指令非法"还是"执行失败"文档没写，不走一定安全。`size` 无效（≤0）⇒ 无格可走 ⇒ **单位不动**，这是故意的降级。
+- **`step_toward` 的终点是"贴着 goal 的一格"，不是 goal 本身**——因为 goal 通常是挡路的（矿/建筑/武器操控位）。⚠️ 但 `build` 的落点是**空地**，那一步要重新过一遍这条契约，别默认沿用。
 - **没有转移物品的指令**（`drop` 只丢不捡，没有拾取）→ 每个角色的背包就是自己的料仓，"A 买 B 用"行不通。
 - **`attack` 最易写反的两处**：`roleCommandMap` 的 **key 是武器 id**，`controllerId` 才是操控角色；`targetPos` 长度 = 武器当前等级（电磁狙击炮恒为 1）。攻击**仅黑夜**可用，且需要角色站在武器周围一格内（一人只能操一座武器）。
 - **`attackRange` 以 payload 为准**：任务书等级表与样例数据矛盾（样例 gatling L1=4 / railgun=7 / rocket=INT_MAX，表格是 3/6/10）。
