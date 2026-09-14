@@ -1,0 +1,97 @@
+{
+  "scope": "4 scenarios x 24 rounds, actual executed actions and JSON transport, no model API; not full games",
+  "baseline_sha": "c53478b41929ed8c47314affdf6f106551834cb4",
+  "disabled_actions_identical": true,
+  "runs": {
+    "baseline": [
+      {
+        "seed": 3,
+        "side": "challenger",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 3,
+        "side": "defender",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 90601,
+        "side": "challenger",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 90601,
+        "side": "defender",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      }
+    ],
+    "disabled": [
+      {
+        "seed": 3,
+        "side": "challenger",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 3,
+        "side": "defender",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 90601,
+        "side": "challenger",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 90601,
+        "side": "defender",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      }
+    ],
+    "enabled": [
+      {
+        "seed": 3,
+        "side": "challenger",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 3,
+        "side": "defender",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 90601,
+        "side": "challenger",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      },
+      {
+        "seed": 90601,
+        "side": "defender",
+        "rounds": 24,
+        "score": 112,
+        "quota": 0
+      }
+    ]
+  }
+}

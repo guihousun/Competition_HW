@@ -7,7 +7,7 @@ from collections import Counter
 from copy import deepcopy
 from typing import Any
 
-from .brain import decide, judge_local_tasks, plan_for_state, respond
+from .brain import decide, judge_local_tasks, plan_for_state, respond, llm_router_enabled
 from .planner import PlannerState
 from .protocol import (LAND, STATION, WALL, Pos, TOWER_TYPES, Turn, distance,
                        station_footprint)
@@ -320,7 +320,7 @@ def step(payload, commands=None):
         planner_state = PlannerState.load(planner_state)
         meta['planner'] = planner_state
     planner_state.note_round(turn.round_no)
-    planner_state.note_results(state, turn.round_no)
+    planner_state.note_results(state, turn.round_no, routed=llm_router_enabled())
     planning = plan_for_state(state, planner_state, judge_tasks=False)
     # Judge replies belong to the previous request, not all future tasks.
     state['llmResp'] = ''

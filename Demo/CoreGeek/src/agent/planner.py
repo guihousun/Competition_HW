@@ -14,12 +14,21 @@ and writes it back, so the planner stays a pure function of (observation, state)
 from __future__ import annotations
 
 import threading
+import hashlib
+import json
 from copy import deepcopy
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
-from .sandbox import CommandResult, JudgeState, PendingRequest
+from .sandbox import CommandResult, JudgeState, LLM_DAILY_QUOTA, PendingRequest
 from .tasks import TaskCycle, Submission
+from .llm_router import LLMRouter
+from .task_context import ContextStore, public_task_confirmed
+
+# Top-level planner memory schema. A dump without this marker (older/newer/
+# foreign) is restored conservatively: context is dropped and the ordinary LLM
+# allowance is not silently reset to "free".
+PLANNER_SCHEMA = "competition-hw-planner/1"
 
 
 @dataclass
@@ -28,11 +37,65 @@ class PlannerState:
 
     judge: JudgeState = field(default_factory=JudgeState)
     tasks: dict[str, Any] = field(default_factory=dict)
+    # Shared cognitive-channel scheduler and bounded task context (P0b).
+    llm_router: "LLMRouter | None" = None
+    task_context: "ContextStore | None" = None
+    # Set when a restore could not be trusted, so the caller degrades explicitly.
+    degraded: str | None = None
     # Round number of the last observation we handled, for cache validation.
     last_round: int = 0
     # Local counters that never affect the official protocol, only diagnostics.
     prompts_sent: int = 0
     commands_sent: int = 0
+    _routed_key: str = field(default="", repr=False)
+    _routed_fields: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    def routed_observation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Expose only this task's associated replies to the legacy pipeline.
+
+        Ingestion is shared by bookkeeping and planning, once per observation.
+        Other owners consume their own router receipts; raw model text must not
+        bypass that boundary through SolverContext or JudgeState.last_result.
+        The original observation (including full trace text) is never modified.
+        """
+        confirmation = public_task_confirmed(payload, self.tasks.get("cycle"))
+        raw_fields = {name: payload.get(name) for name in
+                      ("roundNo", "llmResp", "lastCmdResult", "phaseTask", "errors")}
+        key = hashlib.sha256(json.dumps(
+            [raw_fields, confirmation.generation, confirmation.confirmed],
+            ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+        if key != self._routed_key:
+            router = self.ensure_llm_router()
+            previous = set(router.receipts)
+            router.ingest(payload, confirmed_task=confirmation)
+            allowed = {"llmResp": "", "lastCmdResult": ""}
+            for receipt_id, receipt in router.receipts.items():
+                if receipt_id in previous or receipt.status != "received":
+                    continue
+                request = next((item for item in router.history.values()
+                                if item.request_id == receipt.request_id), None)
+                if (request is None or request.owner != "task"
+                        or not confirmation.confirmed
+                        or request.generation != confirmation.generation):
+                    continue
+                name = "llmResp" if receipt.kind == "prompt" else "lastCmdResult"
+                # Use the original validated value, not the bounded preview.
+                allowed[name] = payload.get(name) or ""
+            self._routed_key, self._routed_fields = key, allowed
+            self.judge.last_result = CommandResult("empty", None, "")
+        return {**payload, **self._routed_fields}
+
+    def ensure_llm_router(self) -> LLMRouter:
+        if self.llm_router is None:
+            self.llm_router = LLMRouter(self.judge)
+        else:
+            self.llm_router.judge = self.judge
+        return self.llm_router
+
+    def ensure_task_context(self) -> ContextStore:
+        if self.task_context is None:
+            self.task_context = ContextStore()
+        return self.task_context
 
     def dump(self) -> dict[str, Any]:
         """Serialise the memory so it can survive an HTTP round trip.
@@ -45,6 +108,8 @@ class PlannerState:
         """
         cycle = self.tasks.get("cycle")
         return {
+            "schema": PLANNER_SCHEMA,
+            "degraded": self.degraded,
             "lastRound": int(self.last_round),
             "promptsSent": int(self.prompts_sent),
             "commandsSent": int(self.commands_sent),
@@ -80,10 +145,27 @@ class PlannerState:
                 "pendingCmd": asdict(self.judge.pending_cmd) if self.judge.pending_cmd else None,
                 "lastResult": asdict(self.judge.last_result),
             },
+            "llmRouter": self.llm_router.dump() if self.llm_router is not None else None,
+            "taskContext": self.task_context.dump() if self.task_context is not None else None,
         }
+
+    def _fresh_tasks(self) -> dict[str, Any]:
+        return {"cycle": None, "cooldown_until": 0, "solver_notes": {}}
 
     @classmethod
     def load(cls, dump: Any) -> "PlannerState":
+        """Restore without trusting malformed transport data or freeing quota."""
+        try:
+            return cls._load(dump)
+        except (TypeError, ValueError, OverflowError, RecursionError):
+            state = cls()
+            state.tasks = state._fresh_tasks()
+            state.degraded = "malformed_planner"
+            state.judge.llm_used_today = LLM_DAILY_QUOTA
+            return state
+
+    @classmethod
+    def _load(cls, dump: Any) -> "PlannerState":
         """Rebuild a planner from :meth:`dump`, tolerating partial input.
 
         A non-dict input (an older summary, or a placeholder string from an earlier
@@ -91,9 +173,26 @@ class PlannerState:
         has, so callers never have to special-case the keys.
         """
         state = cls()
-        state.tasks = {"cycle": None, "cooldown_until": 0, "solver_notes": {}}
+        state.tasks = state._fresh_tasks()
         if not isinstance(dump, dict):
+            state.degraded = "not_an_object"
+            state.judge.llm_used_today = LLM_DAILY_QUOTA  # never reset unknown quota to free
             return state
+        if dump.get("schema") != PLANNER_SCHEMA:
+            state.degraded = ("unknown_schema" if isinstance(dump.get("schema"), str)
+                              else "missing_schema")
+            state.judge.llm_used_today = LLM_DAILY_QUOTA
+            return state
+        judge_record = dump.get("judge")
+        if (not isinstance(judge_record, dict)
+                or type(judge_record.get("llmUsedToday")) is not int
+                or judge_record["llmUsedToday"] < 0
+                or type(judge_record.get("llmDay")) is not int
+                or judge_record["llmDay"] < 1):
+            raise ValueError("unknown quota record")
+        for name in ("lastRound", "promptsSent", "commandsSent"):
+            if name in dump and (type(dump[name]) is not int or dump[name] < 0):
+                raise ValueError("invalid planner counter")
         state.last_round = int(dump.get("lastRound") or 0)
         state.prompts_sent = int(dump.get("promptsSent") or 0)
         state.commands_sent = int(dump.get("commandsSent") or 0)
@@ -141,30 +240,60 @@ class PlannerState:
         if isinstance(judge.get('lastResult'), dict):
             from .sandbox import parse_command_result
             state.judge.last_result = parse_command_result(judge['lastResult'].get('raw'))
+        raw_router = dump.get("llmRouter")
+        if raw_router is not None:
+            router = LLMRouter(state.judge)
+            router.load(raw_router)
+            state.llm_router = router
+            if router.degraded:
+                state.degraded = router.degraded
+        raw_context = dump.get("taskContext")
+        if raw_context is not None:
+            store = ContextStore()
+            store.load(raw_context)
+            state.task_context = store
+            if store.degraded and state.degraded is None:
+                state.degraded = store.degraded
+        if state.degraded is None and isinstance(dump.get("degraded"), str):
+            state.degraded = dump["degraded"]
         return state
 
     def note_round(self, round_no: int) -> None:
         """Per-round housekeeping: detect a new match and roll the game day over.
 
-        A match key cannot distinguish two matches played with the same team id and
-        map size, which is exactly what a benchmark loop does. The round counter
-        can: it only ever moves forward inside a match (任务书 §4.2), so a round
-        number that goes backwards means the previous match ended and this memory
-        belongs to a match that no longer exists. Without this reset, the last
-        task's 30-round cooldown leaks into the next run and silently blocks every
-        task acceptance there.
+        With no official match ID, round one after a later round is our explicit
+        local reset convention. Other backwards observations are stale and do not
+        reset memory or quota. A replayed round one is indistinguishable from a
+        new match on this interface; callers with lifecycle knowledge should use
+        reset() or a fresh PlannerState rather than inventing an official ID.
         """
         round_no = int(round_no)
-        if self.last_round and round_no < self.last_round:
+        if self.last_round and round_no < self.last_round and round_no != 1:
+            return  # delayed observation, not evidence of a new match
+        if self.last_round and round_no == 1 < self.last_round:
             self.tasks = {"cycle": None, "cooldown_until": 0, "solver_notes": {}}
             self.judge = JudgeState()
+            self.llm_router = self.task_context = None
+            self.degraded = None
+            self.prompts_sent = self.commands_sent = 0
+            self._routed_key, self._routed_fields = "", {}
+        if self.degraded and not self.last_round:
+            # A damaged snapshot first seen mid-match cannot get a free day just
+            # because the default JudgeState started its day counter at one.
+            self.judge.llm_day = (round_no - 1) // 130 + 1
+            self.judge.llm_used_today = LLM_DAILY_QUOTA
         self.last_round = round_no
         self.judge.note_round(round_no)
 
     def note_submission(self, prompt: str | None, command: str | None,
                         round_no: int, in_task: bool) -> None:
         if prompt:
-            self.judge.consume_llm(in_task)
+            # One accounting path: if the router already charged this round's
+            # ordinary request, do not charge the same prompt a second time.
+            router = self.llm_router
+            already_charged = bool(router is not None and router.take_charge(round_no))
+            if not already_charged:
+                self.judge.consume_llm(in_task)
             self.judge.pending_prompt = PendingRequest("prompt", round_no, prompt)
             self.judge.last_prompt = prompt
             self.prompts_sent += 1
@@ -173,10 +302,14 @@ class PlannerState:
             self.judge.last_command = command
             self.commands_sent += 1
 
-    def note_results(self, payload: dict[str, Any], round_no: int) -> dict[str, Any]:
+    def note_results(self, payload: dict[str, Any], round_no: int, *,
+                     routed: bool = False) -> dict[str, Any]:
         """Fold the judge's previous answers into the state. Returns a summary."""
         summary: dict[str, Any] = {}
         from .sandbox import parse_command_result
+
+        if routed:
+            payload = self.routed_observation(payload)
 
         llm_resp = str(payload.get("llmResp") or "")
         if self.judge.pending_prompt is not None:
@@ -208,7 +341,15 @@ class PlannerState:
 
 _STATES: dict[str, PlannerState] = {}
 _LOCK = threading.RLock()
+# Fixed lock striping bounds memory while serialising complete transactions for
+# the same public team identity. Locks stay outside serialised planner objects.
+_PLANNING_LOCKS = tuple(threading.RLock() for _ in range(16))
 MAX_TRACKED_MATCHES = 8
+
+
+def planning_lock(payload: dict[str, Any]):
+    digest = hashlib.sha256(_match_key(payload).encode("utf-8")).digest()
+    return _PLANNING_LOCKS[digest[0] % len(_PLANNING_LOCKS)]
 
 
 def _match_key(payload: dict[str, Any]) -> str:

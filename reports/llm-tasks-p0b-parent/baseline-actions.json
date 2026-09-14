@@ -1,0 +1,2713 @@
+[
+  {
+    "seed": 3,
+    "side": "challenger",
+    "rounds": 24,
+    "commands": [
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 26
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 25
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 27
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 27
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 28
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 26
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "buy",
+          "name": "FlameBreath"
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 24
+            }
+          ],
+          "name": "rocket"
+        },
+        "10012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 25
+            }
+          ],
+          "name": "rocket"
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 25
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 27
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 22
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 24
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 26
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 21
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 25
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 20
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 22
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 24
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 20
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 21
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 23
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 21
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 16,
+              "y": 22
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 22
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 22
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 16,
+              "y": 21
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 22
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 20
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 16,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 18,
+              "y": 19
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 19,
+              "y": 20
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 21
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 22
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 23
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 22
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 21
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 24
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 21
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 22
+            }
+          ]
+        },
+        "10011": {
+          "action": "acceptTask"
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 22
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 23
+            }
+          ]
+        },
+        "10011": {
+          "action": "submitAnswer",
+          "taskAnswer": "区域=C1; 用电=55; 用水=23"
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 24
+            }
+          ]
+        },
+        "10011": {
+          "action": "submitAnswer",
+          "taskAnswer": "区域=C1; 用电=55; 用水=23"
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 23
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 25
+            }
+          ],
+          "name": "wall"
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 22
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 25
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 21
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 26
+            }
+          ]
+        },
+        "10012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 24
+            }
+          ],
+          "name": "wall"
+        }
+      }
+    ],
+    "score": 112,
+    "quota": 0
+  },
+  {
+    "seed": 3,
+    "side": "defender",
+    "rounds": 24,
+    "commands": [
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 6
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 5
+            }
+          ]
+        },
+        "20012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 7
+            }
+          ],
+          "name": "rocket"
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 7
+            }
+          ]
+        },
+        "20010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 4
+            }
+          ],
+          "name": "rocket"
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 8
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 8
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 6
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 9
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 8
+            }
+          ]
+        },
+        "20010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 5
+            }
+          ],
+          "name": "rocket"
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 10
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 7
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 11
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 7
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 8
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 12
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 6
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 9
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 13
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 27,
+              "y": 5
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 10
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 14
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 4
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 11
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 15
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 3
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 12
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 2
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 13
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 1
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 14
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20011": {
+          "action": "acceptTask"
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 15
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20011": {
+          "action": "submitAnswer",
+          "taskAnswer": "区域=C1; 用电=55; 用水=23"
+        }
+      },
+      {
+        "20010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20011": {
+          "action": "submitAnswer",
+          "taskAnswer": "区域=C1; 用电=55; 用水=23"
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 2
+            }
+          ]
+        },
+        "20010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 3
+            }
+          ]
+        },
+        "20010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 16
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 4
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 14
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 14
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 27,
+              "y": 5
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 13
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 13
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 26,
+              "y": 6
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 12
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 12
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 7
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 11
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 24,
+              "y": 8
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 10
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 11
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 9
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 9
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 10
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 10
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 8
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 9
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 11
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 7
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 8
+            }
+          ]
+        }
+      }
+    ],
+    "score": 112,
+    "quota": 0
+  },
+  {
+    "seed": 90601,
+    "side": "challenger",
+    "rounds": 24,
+    "commands": [
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 24
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 25
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 27
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 23
+            }
+          ]
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 24
+            }
+          ],
+          "name": "rocket"
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 26
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 22
+            }
+          ]
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 24
+            }
+          ],
+          "name": "rocket"
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 25
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 16,
+              "y": 21
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 25
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 20
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 26
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 18,
+              "y": 19
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 27
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 19,
+              "y": 18
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 4,
+              "y": 28
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 17
+            }
+          ]
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 24
+            }
+          ],
+          "name": "rocket"
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 19,
+              "y": 18
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 18,
+              "y": 19
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 20
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 25
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 16,
+              "y": 21
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 26
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 22
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 27
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 23
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 28
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 24
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 4,
+              "y": 29
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 16,
+              "y": 25
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 3,
+              "y": 29
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 17,
+              "y": 26
+            }
+          ]
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 28
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 27
+            }
+          ]
+        },
+        "10011": {
+          "action": "acceptTask"
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 27
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 26
+            }
+          ]
+        },
+        "10011": {
+          "action": "submitAnswer",
+          "taskAnswer": "服务=A3; 端口=67; 协议=14"
+        }
+      },
+      {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 26
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 25
+            }
+          ]
+        },
+        "10011": {
+          "action": "submitAnswer",
+          "taskAnswer": "服务=A3; 端口=67; 协议=14"
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 18,
+              "y": 25
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 25
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 19,
+              "y": 24
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 23
+            }
+          ],
+          "name": "wall"
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 23
+            }
+          ]
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 23
+            }
+          ],
+          "name": "wall"
+        }
+      },
+      {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 22
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 23
+            }
+          ]
+        }
+      }
+    ],
+    "score": 112,
+    "quota": 0
+  },
+  {
+    "seed": 90601,
+    "side": "defender",
+    "rounds": 24,
+    "commands": [
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 6
+            }
+          ]
+        },
+        "20010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 7
+            }
+          ],
+          "name": "rocket"
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 7
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 7
+            }
+          ],
+          "name": "rocket"
+        },
+        "20012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 7
+            }
+          ],
+          "name": "rocket"
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 27,
+              "y": 7
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 8
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 7
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 26,
+              "y": 8
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 9
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 8
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 9
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 27,
+              "y": 10
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 9
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 24,
+              "y": 10
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 26,
+              "y": 11
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 10
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 11
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 12
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 11
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 12
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 24,
+              "y": 13
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 12
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 13
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 14
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 13
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 14
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 15
+            }
+          ]
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 14
+            }
+          ]
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 15
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 16
+            }
+          ]
+        },
+        "20011": {
+          "action": "acceptTask"
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 20,
+              "y": 16
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 17
+            }
+          ]
+        },
+        "20011": {
+          "action": "submitAnswer",
+          "taskAnswer": "服务=A3; 端口=67; 协议=14"
+        }
+      },
+      {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 21,
+              "y": 17
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 18
+            }
+          ]
+        },
+        "20011": {
+          "action": "submitAnswer",
+          "taskAnswer": "服务=A3; 端口=67; 协议=14"
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 13
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 18
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 24,
+              "y": 19
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 12
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 19
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 20
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 13
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 24,
+              "y": 19
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 26,
+              "y": 21
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 14
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 20
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 27,
+              "y": 22
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 15
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 26,
+              "y": 21
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 23
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 16
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 27,
+              "y": 22
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 24
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 17
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 23
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 25
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 18
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 24
+            }
+          ]
+        },
+        "20012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 26
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 19
+            }
+          ]
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 24
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 27
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "buy",
+          "name": "FlameBreath"
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 25
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 27
+            }
+          ]
+        }
+      },
+      {
+        "20011": {
+          "action": "buy",
+          "name": "StarSand"
+        },
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 26
+            }
+          ]
+        },
+        "20012": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 27
+            }
+          ]
+        }
+      }
+    ],
+    "score": 112,
+    "quota": 0
+  }
+]

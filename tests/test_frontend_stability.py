@@ -519,7 +519,8 @@ function stubPost() {
     await pending;
     assert(app.waitingLLM === true, 'the LLM wait is recorded');
     assert(app.world.index === 0, 'a pending answer never advances the frame');
-    assert(app.statusInfo().label === '等待 DeepSeek', 'the wait is visible in the status');
+    assert(app.statusInfo().label === '等待模型', 'the wait is visible in the status');
+    assert(app.statusInfo().detail === '模型返回前不推进游戏回合', 'the wait explains why the frame is held');
     assert(app.playing === true, 'playback is not silently stopped by a pending answer');
     assert(app.stepping === false, 'the pending answer releases the settle slot');
     const again = app.liveStep();

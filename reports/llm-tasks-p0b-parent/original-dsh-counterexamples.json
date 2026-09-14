@@ -1,0 +1,18 @@
+{
+  "queued_news": {
+    "response_prompt": null,
+    "queue_size": 1
+  },
+  "quarantine_bypass": {
+    "command": {
+      "action": "submitAnswer",
+      "taskAnswer": "stale=999"
+    },
+    "quarantined": 1
+  },
+  "new_scene_path": {
+    "fresh_used": 0,
+    "load_none_used": 3,
+    "load_none_degraded": "not_an_object"
+  }
+}

@@ -81,6 +81,10 @@ def scenario(seed=1, side='challenger', pressure=1):
     # timing are inferred from rumours and are not published (任务书 §5.2).
     treasure.attach(state, treasure.new_rite(seed, round_no=int(state.get('roundNo') or 1)))
     state['_demo']['vis_prev'] = frame_view(state)
+    # This constructor knows it is starting a new match. Missing memory in an
+    # imported snapshot remains a conservative restore, never free quota.
+    from .planner import PlannerState
+    state['_demo']['planner'] = PlannerState().dump()
     return state
 
 

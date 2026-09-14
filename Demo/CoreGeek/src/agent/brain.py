@@ -3,8 +3,9 @@ from collections import Counter
 from contextvars import ContextVar
 from copy import deepcopy
 from itertools import combinations, permutations
+import os
 
-from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor
+from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context
 from .grid import _cost_to_goal, next_step
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -74,6 +75,15 @@ CAMP_MAX_COOLDOWN = 34
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
 _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
+# Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
+# with the variable unset the judge path runs the reviewed deterministic strategy.
+ROUTER_ENV = "COMPETITION_HW_LLM_ROUTER"
+ROUTER_ANSWER_INSTRUCTION = ("请按题目要求作答，只输出答案本身；多个字段用 '字段=值' 并以 '; ' 分隔。")
+
+
+def llm_router_enabled() -> bool:
+    """True only when the operator explicitly enables the shared router."""
+    return os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
 
 
 def decision_report():
@@ -109,6 +119,11 @@ def decide(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def respond(payload: dict[str, Any]) -> dict[str, Any]:
+    with planner.planning_lock(payload):
+        return _respond_locked(payload)
+
+
+def _respond_locked(payload: dict[str, Any]) -> dict[str, Any]:
     """Full official response for one observation, including task bookkeeping.
 
     This is the judge-facing entry: it folds in the replies from the previous
@@ -118,8 +133,10 @@ def respond(payload: dict[str, Any]) -> dict[str, Any]:
     _DECISION_REPORT.set(None)
     state = _planner_state(payload)
     round_no = Turn.load(payload).round_no
+    if state.last_round and round_no < state.last_round and round_no != 1:
+        return {"roleCommandMap": {}}
     state.note_round(round_no)
-    state.note_results(payload, round_no)
+    state.note_results(payload, round_no, routed=llm_router_enabled())
     response = plan_for_state(payload, state, judge_tasks=False)
     state.note_submission(response.prompt, response.execute, round_no,
                           bool(state.tasks.get("cycle")))
@@ -143,8 +160,16 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     the task result bookkeeping.
     """
     turn = Turn.load(payload)
+    last_round = getattr(planner_state, "last_round", 0)
+    if last_round and turn.round_no < last_round and turn.round_no != 1:
+        return sandbox.ResponseBuilder()
     if commit:
         _DECISION_REPORT.set(None)
+    if llm_router_enabled():
+        if not commit:
+            planner_state = planner.PlannerState.load(planner_state.dump())
+        planner_state.note_results(payload, turn.round_no, routed=True)
+        payload = planner_state.routed_observation(payload)
     commands: dict[int, dict[str, Any]] = {}
     pioneer = turn.pioneer()
     tower_pairs = _tower_pairs(turn)
@@ -258,13 +283,22 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
     plan = job.get("plan") if job else None
-    if plan is not None:
+    if commit and llm_router_enabled():
+        if plan is not None and plan.kind in ("prompt", "cmd"):
+            _route_task_channel(payload, planner_state, plan, response, turn=turn)
+        _emit_router_channel(payload, planner_state, response, turn=turn)
+    elif plan is not None:
         if plan.kind == "prompt":
-            if planner_state.judge.llm_available(bool(planner_state.tasks.get("cycle"))):
+            if commit and llm_router_enabled():
+                _route_task_channel(payload, planner_state, plan, response, turn=turn)
+            elif planner_state.judge.llm_available(bool(planner_state.tasks.get("cycle"))):
                 response.prompt = plan.prompt or None
         elif plan.kind == "cmd":
             if planner_state.tasks.get("cycle"):
-                response.execute = plan.command or None
+                if commit and llm_router_enabled():
+                    _route_task_channel(payload, planner_state, plan, response, turn=turn)
+                else:
+                    response.execute = plan.command or None
     if commit and job and job.get("note"):
         planner_state.tasks["last_note"] = job["note"]
     if judge_tasks and isinstance(payload.get("_demo"), dict) and commit:
@@ -282,10 +316,84 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     return response
 
 
+def _router_confirmation(payload: dict[str, Any], planner_state: Any) -> Any:
+    """Public-evidence task confirmation for the shared router."""
+    return task_context.public_task_confirmed(payload, planner_state.tasks.get("cycle"))
+
+
+def _route_task_channel(payload: dict[str, Any], planner_state: Any, plan: Any,
+                        response: Any, *, turn: Turn) -> None:
+    """Offer the pipeline's cognitive request to the shared router (opt-in).
+
+    When the router declines (quota spent, slot busy, not confirmed, oversized)
+    the deterministic command map already built is returned unchanged; no model
+    work is launched for a task that public evidence does not confirm.
+    """
+    try:
+        router = planner_state.ensure_llm_router()
+        confirmation = _router_confirmation(payload, planner_state)
+        generation = confirmation.generation or "none"
+        source_digest = confirmation.source_digest or task_context.context_digest("task", generation)
+        if plan.kind == "prompt" and confirmation.confirmed:
+            envelope = _remember_task_context(planner_state, confirmation, generation,
+                                              source_digest, turn)
+            # The context body, instruction header and nonce room share one
+            # coherent prompt budget (task_context.render_prompt).
+            text = (task_context.render_prompt(envelope, instruction=ROUTER_ANSWER_INSTRUCTION)
+                    if envelope is not None else (plan.prompt or ""))
+        else:
+            text = plan.prompt if plan.kind == "prompt" else plan.command
+        if not text:
+            return
+        request = router.offer(
+            "task", generation, source_digest, kind=plan.kind, payload=text,
+            purpose=plan.purpose or "", in_task=confirmation.confirmed,
+            expected_result_shape=("answer_text" if plan.kind == "prompt"
+                                   else "command_output"))
+        if request is None:
+            return
+    except Exception:  # noqa: BLE001 - the deterministic response must survive any fault
+        return
+
+
+def _emit_router_channel(payload: dict[str, Any], planner_state: Any,
+                         response: Any, *, turn: Turn) -> None:
+    """Dispatch the selected owner even on rounds without a task proposal."""
+    router = planner_state.ensure_llm_router()
+    chosen = router.select(payload, confirmed_task=_router_confirmation(payload, planner_state))
+    if chosen is not None and router.mark_emitted(
+            chosen, round_no=turn.round_no, judge=planner_state.judge):
+        if chosen.kind == "prompt":
+            response.prompt = chosen.payload
+        else:
+            response.execute = chosen.payload
+
+
+def _remember_task_context(planner_state: Any, confirmation: Any, generation: str,
+                           source_digest: str, turn: Turn) -> Any:
+    """Persist a bounded context for the confirmed generation (public fields only)."""
+    if not getattr(confirmation, "confirmed", False) or generation == "none":
+        return None
+    store = planner_state.ensure_task_context()
+    existing = store.get("task", generation)
+    if existing is not None:
+        return existing
+    cycle = planner_state.tasks.get("cycle")
+    envelope = task_context.build_context(
+        "task", generation, source_digest,
+        task_text=str(getattr(cycle, "description", "") or ""),
+        answer_contract={"note": "答案格式以题目原文要求为准（本地约定，非官方新增规则）"},
+        facts=[{"text": "phaseTask 已发布当前任务原文", "kind": "observed",
+                "round": turn.round_no, "source": "phaseTask"}],
+        open_questions=["题目要求的答案字段与单位"])
+    store.put(envelope)
+    return envelope
+
+
 def _detached_planner(planner_state: Any) -> Any:
     """Copy of the planner state whose task memory is safe to mutate."""
     scratch = planner.PlannerState()
-    scratch.judge = planner_state.judge
+    scratch.judge = deepcopy(planner_state.judge)
     scratch.tasks = _detached_tasks(planner_state.tasks)
     return scratch
 
@@ -307,7 +415,7 @@ def _planner_state(payload: dict[str, Any]) -> Any:
     if isinstance(meta, dict) and "seed" in meta:
         state = meta.get("planner")
         if not isinstance(state, planner.PlannerState):
-            state = planner.PlannerState()
+            state = planner.PlannerState.load(state)
             meta["planner"] = state
         return state
     return planner.state_for(payload)
