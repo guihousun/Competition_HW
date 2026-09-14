@@ -170,9 +170,9 @@ class PriorityOrderingTests(unittest.TestCase):
 
 
 class DefaultRegistryTests(unittest.TestCase):
-    def test_default_order_is_unchanged(self):
+    def test_opt_in_agent_runs_before_legacy_llm_and_after_keyword_solver(self):
         self.assertEqual(tasks.default_registry().names(),
-                         ("keyword-fill", "llm-ask", "probe-command"))
+                         ("keyword-fill", "task-agent", "llm-ask", "probe-command"))
 
     def test_default_registry_still_solves_keyword_then_llm(self):
         registry = tasks.default_registry()

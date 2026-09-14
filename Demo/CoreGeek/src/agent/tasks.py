@@ -136,6 +136,7 @@ class SolverContext:
     notes: dict[str, Any]
     backpack: tuple[str, ...]
     is_day: bool
+    cognitive_solver: Any = None
 
 
 Solver = Callable[[SolverContext], Plan]
@@ -413,6 +414,8 @@ def solver_last_resort(**_ignored: Any) -> Plan | None:
 def default_registry() -> SolverRegistry:
     registry = SolverRegistry()
     registry.register("keyword-fill", solver_keyword_fill, priority=10)
+    registry.register("task-agent", lambda context: context.cognitive_solver(context)
+                      if context.cognitive_solver is not None else None, priority=40)
     registry.register("llm-ask", solver_llm_ask, priority=50)
     registry.register("probe-command", solver_probe_command, priority=80)
     return registry
@@ -488,7 +491,7 @@ class TaskPipeline:
     # -- main entry --------------------------------------------------------
     def step(self, *, state: dict[str, Any], turn: Turn, pioneer: Unit | None,
              judge: Any, notes: dict[str, Any], is_day: bool,
-             pending: PendingRequest | None) -> tuple[dict[str, Any] | None, Plan | None]:
+             pending: PendingRequest | None, cognitive_solver=None) -> tuple[dict[str, Any] | None, Plan | None]:
         """Return ``(command, plan)`` for this round, or ``(None, None)``.
 
         ``judge`` is a :class:`~agent.sandbox.JudgeState`; ``notes`` is the
@@ -518,7 +521,7 @@ class TaskPipeline:
         if cycle is None:
             return self._maybe_accept(state, turn, pioneer, team, notes, judge)
         return self._advance(state, turn, pioneer, team, cycle, judge, notes,
-                             is_day=is_day, pending=pending)
+                             is_day=is_day, pending=pending, cognitive_solver=cognitive_solver)
 
     def _published_task_open(self, state: dict[str, Any], team: str) -> bool:
         if str(state.get("phaseTask") or "").strip():
@@ -598,7 +601,7 @@ class TaskPipeline:
 
     def _advance(self, state: dict[str, Any], turn: Turn, pioneer: Unit, team: str,
                  cycle: TaskCycle, judge: Any, notes: dict[str, Any], *,
-                 is_day: bool, pending: PendingRequest | None
+                 is_day: bool, pending: PendingRequest | None, cognitive_solver=None
                  ) -> tuple[dict[str, Any] | None, Plan | None]:
         # 0. The judge is authoritative: if it no longer publishes our task, the
         #    cycle is over whatever we believed. Without this we keep submitting
@@ -663,6 +666,7 @@ class TaskPipeline:
             notes=notes.setdefault("solver_notes", {}),
             backpack=tuple(pioneer.backpack),
             is_day=is_day,
+            cognitive_solver=cognitive_solver,
         )
         solved = self.registry.solve(context)
         if solved is None:

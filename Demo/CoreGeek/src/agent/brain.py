@@ -78,12 +78,17 @@ _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
 ROUTER_ENV = "COMPETITION_HW_LLM_ROUTER"
+TASK_AGENT_ENV = "COMPETITION_HW_TASK_AGENT"
 ROUTER_ANSWER_INSTRUCTION = ("请按题目要求作答，只输出答案本身；多个字段用 '字段=值' 并以 '; ' 分隔。")
 
 
 def llm_router_enabled() -> bool:
     """True only when the operator explicitly enables the shared router."""
-    return os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+    return task_agent_enabled() or os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+
+
+def task_agent_enabled() -> bool:
+    return os.environ.get(TASK_AGENT_ENV, "").strip().lower() in ("1", "on", "true", "yes")
 
 
 def decision_report():
@@ -287,6 +292,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if plan is not None and plan.kind in ("prompt", "cmd"):
             _route_task_channel(payload, planner_state, plan, response, turn=turn)
         _emit_router_channel(payload, planner_state, response, turn=turn)
+        if task_agent_enabled() and planner_state.team_agent is not None:
+            planner_state.team_agent.acknowledge(payload, planner_state, response)
     elif plan is not None:
         if plan.kind == "prompt":
             if commit and llm_router_enabled():
@@ -313,6 +320,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                      'acceptance_status':deepcopy(planner_state.tasks.get('acceptance_status') or {}),
                                      'pending_command':getattr(judge_state,'pending_cmd',None) is not None if judge_state is not None else None,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
+        if getattr(planner_state, "team_agent", None) is not None:
+            _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
     return response
 
 
@@ -392,10 +401,7 @@ def _remember_task_context(planner_state: Any, confirmation: Any, generation: st
 
 def _detached_planner(planner_state: Any) -> Any:
     """Copy of the planner state whose task memory is safe to mutate."""
-    scratch = planner.PlannerState()
-    scratch.judge = deepcopy(planner_state.judge)
-    scratch.tasks = _detached_tasks(planner_state.tasks)
-    return scratch
+    return planner.PlannerState.load(planner_state.dump())
 
 
 def _detached_tasks(tasks_state: dict[str, Any]) -> dict[str, Any]:
@@ -504,6 +510,8 @@ def _task_step(turn: Turn, commands: dict[int, dict[str, Any]],
             state=payload, turn=turn, pioneer=pioneer,
             judge=planner_state.judge, notes=planner_state.tasks,
             is_day=turn.is_day, pending=pending,
+            cognitive_solver=(lambda context: planner_state.ensure_team_agent(payload).solve(
+                payload, planner_state, context)) if task_agent_enabled() else None,
         )
     except Exception as error:  # a solver bug must not cost us the round
         if commit:

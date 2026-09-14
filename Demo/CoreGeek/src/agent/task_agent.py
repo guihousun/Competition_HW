@@ -11,6 +11,7 @@ from copy import deepcopy
 import hashlib
 import json
 from typing import Any
+from .task_context import PROMPT_LIMIT
 
 SCHEMA = 'competition-task-agent/1'
 MAX_PROMPTS = 8  # engineering limits for one task, not official LLM allowances
@@ -111,9 +112,11 @@ class TaskAgent:
             'answer必须符合题目指定格式，不能默认改成键值对。'
             '遇到答案错误应检查数据和格式，修正后重新提交；不能声称已经通过判题。\n'
         )
-        events = json.dumps(self.history[-4:], ensure_ascii=False)
+        events = json.dumps([{**item, 'text': item['text'][:200],
+                              'truncated': item['truncated'] or len(item['text']) > 200}
+                             for item in self.history[-4:]], ensure_ascii=False)
         self.proposal['payload'] = header + '\n可引用证据ID：' + json.dumps(evidence_ids, ensure_ascii=False) + '\n' + context + '\n近期操作摘要：' + events
-        if len(self.proposal['payload']) > 24000:
+        if len(self.proposal['payload']) > PROMPT_LIMIT:
             self.proposal = None
             self.stop_reason = 'assembled_prompt_over_limit'
             return None

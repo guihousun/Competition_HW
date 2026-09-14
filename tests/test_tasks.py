@@ -170,7 +170,7 @@ class PlannerStateTests(unittest.TestCase):
 class SolverRegistryTests(unittest.TestCase):
     def test_default_solvers_are_ordered_and_named(self):
         registry = tasks.default_registry()
-        self.assertEqual(registry.names(), ("keyword-fill", "llm-ask", "probe-command"))
+        self.assertEqual(registry.names(), ("keyword-fill", "task-agent", "llm-ask", "probe-command"))
 
     def test_duplicate_registration_is_refused(self):
         registry = tasks.default_registry()

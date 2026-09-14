@@ -40,6 +40,7 @@ class PlannerState:
     # Shared cognitive-channel scheduler and bounded task context (P0b).
     llm_router: "LLMRouter | None" = None
     task_context: "ContextStore | None" = None
+    team_agent: Any = None
     # Set when a restore could not be trusted, so the caller degrades explicitly.
     degraded: str | None = None
     # Round number of the last observation we handled, for cache validation.
@@ -70,10 +71,15 @@ class PlannerState:
             router.ingest(payload, confirmed_task=confirmation)
             allowed = {"llmResp": "", "lastCmdResult": ""}
             for receipt_id, receipt in router.receipts.items():
-                if receipt_id in previous or receipt.status != "received":
+                if receipt_id in previous:
                     continue
                 request = next((item for item in router.history.values()
                                 if item.request_id == receipt.request_id), None)
+                name = "llmResp" if receipt.kind == "prompt" else "lastCmdResult"
+                if self.team_agent is not None:
+                    self.team_agent.consume(request, receipt, payload.get(name) or "")
+                if receipt.status != "received":
+                    continue
                 if (request is None or request.owner != "task"
                         or not confirmation.confirmed
                         or request.generation != confirmation.generation):
@@ -96,6 +102,13 @@ class PlannerState:
         if self.task_context is None:
             self.task_context = ContextStore()
         return self.task_context
+
+    def ensure_team_agent(self, payload):
+        from .team_agent import TeamAgent
+        owner = "team:" + hashlib.sha256(_match_key(payload).encode("utf-8")).hexdigest()
+        if self.team_agent is None or self.team_agent.owner != owner:
+            self.team_agent = TeamAgent(owner)
+        return self.team_agent
 
     def dump(self) -> dict[str, Any]:
         """Serialise the memory so it can survive an HTTP round trip.
@@ -147,6 +160,7 @@ class PlannerState:
             },
             "llmRouter": self.llm_router.dump() if self.llm_router is not None else None,
             "taskContext": self.task_context.dump() if self.task_context is not None else None,
+            "teamAgent": self.team_agent.dump() if self.team_agent is not None else None,
         }
 
     def _fresh_tasks(self) -> dict[str, Any]:
@@ -240,6 +254,12 @@ class PlannerState:
         if isinstance(judge.get('lastResult'), dict):
             from .sandbox import parse_command_result
             state.judge.last_result = parse_command_result(judge['lastResult'].get('raw'))
+        if dump.get("teamAgent") is not None:
+            from .team_agent import TeamAgent
+            raw_agent = dump["teamAgent"]
+            if not isinstance(raw_agent, dict) or not isinstance(raw_agent.get("owner"), str):
+                raise ValueError("invalid coordinator owner")
+            state.team_agent = TeamAgent.load(raw_agent, raw_agent["owner"])
         raw_router = dump.get("llmRouter")
         if raw_router is not None:
             router = LLMRouter(state.judge)
@@ -274,6 +294,7 @@ class PlannerState:
             self.tasks = {"cycle": None, "cooldown_until": 0, "solver_notes": {}}
             self.judge = JudgeState()
             self.llm_router = self.task_context = None
+            self.team_agent = None
             self.degraded = None
             self.prompts_sent = self.commands_sent = 0
             self._routed_key, self._routed_fields = "", {}

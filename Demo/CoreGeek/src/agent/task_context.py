@@ -262,7 +262,7 @@ def public_task_confirmed(payload: Any, cycle: Any) -> TaskConfirmation:
         evidence["round"] = round_no
     if timeout > 0 and round_no is not None:
         accepted = int(getattr(cycle, "accepted_round", 0) or 0)
-        if round_no > accepted + timeout:
+        if round_no >= accepted + timeout:
             return TaskConfirmation(False, generation, digest, "task_timeout", evidence)
     anchor = None
     point = getattr(cycle, "point", None)
