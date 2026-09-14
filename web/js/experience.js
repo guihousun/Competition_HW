@@ -145,19 +145,33 @@
     const name = value => labels[value] || String(value || '未知矿种');
     for (const [owner, field] of [['news', 'officialNews'], ['treasure', 'folkLegends']]) {
       const rows = Array.isArray(sources[owner]) ? sources[owner].filter(r => r && typeof r.text === 'string') : [];
-      const text = rows.map(r => `首次见于第 ${r.firstRound} 轮 [${String(r.id || '').slice(0, 8)}]${r.truncated ? ' · 仅保留片段' : ''}\n${r.text}`).join('\n\n');
+      const memory = (worldState.memories || {})[owner] || {};
+      const archive = (memory.archive || {}).records || [];
+      const text = rows.map(r => {
+        const original = archive.find(doc => doc.id === r.id);
+        const origin = (memory.origins || {})[r.id] || {};
+        const ranges = (memory.visible || {})[r.id] || [];
+        const delivered = ranges.reduce((sum, range) => sum + range[1] - range[0], 0);
+        const date = origin.anchor_day == null ? '发布日期未确认' : `日期基准：第 ${origin.anchor_day} 天`;
+        const stored = original && typeof original.text === 'string' ? original.text.length : 0;
+        const size = original ? `原文 ${original.received_chars} 字符 · 保留 ${stored} · 已发送模型 ${delivered}` : '无原文档案';
+        const excerpt = r.truncated ? (original && stored === original.received_chars ? '（以下仅为开头，全文见原文查看器）' : '（仅保留片段）') : '';
+        return `首次见于第 ${r.firstRound} 轮 [${String(r.id || '').slice(0, 8)}] · ${date}\n${size}${excerpt}\n${r.text}`;
+      }).join('\n\n');
       setText($(`agent-${owner}-sources`), text || (typeof current[field] === 'string' && current[field] ? `本轮公开原文\n${current[field]}` : '尚未收到本类消息。'));
     }
     const events = Array.isArray(worldState.news_events) ? worldState.news_events.filter(e => e && typeof e === 'object') : [];
     const availability = {available:'可开采', unavailable:'停止开采', unknown:'可采状态未知'};
     const direction = {up:'涨价', down:'降价', unchanged:'价格不变', unknown:'价格方向未知'};
-    setText($('agent-news-inferences'), events.map(e => `${name(e.resource)}：第 ${e.startDay}—${e.endDay} 天，${availability[e.availability] || '状态未知'}，${direction[e.priceDirection] || '价格方向未知'}`).join('\n') || '尚未形成可用解释。');
+    setText($('agent-news-inferences'), events.map(e => `${name(e.resource)}：${e.startDay == null || e.endDay == null ? '日期未确定（不据此禁止采矿）' : `第 ${e.startDay}—${e.endDay} 天`}，${availability[e.availability] || '状态未知'}，${direction[e.priceDirection] || '价格方向未知'}`).join('\n') || '尚未形成可用解释。');
     const prices = Array.isArray(state.vendorShopList) ? state.vendorShopList.filter(r => r && typeof r.price === 'number' && Number.isFinite(r.price)) : [];
     setText($('agent-news-prices'), prices.map(r => `${name(r.name)} ${r.price} 金币/个`).join(' · ') || '尚未收到收购价。');
     const newsReady = (worldState.status || {}).news === 'interpreted';
     setText($('agent-news-unknown'), `${newsReady ? '以上为模型解释。' : '最新消息尚未解释成功；已有推断可能来自此前资料。'}价格涨跌幅未给出时保持未知，成交使用当前观测价。`);
-    const h = worldState.hypothesis || worldState.direct || {};
-    setText($('agent-treasure-kind'), worldState.direct ? '公开结构化条件' : '模型推断');
+    const draft = (worldState.drafts || {}).treasure;
+    const h = worldState.direct || draft || worldState.hypothesis || {};
+    const interpreted = worldState.direct || (worldState.status || {}).treasure === 'interpreted';
+    setText($('agent-treasure-kind'), worldState.direct ? '公开结构化条件' : interpreted ? '模型推断' : '候选草稿 · 尚未批准行动');
     const parts = [], missing = [];
     if (h.site && Number.isInteger(h.site.x) && Number.isInteger(h.site.y)) parts.push(`地点 (${h.site.x}, ${h.site.y})`); else missing.push('地点');
     if (Array.isArray(h.items) && h.items.length) parts.push(`物品：${h.items.join('、')}（保留重复数量）`); else missing.push('精确物品与数量');
@@ -167,6 +181,15 @@
       else if (state.roundNo < h.opensAt) parts.push('尚未到开启时间');
     } else missing.push('开启与关闭回合');
     if (h.uncertain) missing.push('解释仍有不确定性或冲突');
+    const unknownLabels = {site:'地点未确定', items:'物品未确定', window:'时间未确定', conflict:'线索冲突', publication_time:'发布日期未确认', unread:'原文未读完', prerequisites:'前置条件未核验'};
+    for (const unknown of h.unknowns || []) missing.push(unknownLabels[unknown] || unknown);
+    if (!interpreted) missing.push('最新资料仍在核对，暂不按草稿采购或召唤');
+    for (const c of h.candidates || []) {
+      const field = {site:'地点', items:'物品', window:'时间', prerequisite:'前置条件'}[c.field] || c.field;
+      const label = c.resolution ? (c.resolution.kind === 'cancelled' ? '已撤回' : '已更正') : c.polarity === 'exclude' ? '排除' : '候选';
+      const refs = (c.evidence || []).map(e => String(e.sourceId || '').slice(0, 8)).join(', ');
+      parts.push(`${label} ${field}：${JSON.stringify(c.value)} [${refs}]`);
+    }
     setText($('agent-treasure-inferences'), parts.join('\n') || '尚未形成可用解释。');
     setText($('agent-treasure-unknown'), worldState.taken ? '已收到宝藏被取走的反馈；不再尝试。' : missing.length ? missing.join('；') : '条件已汇总；仍需核对背包、预算、可达性与防守安排，不保证立即召唤。');
   }
@@ -192,27 +215,33 @@
     updateWorldEvidence(state, worldState);
     const status = worldState.status || {};
     const labels = {idle: '暂无资料', queued: '等待通道', waiting_model: '等待模型', interpreted: '已解释',
-      retry_limit: '重试已停止', invalid_reply: '回复未通过检查', expired: '等待超时', rejected: '请求被拒绝'};
+      retry_limit: '分析步数或重试上限', invalid_reply: '回复未通过检查', expired: '等待超时', rejected: '请求被拒绝',
+      inspected: '准备发送检索片段', needs_reading: '原文未读完', context_budget_exceeded: '资料超出本次上下文容量'};
     const h = worldState.hypothesis;
-    const complete = h && h.site && h.items && h.opensAt != null && h.closesAt != null && !h.uncertain;
+    const complete = status.treasure === 'interpreted' && h && h.site && h.items && h.opensAt != null && h.closesAt != null && !h.uncertain && !(h.unknowns || []).length;
     setText($('agent-world'), `新闻：${labels[status.news] || '暂无资料'} · 宝藏：${worldState.taken ? '已取走' : complete ? '条件已汇总' : labels[status.treasure] || '暂无资料'}`);
     const records = coordinator.memory && Array.isArray(coordinator.memory.records)
-      ? coordinator.memory.records.filter(r => r && typeof r.id === 'string') : [];
+      ? coordinator.memory.records.filter(r => r && typeof r.id === 'string').map(r => ({...r, uiId:r.id})) : [];
+    for (const [owner, title] of [['news', '新闻'], ['treasure', '传闻']]) {
+      const archive = (((worldState.memories || {})[owner] || {}).archive || {}).records;
+      if (Array.isArray(archive)) records.push(...archive.filter(r => r && typeof r.id === 'string').map(r => ({...r,
+        uiId:`${owner}:${r.id}`, label:`${title} · ${r.label || r.id.slice(0, 8)}`})));
+    }
     const select = $('agent-source-select');
     if (!select) return;
-    const key = records.map(r => r.id + ':' + r.label).join('|');
+    const key = records.map(r => r.uiId + ':' + r.label).join('|');
     if (key !== sourceKey) {
       const previous = select.value;
       select.replaceChildren();
-      records.forEach(r => { const option = document.createElement('option'); option.value = r.id;
+      records.forEach(r => { const option = document.createElement('option'); option.value = r.uiId;
         option.textContent = `${r.label || r.id}（${r.received_chars} 字符）`; select.appendChild(option); });
-      select.value = records.some(r => r.id === previous) ? previous : (records[0] && records[0].id || '');
+      select.value = records.some(r => r.uiId === previous) ? previous : (records[0] && records[0].uiId || '');
       sourceKey = key;
     }
-    const chosen = records.find(r => r.id === select.value);
+    const chosen = records.find(r => r.uiId === select.value);
     const text = chosen && typeof chosen.text === 'string' ? chosen.text : '';
     setFlag($('agent-source-text'), 'value', text);
-    const note = !chosen ? '任务开始后可查看实际收到的原文。' : chosen.text == null ? '该原文已因内存预算淘汰，不能假装可读取。'
+    const note = !chosen ? '收到任务、新闻或传闻后，可选择查看实际收到的原文。' : chosen.text == null ? '该原文已因内存预算淘汰，不能假装可读取。'
       : chosen.upstream_truncated ? '上游只返回了部分输出；需缩小查询才能补齐。'
       : text.length < chosen.received_chars ? '仅保留了部分原文，超出部分不可检索。' : '完整保留本次收到的原文；来源不包含模拟器标准答案。';
     setText($('agent-source-note'), note);

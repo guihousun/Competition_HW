@@ -43,7 +43,11 @@ def _world(prompt, token, rows):
         first = next((r for r in rows if '明天开始全面停工两天' in r.get('text', '') and not r.get('truncated')), None)
         events = []
         if first:
-            day = (first['firstRound'] - 1) // 130 + 1
+            day = first.get('memory', {}).get('anchor_day')
+            if day is None:
+                return json.dumps({'request_id': token, 'events': [{'resource': 'iron',
+                    'availability': 'unavailable', 'startDay': None, 'endDay': None,
+                    'priceDirection': 'up', 'evidence': proof(first)}]}, ensure_ascii=False)
             events = [{'resource': 'iron', 'availability': status, 'startDay': start,
                        'endDay': end, 'priceDirection': direction, 'evidence': proof(first)}
                       for start, end, status, direction in ((day, day, 'available', 'unchanged'),
@@ -66,6 +70,7 @@ def _world(prompt, token, rows):
             h['opensAt'] = (int(window[1]) - 1) * 130 + 1
             h['closesAt'] = h['opensAt'] + 29; h['evidence']['window'] = proof(row)
     h['uncertain'] = any(h[k] is None for k in ('site', 'items', 'opensAt', 'closesAt'))
+    h['unknowns'] = [field for field, key in (('site', 'site'), ('items', 'items'), ('window', 'opensAt')) if h[key] is None]
     return json.dumps({'request_id': token, 'hypothesis': h}, ensure_ascii=False)
 
 

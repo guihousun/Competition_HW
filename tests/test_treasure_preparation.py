@@ -26,8 +26,13 @@ def situation(*, gold=100, towers=3, health=1500, round_no=132, shop=(15, 23)):
                for t, n in ((site_text, 1), (items_text, 131))]
     world = WorldAgent()
     world.sources['treasure'] = records
+    # This fixture represents evidence already sent to the model, not an
+    # arbitrary trusted hypothesis injected through saved JSON.
+    for record in records:
+        world.memories['treasure'].observe(record['text'], record['firstRound'])
+        world.memories['treasure'].expose(record['id'], 0, len(record['text']))
     world.hypothesis = {'site': {'x': 3, 'y': 4}, 'items': ['AcientTablet', 'IronWhistle'],
-                        'opensAt': None, 'closesAt': None, 'uncertain': True,
+                        'opensAt': None, 'closesAt': None, 'uncertain': True, 'unknowns': ['window'],
                         'evidence': {'site': [{'sourceId': records[0]['id'], 'quote': site_text}],
                                      'items': [{'sourceId': records[1]['id'], 'quote': items_text}], 'window': []}}
     world.resolved['treasure'] = world.version('treasure')
