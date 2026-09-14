@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1420'/%3E%3Cpath d='M8 22 L16 8 L24 22 Z' fill='%234fe0b4'/%3E%3Ccircle cx='16' cy='19' r='3' fill='%23ffb347'/%3E%3C/svg%3E">
 <title>未来战争 · 策略调试台（本地演示与研发平台）</title>
-<link rel="stylesheet" href="/css/app.css?v=20260915-agent">
-<link rel="stylesheet" href="/css/experience.css?v=20260915-agent">
+<link rel="stylesheet" href="/css/app.css?v=20260915-evidence">
+<link rel="stylesheet" href="/css/experience.css?v=20260915-evidence">
 </head>
 <body>
 <!-- Two columns: the console (left, scrolls on its own) and the match (right).
@@ -124,6 +124,17 @@
         <p id="agent-budget">普通额度按游戏日共享，任务内调用单独标明。</p>
         <p id="agent-operation">工人行动由策略控制，模型负责认知任务。</p>
         <p id="agent-world">新闻与宝藏暂无解释。</p>
+        <details class="world-evidence" aria-label="新闻证据面板"><summary>新闻：原文、推断与价格</summary>
+          <h4>已收到的原文</h4><pre id="agent-news-sources">尚未收到新闻。</pre>
+          <h4>模型推断</h4><p id="agent-news-inferences">尚未形成解释。</p>
+          <h4>当前观测价格</h4><p id="agent-news-prices">尚未收到收购价。</p>
+          <p class="evidence-caution" id="agent-news-unknown">价格涨跌幅未知时，不生成预测价格。</p>
+        </details>
+        <details class="world-evidence" aria-label="宝藏证据面板"><summary>宝藏：线索、条件与缺项</summary>
+          <h4>已收到的原文</h4><pre id="agent-treasure-sources">尚未收到传闻。</pre>
+          <h4 id="agent-treasure-kind">模型推断</h4><p id="agent-treasure-inferences">尚未形成解释。</p>
+          <h4>仍需确认</h4><p class="evidence-caution" id="agent-treasure-unknown">地点、物品和时间窗。</p>
+        </details>
         <details><summary>查看题目与已收到的原文</summary>
           <label for="agent-source-select">来源</label>
           <select id="agent-source-select" aria-label="选择题目或工具原文"></select>
@@ -254,7 +265,7 @@
     <footer class="foot">
       <span>本地实验环境 · 结果用于调试，不代表官方成绩</span>
       <span id="foot-stats" class="muted">空格：暂停 / 继续 · ← →：单轮回看 · F：全图</span>
-      <span id="foot-ver" title="Agent演示与原文检索界面">前端 20260915-agent</span>
+      <span id="foot-ver" title="Agent新闻与宝藏证据界面">前端 20260915-evidence</span>
     </footer>
   </aside>
 
@@ -339,15 +350,15 @@
   <div class="guide-signals"><p><b>观战</b> 开始后自动推进；空格暂停 / 继续，← → 后退 / 前进一轮。</p><p><b>地图</b> 拖动平移、滚轮缩放；点击角色卡放大定位，F 或「全图」恢复全景。</p><p><b>复盘</b> 「回到开头」保留历史；「开始新对局」重新生成。「录像与复盘」可生成、打开和保存整场录像。</p><p><b>坐标</b> 左下角为原点，x 向右、y 向上。图例只解释显示，不改变比赛规则。</p></div>
 </dialog>
 
-<script src="/js/constants.js?v=20260915-agent"></script>
-<script src="/js/viewmodel.js?v=20260915-agent"></script>
-<script src="/js/replay.js?v=20260915-agent"></script>
-<script src="/js/sprites.js?v=20260915-agent"></script>
-<script src="/js/effects.js?v=20260915-agent"></script>
-<script src="/js/renderer.js?v=20260915-agent"></script>
-<script src="/js/panel.js?v=20260915-agent"></script>
-<script src="/js/experience.js?v=20260915-agent"></script>
-<script src="/js/guide.js?v=20260915-agent"></script>
-<script src="/js/app.js?v=20260915-agent"></script>
+<script src="/js/constants.js?v=20260915-evidence"></script>
+<script src="/js/viewmodel.js?v=20260915-evidence"></script>
+<script src="/js/replay.js?v=20260915-evidence"></script>
+<script src="/js/sprites.js?v=20260915-evidence"></script>
+<script src="/js/effects.js?v=20260915-evidence"></script>
+<script src="/js/renderer.js?v=20260915-evidence"></script>
+<script src="/js/panel.js?v=20260915-evidence"></script>
+<script src="/js/experience.js?v=20260915-evidence"></script>
+<script src="/js/guide.js?v=20260915-evidence"></script>
+<script src="/js/app.js?v=20260915-evidence"></script>
 </body>
 </html>

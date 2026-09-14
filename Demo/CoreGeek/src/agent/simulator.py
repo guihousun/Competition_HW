@@ -9,6 +9,7 @@ from typing import Any
 
 from .brain import decide, judge_local_tasks, plan_for_state, respond, llm_router_enabled
 from .planner import PlannerState
+from .sandbox import ResponseBuilder
 from .protocol import (LAND, STATION, WALL, Pos, TOWER_TYPES, Turn, distance,
                        station_footprint)
 from .scenarios import observation, prepare_round, ROBOT_STATS
@@ -300,7 +301,22 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     return resolved, rejected
 
 
-def step(payload, commands=None):
+def step(payload, commands=None, *, external_response=None):
+    """Advance the environment; an external response bypasses local policy.
+
+    ``commands`` keeps the older manual-debug semantics. The explicit external
+    mode is for HTTP agent/replay validation: no local strategy, model request,
+    receipt consumption or preview is run alongside the external decision.
+    """
+    if external_response is not None:
+        if (commands is not None or not isinstance(external_response, dict)
+                or set(external_response) - {'roleCommandMap', 'prompt', 'executeCmd'}
+                or not isinstance(external_response.get('roleCommandMap'), dict)
+                or any(not isinstance(k, str) or not isinstance(v, dict)
+                       for k, v in external_response['roleCommandMap'].items())
+                or any(k in external_response and not isinstance(external_response[k], str)
+                       for k in ('prompt', 'executeCmd'))):
+            raise ValueError('invalid_external_response')
     state = deepcopy(payload)
     turn = Turn.load(state)
     roles = state['teamOur']['roles']
@@ -311,7 +327,7 @@ def step(payload, commands=None):
     # Plan with the same pipeline the judge entry uses, so a local run exercises
     # the real strategy (tasks included) rather than a reduced copy.
     meta = state.setdefault('_demo', {})
-    planner_state = meta.get('planner')
+    planner_state = meta.get('planner') if external_response is None else PlannerState()
     if not isinstance(planner_state, PlannerState):
         # A state that travelled over HTTP carries the planner as a plain dict (it
         # cannot carry an object). Rebuild it instead of starting empty, so the local
@@ -319,9 +335,17 @@ def step(payload, commands=None):
         # copy of it.
         planner_state = PlannerState.load(planner_state)
         meta['planner'] = planner_state
-    planner_state.note_round(turn.round_no)
-    planner_state.note_results(state, turn.round_no, routed=llm_router_enabled())
-    planning = plan_for_state(state, planner_state, judge_tasks=False)
+    if external_response is None:
+        planner_state.note_round(turn.round_no)
+        planner_state.note_results(state, turn.round_no, routed=llm_router_enabled())
+        planning = plan_for_state(state, planner_state, judge_tasks=False)
+    else:
+        planning = ResponseBuilder()
+        planning.commands = deepcopy(external_response['roleCommandMap'])
+        planning.prompt = external_response.get('prompt')
+        planning.execute = external_response.get('executeCmd')
+        meta['planner'] = None  # external agent owns its memory; do not invent a local copy
+        meta['decision_source'] = 'external-response'
     # Judge replies belong to the previous request, not all future tasks.
     state['llmResp'] = ''
     state['lastCmdResult'] = ''
@@ -330,9 +354,10 @@ def step(payload, commands=None):
     state['errors'] = []
     state['lastSummonTreasureResult'] = 0
     plan_commands = planning.commands
-    planner_state.note_submission(planning.prompt, planning.execute, turn.round_no,
-                                  bool(planner_state.tasks.get('cycle')))
-    planner_state.last_round = turn.round_no
+    if external_response is None:
+        planner_state.note_submission(planning.prompt, planning.execute, turn.round_no,
+                                      bool(planner_state.tasks.get('cycle')))
+        planner_state.last_round = turn.round_no
     commands = plan_commands if commands is None else commands
     by_id = {str(u['id']): u for u in roles}
     events, outcomes, damage = [], {}, Counter()
@@ -782,7 +807,7 @@ def step(payload, commands=None):
     # The official response for the *new* state: same pipeline as the judge path,
     # so the preview a user sees is the command map the judge would receive. It is
     # planned without committing, so a preview can never accept or end a task.
-    if done:
+    if done or external_response is not None:
         preview: dict[str, Any] = {}
     else:
         preview = plan_for_state(state, planner_state, commit=False,

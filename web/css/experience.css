@@ -191,6 +191,12 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
 .agent-inspector h3 b { color:var(--accent, #72d8c7); font-size:14px; }
 .agent-inspector p { font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
 .agent-inspector summary { cursor:pointer; padding:8px 0; font-size:13px; }
+.world-evidence { border-top:1px solid rgba(140,185,205,.16); }
+.world-evidence h4 { margin:10px 0 4px; font-size:13px; color:var(--accent, #72d8c7); }
+.world-evidence pre { margin:0; padding:8px; white-space:pre-wrap; overflow-wrap:anywhere; max-height:180px; overflow:auto;
+  font:13px/1.6 system-ui,sans-serif; background:rgba(0,0,0,.13); border-radius:6px; }
+.world-evidence p { white-space:pre-line; }
+.world-evidence .evidence-caution { color:#d4ba83; }
 .agent-inspector textarea { width:100%; box-sizing:border-box; resize:vertical; min-height:150px; max-height:420px;
   padding:10px; color:inherit; background:rgba(0,0,0,.2); border:1px solid var(--line); border-radius:8px;
   font:13px/1.55 ui-monospace,Consolas,monospace; white-space:pre-wrap; }

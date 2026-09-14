@@ -138,6 +138,39 @@
   }
 
   let sourceKey = '';
+  function updateWorldEvidence(state, worldState) {
+    const sources = worldState.sources || {};
+    const current = state.worldNews || {};
+    const labels = {stone:'石头', iron:'铁', copper:'铜', silver:'银', gold:'金'};
+    const name = value => labels[value] || String(value || '未知矿种');
+    for (const [owner, field] of [['news', 'officialNews'], ['treasure', 'folkLegends']]) {
+      const rows = Array.isArray(sources[owner]) ? sources[owner].filter(r => r && typeof r.text === 'string') : [];
+      const text = rows.map(r => `首次见于第 ${r.firstRound} 轮 [${String(r.id || '').slice(0, 8)}]${r.truncated ? ' · 仅保留片段' : ''}\n${r.text}`).join('\n\n');
+      setText($(`agent-${owner}-sources`), text || (typeof current[field] === 'string' && current[field] ? `本轮公开原文\n${current[field]}` : '尚未收到本类消息。'));
+    }
+    const events = Array.isArray(worldState.news_events) ? worldState.news_events.filter(e => e && typeof e === 'object') : [];
+    const availability = {available:'可开采', unavailable:'停止开采', unknown:'可采状态未知'};
+    const direction = {up:'涨价', down:'降价', unchanged:'价格不变', unknown:'价格方向未知'};
+    setText($('agent-news-inferences'), events.map(e => `${name(e.resource)}：第 ${e.startDay}—${e.endDay} 天，${availability[e.availability] || '状态未知'}，${direction[e.priceDirection] || '价格方向未知'}`).join('\n') || '尚未形成可用解释。');
+    const prices = Array.isArray(state.vendorShopList) ? state.vendorShopList.filter(r => r && typeof r.price === 'number' && Number.isFinite(r.price)) : [];
+    setText($('agent-news-prices'), prices.map(r => `${name(r.name)} ${r.price} 金币/个`).join(' · ') || '尚未收到收购价。');
+    const newsReady = (worldState.status || {}).news === 'interpreted';
+    setText($('agent-news-unknown'), `${newsReady ? '以上为模型解释。' : '最新消息尚未解释成功；已有推断可能来自此前资料。'}价格涨跌幅未给出时保持未知，成交使用当前观测价。`);
+    const h = worldState.hypothesis || worldState.direct || {};
+    setText($('agent-treasure-kind'), worldState.direct ? '公开结构化条件' : '模型推断');
+    const parts = [], missing = [];
+    if (h.site && Number.isInteger(h.site.x) && Number.isInteger(h.site.y)) parts.push(`地点 (${h.site.x}, ${h.site.y})`); else missing.push('地点');
+    if (Array.isArray(h.items) && h.items.length) parts.push(`物品：${h.items.join('、')}（保留重复数量）`); else missing.push('精确物品与数量');
+    if (Number.isInteger(h.opensAt) && Number.isInteger(h.closesAt)) {
+      parts.push(`第 ${h.opensAt}—${h.closesAt} 轮（含首尾）`);
+      if (state.roundNo > h.closesAt) parts.push('该时间窗已过');
+      else if (state.roundNo < h.opensAt) parts.push('尚未到开启时间');
+    } else missing.push('开启与关闭回合');
+    if (h.uncertain) missing.push('解释仍有不确定性或冲突');
+    setText($('agent-treasure-inferences'), parts.join('\n') || '尚未形成可用解释。');
+    setText($('agent-treasure-unknown'), worldState.taken ? '已收到宝藏被取走的反馈；不再尝试。' : missing.length ? missing.join('；') : '条件已汇总；仍需核对背包、预算、可达性与防守安排，不保证立即召唤。');
+  }
+
   function updateAgent(world) {
     const state = world && world.state || {};
     const meta = state._demo || {};
@@ -156,6 +189,7 @@
     const counts = `${ended ? '最近一题' : '本题'} ${task.prompts || 0} 次模型 · ${task.commands || 0} 次沙盒 · ${task.inspections || 0} 次原文检索`;
     setText($('agent-operation'), counts + (task.stop_reason ? ` · ${task.stop_reason}` : ''));
     const worldState = coordinator.world || {};
+    updateWorldEvidence(state, worldState);
     const status = worldState.status || {};
     const labels = {idle: '暂无资料', queued: '等待通道', waiting_model: '等待模型', interpreted: '已解释',
       retry_limit: '重试已停止', invalid_reply: '回复未通过检查', expired: '等待超时', rejected: '请求被拒绝'};
