@@ -380,6 +380,10 @@ def step(payload, commands=None):
         elif action == 'collect' and target and unit['roleType'] == 'worker':
             bag = unit.setdefault('backpack', [])
             kind = turn.zones.get(target)
+            from .local_world_news import resource_paused
+            if resource_paused(state, kind, turn.round_no):
+                events.append(f'{uid} 采集未执行：本地新闻事件导致 {kind} 暂停开采')
+                continue
             if distance(pos, target) == 1 and kind in ('stone', 'iron', 'copper') and len(bag) < unit.get('backPackCapability', 100):
                 bag.append(kind)
                 collected[(target.x, target.y, kind)] += 1

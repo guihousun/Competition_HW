@@ -108,6 +108,8 @@ def prepare_round(state, events, extra_load=None):
         return []
     spawned = []
     n = state['roundNo']
+    from .local_world_news import publish
+    publish(state, events)
     rng = random.Random(meta['seed'] * 10000 + n)
     if (n-1) % 130 == 0:
         state['robot']['roles'] = []

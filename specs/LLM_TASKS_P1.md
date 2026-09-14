@@ -33,3 +33,19 @@ taskworld._advance_once 在任何 pending_answer 后都结算并结束，包括 
 对每次发出和收到的操作记录 generation、来源摘要、阶段、回执类型；命令全文/原题需有有界存储和真实 trace 引用。前端展示探索/等待/验证/提交/失败以及额度，不把发出答案等同成功。
 
 完整 unittest、diff check、双侧种子1/90317/90601代表性模拟；与冻结基线对比，报告任务分与基地生存。最终从审核后的源码构建参赛包，Python3.11.10 验证入口，整合固定 codex/sgh。无内网数据不宣称官方 PASS。
+
+## 当前控制器原型及待接入接口
+
+task_agent.TaskAgent 已编写，尚未接入比赛决策函数，不能据独立测试宣称P1完成。
+
+- begin(generation,source)：只在新代际建立工作状态。损坏恢复状态保持降级，不能悄悄重建成免费重试。
+- decide(context,evidence_ids,active,round_no)：提出prompt/cmd/submit，等待或预览不增加调用计数；context来自共享公开上下文。
+- acknowledge(token,round_no)：公共仲裁器实际发出该提案后再确认；这里的次数只是任务软预算，官方额度仍归共享router/JudgeState管理。
+- receive(token,kind,text,round_no,verified)：只接受router已经关联的回执。模型回复严格为顶层request_id和plan，工具结果仍为官方lastCmdResult文本；错误nonce、重复、同轮和旧代际回执不能触发操作。
+- failed(token,reason,round_no)：消费router的过期/拒绝事件，不能伪装成模型回复，也不能让pending永久等待。
+- feedback(errors,round_no)：答案错误/指令错误后重新规划；任务超时结束。提交后处于awaiting_judgement，不把发出答案标为成功。
+- dump/load：有界结构恢复，验证阶段、提案身份、pending、计数和事件类型；未经证实的模型推断仍是推断。
+
+当前原型软上限8次任务模型请求、8次命令、相同命令最多两次，属于工程策略，不改变官方任务内不限普通日额度的规则。上下文/输出上限也属于工程保护，超出必须明确拒绝或由共享上下文组织层提供有来源的相关片段，不静默改写命令和答案。
+
+独立控制器测试已有文档发现→读取→参数查询→精确JSON答案、错误后重新规划、JSON运输、损坏状态、伪造证据/官方字段、迟到代际回执以及过期恢复。仍待：接入共享router实际发送回调与回执、真实TaskPipeline及模拟器整链路、四组题库的自主完成、真实模型重复试验与P2方法复用。当前手工脚本给出的模型计划只验证控制机制，不代表模型自主解题能力。
