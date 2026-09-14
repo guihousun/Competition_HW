@@ -30,19 +30,25 @@ class Agent:
         #: **任务内**的会话上下文 —— 跨回合状态之二（第 25 步）。题目变了即换新；
         #: 任务结束不清（死会话，下场换题时自然被替）。
         self._context: Context | None = None
-        #: 工具名 → (实现, 给 LLM 看的描述)。**描述是 prompt 的一部分**，措辞直接决定调用
-        #: 正确率（要写清楚"参数是什么"与"结果怎么回来"）。顺序即 prompt 里的顺序。
+        #: 工具名 → (实现, 给 LLM 看的描述, **参数表** `((参数名, 用途), …)`)。
+        #: 描述与参数说明都是 prompt 的一部分，措辞直接决定调用正确率；参数表同时是
+        #: `tool_call` 的**调度签名**（实现按关键字收参，见第 30 步）—— 一张表两处用，
+        #: 描述与调度不会分家。顺序即 prompt 里的顺序。
         #: ⚠️ **表必须由实例构造**：`SOP2Prompt` 写的是 `self._sop` ⇒ 只能是绑定方法。
-        self._tools: dict[str, tuple[Callable[[str], str], str]] = {
+        self._tools: dict[
+            str, tuple[Callable[..., str], str, tuple[tuple[str, str], ...]]
+        ] = {
             "executeCmd": (
                 executeCmd,
-                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。当命令涉及到文件path时，若无法判定文件的位置，先找到文件的位置\n"
-                "参数 = 命令原文；",
+                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。"
+                "当命令涉及到文件 path 时，若无法判定文件的位置，先找到文件的位置。",
+                (("cmd", "命令原文"),),
             ),
             "SOP2Prompt": (
                 self.SOP2Prompt,
-                "把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段\n"
-                "参数 = SOP 全文。",
+                "把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段。"
+                "它不产出命令、当回合也没有回执，但从此每道题都会看到它。",
+                (("sop", "SOP 全文"),),
             ),
         }
 
@@ -78,29 +84,63 @@ class Agent:
         if self._context is not None:
             self._context.hear(reply)
 
-    def tool_call(self, tool_name: str, tool_param: str) -> str:
+    def tool_call(self, tool_name: str, params: list[tuple[str | None, str]]) -> str:
         """**顶层调度入口**：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。
 
-        ⚠️ **"返回值即命令"是一条铁律**：`""` = 这个工具不产出命令（`SOP2Prompt`），
-        下游不需要区分"不产出命令"与"调用不成立"，两者都落到"重问"。
+        `params` 是 `tool_of` 解析出来的 `[(参数名|None, 原文), …]`（第 30 步）：
+        **无名参数按声明的参数表位置填充**（单参数工具的无名形状、旧形状
+        `<tool>ls</tool>` 全是它的特例）；**带名的按名对**，认不出的名字忽略
+        （不为一个编造的名字作废整次调用）；声明了的参数**一个不少、值是非空字符串**
+        才放行，最后 `impl(**resolved)` —— 无参数工具就是 `impl()`。
+
+        ⚠️ **"返回值即命令"是一条铁律**：`""` = 这个工具不产出命令（`SOP2Prompt`）/
+        调用不成立（未知工具、形状不对、缺参数、空白值），**下游不需要区分**，全落到"重问"。
 
         ⚠️ **绝不抛异常**（它跑在 `app.handle` 的 `try` 里，抛出去会把整回合所有角色的指令
-        一起带走）⇒ 两道闸门一律返回 `""`：**未知工具名**、**参数不是字符串 / 空参数**。
-        ⚠️ 只在这里挡、不在每个工具里再挡一遍：这是**唯一一个由外部字符串驱动**的入口，
-        边界校验只应有一处（推论：`SOP2Prompt` 走正常路径时永远不会收到空串）。
+        一起带走）⇒ 一切不成立都返回 `""`。⚠️ 边界校验只在**这一处**：这是唯一一个由
+        外部字符串驱动的入口（推论：`SOP2Prompt` 走正常路径时永远不会收到空串 ——
+        空白参数在进工具之前就被挡下，清不掉已存的 SOP）。
         """
         entry = self._tools.get(tool_name)
-        if entry is None or not isinstance(tool_param, str) or not tool_param.strip():
+        if entry is None:
             return ""
-        return entry[0](tool_param)
+        impl, _, spec = entry
+        resolved: dict[str, str] = {}
+        position = 0
+        try:
+            for name, value in params:
+                if name is None:
+                    if position >= len(spec):
+                        return ""  # 位置参数多过声明 —— 多半是 LLM 自己编的
+                    resolved[spec[position][0]] = value
+                    position += 1
+                elif name in dict(spec):
+                    resolved[name] = value
+            # 认不出的参数名：忽略（宽容那一侧）
+        except (TypeError, ValueError):
+            return ""  # params 不是 [(名|None, 文本)] 的形状
+        if any(
+            not isinstance(resolved.get(pname), str) or not resolved[pname].strip()
+            for pname, _ in spec
+        ):
+            return ""
+        return impl(**resolved)
 
     def tool_desc(self) -> str:
         """「可使用的工具」那一段的正文 —— 由工具表**生成**，不手写第二份。
 
+        第 30 步起**参数说明也是生成的**：每个声明的参数一行 `参数 名：用途`、
+        无参数的工具打 `（无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。
         手写第二份迟早会出现"prompt 里写了、代码里没有"（或反过来），而那种不一致
         **只有实盘上 LLM 报错才看得出来**（本地怎么测都是绿的）。
         """
-        return "\n".join(f"- {name}：{desc}" for name, (_, desc) in self._tools.items())
+        lines: list[str] = []
+        for name, (_, desc, params) in self._tools.items():
+            lines.append(f"- {name}：{desc}")
+            lines += [f"    参数 {pname}：{pdesc}" for pname, pdesc in params]
+            if not params:
+                lines.append("    （无参数）")
+        return "\n".join(lines)
 
     def SOP2Prompt(self, sop: str) -> str:
         """把 `sop` **整段替换**进「沉淀的 SOP」段。返回 `""` —— **它不产出命令**。

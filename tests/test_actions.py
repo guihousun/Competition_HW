@@ -3650,10 +3650,59 @@ class AgentToolCallTest(unittest.TestCase):
     ⚠️ **这一类的 `setUp` 造的是 `AGENT` 之外的实例**（用户拍板：Agent 是单实例，
     状态住在实例上 ⇒ 新实例天然干净）。所以这里的用例**不需要**复位任何东西 ——
     复位是给"必须走包根单例"的那些用例准备的（`HandleTest` / `TaskChannelTest`）。
+
+    第 30 步起参数走**参数表**：注册表给每个工具声明 `((参数名, 用途), …)`；
+    `tool_call` 收 `[(参数名|None, 原文), …]` —— 无名的按声明顺序**位置填充**
+    （旧形状全兼容）、认不出的名字忽略，声明的参数**一个不少且非空**才放行，
+    `impl(**resolved)`。
     """
 
     def setUp(self) -> None:
         self.agent = Agent()
+
+    def test_an_unnamed_param_fills_the_declared_slot(self):
+        """无名参数（单参数工具的主形状）⇒ 位置填充进声明的第一个参数。"""
+        self.assertEqual(self.agent.tool_call("executeCmd", [(None, "ls -la")]), "ls -la")
+
+    def test_a_named_param_is_matched_by_its_name(self):
+        self.assertEqual(self.agent.tool_call("executeCmd", [("cmd", "ls -la")]), "ls -la")
+
+    def test_a_fabricated_param_name_means_no_call(self):
+        """LLM 编的参数名**忽略**（不为它作废整次调用），但声明的参数没给上 ⇒ 不成立。"""
+        self.assertEqual(self.agent.tool_call("executeCmd", [("命令", "ls")]), "")
+
+    def test_a_declared_param_left_out_means_no_call(self):
+        self.assertEqual(self.agent.tool_call("executeCmd", []), "")
+
+    def test_a_blank_or_non_string_value_never_reaches_the_tool(self):
+        """值不是字符串 / 空白 ⇒ `""`，**绝不抛** —— 这条闸门在 `SOP2Prompt` 之前，
+        空参数调用不会把整场攒下来的 SOP 抹掉。"""
+        for value in ("", "   ", "\n", None, 42):
+            with self.subTest(value=value):
+                self.assertEqual(self.agent.tool_call("executeCmd", [(None, value)]), "")
+
+    def test_malformed_params_are_not_a_call(self):
+        """`params` 整个不是 `[(名|None, 文本), …]` 的形状 ⇒ `""`，**绝不抛**
+        （它跑在 `app.handle` 的 `try` 里，抛出去 = 整回合空指令）。"""
+        for params in ("ls", None, 42, ["ls"], [("cmd",)], [None]):
+            with self.subTest(params=params):
+                self.assertEqual(self.agent.tool_call("executeCmd", params), "")
+
+    def test_a_zero_param_tool_needs_no_params(self):
+        """**无参数工具**：参数表为空 ⇒ 空参数表就能调起来；多余的参数 ⇒ 不成立。"""
+        self.agent._tools["查询状态"] = (lambda: "状态正常", "测试用：查个状态", ())
+        self.assertEqual(self.agent.tool_call("查询状态", []), "状态正常")
+        self.assertEqual(self.agent.tool_call("查询状态", [(None, "多余")]), "")
+
+    def test_a_two_param_tool_takes_named_or_positional_params(self):
+        """**多参数工具**：按名或按位置都行；缺一个 ⇒ 不成立。"""
+        def echo(**kw: str) -> str:
+            return f"{kw['甲']}+{kw['乙']}"
+
+        self.agent._tools["双参"] = (echo, "测试用：两个参数", (("甲", "第一个"), ("乙", "第二个")))
+        self.assertEqual(self.agent.tool_call("双参", [("甲", "一"), ("乙", "二")]), "一+二")
+        self.assertEqual(self.agent.tool_call("双参", [(None, "一"), (None, "二")]), "一+二")
+        self.assertEqual(self.agent.tool_call("双参", [("甲", "一")]), "")
 
     def test_execute_cmd_returns_the_command_verbatim(self):
         """`executeCmd` 就是"把命令搬进响应字段"这一步 —— **本地一个字都不执行**。
@@ -3668,16 +3717,20 @@ class AgentToolCallTest(unittest.TestCase):
             "grep -n '中文' a.txt\nwc -l a.txt",
         ):
             with self.subTest(cmd=cmd):
-                self.assertEqual(self.agent.tool_call("executeCmd", cmd), cmd)
+                self.assertEqual(self.agent.tool_call("executeCmd", [(None, cmd)]), cmd)
 
     def test_sop2prompt_stores_the_method_and_yields_no_command(self):
         """`SOP2Prompt` 存下方法、**返回空串**（它不产出命令）。
 
         返回值直接进响应顶层的 `executeCmd` ⇒ 返回非空就是往沙盒里丢一条命令
         （而这条命令根本不存在，只会白烧一次沙盒执行）。
+        ⚠️ 顺带钉**闸门的位置**：空白参数在 `tool_call` 就被挡下 ⇒ 清不掉已存的 SOP
+        （`SOP2Prompt("")` 的语义是"清空"，校验下沉到工具里就会一次误调用抹掉全场沉淀）。
         """
-        self.assertEqual(self.agent.tool_call("SOP2Prompt", "第一步：先 ls"), "")
+        self.assertEqual(self.agent.tool_call("SOP2Prompt", [(None, "第一步：先 ls")]), "")
         self.assertEqual(self.agent.sop, "第一步：先 ls")
+        self.assertEqual(self.agent.tool_call("SOP2Prompt", [(None, "  ")]), "")
+        self.assertEqual(self.agent.sop, "第一步：先 ls", "空白参数清不掉 SOP —— 闸门在工具之前")
 
     def test_an_unknown_tool_yields_no_command_and_no_exception(self):
         """未知工具 ⇒ 空串，**绝不抛**。
@@ -3687,33 +3740,29 @@ class AgentToolCallTest(unittest.TestCase):
         """
         for name in ("nope", "", "execute_cmd", None):
             with self.subTest(name=name):
-                self.assertEqual(self.agent.tool_call(name, "ls"), "")
-
-    def test_a_blank_or_non_string_param_never_reaches_the_tool(self):
-        """空参数 / 非字符串参数 ⇒ 空串，**而且 SOP 没被清空**（闸门在调用之前）。
-
-        这条钉的是**闸门的位置**：`SOP2Prompt("")` 的语义是"清空"，
-        如果校验下沉到工具里，一次空参数调用就会把整场攒下来的 SOP 抹掉。
-        """
-        self.agent.SOP2Prompt("保住我")
-        for param in ("", "   ", "\n", None, 42, ["ls"]):
-            with self.subTest(param=param):
-                self.assertEqual(self.agent.tool_call("SOP2Prompt", param), "")
-        self.assertEqual(self.agent.sop, "保住我")
+                self.assertEqual(self.agent.tool_call(name, [(None, "ls")]), "")
 
     def test_every_registered_tool_is_described_and_callable(self):
-        """`tool_desc()` 覆盖工具表里的每一个工具，且每个都能真的调起来。
-
+        """`tool_desc()` 覆盖工具表里的每一个工具（含参数行），且每个都能真的调起来。
         注册了却没进描述（LLM 永远不知道它存在），或者描述里有、注册表里没有
         （LLM 一调就落空）—— 两种都是**只有在实盘上才会暴露**的不一致。
         """
         desc = self.agent.tool_desc()
-        for name in self.agent._tools:
-            self.assertIn(name, desc)
-        for name, (impl, text) in self.agent._tools.items():
+        for name, (impl, _, params) in self.agent._tools.items():
             with self.subTest(name=name):
+                self.assertIn(name, desc)
                 self.assertTrue(callable(impl))
-                self.assertTrue(text.strip())
+                if params:
+                    self.assertIn(f"参数 {params[0][0]}：", desc)
+
+    def test_the_tool_desc_documents_the_param_table(self):
+        """参数说明由注册表**生成**：`参数 名：用途` 一行一个；无参数打 `（无参数）`
+        —— LLM 照着表写调用，不靠描述正文里的散文。"""
+        desc = self.agent.tool_desc()
+        self.assertIn("参数 cmd：命令原文", desc)
+        self.assertIn("参数 sop：SOP 全文", desc)
+        self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
+        self.assertIn("查询状态：测试用\n    （无参数）", self.agent.tool_desc())
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """**加一个工具只改一处**（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。
@@ -3724,10 +3773,14 @@ class AgentToolCallTest(unittest.TestCase):
         ⚠️ **注入的是本类 setUp 里那个新实例的表**（第 19 步起工具表是实例属性）
         ⇒ 不需要 `finally: del` —— 实例是这条用例私有的，跑完就没人再看得见它。
         """
-        self.agent._tools["测试用工具"] = (lambda param: f"命令:{param}", "只在这条用例里存在")
+        self.agent._tools["测试用工具"] = (
+            lambda **kw: f"命令:{kw['参数']}",
+            "只在这条用例里存在",
+            (("参数", "测试参数"),),
+        )
         self.assertIn("测试用工具", self.agent.tool_desc())
-        self.assertIn("只在这条用例里存在", self.agent.tool_desc())
-        self.assertEqual(self.agent.tool_call("测试用工具", "参数"), "命令:参数")
+        self.assertIn("参数 参数：测试参数", self.agent.tool_desc())
+        self.assertEqual(self.agent.tool_call("测试用工具", [(None, "实参")]), "命令:实参")
         self.assertNotIn("测试用工具", Agent().tool_desc())
 
 
@@ -3783,8 +3836,8 @@ class SopStateTest(unittest.TestCase):
         调方法）把它挡住。
         """
         other = Agent()
-        self.agent.tool_call("SOP2Prompt", "甲走工具表")
-        other.tool_call("SOP2Prompt", "乙走工具表")
+        self.agent.tool_call("SOP2Prompt", [(None, "甲走工具表")])
+        other.tool_call("SOP2Prompt", [(None, "乙走工具表")])
         self.assertEqual(self.agent.sop, "甲走工具表")
         self.assertEqual(other.sop, "乙走工具表")
 
@@ -4091,11 +4144,38 @@ class ContextTest(unittest.TestCase):
 
 
 class ToolReplyParseTest(unittest.TestCase):
-    """`tool_of`：解析工具调用。**严格**（与 `looks_like_tool` 故意相反）。"""
+    """`tool_of`：解析工具调用。**严格**（与 `looks_like_tool` 故意相反）。
 
-    def test_a_full_call_gives_the_name_and_the_param(self):
+    第 30 步起返回 `(工具名, [(参数名|None, 原文), …])` —— 参数可零个可多个，
+    带名的按名收、无名的留 `None`（由 `Agent.tool_call` 按声明的参数表位置填充）。
+    """
+
+    def test_a_full_call_gives_the_name_and_the_params(self):
+        """成对块 ⇒ `(名, [(None, 原文)])`。无名 `<tool_param>` 是**单参数工具**的主形状
+        （prompt 里教的），名字留 `None`、位置填充在 `tool_call` 那边做 ——
+        `chat.py` 只管语法、不认识工具的声明，这是两边的分界。"""
         reply = "<tool><tool_name>executeCmd</tool_name><tool_param>cat /tmp/a.txt</tool_param></tool>"
-        self.assertEqual(tool_of(reply), ("executeCmd", "cat /tmp/a.txt"))
+        self.assertEqual(tool_of(reply), ("executeCmd", [(None, "cat /tmp/a.txt")]))
+
+    def test_named_params_are_kept_by_their_names(self):
+        """**多参数工具**的形状：每块 `<tool_param name="参数名">` 各写一个、带上 name。"""
+        reply = (
+            "<tool><tool_name>假工具</tool_name>"
+            '<tool_param name="甲">一</tool_param>'
+            '<tool_param name="乙">二</tool_param>'
+            "</tool>"
+        )
+        self.assertEqual(tool_of(reply), ("假工具", [("甲", "一"), ("乙", "二")]))
+
+    def test_the_name_attribute_tolerates_single_quotes(self):
+        """LLM 写 `name='cmd'`（单引号）也算 —— 引号风格不该让调用作废。"""
+        reply = "<tool><tool_name>executeCmd</tool_name><tool_param name='cmd'>ls</tool_param></tool>"
+        self.assertEqual(tool_of(reply), ("executeCmd", [("cmd", "ls")]))
+
+    def test_a_zero_param_call_has_no_param_blocks(self):
+        """**无参数工具**：只有 `<tool_name>`、一个 `<tool_param>` 都不写 ⇒ 合法形状
+        （参数表为空；这工具存不存在、该不该放行由 `Agent.tool_call` 按声明判）。"""
+        self.assertEqual(tool_of("<tool><tool_name>查询状态</tool_name></tool>"), ("查询状态", []))
 
     def test_the_param_keeps_its_inner_newlines(self):
         """参数**内部**的换行原样保留（只去首尾空白）—— 多行命令、带缩进的 python 都合法。"""
@@ -4103,18 +4183,19 @@ class ToolReplyParseTest(unittest.TestCase):
             "<tool><tool_name>executeCmd</tool_name>"
             "<tool_param>\nls -la\n  wc -l a.txt\n</tool_param></tool>"
         )
-        self.assertEqual(tool_of(reply), ("executeCmd", "ls -la\n  wc -l a.txt"))
+        self.assertEqual(tool_of(reply), ("executeCmd", [(None, "ls -la\n  wc -l a.txt")]))
 
     def test_only_the_first_call_is_taken(self):
-        """只取第一条：`executeCmd` 只有一个字段，一回合只跑得了一条（接口文档 L210）。"""
+        """只取**第一条 `<tool>` 块**：一回合只跑得了一条（接口文档 L210）。"""
         reply = (
             "<tool><tool_name>executeCmd</tool_name><tool_param>first</tool_param></tool>"
             "<tool><tool_name>executeCmd</tool_name><tool_param>second</tool_param></tool>"
         )
-        self.assertEqual(tool_of(reply), ("executeCmd", "first"))
+        self.assertEqual(tool_of(reply), ("executeCmd", [(None, "first")]))
 
     def test_the_old_bare_shape_still_works(self):
-        """**兼容层**（用户拍板全覆盖）：块里没有 `<tool_name>` ⇒ 整块正文就是一条命令。
+        """**兼容层**（用户拍板全覆盖）：块里没有任何标签 ⇒ 整块正文就是一条命令 ——
+        落成 `(None, 正文)` 的位置参数，与无名参数是同一个机制，不用单独一条规则。
 
         第 16 步的形状就是这个。判题器的 LLM 认不认新形状是**黑盒**，
         这是"不被认账"时唯一能让任务线继续跑下去的退路。
@@ -4122,15 +4203,16 @@ class ToolReplyParseTest(unittest.TestCase):
         """
         for reply in ("<tool>ls -la</tool>", "<tool  >  ls -la  </tool>", "<tool >ls -la</tool>"):
             with self.subTest(reply=reply):
-                self.assertEqual(tool_of(reply), ("executeCmd", "ls -la"))
+                self.assertEqual(tool_of(reply), ("executeCmd", [(None, "ls -la")]))
 
     def test_partial_markup_is_not_a_call(self):
         """半截的都不算 —— **不猜半个调用**，让调用方落到"重问"那一支。
 
         `cat /tmp/x` 这种没有 `<tool>` 的裸参数也不认（那只是普通文本）。
+        ⚠️ "有名字没参数"**不在这里**（第 30 步起那是无参数工具的合法形状，
+        见 `test_a_zero_param_call_has_no_param_blocks`）。
         """
         cases = (
-            "<tool><tool_name>executeCmd</tool_name></tool>",  # 有名字没参数
             "<tool><tool_param>ls</tool_param></tool>",  # 有参数没名字
             "<tool></tool>",  # 空块
             "<tool>   </tool>",  # 只有空白

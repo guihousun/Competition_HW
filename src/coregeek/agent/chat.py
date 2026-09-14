@@ -45,6 +45,8 @@ PROMPT = """
 
 例：<tool><tool_name>executeCmd</tool_name><tool_param>cat /tmp/a.txt</tool_param></tool>
 
+无参数的工具不用写 `<tool_param>`；有多个参数的工具，每块 `<tool_param name="参数名">` 各写一个、都带上 `name`。
+
 一次只调用一个工具。不用再调工具、可以直接作答时，把**答案本身**放进 `<answer>`：
 
 <answer>答案本身</answer>
@@ -56,33 +58,87 @@ PROMPT = """
 #: 要判**宽**（`<tool>`、`<tool >`、`<tool_name>` 都算"它想调工具"），否则畸形回复会被当成答案。
 _TOOL_OPEN = "<tool"
 _TOOL_CLOSE = "</tool>"
+_PARAM_OPEN = "<tool_param"
+_PARAM_CLOSE = "</tool_param>"
 
 
-def tool_of(reply: str) -> tuple[str, str] | None:
-    """解析工具调用 ⇒ `(工具名, 参数)`；不是工具调用、或形状不完整 ⇒ `None`。
+def tool_of(reply: str) -> tuple[str, list[tuple[str | None, str]]] | None:
+    """解析工具调用 ⇒ `(工具名, [(参数名|None, 原文), …])`；不是工具调用、或形状不完整 ⇒ `None`。
 
-    判据**严格**（与 `looks_like_tool` 故意相反）：
+    判据**严格**（与 `looks_like_tool` 故意相反）。参数**可零个可多个**（第 30 步）：
 
-    1. 取**第一对** `<tool>` … `</tool>`（按开标签 `>` 的位置定位，所以 `<tool >` 也认）；不成对 ⇒ `None`。
-    2. 块里有 `<tool_name>` 与 `<tool_param>` ⇒ **两个都要成对**才给值，只有一个 ⇒ `None`
-       （**不猜半个调用**）。⚠️ 参数的内部换行原样保留，只去首尾空白。
-    3. **块里两个标签都没有 ⇒ 整块正文就是一条 `executeCmd` 命令**（旧形状 `<tool>ls -la</tool>`，
-       用户拍板的兼容层）。这里不加"含 `<` 就当畸形"的守卫：那会误杀 `cat < input.txt`。
-    4. 块是空的 ⇒ `None`。
+    1. 取**第一对** `<tool>` … `</tool>`（按开标签 `>` 的位置定位，所以 `<tool >` 也认）；
+       不成对 ⇒ `None`。
+    2. `<tool_name>` 取第一块；`<tool_param>` **全部收集**（出现顺序即表序）：每块可带
+       `name="参数名"`（单双引号都认），带名的按名收、无名的留 `None` —— 位置填充是
+       `Agent.tool_call` 的事（那边才有工具的参数声明；这个模块只管语法、不认识工具）。
+       ⚠️ 参数的内部换行原样保留，只去首尾空白。
+    3. **两个标签都没有 ⇒ 整块正文就是一条 `executeCmd` 命令**（旧形状 `<tool>ls -la</tool>`，
+       用户拍板的兼容层），落成 `(None, 正文)` 的位置参数 —— 与无名参数同一个机制。
+       这里不加"含 `<` 就当畸形"的守卫：那会误杀 `cat < input.txt`。
+    4. **只有参数没有名字 ⇒ `None`**（不猜工具名）。**只有名字没有参数**是合法形状 ——
+       那可能是无参数工具的调用（第 30 步起 0 参是常态而非畸形），放不放行由
+       `tool_call` 按声明的参数表判。
+    5. 块是空的 ⇒ `None`。
 
-    只取**第一条**：`executeCmd` 只有一个字段、判题器一回合只跑一条。
+    只取**第一条** `<tool>` 块：一回合只跑得了一条（接口文档 L210）。
     """
     body = _block(reply, _TOOL_OPEN, _TOOL_CLOSE)
     if body is None:
         return None
-    name = _block(body, "<tool_name>", "</tool_name>")
-    param = _block(body, "<tool_param>", "</tool_param>")
-    if name is None and param is None:
+    name = _block(body, "<tool_name", "</tool_name>")
+    params = _params(body)
+    if name is None and not params:
         text = body.strip()
-        return ("executeCmd", text) if text else None
-    if name is None or param is None:
+        return ("executeCmd", [(None, text)]) if text else None
+    if name is None:
         return None
-    return name.strip(), param.strip()
+    return name.strip(), params
+
+
+def _params(body: str) -> list[tuple[str | None, str]]:
+    """收集**全部** `<tool_param>` 块：`[(参数名|None, 原文), …]`，出现顺序即表序。
+
+    名字取开标签里的 `name` 属性（`<tool_param name="cmd">`，单双引号都认、空名当无名）。
+    ⚠️ 值**只去首尾空白**（内部换行原样保留 —— 多行命令、带缩进的 python 都合法）。
+    半截的块（有开无闭）**不要** —— 与 `_block` 同一条"成对才作数"：半截参数绝不能
+    当内容用（会被当命令发进沙盒）。
+    """
+    out: list[tuple[str | None, str]] = []
+    start = 0
+    while True:
+        head = body.find(_PARAM_OPEN, start)
+        if head < 0:
+            return out
+        head_end = body.find(">", head)
+        if head_end < 0:
+            return out
+        end = body.find(_PARAM_CLOSE, head_end)
+        if end < 0:
+            return out
+        out.append((_attr(body[head : head_end + 1]), body[head_end + 1 : end].strip()))
+        start = end + len(_PARAM_CLOSE)
+
+
+def _attr(open_tag: str) -> str | None:
+    """开标签文本（如 `<tool_param name="cmd">`）里 `name` 属性的值；没有/为空 ⇒ `None`。
+
+    只认这一种属性、值须用成对的引号包着（单双都行）；`name = "cmd"`（多敲空格）也认 ——
+    LLM 的标点风格不该让调用作废。不做完整的属性语法分析：标签里没有第二种属性要认。
+    """
+    at = open_tag.find("name")
+    if at < 0:
+        return None
+    eq = open_tag.find("=", at)
+    if eq < 0:
+        return None
+    for quote in ('"', "'"):
+        first = open_tag.find(quote, eq)
+        if first >= 0:
+            last = open_tag.find(quote, first + 1)
+            if last > first:
+                return open_tag[first + 1 : last].strip() or None
+    return None
 
 
 def looks_like_tool(reply: str) -> bool:
