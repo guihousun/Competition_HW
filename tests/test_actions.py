@@ -450,7 +450,7 @@ class HandleTest(unittest.TestCase):
         messages = json.loads(ask[len(ASK):])  # 短题 ⇒ 没到上限，整串都在这行里
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
         self.assertEqual(messages[1]["content"], "短题目")
-        for piece in ("# Agent定位", "# 可使用的工具", "- SOP2Prompt：", "# 沉淀的 SOP"):
+        for piece in ("# Agent定位", "# 可使用的工具", "## SOP2Prompt", "# 沉淀的 SOP"):
             self.assertIn(piece, messages[0]["content"])
 
         #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**（省 LLM 额度）
@@ -3331,6 +3331,33 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn("先看目录", prompt)  # 存下的 SOP 立刻出现在同一份 prompt 里
         self.assertEqual(AGENT.sop, "先看目录")
 
+    def test_sinking_the_sop_rides_along_with_the_answer(self):
+        """⚠️ **沉淀 SOP 不许独占一回合** —— 它单独来一趟就得重问一次，等于白花一回合。
+
+        任务是**按回合计分**的（`5 × 标准回合数 / (完成回合 − 接取回合)`），所以白花一回合
+        直接掉分。而代码侧本来就支持"同一条回复里既沉淀又作答"：`<answer>` 在 `<tool>` 块
+        **之外**，`tool_of` 只取第一块所以不受影响、`answer_of` 照旧认出它 ⇒ `task_channel`
+        走**判据 ⑤**（`("", "")`，不是 ③′ → ⑥ 的重问）；同时 `plan` 里 `_answer_task`
+        独立用**同一个谓词**取答案，当回合就 `submitAnswer`。⇒ 唯一的阻塞是 prompt 措辞，
+        所以第 32 步一个字都没改判据链（改措辞那条用例见
+        `ChatPromptTest.test_the_sop_round_must_carry_the_answer`）。
+
+        反向验证：把 `answer_of` 那半句"像工具调用 ⇒ `""`"改成无条件的，这条立刻挂。
+        """
+        reply = (
+            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>先找文件</tool_param></tool>"
+            "\n<answer>晴 26 度</answer>"
+        )
+        self.assertEqual(
+            task_channel(self._turn(self.TASK, reply)), ("", ""), "既不该重问、也不该发命令"
+        )
+        self.assertEqual(AGENT.sop, "先找文件", "沉淀照样生效")
+        self.assertEqual(
+            plan(self._turn(self.TASK, reply)).get("10011"),
+            {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
+            "同一个回合里开拓者已经把答案交上去了",
+        )
+
     def test_the_stored_sop_rides_along_in_every_later_prompt(self):
         """**自进化的可观测证据**：存过一次之后，后面每一份 prompt 都带着它 ——
         包括"回灌沙盒结果"与"带纠错重问"这两条分支。"""
@@ -3750,19 +3777,20 @@ class AgentToolCallTest(unittest.TestCase):
         desc = self.agent.tool_desc()
         for name, (impl, _, params) in self.agent._tools.items():
             with self.subTest(name=name):
-                self.assertIn(name, desc)
+                self.assertIn(f"## {name}", desc)
                 self.assertTrue(callable(impl))
                 if params:
-                    self.assertIn(f"参数 {params[0][0]}：", desc)
+                    self.assertIn(f"    - {params[0][0]}: ", desc)
 
     def test_the_tool_desc_documents_the_param_table(self):
-        """参数说明由注册表**生成**：`参数 名：用途` 一行一个；无参数打 `（无参数）`
+        """参数说明由注册表**生成**，第 32 步起是 `## 名 / Description: / Params:` 的块，
+        参数一行一个 `- 名: 用途`；无参数打 `Params: （无参数）`
         —— LLM 照着表写调用，不靠描述正文里的散文。"""
         desc = self.agent.tool_desc()
-        self.assertIn("参数 cmd：命令原文", desc)
-        self.assertIn("参数 sop：SOP 全文", desc)
+        self.assertIn("Params:\n    - cmd: 命令原文", desc)
+        self.assertIn("Params:\n    - sop: SOP 全文", desc)
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
-        self.assertIn("查询状态：测试用\n    （无参数）", self.agent.tool_desc())
+        self.assertIn("## 查询状态\nDescription: 测试用\nParams: （无参数）", self.agent.tool_desc())
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """**加一个工具只改一处**（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。
@@ -3779,7 +3807,7 @@ class AgentToolCallTest(unittest.TestCase):
             (("参数", "测试参数"),),
         )
         self.assertIn("测试用工具", self.agent.tool_desc())
-        self.assertIn("参数 参数：测试参数", self.agent.tool_desc())
+        self.assertIn("    - 参数: 测试参数", self.agent.tool_desc())
         self.assertEqual(self.agent.tool_call("测试用工具", [(None, "实参")]), "命令:实参")
         self.assertNotIn("测试用工具", Agent().tool_desc())
 
@@ -3960,6 +3988,23 @@ class ChatPromptTest(unittest.TestCase):
             system,
         )
         self.assertIn("<answer>答案本身</answer>", system)
+
+    def test_the_sop_round_must_carry_the_answer(self):
+        """prompt 里必须有"沉淀 SOP 要和答案写在同一条回复里"这条**规则与示例**。
+
+        它是省回合的唯一杠杆：代码侧早就支持同回合（`answer_of` + 判据 ⑤ + `_answer_task`
+        三处共用同一个谓词，见
+        `TaskChannelTest.test_sinking_the_sop_rides_along_with_the_answer`），
+        但 prompt 不写的话，LLM 就按"一回合只输出一样东西"把沉淀单独占一回合 ——
+        而那一回合在日志上看起来**完全正常**（有提问、无提交），只有分数会低。
+        """
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        self.assertIn("必须把答案一起写上", system)
+        self.assertIn(
+            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>沉淀的方法</tool_param></tool>"
+            "<answer>答案本身</answer>",
+            system,
+        )
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))

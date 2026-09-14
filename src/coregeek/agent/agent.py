@@ -46,8 +46,9 @@ class Agent:
             ),
             "SOP2Prompt": (
                 self.SOP2Prompt,
-                "把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段。"
-                "它不产出命令、当回合也没有回执，但从此每道题都会看到它。",
+                "把你总结出的解题方法整段替换进后续每一份 prompt 的「沉淀的 SOP」段。"
+                "它不产出命令、当回合也没有回执，但从此每道题都会看到它。"
+                "所以调用它的那一回合必须把答案一起写上。",
                 (("sop", "SOP 全文"),),
             ),
         }
@@ -129,18 +130,29 @@ class Agent:
     def tool_desc(self) -> str:
         """「可使用的工具」那一段的正文 —— 由工具表**生成**，不手写第二份。
 
-        第 30 步起**参数说明也是生成的**：每个声明的参数一行 `参数 名：用途`、
-        无参数的工具打 `（无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。
-        手写第二份迟早会出现"prompt 里写了、代码里没有"（或反过来），而那种不一致
-        **只有实盘上 LLM 报错才看得出来**（本地怎么测都是绿的）。
+        第 32 步起每个工具是一个**块**（用户指定的格式）：
+
+            ## 工具名
+            Description: 一句话说清它干什么
+            Params:
+                - 参数名: 用途
+
+        无参数的工具打 `Params: （无参数）` —— 不用 `- （无参数）`，那看起来像
+        多了一个叫"（无参数）"的参数。块之间空一行（`##` 标题摆在那里，不空行会黏成一坨）。
+        参数说明是**生成**的，LLM 照着表写调用、不靠描述正文里的散文：手写第二份迟早会出现
+        "prompt 里写了、代码里没有"（或反过来），而那种不一致**只有实盘上 LLM 报错
+        才看得出来**（本地怎么测都是绿的）。
         """
-        lines: list[str] = []
+        blocks: list[str] = []
         for name, (_, desc, params) in self._tools.items():
-            lines.append(f"- {name}：{desc}")
-            lines += [f"    参数 {pname}：{pdesc}" for pname, pdesc in params]
-            if not params:
-                lines.append("    （无参数）")
-        return "\n".join(lines)
+            lines = [f"## {name}", f"Description: {desc}"]
+            if params:
+                lines.append("Params:")
+                lines += [f"    - {pname}: {pdesc}" for pname, pdesc in params]
+            else:
+                lines.append("Params: （无参数）")
+            blocks.append("\n".join(lines))
+        return "\n\n".join(blocks)
 
     def SOP2Prompt(self, sop: str) -> str:
         """把 `sop` **整段替换**进「沉淀的 SOP」段。返回 `""` —— **它不产出命令**。
