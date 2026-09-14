@@ -1,0 +1,328 @@
+[
+  {
+    "strategy": "RRR",
+    "label": "\u4e09\u706b\u7bad",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2229,
+    "task_score": 1298,
+    "task_rewards": 13,
+    "kills": 61,
+    "crew_deaths": 9,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 478,
+      "build": 20,
+      "collect": 22,
+      "acceptTask": 142,
+      "submitAnswer": 26,
+      "buy": 2,
+      "attack": 119,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 119
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+    "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+    "elapsed_seconds": 22.66,
+    "economy": {
+      "collect_stone": 22
+    }
+  },
+  {
+    "strategy": "RRR",
+    "label": "\u4e09\u706b\u7bad",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 1270,
+    "task_score": 336,
+    "task_rewards": 3,
+    "kills": 62,
+    "crew_deaths": 9,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 287,
+      "build": 20,
+      "collect": 24,
+      "acceptTask": 17,
+      "submitAnswer": 6,
+      "buy": 2,
+      "attack": 124,
+      "sell": 1,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 124
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+    "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+    "elapsed_seconds": 21.97,
+    "economy": {
+      "collect_stone": 24,
+      "sold_stone": 4,
+      "sale_gold": 4
+    }
+  },
+  {
+    "strategy": "RRR",
+    "label": "\u4e09\u706b\u7bad",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2366,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 56,
+    "crew_deaths": 12,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 437,
+      "build": 21,
+      "collect": 39,
+      "acceptTask": 158,
+      "submitAnswer": 30,
+      "buy": 2,
+      "attack": 114,
+      "summonTreasure": 1,
+      "sell": 1
+    },
+    "attacks": {
+      "rocket": 114
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "a1808fc40f48dc977097f8f34c1744adc1eddb0c7b86504cbd29743c96b233a7",
+    "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+    "elapsed_seconds": 15.33,
+    "economy": {
+      "collect_stone": 29,
+      "collect_copper": 10,
+      "sold_copper": 10,
+      "sale_gold": 50
+    }
+  },
+  {
+    "strategy": "RRR",
+    "label": "\u4e09\u706b\u7bad",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2325,
+    "task_score": 1410,
+    "task_rewards": 14,
+    "kills": 49,
+    "crew_deaths": 12,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 579,
+      "build": 21,
+      "collect": 50,
+      "acceptTask": 141,
+      "submitAnswer": 28,
+      "sell": 4,
+      "buy": 2,
+      "attack": 106,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 106
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+    "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+    "elapsed_seconds": 33.81,
+    "economy": {
+      "collect_copper": 20,
+      "collect_stone": 20,
+      "sold_copper": 20,
+      "sale_gold": 130,
+      "collect_iron": 10,
+      "sold_iron": 10
+    }
+  },
+  {
+    "strategy": "RRR",
+    "label": "\u4e09\u706b\u7bad",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 6173,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 1878,
+    "task_score": 949,
+    "task_rewards": 12,
+    "kills": 59,
+    "crew_deaths": 13,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 528,
+      "build": 20,
+      "collect": 20,
+      "acceptTask": 106,
+      "submitAnswer": 24,
+      "buy": 2,
+      "attack": 123,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 123
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "7737864140f5c87ef9545c1eacaaea10abeef9c40cf32ec58e8f9a71dd89eb82",
+    "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+    "elapsed_seconds": 15.05,
+    "economy": {
+      "collect_stone": 20
+    }
+  },
+  {
+    "strategy": "RRR",
+    "label": "\u4e09\u706b\u7bad",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 6173,
+    "side": "defender",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 1452,
+    "task_score": 514,
+    "task_rewards": 6,
+    "kills": 65,
+    "crew_deaths": 8,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 373,
+      "build": 20,
+      "collect": 46,
+      "acceptTask": 58,
+      "submitAnswer": 12,
+      "buy": 4,
+      "attack": 129,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 129
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "facab5c1f4306fd4755b41b912bdd0ecae113fe9dbb475aa2e159f440d49bfe8",
+    "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+    "elapsed_seconds": 15.77,
+    "economy": {
+      "collect_stone": 36,
+      "collect_copper": 10
+    }
+  }
+]

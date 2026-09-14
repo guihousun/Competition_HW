@@ -1,0 +1,119 @@
+"""Background two-team match job for the local debug UI.
+
+A full local 1v1 runs 1300 rounds and takes roughly 100 seconds, so it cannot be
+one HTTP request. This module runs it in a worker thread and exposes a snapshot
+the page can poll: per-side score and base health, the round being played, and
+the finished result.
+
+Local only. The job never touches the official POST path, and every payload is
+labelled as a local comparison rather than an official result.
+"""
+from __future__ import annotations
+
+import threading
+import time
+from typing import Any
+
+from .match import TwoTeamMatch
+from .scenarios import scenario
+
+#: Only one local match at a time: two of them would compete for the GIL and make
+#: both slower without telling the user why.
+_LOCK = threading.Lock()
+_JOB: dict[str, Any] | None = None
+
+
+def _build_world(seed: int, pressure: int) -> dict[str, Any]:
+    """A world holding a real team on each side, facing each other."""
+    world = scenario(seed, "challenger", pressure)
+    world["teamEnemy"] = scenario(seed, "defender", pressure)["teamOur"]
+    return world
+
+
+def _worker(job: dict[str, Any]) -> None:
+    try:
+        match = TwoTeamMatch(job["world"], max_rounds=job["maxRounds"])
+        job["sides"] = list(match.sides)
+        while not job["stop"] and not match.finished:
+            match.round()
+            job["round"] = len(match.log)
+            job["progress"] = job["round"] / max(1, job["maxRounds"])
+            job["scores"] = {side: int(match.world[match._slot(side)]["totalScore"])
+                             for side in match.sides}
+            job["baseHp"] = {side: int(next((r.get("health") or 0
+                                             for r in match.world[match._slot(side)]["roles"]
+                                             if r.get("roleType") == "station"), 0))
+                             for side in match.sides}
+            job["lastEvents"] = match.log[-1]["events"][:6]
+        result = match.result()
+        job["result"] = result
+        job["state"] = "done"
+    except Exception as error:  # a job must report its failure, not die silently
+        job["state"] = "failed"
+        job["error"] = f"{type(error).__name__}: {error}"
+    finally:
+        job["finishedAt"] = time.time()
+
+
+def start(seed: Any = 1, pressure: Any = 1, max_rounds: Any = 1300) -> dict[str, Any]:
+    """Start a local two-team match, replacing any match already running."""
+    global _JOB
+    try:
+        seed_value = int(seed)
+    except (TypeError, ValueError):
+        seed_value = 1
+    try:
+        pressure_value = max(1, min(int(pressure), 3))
+    except (TypeError, ValueError):
+        pressure_value = 1
+    try:
+        rounds = max(1, min(int(max_rounds), 1300))
+    except (TypeError, ValueError):
+        rounds = 1300
+    with _LOCK:
+        if _JOB is not None and _JOB.get("state") == "running":
+            _JOB["stop"] = True
+        job: dict[str, Any] = {
+            "state": "running", "stop": False, "seed": seed_value,
+            "pressure": pressure_value, "maxRounds": rounds, "round": 0,
+            "progress": 0.0, "startedAt": time.time(), "sides": ["challenger", "defender"],
+            "scores": {}, "baseHp": {}, "lastEvents": [], "local": True,
+        }
+        job["world"] = _build_world(seed_value, pressure_value)
+        _JOB = job
+        threading.Thread(target=_worker, args=(job,), daemon=True).start()
+    return snapshot()
+
+
+def snapshot() -> dict[str, Any]:
+    """Current state of the match, safe to serialise at any moment."""
+    job = _JOB
+    if job is None:
+        return {"state": "idle", "local": True,
+                "note": "尚未运行本地双队对局（本地对局用于对比两套策略，不是官方成绩）"}
+    return {
+        "state": job["state"],
+        "local": True,
+        "seed": job["seed"],
+        "pressure": job["pressure"],
+        "maxRounds": job["maxRounds"],
+        "round": job["round"],
+        "progress": round(float(job.get("progress") or 0.0), 4),
+        "sides": job["sides"],
+        "scores": job.get("scores") or {},
+        "baseHp": job.get("baseHp") or {},
+        "lastEvents": job.get("lastEvents") or [],
+        "result": job.get("result"),
+        "error": job.get("error"),
+        "elapsed": round(time.time() - job["startedAt"], 1),
+    }
+
+
+def stop() -> dict[str, Any]:
+    job = _JOB
+    if job is not None and job.get("state") == "running":
+        job["stop"] = True
+    return snapshot()
+
+
+__all__ = ["snapshot", "start", "stop"]

@@ -1,0 +1,21 @@
+{
+  "Demo/CoreGeek/src/agent/brain.py": "2baf844be4fb72b352f1e7644ad735725a834e8e075e6abb1883accabd5f3270",
+  "Demo/CoreGeek/src/agent/debug.py": "adcfa3d2eac48ab4807bace09bb85a9eaa19493b7f35bc7f0dd86a6405c7e92e",
+  "Demo/CoreGeek/src/agent/planner.py": "fab280b858f4e12cf951b39f38f790c3f09fcd2a3cc54fb523b26572010a3a9e",
+  "Demo/CoreGeek/src/agent/server.py": "84008c8a799b393ba3be2f7baacebab4477b7f2525d3b04a8d2e5bbd16c4b8e6",
+  "Demo/CoreGeek/src/agent/simulator.py": "0d294b4e0e40711305b2550c1e1982d72bbb85a590928a609fc9a6976423fe06",
+  "Demo/CoreGeek/src/agent/taskworld.py": "f5b3f066b45847d8644e642dada545fc9502727272b150da0560d5d0eb7e8e07",
+  "Demo/CoreGeek/src/agent/deepseek_client.py": "e90005b5fe887c2f005ad9e1a9e6bb44fe2e3573a415805290f6a3c4fe2a286e",
+  "Demo/CoreGeek/src/agent/local_llm.py": "0535447a89f304fb884de387e391573ce92fbdc6f6ff42f2b1a96fc07e485c76",
+  "web/index.html": "19ff6f0e9c20d250ef86a6eaa042964161a8c464e6ca5309bc68b0936b37d48d",
+  "web/js/app.js": "dde02d162361be1c42cb0b3e50382d9fe3acc7fa3e9172aaccd459c8bcc6f1de",
+  "web/js/experience.js": "634cd3c5fe2a72f88c320d544169a1ae7d19298510bc8488b4263182a5e752ed",
+  "web/js/panel.js": "afb39d85a012023af68603fd00770874896ddc7dee2786ebf0217674efb86359",
+  "docs/DEMO.md": "1a449486b1f34cfb7d7658a0246d0c5977903ab4d6dddfaa583bcfb577f99c7f",
+  "docs/DEVELOPMENT_RULES.md": "32115095beb6d7e0aa9f157ec1cf60dc6767a5c1426b0d2bc394760e750a3722",
+  "docs/LLM_SPEC.md": "54bf7bf22153137ba7db85f861e66bd1b2020284e3062ce75bacef36eec6dcd8",
+  "docs/LOCAL_LLM.md": "92ee8af9ca59e17e6377459551904ae7070fdeefde958a0765660636a766100b",
+  "tests/test_local_llm.py": "94227248f3ae07d5af88887885777c7e7e43d9de7cff6e86a6d138486066bae3",
+  "tools/configure_deepseek.ps1": "5bc34fa1a80c348b2915b01216079d90e8548cb02737ec1e888113ffcbf283a8",
+  "reports/LLM_VALIDATION.json": "696cb3d2f689c96c1ef8ed23bd619d325b5a7faf64bf12d573aaf636152c24aa"
+}

@@ -1,0 +1,52 @@
+{
+  "strategy": "RRR",
+  "label": "三火箭",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "rocket"
+  ],
+  "seed": 7,
+  "side": "defender",
+  "pressure": 3,
+  "split": "regression",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 150,
+  "base_level": 1,
+  "base_damage": 1350,
+  "score_local": 2310,
+  "task_score": 1410,
+  "task_rewards": 14,
+  "kills": 44,
+  "crew_deaths": 24,
+  "walls_destroyed": 24,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 705,
+    "build": 41,
+    "collect": 80,
+    "acceptTask": 129,
+    "submitAnswer": 28,
+    "sell": 5,
+    "buy": 2,
+    "attack": 86,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "rocket": 86
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 3
+  },
+  "initial_state_sha256": "f39ea2e5b63ed9f5804faf010faef544e59f5e817cc5076e5f43b8d9f1bcf6f0",
+  "source_sha256": "b520f2e984bd724fabf4857727e7daaccd6c8269996b5bf3d15db63a63ac85b7",
+  "elapsed_seconds": 30.7,
+  "nightwork_enabled": false,
+  "clear_night_worker_actions": {}
+}

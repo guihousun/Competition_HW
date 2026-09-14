@@ -1,0 +1,54 @@
+{
+  "strategy": "GER",
+  "label": "三种各一座",
+  "loadout": [
+    "gatling",
+    "railgun",
+    "rocket"
+  ],
+  "seed": 7,
+  "side": "defender",
+  "pressure": 1,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 2512,
+  "task_score": 1588,
+  "task_rewards": 17,
+  "kills": 55,
+  "crew_deaths": 13,
+  "walls_destroyed": 0,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 502,
+    "build": 20,
+    "collect": 40,
+    "acceptTask": 180,
+    "submitAnswer": 34,
+    "sell": 3,
+    "buy": 2,
+    "attack": 211,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "rocket": 50,
+    "railgun": 144,
+    "gatling": 17
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "gatling": 1,
+    "railgun": 1,
+    "rocket": 1
+  },
+  "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+  "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+  "elapsed_seconds": 40.41
+}

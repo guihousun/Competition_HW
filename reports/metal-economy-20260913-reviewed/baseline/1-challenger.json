@@ -1,0 +1,52 @@
+{
+  "strategy": "RRR",
+  "label": "\u4e09\u706b\u7bad",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "rocket"
+  ],
+  "seed": 1,
+  "side": "challenger",
+  "pressure": 1,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 2229,
+  "task_score": 1298,
+  "task_rewards": 13,
+  "kills": 61,
+  "crew_deaths": 9,
+  "walls_destroyed": 0,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 478,
+    "build": 20,
+    "collect": 22,
+    "acceptTask": 142,
+    "submitAnswer": 26,
+    "buy": 2,
+    "attack": 119,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "rocket": 119
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 3
+  },
+  "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+  "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+  "elapsed_seconds": 22.66,
+  "economy": {
+    "collect_stone": 22
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "strategy": "EEE",
+  "label": "三电磁炮",
+  "loadout": [
+    "railgun",
+    "railgun",
+    "railgun"
+  ],
+  "seed": 1,
+  "side": "defender",
+  "pressure": 3,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 2477,
+  "task_score": 1555,
+  "task_rewards": 16,
+  "kills": 57,
+  "crew_deaths": 22,
+  "walls_destroyed": 15,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 565,
+    "build": 31,
+    "collect": 32,
+    "acceptTask": 124,
+    "submitAnswer": 32,
+    "buy": 12,
+    "attack": 381,
+    "sell": 1,
+    "summonTreasure": 1,
+    "use": 4
+  },
+  "attacks": {
+    "railgun": 381
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "railgun": 3
+  },
+  "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+  "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+  "elapsed_seconds": 48.05
+}

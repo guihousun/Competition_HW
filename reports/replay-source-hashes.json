@@ -1,0 +1,13 @@
+{
+  "Demo/CoreGeek/src/agent/debug.py": "718201bbcf27fe48c6800c8971d0bd560532b45c3e5df5559b5b2627319c2baf",
+  "Demo/CoreGeek/src/agent/recordings.py": "03364f3b3e6ecd7cfe36c6885f93ed7eec464f0e4556de0fef811c116671270a",
+  "Demo/CoreGeek/src/agent/server.py": "67c228a31088b03fd25dd81724e44d7b3727cd0348bf070bc76121e209e932f8",
+  "web/index.html": "85cefd37f87639b1c41ee5c8a52ce4d82b0aa96bacd987f27c23fde9d8040da3",
+  "web/css/app.css": "5da86a1e5c6dcb26b5cf8d262469893499fb0588966b759103f2c0a1d8cb7487",
+  "web/js/app.js": "cff7cf9b20da7bbea1311d04974c5f1232b88c00ea03984118e875f89f549aa9",
+  "web/js/panel.js": "adfe648ab4dfa434195f7f40719b9de196c2df02ecdc0abfada2b6a45a6902cc",
+  "web/js/viewmodel.js": "e8687f85b6eec950d352ef45503bcc91474c3b76bf8f2b5f444392fda89d290c",
+  "web/js/replay.js": "c651075addc202d69379a8a0efb04289552d338a0f565d0c57f1edf82e6e24b3",
+  "tests/test_recordings.py": "80e709be2889c6b8a4330bfa87d786769f1b84b47825dd9c181cf57d59383c97",
+  "tests/test_replay.py": "eb5d01c7a8e8e93f464e2e7600f5d58f071411bc5625d9bbb5110d01708459d1"
+}

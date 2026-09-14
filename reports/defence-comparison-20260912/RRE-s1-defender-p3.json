@@ -1,0 +1,55 @@
+{
+  "strategy": "RRE",
+  "label": "两火箭一电磁炮",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "railgun"
+  ],
+  "seed": 1,
+  "side": "defender",
+  "pressure": 3,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 2370,
+  "task_score": 1443,
+  "task_rewards": 15,
+  "kills": 61,
+  "crew_deaths": 20,
+  "walls_destroyed": 14,
+  "execution_failures": 1,
+  "audit_errors": {
+    "overspend": 1
+  },
+  "actions": {
+    "move": 545,
+    "build": 31,
+    "collect": 32,
+    "acceptTask": 130,
+    "submitAnswer": 30,
+    "buy": 22,
+    "attack": 328,
+    "sell": 1,
+    "summonTreasure": 1,
+    "use": 3
+  },
+  "attacks": {
+    "rocket": 41,
+    "railgun": 287
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 2,
+    "railgun": 1
+  },
+  "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+  "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+  "elapsed_seconds": 44.17
+}

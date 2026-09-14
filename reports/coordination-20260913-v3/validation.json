@@ -1,0 +1,15 @@
+{
+  "tests": 248,
+  "new_tests": 21,
+  "unit_test_seconds": 82.773,
+  "case_count": 8,
+  "rounds": 10095,
+  "source_sha256": "dfa3bb12ae156acf0e824208123d0d3b00aa822655dd8bffd41bfd552e3345e3",
+  "validation_files": {
+    "Demo/CoreGeek/src/agent/brain.py": "3010c57d15441231dca27ab4f717148e94cf4f0fea599d1548d57b81ff639488",
+    "Demo/CoreGeek/src/agent/coordination.py": "735a4f3e1f3e687dd31ac09b0770f8a24794c5049a12ab3b993d635d9131d758",
+    "tests/test_coordination.py": "6151acc9103ae654d3c09a5e6126f46d3dccbac3ff9318aad2d98f7d017b84e1",
+    "tests/test_viewer.py": "efb85b8db2c411e885e654a51ab56f4432b7c7a583d2b0617db61e835ec8c7c5",
+    "tools/check_coordination.py": "28192d40f6bc127b37914a336f2b283b03d7074998a6c7f28ee0aaea23dfae7a"
+  }
+}

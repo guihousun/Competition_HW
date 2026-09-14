@@ -1,0 +1,212 @@
+"""Competition HTTP server plus the local web/debug extensions.
+
+Contract kept intact (AGENTS.md item 7, R01):
+  * ``bash run.sh <port>`` / ``python main.py <port>`` starts this server on 0.0.0.0
+  * the root path POST is the competition entry and answers ``roleCommandMap``
+  * a failing decision still answers ``{"roleCommandMap": {}}`` with HTTP 200, so a
+    viewer problem can never change what a judge receives
+
+Local extensions used only by web/: the ``/debug/*`` JSON endpoints and the static
+page. They are optional; removing them does not affect the judge path.
+"""
+import json
+import logging
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.parse import parse_qs, urlsplit
+
+from . import debug, twomatch, recordings
+from .brain import decide, respond
+from .scenarios import observation
+
+LOGGER = logging.getLogger(__name__)
+ROOT = Path(__file__).resolve().parents[4]
+WEB_ROOT = ROOT / "web"
+
+DEBUG_STEP = "/debug/step"
+DEBUG_SERIES = "/debug/series"
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+    server_version = "CompetitionHW"
+
+    # ---- shared helpers --------------------------------------------------
+    def _send(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _json(self, status: int, payload: Any) -> None:
+        self._send(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                   "application/json; charset=utf-8")
+
+    def _query(self) -> dict[str, list[str]]:
+        return parse_qs(urlsplit(self.path).query)
+
+    # ---- GET: static page, official sample, local debug API --------------
+    def do_GET(self) -> None:
+        path = urlsplit(self.path).path
+        try:
+            if path.startswith("/debug/"):
+                self._debug_get(path)
+                return
+            self._static(path)
+        except Exception:  # pragma: no cover - keeps the server alive
+            LOGGER.exception("GET %s failed", path)
+            self._json(500, {"error": "internal error"})
+
+    def _debug_get(self, path: str) -> None:
+        query = self._query()
+        if path == '/debug/llm/status':
+            from .local_llm import SERVICE
+            self._json(200, SERVICE.status())
+            return
+        if path in ('/debug/recording', '/debug/recording/result'):
+            try:
+                job_id = query.get('id', [''])[0]
+                self._json(200, recordings.JOBS.result(job_id) if path.endswith('/result')
+                           else recordings.JOBS.snapshot(job_id))
+            except KeyError as error:
+                self._json(404, {'error': str(error)})
+            except RuntimeError as error:
+                self._json(409, {'error': str(error)})
+            return
+        if path == "/debug/stats":
+            self._json(200, debug.stats_payload())
+            return
+        if path == "/debug/rules":
+            self._json(200, {"rows": debug.RULE_ROWS, "notes": debug.mismatch_notes()})
+            return
+        if path == "/debug/scenario":
+            self._json(200, debug.scenario_payload(
+                query.get("seed", ["1"])[0],
+                query.get("side", ["challenger"])[0],
+                query.get("pressure", ["1"])[0],
+            ))
+            return
+        if path == "/debug/series":
+            self._json(200, debug.series_payload(
+                query.get("seed", ["1"])[0],
+                query.get("side", ["challenger"])[0],
+                query.get("pressure", ["1"])[0],
+                query.get("limit", [None])[0],
+            ))
+            return
+        if path == "/debug/twomatch":
+            self._json(200, twomatch.snapshot())
+            return
+        if path == "/debug/twomatch/start":
+            self._json(200, twomatch.start(
+                query.get("seed", ["1"])[0],
+                query.get("pressure", ["1"])[0],
+                query.get("rounds", ["1300"])[0],
+            ))
+            return
+        if path == "/debug/twomatch/stop":
+            self._json(200, twomatch.stop())
+            return
+        self._json(404, {"error": "unknown debug endpoint"})
+
+    def _static(self, path: str) -> None:
+        if path == "/sample":
+            self._send(200, (ROOT / "docs/request.txt").read_bytes(),
+                       "application/json; charset=utf-8")
+            return
+        if path == "/health":
+            self._json(200, {"ok": True})
+            return
+        relative = "index.html" if path == "/" else path.lstrip("/")
+        asset = debug.load_asset(str(WEB_ROOT), relative)
+        if asset is None:
+            self.send_error(404)
+            return
+        body, content_type = asset
+        self._send(200, body, content_type)
+
+    # ---- POST: competition decision + local step/series -------------------
+    def do_POST(self) -> None:
+        path = urlsplit(self.path).path
+        local = path.startswith("/debug/")
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length)
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError) as error:
+            if local:
+                self._json(400, {"error": f"请求体不是合法 JSON：{error}"})
+            else:
+                # Official contract: answer a usable (empty) command map, never an error.
+                self._json(200, {"roleCommandMap": {}})
+            return
+        if not isinstance(payload, dict):
+            if local:
+                self._json(400, {"error": "请求体必须是 JSON 对象"})
+            else:
+                self._json(200, {"roleCommandMap": {}})
+            return
+        if path.startswith("/debug/"):
+            self._debug_post(path, payload)
+            return
+        # Competition path: never surface an error page or a hang to a judge.
+        try:
+            response = respond(observation(payload))
+        except Exception:
+            LOGGER.exception("decision failed")
+            response = {"roleCommandMap": {}}
+        LOGGER.info("round %s -> %d commands", payload.get("roundNo"),
+                    len(response["roleCommandMap"]))
+        self._json(200, response)
+
+    def _debug_post(self, path: str, payload: dict[str, Any]) -> None:
+        try:
+            if (path.startswith('/debug/llm') or (payload.get('_demo') or {}).get('llm_enabled') or (payload.get('_demo') or {}).get('llm_pending')) and self.client_address[0] not in ('127.0.0.1', '::1'):
+                self._json(403, {'error': '真实 LLM 调用仅允许本机访问'})
+                return
+            if path == '/debug/llm/scenario':
+                self._json(200, debug.llm_scenario_payload(payload.get('seed', 1), payload.get('side', 'challenger')))
+                return
+            if path == '/debug/recording/start':
+                try:
+                    self._json(202, recordings.JOBS.start(payload.get('seed', 1),
+                        payload.get('side', 'challenger'), payload.get('pressure', 1),
+                        payload.get('limit', 1300)))
+                except RuntimeError as error:
+                    self._json(409, {'error': str(error)})
+                return
+            if path == '/debug/recording/cancel':
+                try:
+                    self._json(200, recordings.JOBS.cancel(payload.get('id', '')))
+                except KeyError as error:
+                    self._json(404, {'error': str(error)})
+                return
+            if path == DEBUG_SERIES:
+                self._json(200, debug.series_payload(
+                    payload.get("seed", 1),
+                    payload.get("side", "challenger"),
+                    payload.get("pressure", 1),
+                    payload.get("limit"),
+                ))
+                return
+            if path == "/debug/screenshot":
+                self._json(200, debug.save_screenshot(
+                    payload.get("name"), payload.get("dataUrl")))
+                return
+            if path != DEBUG_STEP:
+                self._json(404, {"error": f"unknown debug endpoint {path}"})
+                return
+            self._json(200, debug.step_payload(payload))
+        except Exception as error:  # debug endpoints must explain their failures
+            LOGGER.info("debug request failed: %s", error)
+            self._json(400, {"error": f"{type(error).__name__}: {error}"})
+
+    def log_message(self, format: str, *args: Any) -> None:
+        return
+
+
+def serve(port: int) -> None:
+    ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

@@ -1,0 +1,583 @@
+# project_contract.yaml — 全项目合同 / 官方核验台账（人类编辑，非运行时配置）
+#
+# 用途：把「官方已明确」「本地实现现状」「仍待公司内网官方接口核验」三件事分开登记，
+#       供 Codex/维护者审核与派单时查阅。它**不是**运行时配置：
+#       runtime_loading: false —— 当前没有任何代码读取本文件，也不要求将来读取。
+#       本文件不改变官方规则、不改变本地行为，只是可核对的台账。
+#
+# 必读约定：
+#   priority         P0 = 影响官方符合性判定；P1 = 协议/观测核验缺口；P2 = 低影响澄清
+#   category         ambiguity=官方未说清；assumption=本地假设；source_conflict=两份官方材料冲突；
+#                    implementation_gap=官方明确但本地未实现；noncompliant_approximation=官方明确而本地近似实现
+#                    （五类分开登记，不混用；"未实现"不得写成"可选/未规定"）
+#   status           pending_official=等公司内网官方接口/回放核验；needs_trace=需真实回归证据；
+#                    confirmed=已核验（必须填 confirmation）；recheck_source=官方材料更新后需复核
+#   confirmation     null = 未确认。**任何非 null 值都必须附来源与证据**（官方平台版本 + 回放/截图/原文节号）。
+#                    禁止用本地模拟、审计通过或示例代码当作官方确认。
+#   evidence_needed  只写"最小证据"：一次请求-响应-再请求三元组、或一张可读截图、或官方一句话补充；
+#                    不要求公司原始文件、日志、账号或任何凭据。
+#
+# 安全：本文件与配套指南不得写入密钥、令牌、内网地址、账号、公司原始数据。
+# 日期：2026-09-14 编制。
+
+schema_version: 1
+scope: competition-hw
+runtime_loading: false
+last_reviewed: "2026-09-14"
+guide: docs/OFFICIAL_VERIFICATION_GUIDE.md
+
+provenance:
+  # 官方基线来源（本地镜像，不宣称上游今日未更新）
+  upstream_repo: Tymonxiong/Competition
+  upstream_commit: 7e629424c87f3f194d071696d3ee59a8dc2c0a75
+  baseline_label: v1.0 (2026-09-09)
+  precedence:
+    - "任务书 / 接口文档正文 > 官方示例 request.txt / response.txt"
+    - "示例仅用于字段目录与形状；示例数值不自动等于判题器常量（见 D02 类冲突）"
+    - "Demo/CoreGeek 是本地参赛程序，不是规则权威"
+    - "用户口述补充（RULE_SUPPLEMENTS.md S01–S03）是用户来源的开发约束，本身即约束本地实现；"
+    - "其中未被官方材料写明的细节（如 S03 的确切坐标）仍需官方附件或平台证据补齐后才能修复"
+    - "本地模拟、动作审计、测试通过 = 本地证据，不是官方认证"
+    - "另见 docs/DEVELOPMENT_RULES.md §1 与 docs/OFFICIAL_VERIFICATION_GUIDE.md"
+
+immutable_official_baseline:
+  # 只登记"不许当调参项"的关键常量与出处，不复制整份规则原文
+  map:
+    width: 41
+    height: 32
+    origin: bottom-left
+    distance: chebyshev
+  calendar:
+    day_rounds: 70
+    night_rounds: 60
+    rounds_per_day: 130
+    match_days: 10
+    max_rounds: 1300
+  initial:
+    gold: 75
+    station: 1
+    pioneer: 1
+    worker: 2
+    weapons: 0
+    walls: 0
+  buildings:
+    station_health_by_level: [1500, 3000, 4500]
+    weapon_build_cost_gold: 25
+    weapon_global_limit: 3
+    wall_material_cost: {stone: 1}
+    wall_demolish_refund: 0
+    tower_range_by_level:
+      gatling: [3, 5, 7]
+      railgun: [6, 8, 10]
+      rocket: [10, 15, "whole_map"]
+  roles:
+    pioneer: {hp: 200, backpack: 40}
+    worker: {hp: 220, backpack: 100}
+  robots:
+    smallRobot: {hp: 40, attack: 5, range: 3, kill_score: 1}
+    middleRobot: {hp: 60, attack: 10, range: 3, kill_score: 2}
+    largeRobot: {hp: 500, attack: 20, range: 3, kill_score: 4}
+    bossRobot: {hp: 800, attack: 40, range: 3, kill_score: 10}
+  vision_distance: 4
+  sandbox_command_seconds: 15
+  # 普通每日 LLM 调用上限；单条依据 接口文档 §1.7：自进化任务执行期间不受此限且不计入日限
+  llm_calls_per_day: 3
+  llm_task_exemption: true
+  task_refresh_rounds: 30
+  summon_orders_per_day: 10
+  dizzy_rounds: 5
+  bomb: {radius_cells: 1, damage: 100}
+  scoring:
+    # 任务书 §六；部分完成不含 5×标准回合数/(完成回合−接取回合) 的时间加成
+    full_completion: "scoreReward + 5 × timeoutRounds / (完成回合 − 接取回合)"
+    partial_completion: "scoreReward × 通过率"
+    pass_rate: "正确字段数 / 全量字段数"
+    survival_per_day: "10 × day × 存活系数（基地被摧毁当天及之后为 0）"
+  source_ref: 任务书 §4.1–4.7、§五、§六、§七、§八；接口文档 §1.1–1.7、§2
+
+source_refs:
+  # 逐项引用出处；哈希对应本次核验的快照
+  taskbook:
+    path: docs/任务书.md
+    version: v1.0 (2026-09-09)
+    sha256: 40fde8a4d8dd73f4083ad5d531d12b1d168ad139dd17f68a4b8ec5e69a3fd182
+  api_doc:
+    path: docs/接口文档.md
+    version: v1.0 (2026-09-09)
+    sha256: 812bd5e2d8faec3c0b884d2c0830e8967f8a455c5dc626d189ddba1b0ddcfed5
+  request_sample:
+    path: docs/request.txt
+    sha256: 3751c4cba105577a67ad957395aff142fd69e5e87bdee6982748820a82c5a63e
+  response_sample:
+    path: docs/response.txt
+    sha256: 0ec1eeacac7f58a435acb6dadbb3e4862cd70bc91b593d55c438223610c16b45
+  user_supplements:
+    path: docs/RULE_SUPPLEMENTS.md
+    note: S01/S02/S03 为用户转述，尚无官方附件
+  implementation_snapshot:
+    # 关键：这是**工作树快照**，不是提交身份。git_head 是本地分支的提交，而
+    # Demo/CoreGeek/ 与 tests/ 在编制时的 HEAD 下仍是未跟踪文件；因此 HEAD 不能代表
+    # 被描述的模拟器/策略实现。所有"现状"判断都以 files 的相对路径 + SHA256 为准。
+    kind: working_tree
+    base_dir: Demo/CoreGeek/src/agent
+    git_head: 7e629424c87f3f194d071696d3ee59a8dc2c0a75
+    git_head_covers_implementation: false
+    untracked_paths: [Demo/CoreGeek/, tests/]
+    paths: repo_relative
+    files:
+      Demo/CoreGeek/src/agent/protocol.py: ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9
+      Demo/CoreGeek/src/agent/simulator.py: 26861b94a5b0152840101d1f06380dbe5fd075e69990e47f0b4e8e7225350c64
+      Demo/CoreGeek/src/agent/scenarios.py: d1dad9e1c948fb5bbe617eb50400d9378943844d9b849f205362c212ce481285
+      Demo/CoreGeek/src/agent/ballistics.py: b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f
+      Demo/CoreGeek/src/agent/taskworld.py: f5b3f066b45847d8644e642dada545fc9502727272b150da0560d5d0eb7e8e07
+      Demo/CoreGeek/src/agent/vision.py: a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4
+      Demo/CoreGeek/src/agent/server.py: 84008c8a799b393ba3be2f7baacebab4477b7f2525d3b04a8d2e5bbd16c4b8e6
+      Demo/CoreGeek/src/agent/sandbox.py: 4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321
+      Demo/CoreGeek/src/agent/match.py: 4e7b47c3d5738a3700170c16d1269500ecd7ff012dbe8d74e6ae37aa2bc7a9f7
+      Demo/CoreGeek/src/agent/market.py: 8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9
+      Demo/CoreGeek/src/agent/turnactions.py: 85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22
+
+    # 发布版本按 Git 内容字节核对；files 保留编制时磁盘字节哈希（Windows 换行可能不同）。
+    git_content_sha256:
+      Demo/CoreGeek/src/agent/protocol.py: ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9
+      Demo/CoreGeek/src/agent/simulator.py: b7d2a5063782d072c57418c7728eb3e583101ba2e40c30f36613f518c924d0c3
+      Demo/CoreGeek/src/agent/scenarios.py: d1dad9e1c948fb5bbe617eb50400d9378943844d9b849f205362c212ce481285
+      Demo/CoreGeek/src/agent/ballistics.py: b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f
+      Demo/CoreGeek/src/agent/taskworld.py: f5b3f066b45847d8644e642dada545fc9502727272b150da0560d5d0eb7e8e07
+      Demo/CoreGeek/src/agent/vision.py: a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4
+      Demo/CoreGeek/src/agent/server.py: 84008c8a799b393ba3be2f7baacebab4477b7f2525d3b04a8d2e5bbd16c4b8e6
+      Demo/CoreGeek/src/agent/sandbox.py: 4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321
+      Demo/CoreGeek/src/agent/match.py: 4e7b47c3d5738a3700170c16d1269500ecd7ff012dbe8d74e6ae37aa2bc7a9f7
+      Demo/CoreGeek/src/agent/market.py: 8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9
+      Demo/CoreGeek/src/agent/turnactions.py: 85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22
+
+local_runtime_reference:
+  # 当前值，仅供对照；不表示官方值，也不表示判题器会读取这些字段
+  competition_entry: "bash run.sh <port>；根路径 POST；监听 0.0.0.0"
+  local_only:
+    web_ui: "GET /、/debug/* 为本地扩展，判题器不需要，也不要求官方支持"
+    local_deepseek_adapter: "docs/LOCAL_LLM.md；本机演示用的 DeepSeek 适配器，与官方游戏内 LLM 通道是两回事，也不等于执行本项目的 DSH 代理"
+  clearly_not_wired:
+    - "本文件的任何字段都不被代码读取（runtime_loading: false）"
+    - "local_runtime_reference 下的数值只是当前实现快照，不进入策略输出"
+
+# 官方示例中出现的常量与任务书表值不同：登记冲突，不选边、不改官方原文
+source_conflicts:
+  - id: CF-D02
+    summary: "一级炮射程：示例 request.txt gatling=4 / railgun=7；任务书 §4.5.1 表为 gatling=3 / railgun=6"
+    handling: "原样保留两份材料；本地按任务书表值实现；判题器真实取值待核验，不选边、不改官方原文"
+    tracked_by: V-021
+    question: "判题器发给选手的 roles[].attackRange 一级炮实际取值是多少？它与任务书表值、示例值哪个一致（或都不一致）？"
+    evidence_needed: "官方平台同版本下一次请求中一级 gatling/railgun 的 attackRange 字段值"
+    refs: [request_sample, taskbook]
+
+verification_items:
+  # ---------------- P0：直接影响官方符合性 ----------------
+  - id: V-001
+    title: 固定刷新点的确切坐标、批次落位与被占格处理
+    priority: P0
+    category: noncompliant_approximation
+    status: pending_official
+    official:
+      requirement: "固定刷新点为用户来源的开发约束（RULE_SUPPLEMENTS S03，关联任务书 §4.7.3）；任务书只说夜晚第一回合统一出现、数量随天数增加，未给坐标"
+      refs: [user_supplements, taskbook]
+    local:
+      behavior: "每夜从距己方基地切比雪夫距离 8–13 的环带内先 free_cells 过滤（排除已占格与中立/建造区外沿），再 rng.shuffle 后逐个 pop 落位；因此落点每夜不同，与固定点要求冲突"
+      code: "scenarios.prepare_round（free_cells → 8<=distance<=13 → shuffle/pop）；scenarios.free_cells"
+    question: "固定点的确切坐标有哪些（每侧、是否随地图变化）？一批多只机器人按什么顺序/规则落到这些点？某点被建筑、角色或中立单位占据时，该批机器人落在哪里或是否延后？"
+    evidence_needed: "官方带坐标的刷怪点示意，或连续两夜同一地图的请求快照（同坐标重复出现，且能看到被占格时的处理）"
+    confirmation: null
+
+  - id: V-002
+    title: 任务点2的两格朝向与编码，以及它与"周围一格接取/阻挡移动"的关系
+    priority: P0
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.6.2：任务点2占据两格，开拓者处于任一格即可领取任务；任务点属于阻挡移动的元素（§4.1）；领取范围为'周围一格内'（§4.4 acceptTask）"
+      refs: [taskbook, request_sample]
+    local:
+      behavior: "初始地图只登记一个 zone 格，第二格由 taskworld.point_cells 按硬编码推导为 (x+1, y)（示例 request.txt 的两格为 (16,17)+(17,17)，与该推导一致但只是本地约定）；playerTasks[].taskPosition 只给一个锚点。**两格本身是官方明确的**，这里要核的是编码与朝向"
+      code: "scenarios.scenario（每个任务点只 pop 一个格）；taskworld.point_cells；protocol.Turn.zones/occupied_cells"
+    question: "锚点格与第二格的相对朝向（横向/纵向、锚点是否总为靠西/靠北一格）如何确定？playerTasks[].taskPosition 是锚点还是仅其中一格？对两格各自的'周围一格'圈，取并集还是分别判定？"
+    evidence_needed: "两张不同地图的请求片段，显示两格坐标差、taskPosition 与（若有）合法领取位置"
+    confirmation: null
+
+  - id: V-003
+    title: 建造区域（蓝/黄）的确切几何与坐标锚定
+    priority: P0
+    category: assumption
+    status: pending_official
+    official:
+      requirement: "任务书 §4.1：蓝色区域只能造武器、黄色区域只能造墙；基地位置由系统指定；请求未提供区域字段（接口文档 §1.2 只有 zones/neutralType）"
+      refs: [taskbook, api_doc]
+    local:
+      behavior: "以基地 2×2 占地为基准，切比雪夫半径 1 视为可造武器、半径 2 视为可造墙（一圈炮两圈墙）；不匹配时按指令执行失败处理"
+      code: "simulator.step build 分支（radius = min(distance(target,p) for p in station_footprint)）"
+    question: "可用建造区的形状与边界坐标是什么？是否随地图变化？以基地左上角还是中心锚定？允许区域是整片矩形还是环绕基地区域？"
+    evidence_needed: "官方可读建造区示意图（含坐标轴刻度）或一段带合法/非法建造结果的回放"
+    confirmation: null
+
+  - id: V-004
+    title: 机器人基础波次的数量增长公式与类型比例
+    priority: P0
+    category: assumption
+    status: pending_official
+    official:
+      requirement: "任务书 §4.7.3：数量随天数增加；召唤令叠加在基础浪潮之上；具体公式与类型比例未给出"
+      refs: [taskbook]
+    local:
+      behavior: "基础数量 = 夜数 × 本地压力 + 1（压力为本地参数 1–3）；类型为 smallRobot，每 3 只中第 1 只在第 3 夜起改 middleRobot，压力 3 且第 5 夜起首只改 largeRobot"
+      code: "scenarios.prepare_round（min(len(available), day*pressure+1) 与 i%3 规则）"
+    question: "官方每夜的基础数量公式是什么？各类型（小/中/大/BOSS）的构成比例与出现起始夜是什么？上限如何？"
+    evidence_needed: "多夜请求快照中 robot.roles 的类型与数量，或官方一句话公式说明"
+    confirmation: null
+
+  - id: V-005
+    title: 响应包的完整契约：必需字段、空值形状与枚举拼写
+    priority: P0
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "接口文档 §2.1 把 roleCommandMap/prompt/executeCmd 列为顶层字段，§2.2 部分参数标注 O（可选）；§2.3 给出 12 个动作码；示例 response.txt 只示范 roleCommandMap，且含重复角色键（接口文档注明那只是动作目录写法）"
+      refs: [api_doc, response_sample]
+    local:
+      behavior: "ResponseBuilder 在 prompt/executeCmd 为空时**完全省略**字段，只保留 roleCommandMap；动作码与字段名按接口文档枚举构造，未做本地改写"
+      code: "sandbox.ResponseBuilder.build；protocol.*_command 构造器"
+    question: "真实回执的最小必需形状是什么：roleCommandMap 能否为空对象、prompt/executeCmd 省略是否合法、未知动作码或空字符串如何判？"
+    evidence_needed: "官方一次'无动作/无任务'回合的完整回执样本（可作空值基线），以及判题器对非法动作码的 errors[] 对照"
+    confirmation: null
+
+  - id: V-006
+    title: 已知的互换位置规则 vs 本地结算实现
+    priority: P0
+    category: implementation_gap
+    status: needs_trace
+    official:
+      requirement: "任务书 §4.5.4 第5点：③位置互换（两名角色预期互相移动到对方当前位置）触发碰撞；碰撞结果：双方均中断移动，停留在碰撞前位置"
+      refs: [taskbook]
+    local:
+      behavior: "resolve_moves 显式把直线互换当作合法并成对执行（注释写明'straight swap is officially legal'），并有测试断言其通过；与官方原文冲突"
+      code: "simulator.resolve_moves（pair 分支）"
+    question: "（不询问互换是否合法——官方已明确禁止。）需要的是真实回归证据：官方一次包含互换意图的回合中，双方 roleCommandMap 结果与 lastRoundRoleActionResults 是否为 false、位置是否不变"
+    evidence_needed: "官方回放中一次互换意图的请求-响应-再请求三元组"
+    confirmation: null
+
+  - id: V-007
+    title: 复活时点、落点选择与"背包保留"
+    priority: P0
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.5.2：角色阵亡后，第二天白天开始后20回合可以在基地复活，背包物品保留"
+      refs: [taskbook]
+    local:
+      behavior: "阵亡记账 ((n-2)//130+1)*130+21，到点后在与基地距离 ≤3 的最近空格复活，满血（工人220/开拓者200），背包保留"
+      code: "scenarios.prepare_round 复活分支；role_death 记账在 simulator.step"
+    question: "复活时点是否为'次日起第 21 个白天回合'？复活点是基地占地内、相邻格还是任意空格？多个角色同回合复活且无空位时如何排队？复活当回合能否行动？"
+    evidence_needed: "官方回放中角色死亡到重新出现的回合号与出现坐标"
+    confirmation: null
+
+  - id: V-008
+    title: 终局判定的真实配对轨迹（同回合双毁、提前单毁）
+    priority: P0
+    category: implementation_gap
+    status: needs_trace
+    official:
+      requirement: "任务书 §七：结束判定含'双方基地均被完全摧毁'与 1300 回合；半场同回合双毁时按第六章积分比较（积分相同为平局）；不同回合先后被毁则先毁方判负；双方均未被毁则积分高者获胜。官方**没有**规定以基地剩余血量作平局细分"
+      refs: [taskbook]
+    local:
+      behavior: "_check_end：一方基地归零且另一方存活时立即结束并判存活方胜（缺少'双方同毁'分支，且单毁即停与'半场继续到该半场结束'的官方口径不一致）；round>=max_rounds 才按轮次结束。result() 在比分相同时置 winner=None，与官方积分相同为平局一致，不列为缺陷"
+      code: "match.TwoTeamMatch._check_end / match.result"
+    question: "需要同回合双毁后停止调度、按积分判定的真实回归证据；另外，一方基地已毁而另一方撑到 1300 回合时，胜负如何结算（原文明确了双毁和双存活，未单列这一情形）？"
+    evidence_needed: "官方两段真实终局轨迹：一段同回合双毁、一段提前单毁（含随后回合是否继续发请求与最终比分）"
+    confirmation: null
+
+  - id: V-009
+    title: 官方编译运行环境：操作系统、解释器/依赖版本与沙盒权限边界
+    priority: P0
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §5.3 指向《编译运行环境说明》（该附件本地不可得）并说明沙盒可执行基础 shell 与 python、无法访问外部网络；接口文档 §2.1 给出 executeCmd ≤15 秒、§1.1 给出 64KB 截断；其余宿主环境、工作目录、读写范围、权限与资源限制未在本仓库材料中给出"
+      refs: [taskbook, api_doc]
+    local:
+      behavior: "本地不执行 executeCmd（返回 JUDGER_ERROR），因此对官方宿主环境没有可对标的实测值；LOCAL_LLM 的 60s/4096token/20 次属于本地费用保护，不是官方限制"
+      code: "sandbox.shell / sandbox.parse_command_result；docs/LOCAL_LLM.md（本地保护值）"
+    question: "官方沙盒的操作系统与版本、Python/shell 版本与预装库清单是什么？executeCmd 的工作目录、可读写路径范围、跨回合持久化范围（临时目录是否保留）、用户与权限、CPU/内存/进程数/磁盘限制各是什么？进程被杀或超时的判定基准是什么？"
+    evidence_needed: "《编译运行环境说明》原文或平台帮助页；一次真实 executeCmd 回执能看出 cwd 与可写路径；一次超限/被杀的回执"
+    confirmation: null
+
+  # ---------------- P1：协议与观测核验缺口 ----------------
+  - id: V-010
+    title: 请求包的完整真实形状：版本、字段全集与空值/枚举边界
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "接口文档 §1.1 顶层表列出 roundNo/mapInfo/teamOur/teamEnemy/robot/phaseTask/lastRoundRoleActionResults/lastSummonTreasureResult/llmResp/worldNews/lastCmdResult/vendorShopList/weaponShopList/errors；§1.3 列出 teamId/teamName；§1.3.2 只把 num 一类参数标注可选，未声明哪些字段可能缺失"
+      refs: [api_doc, request_sample]
+    local:
+      behavior: "本地读取按缺省容错（protocol.Unit.load 对 level/cooldown/attackRange 用 raw.get；tasks 对 timeoutRounds 有默认值）；但本地**生成器并不总是补全官方字段**——scenarios.scenario 不生成 teamId/teamName，生成的 role 记录也没有 attackRange/cooldown 等属性的完整集合。因此生成器形状不能当作官方字段全集的证据"
+      code: "protocol.Unit.load / protocol.Turn.load；scenarios.scenario（缺 teamId/teamName 等）；taskworld.player_tasks"
+    question: "官方请求的完整顶层字段与类型全集是什么（含 teamId/teamName 是否恒在、playerTasks 是否恒含 timeoutRounds）？哪些字段可能为 null/空字符串/空数组，缺省语义是什么？mapInfo.width/height 是否恒为 41/32？角色/机器人 roleType、neutralType、taskType 的枚举与拼写是否以接口文档为准？"
+    evidence_needed: "一份**完整**真实请求（可脱敏为字段名+类型骨架）与一份生成场景请求的差异对照，标注 null/缺失字段"
+    confirmation: null
+
+  - id: V-011
+    title: 移动占用的集成缺陷：静止单位未进入占用集合
+    priority: P1
+    category: implementation_gap
+    status: needs_trace
+    official:
+      requirement: "任务书 §4.5.4 第5点：①目标点被本回合未移动的其他角色/机器人占据 → 受阻；②多方争抢同一目标 → 碰撞；③位置互换 → 双方中断（其余碰撞与互换规则已明确，不需要再问合法性）"
+      refs: [taskbook]
+    local:
+      behavior: "**已知集成缺陷**：simulator.step 调用 resolve_moves(moves, origins, terrain) 时，origins 只含本回合提交了 move 的角色，blocked 也只传 terrain（occupied 已与 terrain 取并集后未传入占位集合）。于是静止角色/建筑所在格不出现在 resolve_moves 的 occupied_by 中，移动到静止单位格不会被判为'被未移动者占据'；此外本地不允许临时重叠，因此'离开集合'不动点只能靠依赖顺序，链式前进的可行组合与官方同时结算未做对照"
+      code: "simulator.step（origins = {uid: ... for uid in moves}；resolve_moves(moves, origins, terrain)）；simulator.resolve_moves（occupied_by 仅来自 origins）"
+    question: "（缺陷已定位，不需要再问规则合法性。）需要官方真实轨迹来固定修复后的期望：一次'目标格被静止角色占据'、一次同回合链式前进（A→B、B→C 均空）的 lastRoundRoleActionResults 与坐标变化"
+    evidence_needed: "官方两段移动轨迹的请求-响应-再请求三元组（静止占据、链式前进各一段）"
+    confirmation: null
+
+  - id: V-012
+    title: 机器人阻挡与移动结算细节
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.5.4：结算顺序武器攻击 > 机器人移动；§4.5.4 第5点已规定角色与机器人争抢同格时双方停止；§4.7.3：机器人攻击阻挡其移动的单位（角色/建筑）"
+      refs: [taskbook]
+    local:
+      behavior: "分阶段求解而非联合结算：先收集我方角色 move 意图并单独解析角色移动（resolve_moves），再进入机器人阶段——机器人按当前（已更新的）角色位置选最近目标、逐只朝目标走一格并即时更新 obstacles。因此同回合内角色与机器人不是一次联合同时结算，也不处理两者互相争抢同一格"
+      code: "simulator.step（角色阶段与机器人阶段分段）"
+    question: "机器人每回合是否只移动一格、是否排队/互相阻挡？需要一次角色与机器人争抢同格、双方停止的真实回归轨迹；选敌是否优先角色而非最近单位、是否受'阻挡其移动'限定？"
+    evidence_needed: "官方一夜回放中的机器人坐标序列（相邻回合对比），以及角色与机器人争抢同格的换回合请求"
+    confirmation: null
+
+  - id: V-013
+    title: 视野：共享基准格、基地占地与遮挡/取整
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.3：己方所有单位（武器工事、基地、围墙、角色）视野距离均为 4，全队共享；敌方基地与围墙全局可见；机器人全图可见。§4.5.4 第1点已定义两点距离为切比雪夫距离"
+      refs: [taskbook]
+    local:
+      behavior: "vision.friendly_cells 只取每个存活己方单位的锚点坐标（基地 2×2 也只算左上角一格），vision.is_visible 用切比雪夫 ≤4 判定，无遮挡；敌方 station/wall 由 GLOBAL_VISIBLE_TYPES 恒可见，机器人按 roleType 后缀恒可见"
+      code: "vision.friendly_cells / vision.is_visible / vision.filter_observation（快照 a0d20a3e…）；protocol.GLOBAL_VISIBLE_TYPES；protocol.station_footprint"
+    question: "'己方所有单位'的视野基准是锚点格还是完整占地（基地 2×2 应算 4 个基准格吗）？墙或建筑是否遮挡视线？（围墙与建筑作为己方视野来源本身已明确。）"
+    evidence_needed: "官方请求中同一敌方单位在基地另一侧/贴墙位置的出现与消失边界"
+    confirmation: null
+
+  - id: V-014
+    title: lastCmdResult 的真实错误形状与解析边界
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "接口文档 §1.1：格式 \"[exitCode:N]\\n<输出>\"、\"[TIMEOUT]\\n<部分输出>\"、\"[JUDGER_ERROR]\\n<原因>\"、超 64KB 末尾追加 \"[TRUNCATED]\"；未发命令为空字符串"
+      refs: [api_doc]
+    local:
+      behavior: "sandbox.parse_command_result 严格解析；未知形状一律降级为 judger_error（不当作成功），TRUNCATED 视为标记并剥离"
+      code: "sandbox.parse_command_result"
+    question: "真实判题器的错误形状是否与文档完全一致（大小写、额外前缀、多行输出、退出码负数）？截断标记是否总是单独一行？"
+    evidence_needed: "官方真实 lastCmdResult 样本各一条（成功/失败/超时/判题器异常）"
+    confirmation: null
+
+  - id: V-015
+    title: 新闻 → 采矿可用性 / 矿价 → 恢复的完整生命周期
+    priority: P1
+    category: implementation_gap
+    status: needs_trace
+    official:
+      requirement: "任务书 §5.1：官方消息会引起供需变化并影响与小贩的交易价格，示例给出'明天+后天无法采集铁、铁价上涨，大后天恢复'；§4.1 矿区随机刷新"
+      refs: [taskbook]
+    local:
+      behavior: "矿业事件（禁止采集某矿、价格涨跌、恢复）只在生成器里以固定初始价格体现，没有按新闻文本或轮次驱动矿点禁用/恢复；采集只受背包与邻接限制"
+      code: "scenarios.scenario（vendorShopList 固定 1/3/5）；simulator.step collect 分支"
+    question: "（已知缺口。）需要官方一次包含采矿禁令新闻的请求序列，确认禁用触发条件、持续天数、价格变化幅度与恢复时点"
+    evidence_needed: "官方新闻文本 + 相邻数日 vendorShopList 与矿点 zones 变化"
+    confirmation: null
+
+  - id: V-016
+    title: 任务完成/部分完成/超时的判分语义与通过率口径
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §六：完整完成 = 任务积分 + 5×标准回合数/(完成回合−接取回合)；部分完成 = 奖励×通过率；通过率 = 正确字段数/全量字段数；§5：超时等结束按之前最高通过率结算，金币 = 金币奖励×通过率"
+      refs: [taskbook]
+    local:
+      behavior: "taskworld 本地夹具按 'k=v' 字段集合比较（分号/冒号分隔归一化）计算通过率；rate≥1 时 score=int(积分 + 5×timeout/used)，否则 score=int(积分×rate)，金币=int(金币奖励×rate)；used=max(1, 完成轮−接取轮)；到期判定为 deadline(=接取轮+timeout) <= 当前轮"
+      code: "taskworld._pass_rate / taskworld._advance_once（int() 截断、deadline 判定）"
+    question: "官方如何切分'字段'（键值对、行、JSON 键、是否需要完全一致）？'完成回合'取提交答案的回合还是判题器结算的回合？5×标准回合数/(完成回合−接取回合) 是向下取整还是四舍五入、分母为 0 时如何处理？'计数回合超过超时回合数'对应的到期轮是 timeout 还是 timeout+1？"
+    evidence_needed: "官方一次完整完成 + 一次部分完成的积分/金币变化，能反推取整与完成轮口径"
+    confirmation: null
+
+  - id: V-017
+    title: 官方游戏内 LLM 通道：真实提供方/模型、额度与回执关联
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "接口文档 §2.1：prompt 提交给 LLM，每日调用次数受限，超出报 errorCode 5；§1.7：每队每游戏日 3 次，日内第一回合重置，自进化任务执行期间不受限且不计入日限；§1.1：llmResp 为上回合 LLM 返回内容"
+      refs: [api_doc]
+    local:
+      behavior: "本地把 prompt 交给判题器通道并消费下轮 llmResp（sandbox.JudgeState 记 llm_used_today / llm_day，任务期间走豁免）；**本地不实现官方 LLM 本身**。docs/LOCAL_LLM.md 里的 DeepSeek 适配只是本机演示用的本地调用，不是官方通道实现，也与执行本项目的 DSH 代理无关"
+      code: "sandbox.JudgeState.note_round / llm_available / consume_llm；brain.respond 的 prompt 分支"
+    question: "官方 LLM 的实际提供方与模型、单次输出 token 上限、上下文/输入长度上限、是否保留会话（多轮）语义、超限时的报错形状是什么？一次 prompt 与下一轮 llmResp 的关联规则（同一回合多条 prompt 只会有一个回复？失败/超时如何标记？）"
+    evidence_needed: "官方一次 prompt → 下一轮 llmResp 的真实配对样本（含 errorCode 5 的一次超限样本）"
+    confirmation: null
+
+  - id: V-018
+    title: 任务点每日/总量上限与 30 回合刷新的真实语义
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §五：每个任务点的任务总数有上限，任务结束后再次接取需等待 30 回合；§1.3.2 coldDownRounds 与 isValid 描述冷却与'任务已做完'两种不可接状态"
+      refs: [taskbook, api_doc]
+    local:
+      behavior: "本地夹具给每个任务点 30 个任务的预算，结束后 30 回合冷却，冷却为 0 且有余量时 isValid=true"
+      code: "taskworld.TASKS_PER_POINT / taskworld.player_tasks；tasks.REFRESH_ROUNDS"
+    question: "每点任务总数上限是多少？冷却是否从任务结束的下一回合起算 30 回合？上限耗尽后该点是否永久 isValid=false（本轮次）？"
+    evidence_needed: "官方连续两次任务的 coldDownRounds 序列与耗尽后的 isValid"
+    confirmation: null
+
+  - id: V-019
+    title: 异常计数与指令执行失败的判题器边界
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §八注：'指令错误'特指字段缺失或无法识别；碰撞、落点无目标等执行失败不计异常；单队累计 5 次异常后停止调度"
+      refs: [taskbook]
+    local:
+      behavior: "本地把所有拒绝（非法/执行失败）都记为 lastRoundRoleActionResults=false 且合计为跳过，不计异常；服务器对非法 JSON/非对象也返回 200 + 空 roleCommandMap"
+      code: "simulator.step（outcomes/skipped）；server.do_POST"
+    question: "官方对'目标超出射程'、'建造位置不属于可建造区'、'背包无物品'分别计异常还是执行失败？异常计数是否在 roles 里可见？"
+    evidence_needed: "官方一次边界指令回执与 errors[] 内容对照"
+    confirmation: null
+
+  - id: V-020
+    title: 身份稳定性：teamId/角色 ID 分配与跨轮一致性
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "接口文档 §1.3.1：角色 ID 由判题器在队伍初始化时分配、分配顺序固定并给出区间；§1.3：teamId/teamName 为队伍唯一标识"
+      refs: [api_doc, request_sample]
+    local:
+      behavior: "本地生成器按同一编号表造 ID（10010/10011/10012/10013、炮 10020+、墙 40000+），第二队换 2xxxx/41xxx；teamId 本地不生成"
+      code: "scenarios.scenario（base=10000/20000 与固定偏移）；simulator.step build（start 前缀）"
+    question: "同一队伍跨半场换边后 ID 是否改变？新造武器是否总是取最小可用编号（而非轮换）？围墙 ID 段的边界与回收规则？"
+    evidence_needed: "官方换边前后两次请求的 roles[].id 对照"
+    confirmation: null
+
+  # ---------------- P1（续）：弹道取整与射程冲突 ----------------
+  - id: V-021
+    title: 围墙是否阻挡弹道（S01 原文笔误）与弹道栅格化取整；同时核对 CF-D02 射程
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "用户补充 S01 原文'围棋不会阻挡己方的子弹'（疑为'围墙'笔误）；任务书 §4.5.4 只说加特林/电磁炮沿直线弹道并命中最近机器人，未说墙是否阻挡。另见 CF-D02：示例 request.txt 一级炮 attackRange 与任务书 §4.5.1 表值不同"
+      refs: [user_supplements, taskbook, request_sample]
+    local:
+      behavior: "己方墙不截断弹道（S01 已按此实现并加手算回归）；弹道用点到线段垂直距离 ≤ PATH_HALF_WIDTH(0.5) 判定机器人是否在路径上，不做逐格栅格相交，也不考虑格心连线的取整"
+      code: "ballistics.robots_on_path / ballistics.cone_legal（快照 b7bb235c…）；protocol.TOWER_RANGE_BY_LEVEL（按任务书表值 3/5/7、6/8/10）"
+    question: "S01 的'围棋'是否确为'围墙'，敌方围墙/基地/其他建筑是否阻挡或吸收弹道？弹道按格心连线还是逐格栅格判定（贴边机器人与对角线弹道的命中边界）？另请回答 CF-D02：判题器实际下发的一级炮 attackRange 是多少？"
+    evidence_needed: "官方对 S01 笔误的确认；一次贴边/对角命中的回放；一次请求中一级 gatling/railgun 的 attackRange 实际值"
+    confirmation: null
+
+  - id: V-022
+    title: 超时与异常计数在本地服务端的体现
+    priority: P2
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §八：建连过程超过 10 秒判超时；连接建立并发送请求后 5 秒内未收到响应判超时（两个独立时限）。异常退出后不再拉起；单队累计 5 次异常后不再调度"
+      refs: [taskbook]
+    local:
+      behavior: "本地服务器不主动施加响应时限（决策在请求线程内同步完成），也没有异常计数与停调度机制；只有 match 层的本地终局判定。因此这两个时限在本地都未被验证，需要真实平台行为来确认计时起点与停调度后的请求形态"
+      code: "server.do_POST / server.serve"
+    question: "5 秒响应的计时起点（请求体读完/首字节/建连成功）与 10 秒建连的计时起点各是什么？被停止调度后判题器是否仍向该队发请求（若发，队伍该如何响应才算合法）？"
+    evidence_needed: "官方一次真实超时回执，或平台对停调度后请求行为的说明"
+    confirmation: null
+
+  # ---------------- P1（续）：任务点范围与实现缺陷 ----------------
+  - id: V-023
+    title: 领取/离开任务的"周围一格"基准格（与任务点2两格的关系）
+    priority: P1
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.4：开拓者在己方任务点周围一格内触发；§4.6.2：任务点2占两格，开拓者处于任一格即可领取任务；§五：离开己方任务点周围一格内即结束任务"
+      refs: [taskbook]
+    local:
+      behavior: "accept 与保持判定都取开拓者到两格的最小切比雪夫距离 ≤ HOLD_RANGE(=1)，即两格各自一圈的并集；该并集包含两格本身"
+      code: "taskworld._advance_once（in_ring）；tasks.HOLD_RANGE"
+    question: "'处于任一格即可领取'与'周围一格内'是两个条件还是一个（站上格子是否等价于距离 0 的合法位置）？离开判定是否同样以两格并集为准、任务中途走到另一格是否中断？"
+    evidence_needed: "官方一次贴边/站上任务点格的 acceptTask 回执，以及一次移动到任务点另一格时的 phaseTask 与错误码变化"
+    confirmation: null
+
+  - id: V-024
+    title: 波次召唤令的目标夜与每日 10 张上限的计数口径
+    priority: P2
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.6.3：召唤令使'对方下个夜晚'对应机器人 +1，每天最多使用 10 张；§4.7.3：召唤令叠加在基础浪潮之上"
+      refs: [taskbook]
+    local:
+      behavior: "market.summon_amount_allowed 按当日已用张数截断到 10。目标夜/目标队存在两条不相符的路径：turnactions.summon_load 返回的是 {enemy_team: load}（按规则指向对方），但 simulator.step 只取其中的 load 累加进 meta['summon_load']，**丢弃了 team 键**；scenarios.prepare_round 随后把这些机器人加进本队下一次夜晚。因此单队正常路径下自家买的召唤令会加到自己头上；两队在 match.TwoTeamMatch 里各跑各的 step，也没有把 load 注入对手的 private meta（只有测试可手工注入）。属于已知集成缺陷，不是'规则不明'"
+      code: "turnactions.summon_load（返回 enemy_team）；simulator.step（for team, load in … 丢弃 team）；scenarios.prepare_round（读 meta['summon_load']）；match.TwoTeamMatch（双方各自 private）"
+    question: "白天/夜晚使用召唤令分别作用于当晚还是次夜？10 张上限按自然日还是按夜计数、超额是拒绝整条指令还是截断？官方下一夜的 robot.roles 中，召唤令增量能否与基础波次区分（用于验证目标队）？"
+    evidence_needed: "官方一次使用召唤令后的下夜 robot.roles 变化（若能看到对方视角更佳）"
+    confirmation: null
+
+  - id: V-025
+    title: 眩晕与范围炸弹的结算时点及作用范围外沿
+    priority: P2
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书 §4.6.3：眩晕法宝使目标坐标为中心 3×3 内机器人眩晕 5 回合；范围炸弹造成 100 伤害；两者结算优先级高于机器人移动，且仅对双方机器人有效"
+      refs: [taskbook]
+    local:
+      behavior: "turnactions.apply_battle_items 在机器人移动前结算；3×3 按切比雪夫半径 1 取中心与周围 8 格（含对角线，与官方 3×3 一致）；眩晕按 5 回合递减，freshly_dizzy 集合使施放当回合不递减"
+      code: "turnactions.apply_battle_items / turnactions.tick_dizzy；market.bomb_targets / market.dizzy_targets"
+    question: "眩晕 5 回合是否含施放当回合（当回合机器人是否还能行动）？同回合多张眩晕/炸弹对同一机器人是否叠加、刷新还是各算一次？炸弹伤害是否按命中先后与血量上限截断？"
+    evidence_needed: "官方一次眩晕/炸弹后的 abnormalState 与血量变化（含下一回合仍为 dizzy 的边界）"
+    confirmation: null
+
+# 需在官方材料更新后复核的历史登记（避免把已知实现进展误报为"仍未实现"）
+recheck_source:
+  - id: RC-001
+    ref: "docs/DEVELOPMENT_RULES.md §4 D04/D06/D08（历史差异表）"
+    note: "D04 的弹道/同时移动、D06 的任务字段、D08 的任务与 LLM 通道在本工作树快照均有进展；该表条目不可整段照抄为'仍未实现'，应以本文件 verification_items 的现状条目为准"
+    action: "官方材料更新或实现再次变化时，先复核条目中的断言与证据是否仍成立，再重算 implementation_snapshot 的文件哈希；只重算哈希而不复核断言等于把旧结论套在新代码上"
+
+# 已知的实现缺陷跟踪（官方规则明确，本地实现不一致）
+known_implementation_defects:
+  - id: KD-001
+    summary: "resolve_moves 允许位置互换；任务书 §4.5.4 第5点明确互换触发碰撞、双方停在原地"
+    tracking: V-006
+  - id: KD-002
+    summary: "_check_end 缺少'双方基地同回合被毁'分支，且单方基地归零即结束（早于官方'半场结束/按积分比较'口径）；result() 的积分相同时平局处理符合已知规则，不列为缺陷"
+    tracking: V-008
+  - id: KD-003
+    summary: "矿业新闻未驱动矿点禁用/价格变化/恢复生命周期"
+    tracking: V-015
+  - id: KD-004
+    summary: "生成地图的任务点2只登记一个 zone 格，第二格既不出现在 mapInfo.zones 也不进入阻挡集合；两格本身是官方明确的，缺的是编码/朝向确认（V-002）与登记一致性（V-023 范围条目之外的修复项）"
+    tracking: V-002
+  - id: KD-005
+    summary: "simulator.step 传给 resolve_moves 的 origins 只含本回合的移动者，静止角色/建筑不进入占用集合，移动到静止单位格不会被判受阻"
+    tracking: V-011
+  - id: KD-006
+    summary: "召唤令目标队丢失：simulator.step 只取 summon_load 的 load、丢弃 team 键，单队路径把自家召唤令加到自己身上；两队路径也未注入对手 meta"
+    tracking: V-024
+  - id: KD-007
+    summary: "角色与机器人分阶段求解而非联合同时结算，不处理两者互相争抢同一格"
+    tracking: V-012

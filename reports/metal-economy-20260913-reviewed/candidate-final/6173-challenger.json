@@ -1,0 +1,98 @@
+{
+  "strategy": "RRR",
+  "label": "\u4e09\u706b\u7bad",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "rocket"
+  ],
+  "seed": 6173,
+  "side": "challenger",
+  "pressure": 1,
+  "split": "holdout",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 1877,
+  "task_score": 949,
+  "task_rewards": 12,
+  "kills": 59,
+  "crew_deaths": 13,
+  "walls_destroyed": 1,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 557,
+    "build": 21,
+    "collect": 22,
+    "acceptTask": 106,
+    "submitAnswer": 24,
+    "buy": 2,
+    "attack": 123,
+    "summonTreasure": 1,
+    "sell": 2
+  },
+  "attacks": {
+    "rocket": 123
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 3
+  },
+  "initial_state_sha256": "7737864140f5c87ef9545c1eacaaea10abeef9c40cf32ec58e8f9a71dd89eb82",
+  "source_sha256": "8347d3aa68629dd35bf9bf07223a2ab3b82ace3708dd8f447aa0b8dfa823b88a",
+  "elapsed_seconds": 70.36,
+  "economy": {
+    "collect_stone": 20,
+    "collect_copper": 2,
+    "sold_copper": 2,
+    "sale_gold": 11,
+    "sold_stone": 1
+  },
+  "first_metal_events": {
+    "collect": {
+      "round": 809,
+      "action": {
+        "a": "collect",
+        "id": 10010,
+        "kind": "copper",
+        "from": {
+          "x": 8,
+          "y": 16
+        },
+        "to": {
+          "x": 9,
+          "y": 15
+        },
+        "bag": 4,
+        "cap": 100
+      }
+    },
+    "sell": {
+      "round": 817,
+      "action": {
+        "a": "sell",
+        "id": 10010,
+        "kind": "copper",
+        "num": 2,
+        "price": 5,
+        "gold": 10,
+        "from": {
+          "x": 13,
+          "y": 10
+        },
+        "to": {
+          "x": 13,
+          "y": 10
+        },
+        "bag": 3
+      }
+    }
+  },
+  "max_local_step_ms": 702.52
+}

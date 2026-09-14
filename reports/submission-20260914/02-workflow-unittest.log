@@ -1,0 +1,74 @@
+test_a_run_without_worker_written_session_evidence_is_refused (test_resume.ResumeFlowTests.test_a_run_without_worker_written_session_evidence_is_refused) ... ok
+test_cli_resume_requires_the_original_identity_arguments (test_resume.ResumeFlowTests.test_cli_resume_requires_the_original_identity_arguments) ... usage: dsh_sessions.py [-h] [--pool POOL]
+                       [--specialist {rules-engine,strategy,frontend,qa-tooling}]
+                       [--manifest MANIFEST] [--output OUTPUT]
+                       [--previous PREVIOUS] [--expect-session EXPECT_SESSION]
+                       [--worktree WORKTREE] [--wait] [--timeout TIMEOUT]
+                       {send,resume,steer,wait,status,stop,worker,fingerprint}
+dsh_sessions.py: error: --manifest, --previous, --expect-session and --output required
+ok
+test_newer_request_json_session_id_still_matches (test_resume.ResumeFlowTests.test_newer_request_json_session_id_still_matches) ... ok
+test_ordinary_send_never_silently_replaces_a_failed_session (test_resume.ResumeFlowTests.test_ordinary_send_never_silently_replaces_a_failed_session)
+A failed slot must route to the explicit resume flow, not to a new session. ... ok
+test_resume_clears_a_stop_marker_only_after_the_supervisor_starts (test_resume.ResumeFlowTests.test_resume_clears_a_stop_marker_only_after_the_supervisor_starts) ... ok
+test_resume_never_overwrites_an_existing_output (test_resume.ResumeFlowTests.test_resume_never_overwrites_an_existing_output) ... ok
+test_resume_queues_a_followup_on_the_same_session_and_keeps_evidence (test_resume.ResumeFlowTests.test_resume_queues_a_followup_on_the_same_session_and_keeps_evidence) ... ok
+test_resume_refuses_a_live_worker (test_resume.ResumeFlowTests.test_resume_refuses_a_live_worker) ... ok
+test_resume_refuses_a_non_failed_session_or_a_changed_identity (test_resume.ResumeFlowTests.test_resume_refuses_a_non_failed_session_or_a_changed_identity) ... ok
+test_resume_uses_only_consistent_worker_written_evidence (test_resume.ResumeFlowTests.test_resume_uses_only_consistent_worker_written_evidence) ... ok
+test_followup_after_resume_uses_the_same_native_prompt_channel (test_resume.ResumeProtocolTests.test_followup_after_resume_uses_the_same_native_prompt_channel) ... ok
+test_missing_persisted_session_fails_before_any_prompt (test_resume.ResumeProtocolTests.test_missing_persisted_session_fails_before_any_prompt) ... ok
+test_resume_has_no_turn_deadline_and_waits_for_the_native_turn_end (test_resume.ResumeProtocolTests.test_resume_has_no_turn_deadline_and_waits_for_the_native_turn_end) ... ok
+test_sdk_asks_the_native_runtime_to_resume_the_original_id (test_resume.ResumeProtocolTests.test_sdk_asks_the_native_runtime_to_resume_the_original_id) ... ok
+test_unconfirmed_resume_is_rejected_instead_of_prompting (test_resume.ResumeProtocolTests.test_unconfirmed_resume_is_rejected_instead_of_prompting) ... ok
+test_failed_native_resume_leaves_the_followup_unstarted_and_visible (test_resume.WorkerResumeTests.test_failed_native_resume_leaves_the_followup_unstarted_and_visible) ... ok
+test_interrupted_job_is_never_replayed_by_a_later_worker (test_resume.WorkerResumeTests.test_interrupted_job_is_never_replayed_by_a_later_worker) ... ok
+test_worker_resumes_native_session_then_prompts_and_records_confirmation (test_resume.WorkerResumeTests.test_worker_resumes_native_session_then_prompts_and_records_confirmation) ... ok
+test_worker_without_resume_flag_never_asks_for_resume (test_resume.WorkerResumeTests.test_worker_without_resume_flag_never_asks_for_resume) ... ok
+test_empty_answer_is_not_success (test_runner.RunnerTests.test_empty_answer_is_not_success) ... ok
+test_error_end_is_not_success (test_runner.RunnerTests.test_error_end_is_not_success) ... ok
+test_exact_model_and_effort_on_handshake (test_runner.RunnerTests.test_exact_model_and_effort_on_handshake) ... ok
+test_rejected_model_does_not_fallback_or_send_task (test_runner.RunnerTests.test_rejected_model_does_not_fallback_or_send_task) ... ok
+test_existing_session_cannot_switch_worktree_or_silently_restart (test_sessions.SessionTests.test_existing_session_cannot_switch_worktree_or_silently_restart) ... ok
+test_global_execution_lock_excludes_another_process (test_sessions.SessionTests.test_global_execution_lock_excludes_another_process) ... ok
+test_manifest_requires_review_and_exact_code_and_spec (test_sessions.SessionTests.test_manifest_requires_review_and_exact_code_and_spec) ... ok
+test_other_session_has_distinct_turn_stream (test_sessions.SessionTests.test_other_session_has_distinct_turn_stream) ... ok
+test_other_specialist_cannot_claim_an_existing_specialist_worktree (test_sessions.SessionTests.test_other_specialist_cannot_claim_an_existing_specialist_worktree) ... ok
+test_reusing_live_role_returns_same_native_session_without_spawning (test_sessions.SessionTests.test_reusing_live_role_returns_same_native_session_without_spawning) ... ok
+test_submit_to_existing_output_keeps_evidence_and_enqueues_no_duplicate (test_sessions.SessionTests.test_submit_to_existing_output_keeps_evidence_and_enqueues_no_duplicate) ... ok
+test_two_followups_reuse_exact_native_session_without_shutdown (test_sessions.SessionTests.test_two_followups_reuse_exact_native_session_without_shutdown) ... ok
+test_worker_pid_can_be_recovered_from_matching_status (test_sessions.SessionTests.test_worker_pid_can_be_recovered_from_matching_status) ... ok
+test_heartbeat_throttle_is_tick_driven_and_idle_clears_turn_fields (test_sessions.SupervisionTests.test_heartbeat_throttle_is_tick_driven_and_idle_clears_turn_fields) ... ok
+test_native_wait_has_no_execution_deadline (test_sessions.SupervisionTests.test_native_wait_has_no_execution_deadline)
+Old wrapper: prompt(...,1200) -> TimeoutError -> broken=True -> killed. ... ok
+test_real_process_loss_is_a_transport_failure_not_a_timeout (test_sessions.SupervisionTests.test_real_process_loss_is_a_transport_failure_not_a_timeout) ... ok
+test_reply_raises_error_frame_for_matching_id (test_sessions.SupervisionTests.test_reply_raises_error_frame_for_matching_id) ... ok
+test_same_session_survives_repeated_waiter_timeouts_with_exactly_one_prompt (test_sessions.SupervisionTests.test_same_session_survives_repeated_waiter_timeouts_with_exactly_one_prompt)
+Old bug: waiter deadline -> SDK TimeoutError -> failed result -> taskkill /T /F. ... ok
+test_stale_long_running_heartbeat_is_not_rejected_when_worker_alive (test_sessions.SupervisionTests.test_stale_long_running_heartbeat_is_not_rejected_when_worker_alive) ... ok
+test_steering_continues_while_prompt_waits_indefinitely (test_sessions.SupervisionTests.test_steering_continues_while_prompt_waits_indefinitely) ... ok
+test_duplicate_id_is_idempotent_and_conflicting_reuse_rejected (test_steering.SteeringTests.test_duplicate_id_is_idempotent_and_conflicting_reuse_rejected) ... ok
+test_inactive_or_legacy_session_does_not_queue (test_steering.SteeringTests.test_inactive_or_legacy_session_does_not_queue) ... ok
+test_late_request_receipt_rejects_without_dispatching_new_turn (test_steering.SteeringTests.test_late_request_receipt_rejects_without_dispatching_new_turn) ... ok
+test_steer_uses_native_method_same_turn_and_waits_for_ack (test_steering.SteeringTests.test_steer_uses_native_method_same_turn_and_waits_for_ack) ... ok
+test_dead_worker_is_reported_without_waiting_for_deadline (test_waiter.WaiterTests.test_dead_worker_is_reported_without_waiting_for_deadline) ... ok
+test_failure_is_returned_as_failure (test_waiter.WaiterTests.test_failure_is_returned_as_failure) ... ok
+test_returns_answer_when_current_turn_finishes_without_stopping_worker (test_waiter.WaiterTests.test_returns_answer_when_current_turn_finishes_without_stopping_worker) ... ok
+test_timeout_keeps_job_and_can_wait_again (test_waiter.WaiterTests.test_timeout_keeps_job_and_can_wait_again) ... ok
+test_wrong_session_result_is_rejected (test_waiter.WaiterTests.test_wrong_session_result_is_rejected) ... ok
+test_conflicting_duplicate_does_not_persist_partial_revision (test_workflow.IngestTest.test_conflicting_duplicate_does_not_persist_partial_revision) ... ok
+test_first_owner_issue_enqueues_and_initialises_row (test_workflow.IngestTest.test_first_owner_issue_enqueues_and_initialises_row) ... ok
+test_identical_duplicates_enqueue_once (test_workflow.IngestTest.test_identical_duplicates_enqueue_once) ... ok
+test_identical_snapshot_does_not_enqueue_again (test_workflow.IngestTest.test_identical_snapshot_does_not_enqueue_again) ... ok
+test_lock_refuses_concurrent_owner_and_keeps_lock_file (test_workflow.IngestTest.test_lock_refuses_concurrent_owner_and_keeps_lock_file) ... ok
+test_new_owner_comment_enqueues_new_revision (test_workflow.IngestTest.test_new_owner_comment_enqueues_new_revision) ... ok
+test_new_revision_preserves_implementing_stage (test_workflow.IngestTest.test_new_revision_preserves_implementing_stage) ... ok
+test_non_owner_issues_and_comments_are_ignored (test_workflow.IngestTest.test_non_owner_issues_and_comments_are_ignored) ... ok
+test_partial_snapshot_retains_known_issues (test_workflow.IngestTest.test_partial_snapshot_retains_known_issues) ... ok
+test_workflow_marker_comments_do_not_enqueue (test_workflow.IngestTest.test_workflow_marker_comments_do_not_enqueue) ... ok
+test_wrong_repository_raises_before_writing_state (test_workflow.IngestTest.test_wrong_repository_raises_before_writing_state) ... ok
+
+----------------------------------------------------------------------
+Ran 59 tests in 5.868s
+
+OK

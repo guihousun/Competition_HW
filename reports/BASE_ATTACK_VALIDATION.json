@@ -1,0 +1,17 @@
+{
+  "baseline": "0623fc1",
+  "category": "R02/R05 implementation fix and UI",
+  "tests": {
+    "total": 226,
+    "result": "PASS",
+    "pre_fix_new_case_failures": 11
+  },
+  "cases": "Hand-built base at (10,5), four footprint edges; no zones / base alias; wall break / lethal hit",
+  "sourceHashes": {
+    "Demo/CoreGeek/src/agent/simulator.py": "26861b94a5b0152840101d1f06380dbe5fd075e69990e47f0b4e8e7225350c64",
+    "web/js/viewmodel.js": "0d49467ca96e18e519e6cc3fad5f0348cbafde76f0d0a272df4a3dcdf69b9993",
+    "tests/test_base_targeting.py": "33e7414de34011dfb0137b7f103b3ee0e5d866d27975b17a0999331ccda3653c",
+    "docs/BASE_ATTACK_FIX.md": "4365f6a28d20d16f02bd6aee0180e1fcc697c008a31157dfa53858efd2a6bfb6"
+  },
+  "officialPlatformTested": false
+}

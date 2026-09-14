@@ -1,0 +1,115 @@
+{
+  "created_at": "2026-09-13T09:25:06.810556+00:00",
+  "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+  "files": {
+    "Demo/CoreGeek/src/agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "Demo/CoreGeek/src/agent/actions.py": "618be20f5de35d42c13b188c921fbafc1ae2569a9223fdeb53d127d60eea8a22",
+    "Demo/CoreGeek/src/agent/ballistics.py": "b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f",
+    "Demo/CoreGeek/src/agent/brain.py": "2473ce80f04505e8851ba07b4ac5efb13276e2dac08ce2e31b63dc1f6f0e2fb6",
+    "Demo/CoreGeek/src/agent/coordination.py": "735a4f3e1f3e687dd31ac09b0770f8a24794c5049a12ab3b993d635d9131d758",
+    "Demo/CoreGeek/src/agent/debug.py": "adcfa3d2eac48ab4807bace09bb85a9eaa19493b7f35bc7f0dd86a6405c7e92e",
+    "Demo/CoreGeek/src/agent/deepseek_client.py": "e90005b5fe887c2f005ad9e1a9e6bb44fe2e3573a415805290f6a3c4fe2a286e",
+    "Demo/CoreGeek/src/agent/grid.py": "9f84afadce6808bbe456d8eb10759e341e03d71d16fed9bf268d508925e7aa67",
+    "Demo/CoreGeek/src/agent/local_llm.py": "0535447a89f304fb884de387e391573ce92fbdc6f6ff42f2b1a96fc07e485c76",
+    "Demo/CoreGeek/src/agent/market.py": "8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9",
+    "Demo/CoreGeek/src/agent/match.py": "4e7b47c3d5738a3700170c16d1269500ecd7ff012dbe8d74e6ae37aa2bc7a9f7",
+    "Demo/CoreGeek/src/agent/nightwork.py": "b14ee0e4798dcad4501d8a5afd9a51c433f634f6cfac6c3d3a4137d240a3ed67",
+    "Demo/CoreGeek/src/agent/planner.py": "fab280b858f4e12cf951b39f38f790c3f09fcd2a3cc54fb523b26572010a3a9e",
+    "Demo/CoreGeek/src/agent/protocol.py": "ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9",
+    "Demo/CoreGeek/src/agent/recordings.py": "03364f3b3e6ecd7cfe36c6885f93ed7eec464f0e4556de0fef811c116671270a",
+    "Demo/CoreGeek/src/agent/sandbox.py": "4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321",
+    "Demo/CoreGeek/src/agent/scenarios.py": "d1dad9e1c948fb5bbe617eb50400d9378943844d9b849f205362c212ce481285",
+    "Demo/CoreGeek/src/agent/server.py": "84008c8a799b393ba3be2f7baacebab4477b7f2525d3b04a8d2e5bbd16c4b8e6",
+    "Demo/CoreGeek/src/agent/simulator.py": "26861b94a5b0152840101d1f06380dbe5fd075e69990e47f0b4e8e7225350c64",
+    "Demo/CoreGeek/src/agent/tasks.py": "0704db957d4846270036f69f62fca846b2a32f40773ba223ac04a7dbbcb74359",
+    "Demo/CoreGeek/src/agent/taskworld.py": "f5b3f066b45847d8644e642dada545fc9502727272b150da0560d5d0eb7e8e07",
+    "Demo/CoreGeek/src/agent/treasure.py": "6d243da4ecef18d39307476ec698190b682b034799bbe5055d96119d54d0a93c",
+    "Demo/CoreGeek/src/agent/turnactions.py": "85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22",
+    "Demo/CoreGeek/src/agent/twomatch.py": "31655696219e73bc6e280764affdde0f61a78051a67c23561a7b447061e78fe3",
+    "Demo/CoreGeek/src/agent/vision.py": "a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4",
+    "benchmark.py": "0b3e3b0d2262b4c08424f8c8588daf1d8614e232e90916669b9ee27302308438",
+    "tools/compare_defences.py": "86e107fb7ef69cf9e199ac037f7ce6f3351060de1ca83d6c0589ba50f89a3909",
+    "docs/\u4efb\u52a1\u4e66.md": "40fde8a4d8dd73f4083ad5d531d12b1d168ad139dd17f68a4b8ec5e69a3fd182",
+    "docs/\u63a5\u53e3\u6587\u6863.md": "812bd5e2d8faec3c0b884d2c0830e8967f8a455c5dc626d189ddba1b0ddcfed5"
+  },
+  "cases": [
+    [
+      false,
+      1,
+      "challenger",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      true,
+      1,
+      "challenger",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      false,
+      1,
+      "defender",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      true,
+      1,
+      "defender",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      false,
+      7,
+      "challenger",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      true,
+      7,
+      "challenger",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      false,
+      7,
+      "defender",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      true,
+      7,
+      "defender",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      false,
+      6173,
+      "challenger",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      true,
+      6173,
+      "challenger",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      false,
+      6173,
+      "defender",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ],
+    [
+      true,
+      6173,
+      "defender",
+      "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb"
+    ]
+  ],
+  "baseline": "nightwork.plan disabled; everything else identical",
+  "limitations": [
+    "Single-team local simulator, no paid LLM or intranet",
+    "Known fixed-spawn, static-occupancy and swap settlement gaps remain",
+    "Random future spawn positions may diverge as occupancy changes"
+  ]
+}

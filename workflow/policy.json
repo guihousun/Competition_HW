@@ -1,0 +1,37 @@
+{
+  "schema_version": 2,
+  "repository": "guihousun/Competition_HW",
+  "trusted_request_authors": [
+    "guihousun"
+  ],
+  "monitor_interval_minutes": 30,
+  "executor": {
+    "launcher": "dsh",
+    "profile": "sdk",
+    "provider": "deepseek-official",
+    "model": "deepseek-flash",
+    "reasoningEffort": "max",
+    "task_timeout_seconds": null,
+    "task_timeout_note": "no DSH execution deadline; the session waits for native turn/end+idle. --timeout (default 1250s) bounds only the caller-side wait and never cancels, kills or resubmits the job",
+    "runner": "workflow/dsh_sessions.py",
+    "delivery": "send --wait; on wait timeout reconnect with wait on the same output directory",
+    "legacy_runner": "workflow/dsh_runner.py one-shot run_task(timeout=1200) kills the SDK at its deadline; unsuitable for production long tasks, diagnostics/smoke only",
+    "steering": "Native next-step only; bind active session/job/turn and approved supplemental Spec; reject legacy/inactive targets without queueing"
+  },
+  "concurrency": 1,
+  "max_implementation_attempts_per_revision": 2,
+  "allow_issue_replies": true,
+  "allow_candidate_prs": true,
+  "allow_reviewed_merge": true,
+  "merge_policy": "Codex review and required checks on current head; official behavior changes additionally require owner intranet PASS naming that exact head SHA",
+  "runtime_directory": ".workflow",
+  "notes": "Worktree/prompt restrictions are not an OS sandbox. No automatic raw log upload. No model fallback.",
+  "specialists": [
+    "rules-engine",
+    "strategy",
+    "frontend",
+    "qa-tooling"
+  ],
+  "context_management": "DSH native only; no manual history, compression or reconstruction",
+  "dispatch_policy": "Codex handles difficult or ambiguous issues directly; delegate bounded and independently verifiable tasks; escalate after two failed attempts"
+}

@@ -1,0 +1,49 @@
+{
+  "strategy": "RRR",
+  "label": "三火箭",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "rocket"
+  ],
+  "seed": 7,
+  "side": "challenger",
+  "pressure": 3,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 215,
+  "base_level": 1,
+  "base_damage": 1285,
+  "score_local": 2462,
+  "task_score": 1555,
+  "task_rewards": 16,
+  "kills": 50,
+  "crew_deaths": 24,
+  "walls_destroyed": 18,
+  "execution_failures": 60,
+  "audit_errors": {},
+  "actions": {
+    "move": 459,
+    "build": 37,
+    "collect": 51,
+    "acceptTask": 160,
+    "submitAnswer": 32,
+    "buy": 2,
+    "attack": 98,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "rocket": 98
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 3
+  },
+  "initial_state_sha256": "fe4b5e67e3bc0cd931d9b37fea1723a0e00b32fb6ab10758606178ea7f6ef78f",
+  "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+  "elapsed_seconds": 18.22
+}

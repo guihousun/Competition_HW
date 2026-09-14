@@ -1,0 +1,54 @@
+{
+  "strategy": "GER",
+  "label": "三种各一座",
+  "loadout": [
+    "gatling",
+    "railgun",
+    "rocket"
+  ],
+  "seed": 1371,
+  "side": "challenger",
+  "pressure": 1,
+  "split": "holdout",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 2089,
+  "task_score": 1186,
+  "task_rewards": 12,
+  "kills": 40,
+  "crew_deaths": 15,
+  "walls_destroyed": 2,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 592,
+    "build": 22,
+    "collect": 33,
+    "acceptTask": 149,
+    "submitAnswer": 24,
+    "buy": 4,
+    "sell": 3,
+    "attack": 154,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "railgun": 59,
+    "rocket": 29,
+    "gatling": 66
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "gatling": 1,
+    "railgun": 1,
+    "rocket": 1
+  },
+  "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+  "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+  "elapsed_seconds": 23.52
+}

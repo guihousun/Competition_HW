@@ -1,0 +1,58 @@
+{
+  "strategy": "RRR",
+  "label": "\u4e09\u706b\u7bad",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "rocket"
+  ],
+  "seed": 7,
+  "side": "defender",
+  "pressure": 1,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 2325,
+  "task_score": 1410,
+  "task_rewards": 14,
+  "kills": 49,
+  "crew_deaths": 12,
+  "walls_destroyed": 1,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 579,
+    "build": 21,
+    "collect": 50,
+    "acceptTask": 141,
+    "submitAnswer": 28,
+    "sell": 4,
+    "buy": 2,
+    "attack": 106,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "rocket": 106
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 3
+  },
+  "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+  "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+  "elapsed_seconds": 33.81,
+  "economy": {
+    "collect_copper": 20,
+    "collect_stone": 20,
+    "sold_copper": 20,
+    "sale_gold": 130,
+    "collect_iron": 10,
+    "sold_iron": 10
+  }
+}

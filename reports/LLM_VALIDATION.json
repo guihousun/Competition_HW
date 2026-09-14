@@ -1,0 +1,40 @@
+{
+  "kind": "local-synthetic-llm-task",
+  "seed": 1,
+  "side": "challenger",
+  "provider": {
+    "provider": "DeepSeek",
+    "model": "deepseek-flash",
+    "effort": "max",
+    "configured": true,
+    "calls": 1,
+    "maxCalls": 20,
+    "note": "仅显式启用的本地场景调用，额度是本地费用保护，不是官方规则"
+  },
+  "answer": "result=42",
+  "rate": 1.0,
+  "round": 14,
+  "waitingRounds": [
+    12
+  ],
+  "channel": {
+    "status": "done",
+    "usage": {
+      "prompt_tokens": 101,
+      "completion_tokens": 59,
+      "total_tokens": 160
+    },
+    "elapsed": 3.28,
+    "model": "deepseek-flash"
+  },
+  "source": {
+    "sourceSha256": "e1cb0fc257349d8c24378ada3a025f3a8347995e75832960cdff820f94be64bc",
+    "rulesBaseline": "v1.0 / 2026-09-09",
+    "local": true,
+    "scope": "single-team-local",
+    "limitations": [
+      "单队本地结算，不是官方双队胜负",
+      "建造区域、波次、任务夹具与弹道细节含本地假设"
+    ]
+  }
+}

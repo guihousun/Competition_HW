@@ -1,0 +1,3072 @@
+[
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2348,
+    "task_score": 1410,
+    "task_rewards": 14,
+    "kills": 65,
+    "crew_deaths": 5,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 524,
+      "build": 20,
+      "collect": 22,
+      "acceptTask": 156,
+      "submitAnswer": 28,
+      "buy": 2,
+      "attack": 326,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 326
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 28.95
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1425,
+    "base_level": 1,
+    "base_damage": 75,
+    "score_local": 2098,
+    "task_score": 1186,
+    "task_rewards": 12,
+    "kills": 45,
+    "crew_deaths": 12,
+    "walls_destroyed": 3,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 527,
+      "build": 22,
+      "collect": 22,
+      "acceptTask": 134,
+      "submitAnswer": 24,
+      "buy": 2,
+      "attack": 190,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 143,
+      "rocket": 19,
+      "gatling": 28
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 28.22
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 1845,
+    "task_score": 929,
+    "task_rewards": 9,
+    "kills": 48,
+    "crew_deaths": 19,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 542,
+      "build": 21,
+      "collect": 22,
+      "acceptTask": 102,
+      "submitAnswer": 18,
+      "buy": 2,
+      "attack": 240,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 240
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 27.25
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2340,
+    "task_score": 1410,
+    "task_rewards": 14,
+    "kills": 60,
+    "crew_deaths": 9,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 515,
+      "build": 20,
+      "collect": 22,
+      "acceptTask": 156,
+      "submitAnswer": 28,
+      "buy": 2,
+      "attack": 137,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 108,
+      "railgun": 29
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 28.86
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2341,
+    "task_score": 1410,
+    "task_rewards": 14,
+    "kills": 61,
+    "crew_deaths": 9,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 515,
+      "build": 20,
+      "collect": 22,
+      "acceptTask": 156,
+      "submitAnswer": 28,
+      "buy": 2,
+      "attack": 118,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 118
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "bf1c55c5e9aa57a03f03df1a8ef72345bb56707b7f7b5f1ec5abee6752f9815a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 29.17
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1271,
+    "survived_full": false,
+    "base_hp": 0,
+    "base_level": 1,
+    "base_damage": 1525,
+    "score_local": 1757,
+    "task_score": 929,
+    "task_rewards": 9,
+    "kills": 62,
+    "crew_deaths": 23,
+    "walls_destroyed": 12,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 624,
+      "build": 33,
+      "collect": 39,
+      "acceptTask": 102,
+      "submitAnswer": 18,
+      "buy": 2,
+      "attack": 364,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 364
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "4766cef70b603d6c899706e350ce6cf8dd5bd9abaf5c9b463ad89204ed8fd0f7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 28.67
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1276,
+    "survived_full": false,
+    "base_hp": 0,
+    "base_level": 1,
+    "base_damage": 1520,
+    "score_local": 1759,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 37,
+    "crew_deaths": 24,
+    "walls_destroyed": 17,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 617,
+      "build": 38,
+      "collect": 32,
+      "acceptTask": 112,
+      "submitAnswer": 20,
+      "buy": 2,
+      "attack": 189,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 83,
+      "rocket": 19,
+      "gatling": 87
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "4766cef70b603d6c899706e350ce6cf8dd5bd9abaf5c9b463ad89204ed8fd0f7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 29.25
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 630,
+    "base_level": 1,
+    "base_damage": 870,
+    "score_local": 1808,
+    "task_score": 929,
+    "task_rewards": 9,
+    "kills": 25,
+    "crew_deaths": 28,
+    "walls_destroyed": 17,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 699,
+      "build": 37,
+      "collect": 47,
+      "acceptTask": 101,
+      "submitAnswer": 18,
+      "buy": 2,
+      "attack": 149,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 149
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "4766cef70b603d6c899706e350ce6cf8dd5bd9abaf5c9b463ad89204ed8fd0f7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 30.72
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 490,
+    "base_level": 1,
+    "base_damage": 1010,
+    "score_local": 1880,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 58,
+    "crew_deaths": 23,
+    "walls_destroyed": 14,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 605,
+      "build": 35,
+      "collect": 32,
+      "acceptTask": 112,
+      "submitAnswer": 20,
+      "buy": 2,
+      "attack": 138,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 87,
+      "railgun": 51
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "4766cef70b603d6c899706e350ce6cf8dd5bd9abaf5c9b463ad89204ed8fd0f7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 28.48
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 795,
+    "base_level": 1,
+    "base_damage": 705,
+    "score_local": 1886,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 61,
+    "crew_deaths": 24,
+    "walls_destroyed": 15,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 629,
+      "build": 39,
+      "collect": 32,
+      "acceptTask": 112,
+      "submitAnswer": 20,
+      "buy": 2,
+      "attack": 100,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 100
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "4766cef70b603d6c899706e350ce6cf8dd5bd9abaf5c9b463ad89204ed8fd0f7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 30.77
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2124,
+    "task_score": 1186,
+    "task_rewards": 12,
+    "kills": 65,
+    "crew_deaths": 11,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 403,
+      "build": 20,
+      "collect": 24,
+      "acceptTask": 131,
+      "submitAnswer": 24,
+      "buy": 2,
+      "attack": 324,
+      "sell": 1,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 324
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 51.33
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2113,
+    "task_score": 1186,
+    "task_rewards": 12,
+    "kills": 58,
+    "crew_deaths": 12,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 409,
+      "build": 20,
+      "collect": 24,
+      "acceptTask": 131,
+      "submitAnswer": 24,
+      "buy": 2,
+      "attack": 185,
+      "sell": 1,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 63,
+      "railgun": 121,
+      "gatling": 1
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 51.75
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2329,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 26,
+    "crew_deaths": 15,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 439,
+      "build": 21,
+      "collect": 24,
+      "acceptTask": 142,
+      "submitAnswer": 30,
+      "buy": 2,
+      "attack": 134,
+      "sell": 1,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 134
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 50.86
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2236,
+    "task_score": 1298,
+    "task_rewards": 13,
+    "kills": 65,
+    "crew_deaths": 11,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 405,
+      "build": 20,
+      "collect": 24,
+      "acceptTask": 132,
+      "submitAnswer": 26,
+      "buy": 2,
+      "attack": 236,
+      "sell": 1,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 53,
+      "railgun": 183
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 52.41
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2232,
+    "task_score": 1298,
+    "task_rewards": 13,
+    "kills": 63,
+    "crew_deaths": 12,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 404,
+      "build": 20,
+      "collect": 24,
+      "acceptTask": 132,
+      "submitAnswer": 26,
+      "buy": 2,
+      "attack": 116,
+      "sell": 1,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 116
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 51.17
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2477,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 57,
+    "crew_deaths": 22,
+    "walls_destroyed": 15,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 565,
+      "build": 31,
+      "collect": 32,
+      "acceptTask": 124,
+      "submitAnswer": 32,
+      "buy": 12,
+      "attack": 381,
+      "sell": 1,
+      "summonTreasure": 1,
+      "use": 4
+    },
+    "attacks": {
+      "railgun": 381
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 48.05
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 480,
+    "base_level": 1,
+    "base_damage": 1020,
+    "score_local": 2577,
+    "task_score": 1667,
+    "task_rewards": 17,
+    "kills": 49,
+    "crew_deaths": 23,
+    "walls_destroyed": 13,
+    "execution_failures": 1,
+    "audit_errors": {
+      "overspend": 1
+    },
+    "actions": {
+      "move": 633,
+      "build": 34,
+      "collect": 37,
+      "acceptTask": 136,
+      "submitAnswer": 34,
+      "buy": 16,
+      "attack": 183,
+      "sell": 1,
+      "summonTreasure": 1,
+      "use": 4
+    },
+    "attacks": {
+      "rocket": 64,
+      "railgun": 110,
+      "gatling": 9
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 47.05
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1240,
+    "base_level": 1,
+    "base_damage": 260,
+    "score_local": 2325,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 26,
+    "crew_deaths": 24,
+    "walls_destroyed": 19,
+    "execution_failures": 16,
+    "audit_errors": {},
+    "actions": {
+      "move": 659,
+      "build": 32,
+      "collect": 42,
+      "acceptTask": 119,
+      "submitAnswer": 30,
+      "buy": 18,
+      "attack": 147,
+      "sell": 1,
+      "summonTreasure": 1,
+      "use": 4
+    },
+    "attacks": {
+      "gatling": 147
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 46.52
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2370,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 61,
+    "crew_deaths": 20,
+    "walls_destroyed": 14,
+    "execution_failures": 1,
+    "audit_errors": {
+      "overspend": 1
+    },
+    "actions": {
+      "move": 545,
+      "build": 31,
+      "collect": 32,
+      "acceptTask": 130,
+      "submitAnswer": 30,
+      "buy": 22,
+      "attack": 328,
+      "sell": 1,
+      "summonTreasure": 1,
+      "use": 3
+    },
+    "attacks": {
+      "rocket": 41,
+      "railgun": 287
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 44.17
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1390,
+    "base_level": 1,
+    "base_damage": 110,
+    "score_local": 2371,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 63,
+    "crew_deaths": 23,
+    "walls_destroyed": 17,
+    "execution_failures": 71,
+    "audit_errors": {
+      "overspend": 1
+    },
+    "actions": {
+      "move": 652,
+      "build": 31,
+      "collect": 42,
+      "acceptTask": 119,
+      "submitAnswer": 30,
+      "buy": 13,
+      "attack": 111,
+      "sell": 1,
+      "summonTreasure": 1,
+      "use": 4
+    },
+    "attacks": {
+      "rocket": 111
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "2fa402ac59a52a3f8460bd1d045f3b9ccfb5a7a32e42ef03b8f7fa1d9f3b459a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 43.62
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2524,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 63,
+    "crew_deaths": 10,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 328,
+      "build": 20,
+      "collect": 20,
+      "acceptTask": 201,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 317,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 317
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "a1808fc40f48dc977097f8f34c1744adc1eddb0c7b86504cbd29743c96b233a7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 16.41
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2506,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 50,
+    "crew_deaths": 14,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 325,
+      "build": 22,
+      "collect": 20,
+      "acceptTask": 183,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 183,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 40,
+      "railgun": 108,
+      "gatling": 35
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "a1808fc40f48dc977097f8f34c1744adc1eddb0c7b86504cbd29743c96b233a7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 16.88
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1165,
+    "base_level": 1,
+    "base_damage": 335,
+    "score_local": 2486,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 36,
+    "crew_deaths": 22,
+    "walls_destroyed": 3,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 365,
+      "build": 22,
+      "collect": 29,
+      "acceptTask": 171,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 199,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 199
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "a1808fc40f48dc977097f8f34c1744adc1eddb0c7b86504cbd29743c96b233a7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 15.09
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2515,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 57,
+    "crew_deaths": 11,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 327,
+      "build": 20,
+      "collect": 20,
+      "acceptTask": 201,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 188,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 75,
+      "railgun": 113
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "a1808fc40f48dc977097f8f34c1744adc1eddb0c7b86504cbd29743c96b233a7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 15.39
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2510,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 55,
+    "crew_deaths": 12,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 357,
+      "build": 21,
+      "collect": 29,
+      "acceptTask": 197,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 117,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 117
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "a1808fc40f48dc977097f8f34c1744adc1eddb0c7b86504cbd29743c96b233a7",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 16.05
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1289,
+    "survived_full": false,
+    "base_hp": 0,
+    "base_level": 1,
+    "base_damage": 1505,
+    "score_local": 2388,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 41,
+    "crew_deaths": 22,
+    "walls_destroyed": 19,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 444,
+      "build": 38,
+      "collect": 53,
+      "acceptTask": 183,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 288,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 288
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "fe4b5e67e3bc0cd931d9b37fea1723a0e00b32fb6ab10758606178ea7f6ef78f",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 19.36
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1163,
+    "survived_full": false,
+    "base_hp": 0,
+    "base_level": 1,
+    "base_damage": 1540,
+    "score_local": 2142,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 33,
+    "crew_deaths": 22,
+    "walls_destroyed": 18,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 359,
+      "build": 33,
+      "collect": 30,
+      "acceptTask": 152,
+      "submitAnswer": 30,
+      "buy": 2,
+      "attack": 161,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 33,
+      "railgun": 68,
+      "gatling": 60
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "fe4b5e67e3bc0cd931d9b37fea1723a0e00b32fb6ab10758606178ea7f6ef78f",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 17.23
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 835,
+    "base_level": 1,
+    "base_damage": 665,
+    "score_local": 2178,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 34,
+    "crew_deaths": 26,
+    "walls_destroyed": 21,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 423,
+      "build": 40,
+      "collect": 37,
+      "acceptTask": 164,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 212
+    },
+    "attacks": {
+      "gatling": 212
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "fe4b5e67e3bc0cd931d9b37fea1723a0e00b32fb6ab10758606178ea7f6ef78f",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 18.33
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 565,
+    "base_level": 1,
+    "base_damage": 935,
+    "score_local": 2489,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 44,
+    "crew_deaths": 22,
+    "walls_destroyed": 22,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 510,
+      "build": 42,
+      "collect": 65,
+      "acceptTask": 183,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 159,
+      "summonTreasure": 1,
+      "sell": 1
+    },
+    "attacks": {
+      "rocket": 59,
+      "railgun": 100
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "fe4b5e67e3bc0cd931d9b37fea1723a0e00b32fb6ab10758606178ea7f6ef78f",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 19.5
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 215,
+    "base_level": 1,
+    "base_damage": 1285,
+    "score_local": 2462,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 50,
+    "crew_deaths": 24,
+    "walls_destroyed": 18,
+    "execution_failures": 60,
+    "audit_errors": {},
+    "actions": {
+      "move": 459,
+      "build": 37,
+      "collect": 51,
+      "acceptTask": 160,
+      "submitAnswer": 32,
+      "buy": 2,
+      "attack": 98,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 98
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "fe4b5e67e3bc0cd931d9b37fea1723a0e00b32fb6ab10758606178ea7f6ef78f",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 18.22
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2377,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 62,
+    "crew_deaths": 11,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 541,
+      "build": 20,
+      "collect": 40,
+      "acceptTask": 172,
+      "submitAnswer": 30,
+      "sell": 3,
+      "buy": 2,
+      "attack": 304,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 304
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 39.05
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2512,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 55,
+    "crew_deaths": 13,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 502,
+      "build": 20,
+      "collect": 40,
+      "acceptTask": 180,
+      "submitAnswer": 34,
+      "sell": 3,
+      "buy": 2,
+      "attack": 211,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 50,
+      "railgun": 144,
+      "gatling": 17
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 40.41
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2448,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 32,
+    "crew_deaths": 18,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 480,
+      "build": 21,
+      "collect": 40,
+      "acceptTask": 162,
+      "submitAnswer": 32,
+      "sell": 3,
+      "buy": 2,
+      "attack": 159,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 159
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 39.69
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2476,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 53,
+    "crew_deaths": 11,
+    "walls_destroyed": 2,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 514,
+      "build": 20,
+      "collect": 40,
+      "acceptTask": 174,
+      "submitAnswer": 32,
+      "sell": 3,
+      "buy": 2,
+      "attack": 199,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 47,
+      "railgun": 152
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 42.02
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2499,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 46,
+    "crew_deaths": 14,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 506,
+      "build": 21,
+      "collect": 40,
+      "acceptTask": 180,
+      "submitAnswer": 34,
+      "sell": 3,
+      "buy": 2,
+      "attack": 103,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 103
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "9a6b3e88404fdaa8c0120dcbdc9e98eca58639bdead8084d388aecef76e44266",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 39.0
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1460,
+    "base_level": 1,
+    "base_damage": 40,
+    "score_local": 2466,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 47,
+    "crew_deaths": 23,
+    "walls_destroyed": 20,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 640,
+      "build": 37,
+      "collect": 57,
+      "acceptTask": 156,
+      "submitAnswer": 32,
+      "sell": 4,
+      "buy": 2,
+      "attack": 293,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 293
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "f39ea2e5b63ed9f5804faf010faef544e59f5e817cc5076e5f43b8d9f1bcf6f0",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 37.12
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1290,
+    "base_level": 1,
+    "base_damage": 210,
+    "score_local": 2476,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 31,
+    "crew_deaths": 24,
+    "walls_destroyed": 23,
+    "execution_failures": 6,
+    "audit_errors": {},
+    "actions": {
+      "move": 657,
+      "build": 41,
+      "collect": 83,
+      "acceptTask": 160,
+      "submitAnswer": 34,
+      "sell": 6,
+      "buy": 2,
+      "attack": 171,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 43,
+      "railgun": 122,
+      "gatling": 6
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "f39ea2e5b63ed9f5804faf010faef544e59f5e817cc5076e5f43b8d9f1bcf6f0",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 36.94
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 570,
+    "base_level": 1,
+    "base_damage": 930,
+    "score_local": 2468,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 25,
+    "crew_deaths": 28,
+    "walls_destroyed": 27,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 617,
+      "build": 42,
+      "collect": 60,
+      "acceptTask": 163,
+      "submitAnswer": 34,
+      "sell": 2,
+      "buy": 2,
+      "attack": 172,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 172
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "f39ea2e5b63ed9f5804faf010faef544e59f5e817cc5076e5f43b8d9f1bcf6f0",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 35.27
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1165,
+    "base_level": 1,
+    "base_damage": 335,
+    "score_local": 2467,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 50,
+    "crew_deaths": 22,
+    "walls_destroyed": 24,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 672,
+      "build": 37,
+      "collect": 52,
+      "acceptTask": 162,
+      "submitAnswer": 32,
+      "sell": 3,
+      "buy": 2,
+      "attack": 208,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 45,
+      "railgun": 163
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "f39ea2e5b63ed9f5804faf010faef544e59f5e817cc5076e5f43b8d9f1bcf6f0",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 38.23
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 7,
+    "side": "defender",
+    "pressure": 3,
+    "split": "development",
+    "rounds": 1285,
+    "survived_full": false,
+    "base_hp": 0,
+    "base_level": 1,
+    "base_damage": 1510,
+    "score_local": 2379,
+    "task_score": 1588,
+    "task_rewards": 17,
+    "kills": 38,
+    "crew_deaths": 24,
+    "walls_destroyed": 22,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 630,
+      "build": 41,
+      "collect": 62,
+      "acceptTask": 162,
+      "submitAnswer": 34,
+      "sell": 3,
+      "buy": 2,
+      "attack": 84,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 84
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "f39ea2e5b63ed9f5804faf010faef544e59f5e817cc5076e5f43b8d9f1bcf6f0",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 38.39
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2146,
+    "task_score": 1219,
+    "task_rewards": 13,
+    "kills": 58,
+    "crew_deaths": 12,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 564,
+      "build": 20,
+      "collect": 33,
+      "acceptTask": 163,
+      "submitAnswer": 26,
+      "buy": 4,
+      "sell": 3,
+      "attack": 296,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 296
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 22.19
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2089,
+    "task_score": 1186,
+    "task_rewards": 12,
+    "kills": 40,
+    "crew_deaths": 15,
+    "walls_destroyed": 2,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 592,
+      "build": 22,
+      "collect": 33,
+      "acceptTask": 149,
+      "submitAnswer": 24,
+      "buy": 4,
+      "sell": 3,
+      "attack": 154,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 59,
+      "rocket": 29,
+      "gatling": 66
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 23.52
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1430,
+    "base_level": 1,
+    "base_damage": 70,
+    "score_local": 1857,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 36,
+    "crew_deaths": 22,
+    "walls_destroyed": 3,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 580,
+      "build": 21,
+      "collect": 33,
+      "acceptTask": 129,
+      "submitAnswer": 20,
+      "buy": 5,
+      "sell": 3,
+      "attack": 188,
+      "summonTreasure": 1,
+      "use": 3
+    },
+    "attacks": {
+      "gatling": 188
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 22.0
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2246,
+    "task_score": 1331,
+    "task_rewards": 14,
+    "kills": 51,
+    "crew_deaths": 10,
+    "walls_destroyed": 2,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 563,
+      "build": 22,
+      "collect": 33,
+      "acceptTask": 177,
+      "submitAnswer": 28,
+      "buy": 5,
+      "sell": 3,
+      "attack": 151,
+      "summonTreasure": 1,
+      "use": 1
+    },
+    "attacks": {
+      "rocket": 77,
+      "railgun": 74
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 23.47
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2261,
+    "task_score": 1331,
+    "task_rewards": 14,
+    "kills": 61,
+    "crew_deaths": 12,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 549,
+      "build": 21,
+      "collect": 33,
+      "acceptTask": 177,
+      "submitAnswer": 28,
+      "buy": 2,
+      "sell": 3,
+      "attack": 110,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 110
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 22.92
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 800,
+    "base_level": 1,
+    "base_damage": 700,
+    "score_local": 1875,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 48,
+    "crew_deaths": 23,
+    "walls_destroyed": 19,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 661,
+      "build": 37,
+      "collect": 45,
+      "acceptTask": 129,
+      "submitAnswer": 20,
+      "buy": 14,
+      "sell": 3,
+      "attack": 287,
+      "summonTreasure": 1,
+      "use": 2
+    },
+    "attacks": {
+      "railgun": 287
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "0f0dffc0e17154a2434982ff9eb4cceadc1a9d4c548b8875da754029cf65b3ee",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 27.09
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1036,
+    "survived_full": false,
+    "base_hp": 0,
+    "base_level": 1,
+    "base_damage": 1505,
+    "score_local": 1356,
+    "task_score": 738,
+    "task_rewards": 8,
+    "kills": 33,
+    "crew_deaths": 19,
+    "walls_destroyed": 13,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 551,
+      "build": 32,
+      "collect": 49,
+      "acceptTask": 97,
+      "submitAnswer": 16,
+      "buy": 9,
+      "sell": 3,
+      "attack": 152,
+      "summonTreasure": 1,
+      "use": 2
+    },
+    "attacks": {
+      "railgun": 40,
+      "rocket": 24,
+      "gatling": 88
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "0f0dffc0e17154a2434982ff9eb4cceadc1a9d4c548b8875da754029cf65b3ee",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 20.31
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 950,
+    "base_level": 1,
+    "base_damage": 550,
+    "score_local": 1856,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 35,
+    "crew_deaths": 28,
+    "walls_destroyed": 21,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 725,
+      "build": 38,
+      "collect": 49,
+      "acceptTask": 118,
+      "submitAnswer": 20,
+      "buy": 7,
+      "sell": 2,
+      "attack": 191,
+      "summonTreasure": 1,
+      "use": 3
+    },
+    "attacks": {
+      "gatling": 191
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "0f0dffc0e17154a2434982ff9eb4cceadc1a9d4c548b8875da754029cf65b3ee",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 25.84
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 60,
+    "base_level": 1,
+    "base_damage": 1440,
+    "score_local": 1863,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 42,
+    "crew_deaths": 24,
+    "walls_destroyed": 18,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 651,
+      "build": 37,
+      "collect": 49,
+      "acceptTask": 129,
+      "submitAnswer": 20,
+      "buy": 12,
+      "sell": 3,
+      "attack": 140,
+      "summonTreasure": 1,
+      "use": 2
+    },
+    "attacks": {
+      "rocket": 62,
+      "railgun": 78
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "0f0dffc0e17154a2434982ff9eb4cceadc1a9d4c548b8875da754029cf65b3ee",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 24.09
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "challenger",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1440,
+    "base_level": 1,
+    "base_damage": 60,
+    "score_local": 1854,
+    "task_score": 962,
+    "task_rewards": 10,
+    "kills": 38,
+    "crew_deaths": 24,
+    "walls_destroyed": 23,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 659,
+      "build": 41,
+      "collect": 49,
+      "acceptTask": 129,
+      "submitAnswer": 20,
+      "buy": 9,
+      "sell": 3,
+      "attack": 81,
+      "summonTreasure": 1,
+      "use": 3
+    },
+    "attacks": {
+      "rocket": 81
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "0f0dffc0e17154a2434982ff9eb4cceadc1a9d4c548b8875da754029cf65b3ee",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 23.81
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2486,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 61,
+    "crew_deaths": 9,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 563,
+      "build": 20,
+      "collect": 31,
+      "acceptTask": 183,
+      "submitAnswer": 32,
+      "buy": 2,
+      "sell": 3,
+      "attack": 305,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 305
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "379c96ca8f45e25f80f055793ddf7dbf3467705e740aba8acdc5764e93da8405",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 38.64
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2477,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 54,
+    "crew_deaths": 10,
+    "walls_destroyed": 1,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 511,
+      "build": 21,
+      "collect": 31,
+      "acceptTask": 174,
+      "submitAnswer": 32,
+      "buy": 2,
+      "sell": 3,
+      "attack": 183,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 51,
+      "railgun": 128,
+      "gatling": 4
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "379c96ca8f45e25f80f055793ddf7dbf3467705e740aba8acdc5764e93da8405",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 38.41
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2564,
+    "task_score": 1667,
+    "task_rewards": 17,
+    "kills": 37,
+    "crew_deaths": 17,
+    "walls_destroyed": 2,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 469,
+      "build": 22,
+      "collect": 36,
+      "acceptTask": 154,
+      "submitAnswer": 34,
+      "buy": 2,
+      "sell": 3,
+      "attack": 179,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 179
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "379c96ca8f45e25f80f055793ddf7dbf3467705e740aba8acdc5764e93da8405",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 32.7
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2377,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 63,
+    "crew_deaths": 10,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 565,
+      "build": 20,
+      "collect": 31,
+      "acceptTask": 181,
+      "submitAnswer": 30,
+      "buy": 2,
+      "sell": 3,
+      "attack": 223,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 52,
+      "railgun": 171
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "379c96ca8f45e25f80f055793ddf7dbf3467705e740aba8acdc5764e93da8405",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 38.45
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 1,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1500,
+    "base_level": 1,
+    "base_damage": 0,
+    "score_local": 2375,
+    "task_score": 1443,
+    "task_rewards": 15,
+    "kills": 62,
+    "crew_deaths": 12,
+    "walls_destroyed": 0,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 568,
+      "build": 20,
+      "collect": 31,
+      "acceptTask": 182,
+      "submitAnswer": 30,
+      "buy": 2,
+      "sell": 3,
+      "attack": 118,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 118
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "379c96ca8f45e25f80f055793ddf7dbf3467705e740aba8acdc5764e93da8405",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 39.44
+  },
+  {
+    "strategy": "EEE",
+    "label": "三电磁炮",
+    "loadout": [
+      "railgun",
+      "railgun",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1180,
+    "base_level": 1,
+    "base_damage": 320,
+    "score_local": 2460,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 45,
+    "crew_deaths": 21,
+    "walls_destroyed": 23,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 724,
+      "build": 37,
+      "collect": 52,
+      "acceptTask": 161,
+      "submitAnswer": 32,
+      "buy": 2,
+      "sell": 3,
+      "attack": 291,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "railgun": 291
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "railgun": 3
+    },
+    "initial_state_sha256": "f979f715ec2d5b1e767443ad0235a1479d6be1ff9e955463144fd1061e762eb2",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 37.09
+  },
+  {
+    "strategy": "GER",
+    "label": "三种各一座",
+    "loadout": [
+      "gatling",
+      "railgun",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1410,
+    "base_level": 1,
+    "base_damage": 90,
+    "score_local": 2442,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 30,
+    "crew_deaths": 22,
+    "walls_destroyed": 24,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 686,
+      "build": 41,
+      "collect": 57,
+      "acceptTask": 162,
+      "submitAnswer": 32,
+      "buy": 2,
+      "sell": 3,
+      "attack": 174,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 42,
+      "railgun": 112,
+      "gatling": 20
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 1,
+      "railgun": 1,
+      "rocket": 1
+    },
+    "initial_state_sha256": "f979f715ec2d5b1e767443ad0235a1479d6be1ff9e955463144fd1061e762eb2",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 33.5
+  },
+  {
+    "strategy": "GGG",
+    "label": "三加特林",
+    "loadout": [
+      "gatling",
+      "gatling",
+      "gatling"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 775,
+    "base_level": 1,
+    "base_damage": 725,
+    "score_local": 2553,
+    "task_score": 1667,
+    "task_rewards": 17,
+    "kills": 29,
+    "crew_deaths": 28,
+    "walls_destroyed": 27,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 564,
+      "build": 38,
+      "collect": 53,
+      "acceptTask": 163,
+      "submitAnswer": 34,
+      "buy": 2,
+      "sell": 3,
+      "attack": 177,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "gatling": 177
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "gatling": 3
+    },
+    "initial_state_sha256": "f979f715ec2d5b1e767443ad0235a1479d6be1ff9e955463144fd1061e762eb2",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 28.33
+  },
+  {
+    "strategy": "RRE",
+    "label": "两火箭一电磁炮",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "railgun"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 795,
+    "base_level": 1,
+    "base_damage": 705,
+    "score_local": 2457,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 43,
+    "crew_deaths": 22,
+    "walls_destroyed": 24,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 657,
+      "build": 41,
+      "collect": 61,
+      "acceptTask": 163,
+      "submitAnswer": 32,
+      "buy": 2,
+      "sell": 4,
+      "attack": 193,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 49,
+      "railgun": 144
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 2,
+      "railgun": 1
+    },
+    "initial_state_sha256": "f979f715ec2d5b1e767443ad0235a1479d6be1ff9e955463144fd1061e762eb2",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 30.95
+  },
+  {
+    "strategy": "RRR",
+    "label": "三火箭",
+    "loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ],
+    "seed": 1371,
+    "side": "defender",
+    "pressure": 3,
+    "split": "holdout",
+    "rounds": 1300,
+    "survived_full": true,
+    "base_hp": 1030,
+    "base_level": 1,
+    "base_damage": 470,
+    "score_local": 2455,
+    "task_score": 1555,
+    "task_rewards": 16,
+    "kills": 43,
+    "crew_deaths": 22,
+    "walls_destroyed": 25,
+    "execution_failures": 0,
+    "audit_errors": {},
+    "actions": {
+      "move": 633,
+      "build": 39,
+      "collect": 50,
+      "acceptTask": 164,
+      "submitAnswer": 32,
+      "buy": 2,
+      "sell": 3,
+      "attack": 93,
+      "summonTreasure": 1
+    },
+    "attacks": {
+      "rocket": 93
+    },
+    "requested_channels": {
+      "executeCmd": 1
+    },
+    "paid_llm_calls": 0,
+    "first_complete_roster": {
+      "rocket": 3
+    },
+    "initial_state_sha256": "f979f715ec2d5b1e767443ad0235a1479d6be1ff9e955463144fd1061e762eb2",
+    "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+    "elapsed_seconds": 34.42
+  }
+]

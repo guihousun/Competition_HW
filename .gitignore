@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.codegraph/
+tests/_viewer_tmp/
+.playwright-mcp/
+
+# Local orchestration, runtime credentials and scratch data
+.workflow/
+.env
+.env.*
+!.env.example
+*.dpapi

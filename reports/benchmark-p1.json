@@ -1,0 +1,789 @@
+[
+  {
+    "seed": 1,
+    "side": "challenger",
+    "pressure": 1,
+    "rounds": 1300,
+    "terminal": true,
+    "base_hp": 1500,
+    "score_local": 2335,
+    "kills": 56,
+    "waves": 10,
+    "actions": {
+      "move": 515,
+      "build": 20,
+      "collect": 22,
+      "acceptTask": 163,
+      "submitAnswer": 28,
+      "buy": 2,
+      "attack": 115,
+      "summonTreasure": 1
+    },
+    "task_rewards": [
+      {
+        "round": 25,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 283,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 316,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 413,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 445,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 543,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 575,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 673,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 705,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 826,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 955,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1063,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1095,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1216,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      }
+    ],
+    "audit_errors": {},
+    "execution_failures": 0,
+    "max_http_ms": 102.18
+  },
+  {
+    "seed": 1,
+    "side": "defender",
+    "pressure": 1,
+    "rounds": 1300,
+    "terminal": true,
+    "base_hp": 1500,
+    "score_local": 2488,
+    "kills": 62,
+    "waves": 10,
+    "actions": {
+      "move": 346,
+      "build": 20,
+      "collect": 24,
+      "acceptTask": 131,
+      "submitAnswer": 32,
+      "buy": 2,
+      "attack": 114,
+      "summonTreasure": 1
+    },
+    "task_rewards": [
+      {
+        "round": 29,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 300,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 333,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 430,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 462,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 560,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 592,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 690,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 722,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 820,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 852,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 957,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1080,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1112,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1210,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 1242,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      }
+    ],
+    "audit_errors": {},
+    "execution_failures": 0,
+    "max_http_ms": 134.24
+  },
+  {
+    "seed": 7,
+    "side": "challenger",
+    "pressure": 1,
+    "rounds": 1300,
+    "terminal": true,
+    "base_hp": 1500,
+    "score_local": 2517,
+    "kills": 60,
+    "waves": 10,
+    "actions": {
+      "move": 258,
+      "build": 20,
+      "collect": 20,
+      "acceptTask": 201,
+      "submitAnswer": 34,
+      "buy": 2,
+      "attack": 118,
+      "summonTreasure": 1
+    },
+    "task_rewards": [
+      {
+        "round": 11,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 272,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 305,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 400,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 432,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 548,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 580,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 660,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 692,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 808,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 840,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 938,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 970,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1068,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1100,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 1198,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1230,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      }
+    ],
+    "audit_errors": {},
+    "execution_failures": 0,
+    "max_http_ms": 83.08
+  },
+  {
+    "seed": 7,
+    "side": "defender",
+    "pressure": 1,
+    "rounds": 1300,
+    "terminal": true,
+    "base_hp": 1500,
+    "score_local": 2502,
+    "kills": 49,
+    "waves": 10,
+    "actions": {
+      "move": 405,
+      "build": 20,
+      "collect": 48,
+      "acceptTask": 189,
+      "submitAnswer": 34,
+      "sell": 1,
+      "buy": 2,
+      "attack": 107,
+      "summonTreasure": 1
+    },
+    "task_rewards": [
+      {
+        "round": 21,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 282,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 315,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 408,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 440,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 538,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 570,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 668,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 700,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 810,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 842,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 940,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 972,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1070,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1102,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 1200,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1232,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      }
+    ],
+    "audit_errors": {},
+    "execution_failures": 0,
+    "max_http_ms": 206.92
+  },
+  {
+    "seed": 19,
+    "side": "challenger",
+    "pressure": 1,
+    "rounds": 1300,
+    "terminal": true,
+    "base_hp": 1500,
+    "score_local": 3153,
+    "kills": 57,
+    "waves": 10,
+    "actions": {
+      "move": 239,
+      "build": 20,
+      "collect": 20,
+      "acceptTask": 230,
+      "submitAnswer": 44,
+      "buy": 2,
+      "attack": 129,
+      "summonTreasure": 1
+    },
+    "task_rewards": [
+      {
+        "round": 16,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 140,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 173,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 268,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 300,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 332,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 398,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 430,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 462,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 552,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 584,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 658,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 690,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 722,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 812,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 844,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 942,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 974,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1072,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1104,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1202,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1234,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      }
+    ],
+    "audit_errors": {},
+    "execution_failures": 0,
+    "max_http_ms": 61.67
+  },
+  {
+    "seed": 19,
+    "side": "defender",
+    "pressure": 1,
+    "rounds": 1300,
+    "terminal": true,
+    "base_hp": 1500,
+    "score_local": 2829,
+    "kills": 65,
+    "waves": 10,
+    "actions": {
+      "move": 418,
+      "build": 19,
+      "collect": 28,
+      "acceptTask": 220,
+      "submitAnswer": 38,
+      "buy": 2,
+      "attack": 133,
+      "summonTreasure": 1
+    },
+    "task_rewards": [
+      {
+        "round": 26,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 143,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 176,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 276,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 308,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 406,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 438,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 536,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 568,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 666,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 698,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 796,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 828,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 951,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 983,
+        "rate": 0.667,
+        "score": 33,
+        "gold": 20
+      },
+      {
+        "round": 1081,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1113,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1211,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      },
+      {
+        "round": 1243,
+        "rate": 1.0,
+        "score": 112,
+        "gold": 30
+      }
+    ],
+    "audit_errors": {},
+    "execution_failures": 18,
+    "max_http_ms": 84.71
+  }
+]

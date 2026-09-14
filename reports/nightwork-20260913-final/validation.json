@@ -1,0 +1,26 @@
+{
+  "tests": 263,
+  "new_tests": 15,
+  "cases": 12,
+  "rounds": 15027,
+  "source_sha256": "39dbc6542982720ded0cc8909f87abed64349600e2682d6837101f0d0da034eb",
+  "work_on": {
+    "move": 44,
+    "collect": 35,
+    "sell": 2
+  },
+  "work_off": {
+    "move": 1
+  },
+  "http_checks": [
+    "root POST quiet-night collect",
+    "root POST new-robot return move",
+    "root GET 200"
+  ],
+  "files": {
+    "Demo/CoreGeek/src/agent/brain.py": "2473ce80f04505e8851ba07b4ac5efb13276e2dac08ce2e31b63dc1f6f0e2fb6",
+    "Demo/CoreGeek/src/agent/nightwork.py": "b14ee0e4798dcad4501d8a5afd9a51c433f634f6cfac6c3d3a4137d240a3ed67",
+    "tests/test_nightwork.py": "0b94186c0d3cbe0521de3fd5733e598f7773828b4f437007a75e648ad138f88e",
+    "tools/check_nightwork.py": "5c3147b5acb216b2f7a8d5fef9f03772fc27e8348b2f034ccafa21e8efc1d345"
+  }
+}

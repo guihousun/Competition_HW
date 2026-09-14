@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1420'/%3E%3Cpath d='M8 22 L16 8 L24 22 Z' fill='%234fe0b4'/%3E%3Ccircle cx='16' cy='19' r='3' fill='%23ffb347'/%3E%3C/svg%3E">
+<title>未来战争 · 策略调试台（本地演示与研发平台）</title>
+<link rel="stylesheet" href="/css/app.css?v=20260913a">
+<link rel="stylesheet" href="/css/experience.css?v=20260913a">
+</head>
+<body>
+<!-- Two columns: the console (left, scrolls on its own) and the match (right).
+     Debug tools live in the console so opening them never resizes the canvas. -->
+<div class="app" id="app">
+  <aside class="console" id="console" aria-label="控制台">
+
+    <header class="console-head">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <h1>未来战争 <span class="brand-tag">本地实验室</span></h1>
+          <p class="brand-sub">看一场对局，理解每一步决策</p>
+        </div>
+      </div>
+      <button id="debug-toggle" type="button" aria-expanded="false" aria-controls="dev">调试面板</button>
+    </header>
+
+    <div class="console-actions">
+      <details class="menu settings-menu"><summary>对局设置</summary>
+      <div class="topbar-group setup" role="group" aria-label="场景设置">
+        <p class="setup-help">相同地图编号可以复现同一布局。</p><label>地图编号 <input id="seed" type="number" min="0" max="9999" step="1" value="1"></label>
+        <label>阵营
+          <select id="side">
+            <option value="challenger">蓝方（左上基地）</option>
+            <option value="defender">红方（右下基地）</option>
+          </select>
+        </label>
+        <label>压力
+          <select id="pressure">
+            <option value="1">1 · 基础（本地假设）</option>
+            <option value="2">2 · 增强（本地假设）</option>
+            <option value="3">3 · 高压（本地假设）</option>
+          </select>
+        </label>
+
+        <button id="preset" type="button" title="换一个可复现的演示场景">换演示场景</button>
+        <button id="llm-demo" type="button">体验 LLM 任务（真实 API）</button>
+        <p class="setup-help">使用服务端密钥，可能产生费用；普通对局默认不调用 API。</p>
+      </div>
+      </details>
+      <button id="newmatch" class="primary" type="button">开始新对局</button>
+    </div>
+
+    <div class="ribbon" role="note">
+      <span class="pill warn">本地模拟 · 非官方判题器</span>
+      <span id="ribbon-text">当前仍使用随机刷怪，尚不符合固定刷新点补充规则。</span>
+      <button id="ribbon-toggle" class="ghost tiny" type="button">规则与限制</button>
+    </div>
+
+    <section class="console-block" aria-label="关键状态">
+      <div class="hud" id="hud">
+        <div class="hud-cell"><span class="k">回合</span><b id="hud-round">—</b><small id="hud-round-sub">未开始</small></div>
+        <div class="hud-cell"><span class="k">天数 / 昼夜</span><b id="hud-phase">—</b><small id="hud-phase-sub">—</small></div>
+        <div class="hud-cell"><span class="k">金币</span><b id="hud-gold">—</b><small id="hud-gold-sub">初始 75</small></div>
+        <div class="hud-cell wide"><span class="k">基地状态</span>
+          <b id="hud-base">—</b>
+          <div class="bar"><i id="hud-base-bar" style="width:0%"></i></div>
+        </div>
+        <div class="hud-cell"><span class="k">本地分数</span><b id="hud-score">—</b><small id="hud-score-sub">生存+击杀（本地）</small></div>
+        <div class="hud-cell"><span class="k">击杀</span><b id="hud-kills">—</b><small id="hud-kills-sub">机器人</small></div>
+        <div class="hud-cell"><span class="k">我方单位</span><b id="hud-units">—</b><small id="hud-units-sub">—</small></div>
+        <div class="hud-cell"><span class="k">机器人</span><b id="hud-robots">—</b><small id="hud-robots-sub">场上</small></div>
+        <div class="hud-cell"><span class="k">运行状态</span><b id="hud-status">待机</b><small id="hud-status-sub">—</small></div>
+      </div>
+      <div class="transport" role="group" aria-label="对局控制">
+        <button id="play" class="primary" type="button" disabled>▶ 继续</button>
+        <button id="pause" type="button" hidden>⏸ 暂停</button>
+        <button id="step" type="button">前进一轮</button>
+        <button id="stepback" type="button">后退一轮</button>
+        <button id="reset" type="button">回到开头</button>
+        <details class="menu replay-menu"><summary>录像与复盘</summary><div class="menu-content">
+<p>后台生成回放后，可直接跳到任意一轮。</p>
+        <button id="record" type="button" title="本地逐回合录制 600 回合，用于任意回看">生成前 600 轮回放</button>
+        <button id="recordfull" type="button" title="录制到终局（最多 1300 回合，数据量较大）">生成整场回放</button>
+        <button id="import-replay" type="button">打开录像</button>
+        <input id="replay-file" type="file" accept=".json,application/json" hidden>
+<button id="save-replay" type="button">保存当前录像</button></div></details>
+        <label class="speed">速度
+          <select id="speed">
+
+            <option value="550" selected>正常</option>
+            <option value="260">2 倍速</option>
+            <option value="90">6 倍速</option>
+            <option value="16">极速（回放）</option>
+          </select>
+        </label>
+        <span class="mode-badge" id="mode-badge">未开始</span>
+      </div>
+    </section>
+
+    <aside class="battle-brief" aria-label="战况概览">
+      <div class="brief-section"><h3>LLM 通道</h3><p id="llm-channel-status">普通场景不调用真实 API。可在对局设置中体验 LLM 任务。</p></div>
+      <div class="brief-section"><span class="eyebrow">战况概览</span><h2 id="brief-title">准备出发</h2><p id="brief-text">开始后，这里会解释昼夜阶段和当前战况。</p><div class="phase-meter"><i id="phase-meter-fill"></i></div><small id="brief-countdown">一场对局最多 10 天</small></div>
+      <div class="brief-section"><h3>我方行动单位 <small>点击定位</small></h3><div id="crew-list" class="crew-list"><p class="muted">1 名开拓者 · 2 名工人</p></div></div>
+      <div class="brief-section task-status"><h3 id="task-status-title">尚未领取任务</h3><p id="task-status-description">等待任务信息</p><b id="task-status-time">暂无进行中的任务</b><progress id="task-status-meter" max="1" value="0" hidden aria-label="任务剩余时间"></progress><p id="task-status-hint">开拓者负责接取与提交任务。</p></div>
+      <div class="brief-section" id="selection-card" hidden><h3 id="selection-title">单位详情</h3><p id="selection-text"></p><button id="selection-details" type="button" class="tiny">查看详细字段</button></div>
+      <div class="brief-section"><h3>刚刚发生 <small>已结算</small></h3><div id="brief-events"><p class="muted">还没有已执行的行动。</p></div><button id="view-events" class="ghost tiny" type="button">查看完整事件记录 →</button></div>
+      <div class="brief-section legend"><h3>怎样看地图</h3><span><i class="legend-own"></i>青色：我方单位</span><span><i class="legend-enemy"></i>红色：敌方建筑 / 单位</span><span><i class="legend-robot"></i>橙色：来袭机器人</span><p>工人采矿与建造；开拓者处理任务。夜晚由角色操控炮台防守。</p></div>
+    </aside>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="horizontal"
+         aria-label="调整开发者面板高度" tabindex="0" title="拖动调整开发者面板高度"></div>
+
+    <section class="dev collapsed" id="dev">
+      <div class="dev-head">
+        <h2>开发者面板</h2>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-tab="plan" role="tab" type="button">下一轮预览</button>
+          <button class="tab" data-tab="exec" role="tab" type="button">已执行</button>
+          <button class="tab" data-tab="events" role="tab" type="button">事件流</button>
+          <button class="tab" data-tab="tasks" role="tab" type="button">任务</button>
+          <button class="tab" data-tab="twomatch" role="tab" type="button">双队</button>
+          <button class="tab" data-tab="inspect" role="tab" type="button">单位详情</button>
+          <button class="tab" data-tab="io" role="tab" type="button">请求 / 响应</button>
+          <button class="tab" data-tab="rules" role="tab" type="button">规则边界</button>
+          <button class="tab" data-tab="diag" role="tab" type="button">诊断</button>
+        </div>
+        <div class="dev-actions">
+          <label class="check"><input type="checkbox" id="ev-autoscroll" checked> 自动滚动</label>
+          <button id="export" class="ghost tiny" type="button">保存完整录像</button>
+          <button id="import" class="ghost tiny" type="button">导入请求 JSON</button>
+          <input id="file" type="file" accept=".json,.txt,application/json" hidden>
+          <button id="collapse" class="ghost tiny" type="button">收起</button>
+        </div>
+      </div>
+      <div class="dev-body">
+        <div class="pane active" data-pane="plan">
+          <div class="pane-head">
+            <span class="tag">预览</span>
+            <span class="muted" id="plan-note">来自当前状态的角色指令（下一轮将要提交的指令，尚未结算）。</span>
+          </div>
+          <div id="plan-list" class="list"></div>
+        </div>
+        <div class="pane" data-pane="exec">
+          <div class="pane-head">
+            <span class="tag ok">已执行</span>
+            <span class="muted">本回合真实发生的动作与结果；失败指令单独列出，不会被隐藏。</span>
+          </div>
+          <div id="exec-list" class="list"></div>
+        </div>
+        <div class="pane" data-pane="events">
+          <div class="pane-head">
+            <span class="tag">事件流</span>
+            <div class="filters" id="event-filters"></div>
+          </div>
+          <div id="event-list" class="list log"></div>
+        </div>
+        <div class="pane" data-pane="tasks">
+          <div class="pane-head">
+            <span class="tag">任务</span>
+            <span class="muted">官方任务字段与本地任务夹具（本地夹具用于离线演示，非官方判题）。</span>
+          </div>
+          <div id="tasks-body" class="inspect">尚未创建对局。</div>
+        </div>
+        <div class="pane" data-pane="twomatch">
+          <div class="pane-head">
+            <span class="tag">双队</span>
+            <span class="muted">本地 1v1 对比：同一套策略引擎分别驱动两支队伍，结果不是官方成绩。</span>
+          </div>
+          <div class="row">
+            <button id="twomatch-start" type="button">开始本地双队对局</button>
+            <button id="twomatch-stop" type="button">停止</button>
+            <label>种子 <input id="twomatch-seed" type="number" min="1" max="9999" value="1"></label>
+            <label>回合 <input id="twomatch-rounds" type="number" min="10" max="1300" value="300"></label>
+          </div>
+          <div id="twomatch-body" class="inspect">尚未开始本地双队对局。</div>
+        </div>
+        <div class="pane" data-pane="inspect">
+          <div class="pane-head"><span class="tag">选中</span><span class="muted">点击地图上的单位或中立点查看真实字段。</span></div>
+          <div id="inspect-body" class="inspect">点击画面中的单位。</div>
+        </div>
+        <div class="pane" data-pane="io">
+          <div class="split">
+            <div>
+              <div class="pane-head">
+                <span class="tag">请求 JSON（可编辑）</span>
+                <span class="muted">编辑后点「应用」重建画面；不会修改官方样例。</span>
+              </div>
+              <textarea id="input-json" spellcheck="false" aria-label="请求 JSON"></textarea>
+              <div class="row">
+                <button id="apply-json" class="tiny" type="button">应用到画面</button>
+                <button id="decide-json" class="tiny" type="button">只跑策略</button>
+                <button id="sample" class="tiny" type="button">查看官方单轮示例</button>
+                <label>回合 <input id="round" type="number" min="1" max="1300" value="85"></label>
+              </div>
+            </div>
+            <div>
+              <div class="pane-head"><span class="tag">响应 JSON</span><span class="muted" id="resp-note">根路径 POST 的兼容响应。</span></div>
+              <pre id="output-json" class="code">尚未请求。</pre>
+            </div>
+          </div>
+        </div>
+        <div class="pane" data-pane="rules">
+          <div class="pane-head"><span class="tag">规则边界</span><span class="muted">官方明确 / 实现缺口 / 非合规近似 / 本地假设 分列，不混用。</span></div>
+          <div id="rules-body" class="rules"></div>
+          <div class="diff-note">
+            <b>本地面板不会改变比赛：</b>
+            <ul>
+              <li>官方协议、坐标、地图尺寸、动作权限、资源、射程、冷却、结算顺序与计分定义均未改动。</li>
+              <li>预览指令与已执行结果分开显示；箭头只是「将要提交」的意思，不代表执行成功。</li>
+              <li>画面只画已提交的状态与真实事件；移动动画不会提前改变逻辑坐标。</li>
+              <li>种子、波次计划、隐藏敌方信息只存在于本地模拟，不进入策略。</li>
+            </ul>
+          </div>
+        </div>
+        <div class="pane" data-pane="diag">
+          <div class="pane-head"><span class="tag">诊断</span><span class="muted">失败、未覆盖类型与性能计数。</span></div>
+          <div id="diag-body" class="diagnostics"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <span>本地实验环境 · 结果用于调试，不代表官方成绩</span>
+      <span id="foot-stats" class="muted">空格：暂停 / 继续 · ← →：单轮回看 · F：全图</span>
+      <span id="foot-ver" title="前端资源版本；若与 /js 资源后缀不一致，说明浏览器仍在用旧页面">前端 20260913a</span>
+    </footer>
+  </aside>
+
+  <main class="game" id="game" aria-label="对局画面">
+    <div class="stage-head">
+      <div class="viewtools" role="group" aria-label="视图控制">
+        <button id="open-map-guide" type="button">图例与操作说明</button>
+        <details class="menu layers-menu"><summary>显示图层</summary><div class="menu-content">        <label class="check"><input type="checkbox" id="opt-grid" checked> 网格</label>
+        <label class="check"><input type="checkbox" id="opt-ranges"> 射程</label>
+        <label class="check"><input type="checkbox" id="opt-preview"> 预览指令</label>
+        <label class="check"><input type="checkbox" id="opt-executed" checked> 已执行</label>
+</div></details>
+        <button id="zoomout" type="button" title="缩小">−</button>
+        <button id="zoomin" type="button" title="放大">+</button>
+        <button id="fit" type="button">全图</button>
+        <button id="follow" type="button">基地近景</button>
+      </div>
+    </div>
+
+    <div class="stage-canvas" id="stage-canvas">
+      <div class="map-key" aria-label="地图简明图例"><span><i class="key-own"></i>我方</span><span><i class="key-enemy"></i>敌方</span><span><i class="key-robot"></i>机器人</span><span><i class="key-plan"></i>虚线：预览</span><span><i class="key-action"></i>实线：已执行</span></div>
+      <div class="recording-progress" id="recording-progress" hidden role="status" aria-live="polite">
+        <div><b id="recording-title">正在录制</b><span id="recording-detail"></span></div>
+        <progress id="recording-meter" max="1" value="0" aria-label="录制进度"></progress>
+        <div class="recording-actions"><span>取消将保留已录制的回合</span><button id="recording-cancel" type="button">取消录制</button><button id="recording-retry" type="button" hidden>重新连接</button></div>
+      </div>
+      <canvas id="map" role="img" aria-label="《未来战争》本地对局俯视画面"></canvas>
+      <div class="tooltip" id="tooltip" hidden></div>
+      <div class="toast" id="toast" hidden></div>
+      <div class="banner" id="banner" hidden></div>
+      <div class="empty-state" id="empty-state"><span class="eyebrow">从一场模拟开始</span>
+        <h2>白天建设，夜晚守住基地</h2>
+        <p>点击开始，策略会自动控制工人、开拓者和炮台。你可以随时暂停，查看它为什么这样行动。</p>
+        <div class="empty-actions">
+          <button id="empty-new" class="primary" type="button">开始观看对局</button>
+          <button id="empty-sample" type="button">查看官方单轮示例</button>
+        </div>
+        <div class="intro-steps"><span><b>01</b> 开始自动模拟</span><span><b>02</b> 点击单位了解状态</span><span><b>03</b> 暂停并回看事件</span></div>
+      </div>
+      <div class="map-caption" id="map-caption" hidden><span id="interaction-hint">拖动平移 · 滚轮缩放</span><span>点击单位查看详情</span></div>
+    </div>
+
+    <div class="timeline">
+      <div class="replay-tools">
+        <span class="replay-heading">对局复盘</span>
+        <label>定位 <select id="event-kind"><option value="all">所有关键事件</option><option value="skip">失败指令</option><option value="death">单位阵亡</option><option value="spawn">机器人波次</option><option value="task">任务 / 宝藏</option><option value="phase">昼夜切换</option></select></label>
+        <button id="event-prev" type="button" class="tiny">← 上一事件</button>
+        <button id="event-next" type="button" class="tiny">下一事件 →</button>
+        <label>进度 <input id="seek-frame" type="number" value="0" min="0" max="1300" title="已推进的轮数，0 表示起始状态"></label><button id="seek-go" class="tiny" type="button">跳转</button>
+        <span id="replay-summary" class="muted">录制后可定位关键事件</span>
+      </div>
+      <div id="event-markers" class="event-markers" aria-label="关键事件时间轴"></div>
+      <div class="timeline-row">
+        <input id="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="时间轴">
+        <div class="timeline-meta">
+          <span id="timeline-label">第 0 / 0 帧</span>
+          <span id="timeline-hint" class="muted">时间轴只在已记录帧之间移动</span>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<dialog id="map-guide" aria-labelledby="map-guide-title">
+  <div class="guide-head"><div><span class="eyebrow">看懂地图</span><h2 id="map-guide-title">图例与操作说明</h2></div><button id="close-map-guide" type="button" aria-label="关闭图例">关闭 ×</button></div>
+  <p class="guide-intro">下方图标与地图使用相同绘制方式。图标表示类型，青色 / 红色标记表示我方 / 敌方；矿物和商店使用各自的颜色。</p>
+  <h3>角色、建筑与机器人</h3><div id="guide-units" class="guide-catalog"></div>
+  <h3>地图地点与资源</h3><div id="guide-sites" class="guide-catalog"></div>
+  <h3>线条、血量与事件</h3>
+  <div class="guide-signals">
+    <p><i class="key-plan"></i><b>黄色虚线</b> 下一轮准备提交的指令，不代表执行成功。在「显示图层」中开启。</p>
+    <p><i class="key-action"></i><b>青色实线</b> 已执行指令的方向；闪光和伤害数字来自已记录的战斗事件。</p>
+    <p><b>角色铭牌</b> 紧凑两行：身份、#角色 ID，以及「生命当前值/上限 · 背包数量/容量」。字号不随地图缩小；完整明细在控制台单位卡里。背包数字是物品数量，不是等级或伤害。</p>
+    <p><b>任务时间条</b> 开拓者执行任务时，铭牌多一行剩余轮数和一条细时间条，与控制台一致；这是倒计时，不是解题完成率。结算后另显示实际通过率。</p>
+    <p><b>昼夜底色</b> 白天地面与地图外背景为亮色，黄昏偏暖，夜晚转为深蓝；颜色只来自当前回合的昼夜阶段，回放拖动时间轴会恢复对应色调。</p>
+    <p><b>血量条</b> 绿 / 黄 / 红表示从健康到濒危。选中单位可查看具体血量、坐标与冷却。</p>
+    <p><b>时间轴色标</b> 红色：失败或阵亡；绿色：任务 / 宝藏；橙色：波次或昼夜切换。一轮可能有多种事件，可用筛选定位。</p>
+    <p><b>射程框</b> 选中炮台或开启「射程」后查看；表示攻击范围，不是移动路线或视野范围。</p>
+  </div>
+  <h3>常用操作</h3>
+  <div class="guide-signals"><p><b>观战</b> 开始后自动推进；空格暂停 / 继续，← → 后退 / 前进一轮。</p><p><b>地图</b> 拖动平移、滚轮缩放；点击角色卡放大定位，F 或「全图」恢复全景。</p><p><b>复盘</b> 「回到开头」保留历史；「开始新对局」重新生成。「录像与复盘」可生成、打开和保存整场录像。</p><p><b>坐标</b> 左下角为原点，x 向右、y 向上。图例只解释显示，不改变比赛规则。</p></div>
+</dialog>
+
+<script src="/js/constants.js?v=20260913a"></script>
+<script src="/js/viewmodel.js?v=20260913a"></script>
+<script src="/js/replay.js?v=20260913a"></script>
+<script src="/js/sprites.js?v=20260913a"></script>
+<script src="/js/effects.js?v=20260913a"></script>
+<script src="/js/renderer.js?v=20260913a"></script>
+<script src="/js/panel.js?v=20260913a"></script>
+<script src="/js/experience.js?v=20260913a"></script>
+<script src="/js/guide.js?v=20260913a"></script>
+<script src="/js/app.js?v=20260913a"></script>
+</body>
+</html>

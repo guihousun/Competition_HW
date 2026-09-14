@@ -1,0 +1,57 @@
+{
+  "strategy": "RRR",
+  "label": "\u4e09\u706b\u7bad",
+  "loadout": [
+    "rocket",
+    "rocket",
+    "rocket"
+  ],
+  "seed": 1,
+  "side": "defender",
+  "pressure": 1,
+  "split": "development",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1500,
+  "base_level": 1,
+  "base_damage": 0,
+  "score_local": 1270,
+  "task_score": 336,
+  "task_rewards": 3,
+  "kills": 62,
+  "crew_deaths": 9,
+  "walls_destroyed": 0,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 289,
+    "build": 20,
+    "collect": 24,
+    "acceptTask": 17,
+    "submitAnswer": 6,
+    "buy": 2,
+    "attack": 124,
+    "sell": 1,
+    "summonTreasure": 1
+  },
+  "attacks": {
+    "rocket": 124
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "rocket": 3
+  },
+  "initial_state_sha256": "9e33fe889cd12da48721961a25827f9c4bd0fba8e792d86bd67db333da7696e9",
+  "source_sha256": "8347d3aa68629dd35bf9bf07223a2ab3b82ace3708dd8f447aa0b8dfa823b88a",
+  "elapsed_seconds": 25.72,
+  "economy": {
+    "collect_stone": 24,
+    "sold_stone": 4,
+    "sale_gold": 4
+  },
+  "first_metal_events": {},
+  "max_local_step_ms": 562.05
+}

@@ -1,0 +1,51 @@
+{
+  "strategy": "GGG",
+  "label": "三加特林",
+  "loadout": [
+    "gatling",
+    "gatling",
+    "gatling"
+  ],
+  "seed": 1371,
+  "side": "challenger",
+  "pressure": 1,
+  "split": "holdout",
+  "rounds": 1300,
+  "survived_full": true,
+  "base_hp": 1430,
+  "base_level": 1,
+  "base_damage": 70,
+  "score_local": 1857,
+  "task_score": 962,
+  "task_rewards": 10,
+  "kills": 36,
+  "crew_deaths": 22,
+  "walls_destroyed": 3,
+  "execution_failures": 0,
+  "audit_errors": {},
+  "actions": {
+    "move": 580,
+    "build": 21,
+    "collect": 33,
+    "acceptTask": 129,
+    "submitAnswer": 20,
+    "buy": 5,
+    "sell": 3,
+    "attack": 188,
+    "summonTreasure": 1,
+    "use": 3
+  },
+  "attacks": {
+    "gatling": 188
+  },
+  "requested_channels": {
+    "executeCmd": 1
+  },
+  "paid_llm_calls": 0,
+  "first_complete_roster": {
+    "gatling": 3
+  },
+  "initial_state_sha256": "61129406dafdb66c1ad20334753805d3d800d1133eb6499c848ef8d28f1fed9a",
+  "source_sha256": "8ed76567582bf01d60b4a91dfeb2a2c70d40b4dae54319cd1cec2330f875e992",
+  "elapsed_seconds": 22.0
+}

@@ -1,0 +1,18 @@
+ok   resume uses the original session id and never agents.create
+ok   a prompt after resume attaches to the resumed agent, not a new one
+ok   resume fails loudly without native persistence
+ok   resume refuses to replace a live native agent
+ok   a missing persisted session is reported, not replaced
+ok   a resumed agent with another model is refused and disposed
+ok   resume validates its parameter
+ok   an SDK server without the attach seam is reported, not bypassed
+ok   event and steering plumbing is unchanged after resume
+✔ workflow\test_resume.mjs (169.1661ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 176.9566

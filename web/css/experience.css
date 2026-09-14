@@ -1,0 +1,186 @@
+/* Viewing-first layout: a compact control console on the left, the match on the
+   right. Console and match are separate grid tracks, so scrolling the console
+   (or opening the debug panel) can never resize the canvas. */
+:root { --text:#e7eef8; --muted:#a3b4c8; --console-w:300px; }
+body { font-size:14px; overflow:hidden; }
+button, select, input { font-size:13px; }
+/* Toolbar-sized touch targets. Dense strips that must stay inside their own lane
+   (the .event-marker timeline markers) override min-height explicitly. */
+button, summary { min-height:36px; }
+button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--accent-2); outline-offset:3px; }
+[hidden] { display:none !important; }
+
+.app {
+  height: 100vh;
+  grid-template-columns: var(--console-w) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+/* Routine round settlements never disable the transport; the hint is delayed so
+   fast rounds cannot flash a border on the Step button. */
+#step[aria-busy="true"] { border-color:var(--accent-2); transition-delay:0.45s; }
+
+/* --------------------------------------------------------------- console */
+.console-actions { display:flex; flex-wrap:wrap; gap:8px; padding:10px 12px 0; }
+.console-actions .menu { flex:1 1 120px; }
+.console-actions #newmatch { flex:1 1 100%; }
+.console .menu summary { width:100%; }
+.console .ribbon { padding:8px 12px; align-items:flex-start; flex-direction:column; gap:6px; font-size:11.5px; }
+.console .ribbon #ribbon-toggle { margin-left:0; }
+.console-block { display:grid; gap:10px; padding:10px 12px; border-bottom:1px solid var(--line); }
+.console-block .hud { margin-top:0; }
+.hud { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.hud-cell { padding:7px 9px; }
+.hud-cell.wide { grid-column:span 2; }
+.hud-cell b { font-size:15px; }
+.hud-cell .k { font-size:10px; }
+.hud-cell small { font-size:10px; white-space:normal; }
+.transport { gap:6px; }
+.console-block > .transport { order:-1; }
+.console-head .brand { min-width:0; }
+.console-head .brand-tag { display:block; }
+.console-head #debug-toggle { flex-shrink:0; white-space:nowrap; }
+.transport button { flex:1 1 44%; padding:6px 8px; }
+.transport .replay-menu { flex:1 1 100%; }
+.transport .speed { flex:1 1 100%; justify-content:space-between; }
+.transport .mode-badge { flex:1 1 100%; text-align:center; }
+.battle-brief { border-bottom:1px solid var(--line); }
+.brief-section { padding:12px; border-bottom:1px solid var(--line); }
+.brief-section:last-child { border-bottom:0; }
+.brief-section h2 { font-size:17px; margin-top:8px; }
+.brief-section h3 { font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.brief-section small { font-size:11px; font-weight:400; color:var(--muted); }
+.brief-section p { font-size:12.5px; line-height:1.7; color:#afc0d3; margin:8px 0; overflow-wrap:anywhere; }
+.eyebrow { color:var(--accent-2); font-size:11px; letter-spacing:2px; }
+.phase-meter { height:4px; margin:12px 0 8px; border-radius:3px; background:#25384c; overflow:hidden; }
+.phase-meter i { display:block; height:100%; background:var(--accent); transition:width .2s; }
+[data-phase=night] .phase-meter i { background:var(--warn); }
+.crew-list { display:grid; gap:8px; margin-top:12px; color:var(--muted); font-size:13px; }
+.crew-button { display:grid; grid-template-columns:1fr auto; text-align:left; padding:10px; background:#152739; }
+.crew-button { grid-template-columns:minmax(0,1fr); gap:5px; }
+.crew-button b { font-size:16px; }
+.crew-button span { font-size:14px; color:var(--accent); }
+.crew-button small { grid-column:1 / -1; margin-top:2px; font-size:14px; line-height:1.6; }
+.task-status h3 { font-size:16px; }
+.task-status p { font-size:14px; }
+.task-status > b { display:block; font-size:16px; color:#ffe09a; margin:10px 0; }
+.task-status progress { display:block; width:100%; height:16px; accent-color:#f4cf70; }
+.task-status progress[hidden] { display:none; }
+.task-status progress::-webkit-progress-bar { background:#283d51; border-radius:8px; }
+.task-status progress::-webkit-progress-value { background:#f4cf70; border-radius:8px; }
+.brief-event { border-left:2px solid #557c9d; padding-left:9px; overflow-wrap:anywhere; }
+.brief-event.skip,.brief-event.death { border-color:var(--bad); }
+.legend { display:grid; gap:9px; font-size:12px; }
+.legend span { display:flex; gap:8px; align-items:center; color:var(--muted); }
+.legend i { width:8px; height:8px; border-radius:50%; }
+.legend-own { background:var(--accent); }.legend-enemy { background:var(--bad); }.legend-robot { background:var(--warn); }
+.foot { flex-direction:column; gap:4px; padding:10px 12px; }
+.foot span { overflow-wrap:anywhere; }
+
+/* ------------------------------------------------------------------ game */
+.stage-canvas { min-height:0; }
+.stage-head .viewtools { gap:6px; }
+.map-caption { position:absolute; bottom:12px; left:16px; right:16px; display:flex; justify-content:space-between; gap:8px; pointer-events:none; color:#c0cfdf; font-size:11px; }
+.map-caption span { background:#07111ddd; border-radius:5px; padding:5px 8px; }
+.timeline { padding:6px 12px 8px; }
+.replay-tools { padding-bottom:4px; }
+.timeline-row { margin-top:8px; }
+.timeline-meta { white-space:normal; }
+#replay-summary { white-space:normal; }
+.empty-state { background:radial-gradient(ellipse at 50% 40%,#14354b99,#07111caa 70%); }
+.empty-state h2 { font-size:clamp(22px,2.4vw,34px); margin-top:14px; }
+.empty-state p { max-width:480px; font-size:14px; line-height:1.9; }
+.empty-actions { margin-top:12px; flex-wrap:wrap; justify-content:center; }
+.intro-steps { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; margin-top:32px; font-size:12px; color:var(--muted); }
+.intro-steps b { color:var(--accent-2); margin-right:5px; }
+#pause { display:none; }
+[data-ready=false] .timeline { display:none; }
+[data-ready=false] .hud { display:none; }
+
+/* ------------------------------------------------------------- dropdowns */
+.menu { position:relative; }
+.menu summary { cursor:pointer; list-style:none; padding:8px 12px; border:1px solid var(--line); border-radius:7px; background:#101d2d; font-size:13px; }
+.menu summary::after { content:' ▾'; color:var(--muted); }
+.menu[open] summary { border-color:var(--accent-2); }
+.menu-content, .settings-menu .setup {
+  position:absolute; top:calc(100% + 8px); left:0; z-index:30; width:260px; padding:14px; display:grid; gap:10px;
+  border:1px solid #37516b; background:#122235; border-radius:10px; box-shadow:0 12px 35px #0009;
+}
+.settings-menu .setup { left:auto; right:0; width:310px; }
+.layers-menu .menu-content { right:0; left:auto; width:210px; }
+/* Inside the console an overlay would be clipped by the console's own scroll
+   container, so those dropdowns expand in place instead. */
+.console .menu-content, .console .settings-menu .setup {
+  position:static; width:100%; max-width:100%; left:auto; right:auto; margin-top:8px; box-shadow:none;
+}
+.setup label { justify-content:space-between; gap:8px; }
+.setup input { width:100px; }
+.setup select { max-width:210px; }
+.console .setup label { display:grid; grid-template-columns:auto minmax(0,1fr); align-items:center; }
+.console .setup input, .console .setup select { width:100%; min-width:0; max-width:none; }
+.setup-help,.menu-content p { margin:0; font-size:12px; line-height:1.6; color:var(--muted); overflow-wrap:anywhere; }
+.menu-content button { text-align:left; }
+
+/* ------------------------------------------------------------ debug panel */
+.splitter { display:none; }
+.app.debug-open .splitter { display:block; height:10px; }
+.dev { height:340px; min-height:180px; max-height:none; border-top:0; }
+.dev.collapsed { display:none; }
+.console .dev-head { padding:6px 10px; gap:6px; }
+.console .dev-head h2 { display:none; }
+.console .tabs { gap:3px; }
+.console .tab { padding:3px 9px; font-size:11px; min-height:30px; }
+.console .dev-actions { margin-left:0; }
+.console .pane { padding:8px 10px 12px; }
+.console .split { grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto; height:auto; }
+.console .split > div { grid-template-rows:auto auto auto; }
+.console textarea { height:150px; }
+.console pre.code { max-height:220px; }
+.console .inspect .kv { grid-template-columns:92px minmax(0,1fr); }
+.console .rules table { min-width:340px; }
+.console .list .item { flex-wrap:wrap; }
+.console .list .item .who { min-width:0; }
+
+/* ------------------------------------------------------------ map guide */
+.map-key { position:absolute; top:10px; left:12px; right:12px; z-index:3; display:flex; flex-wrap:wrap; gap:8px 14px; pointer-events:none; width:fit-content; padding:8px 12px; border:1px solid #344b60; border-radius:8px; background:#081522e8; font-size:12px; color:#e0eaf7; }
+.map-key span { display:inline-flex; align-items:center; gap:6px; }
+.key-own,.key-enemy,.key-robot { display:inline-block; width:9px; height:9px; border-radius:50%; }
+.key-own { background:#4fe0b4; }.key-enemy { background:#ff6b81; }.key-robot { background:#ffb347; }
+.key-plan,.key-action { display:inline-block; width:23px; height:0; border-top:2px dashed #ffd166; vertical-align:middle; margin-right:5px; }
+.key-action { border-top:2px solid #63e6be; }
+#map-guide { color:var(--text); background:#101e2d; border:1px solid #41627e; border-radius:16px; width:min(860px,calc(100vw - 28px)); max-height:86vh; padding:24px; overflow:auto; box-shadow:0 24px 100px #000b; }
+#map-guide::backdrop { background:#030a13b8; }
+.guide-head { display:flex; gap:16px; align-items:center; justify-content:space-between; position:sticky; top:0; background:#101e2d; z-index:1; padding-bottom:12px; }
+.guide-head h2 { margin-top:6px; font-size:23px; }.guide-head button { flex-shrink:0; }
+.guide-intro { color:var(--muted); line-height:1.8; font-size:13px; }
+#map-guide h3 { margin:22px 0 12px; font-size:15px; }
+.guide-catalog { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; }
+.guide-card { padding:8px 10px 12px; background:#17293b; border:1px solid #294258; border-radius:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; }
+.guide-card canvas { width:80px; height:70px; }.guide-card b { font-size:13px; }.guide-card small { color:var(--muted); font-size:12px; line-height:1.5; }
+.guide-signals { font-size:13px; line-height:1.8; color:var(--muted); }.guide-signals b { color:var(--text); margin-right:8px; }
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width:1180px) {
+  :root { --console-w:280px; }
+  .replay-tools { gap:4px; }
+  #replay-summary { width:100%; margin-left:0; }
+}
+@media (max-width:900px) {
+  /* Stack: the match first, the console below it, no horizontal overflow. */
+  body { overflow:auto; }
+  .app { height:auto; min-height:100vh; overflow:visible; grid-template-columns:minmax(0,1fr); grid-template-rows:auto auto; }
+  .game { order:-1; grid-template-rows:auto minmax(280px,52vh) auto; }
+  .console { overflow:visible; border-right:0; border-top:1px solid var(--line); scrollbar-gutter:auto; }
+  .hud { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (max-width:560px) {
+  .brand-sub { display:none; }
+  .transport button, .viewtools button { padding:6px 9px; }
+  .intro-steps { display:none; }
+  .map-key { font-size:11px; gap:6px 10px; }
+  .map-caption { bottom:8px; left:8px; right:8px; font-size:10px; }
+  .map-caption span { max-width:100%; }
+  #map-guide { padding:16px; }
+  .guide-catalog { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }

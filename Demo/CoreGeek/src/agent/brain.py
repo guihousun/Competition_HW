@@ -1,0 +1,1753 @@
+from typing import Any
+from collections import Counter
+from itertools import permutations
+
+from . import ballistics, planner, sandbox, tasks, treasure, nightwork
+from .grid import _cost_to_goal, next_step
+from .coordination import available_gold, reconcile
+from .tasks import TaskPipeline
+from .market import (
+    buy_plan,
+    can_upgrade,
+    count_item,
+    sellable_inventory,
+    shop_prices,
+    vendor_prices,
+)
+from .protocol import (
+    BOMB,
+    MEDICINE,
+    PIONEER,
+    Pos,
+    Turn,
+    Unit,
+    WALL,
+    WALL_FIXER,
+    WALL_MATERIAL,
+    WEAPON_BUILD_COST,
+    attack_command,
+    attack_command_multi,
+    build_command,
+    collect_command,
+    distance,
+    move_command,
+    sell_command,
+    buy_command,
+    use_command,
+    station_footprint,
+)
+
+TOWER_LOADOUT = ("rocket", "rocket", "rocket")
+# Stone carried per wall run. Above the surplus threshold, so that a worker that
+# has filled up while the wall ring is unfinished still visits the vendor with
+# the excess instead of hoarding it.
+STONE_BATCH = 10
+# How close we want the shop/vendor work to happen before dusk (R02: 70+60).
+RETURN_BEFORE_NIGHT = 55
+# Economy window: after the first towers are up, a worker may walk to the
+# vendor/shop. The trip can span days, because the neutral points are randomly
+# placed and may sit far from the base; an errand is abandoned in the evening so
+# the worker is back for night defence.
+ECONOMY_WINDOW_START = 12
+# Surplus worth a trip. Kept close to the stone reserve so a worker that fills up
+# while the wall ring is unfinished still earns something for the excess.
+ECONOMY_MIN_SURPLUS = 3
+# Stone kept back for wall building and repairs, never sold (R03: walls cost a
+# stone and razing them refunds nothing, so the reserve is not wasteful).
+WALL_RESERVE = 2
+# Ore gathering is a top-up, not a goal in itself: walking further than this for
+# a few gold costs more wall-building rounds than it earns. It is measured from
+# the role, not from the base, so it bounds only the *first* step of a run; the
+# return budget below is what keeps a trip affordable in rounds.
+ORE_MAX_DISTANCE = 8
+# Metal carried per mining run. The same order of magnitude as STONE_BATCH: big
+# enough that one trip to the vendor repays the walk, small enough that a worker
+# never parks on a mine with a full bag (R03: worker backpack is 100 cells).
+METAL_BATCH = 10
+# Evening return: enough rounds left to walk home before robots arrive.
+RETURN_SAFE_INDEX = 50
+# Stand by a cooling task point instead of walking home when the refresh is
+# shorter than the round trip (local scheduling choice, official 30-round refresh).
+CAMP_MAX_COOLDOWN = 34
+# Task pipeline: the frame is official, the solvers are pluggable.
+TASK_PIPELINE = TaskPipeline()
+_NEIGHBOUR_STEPS = (
+    (-1, -1), (-1, 0), (-1, 1),
+    (0, -1), (0, 1),
+    (1, -1), (1, 0), (1, 1),
+)
+
+
+def decide(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Competition entry: the roleCommandMap for this observation.
+
+    Kept as the simple entry point; :func:`respond` is the full official
+    response (it can additionally carry ``prompt`` / ``executeCmd``).
+    """
+    return respond(payload)["roleCommandMap"]
+
+
+def respond(payload: dict[str, Any]) -> dict[str, Any]:
+    """Full official response for one observation, including task bookkeeping.
+
+    This is the judge-facing entry: it folds in the replies from the previous
+    round, plans, and emits ``roleCommandMap`` plus at most one ``prompt`` or
+    ``executeCmd``.
+    """
+    state = _planner_state(payload)
+    round_no = Turn.load(payload).round_no
+    state.note_round(round_no)
+    state.note_results(payload, round_no)
+    response = plan_for_state(payload, state, judge_tasks=False)
+    state.note_submission(response.prompt, response.execute, round_no,
+                          bool(state.tasks.get("cycle")))
+    state.last_round = round_no
+    if isinstance(payload.get("_demo"), dict):
+        _locally_judge_tasks(payload, response.commands, state)
+    return response.build()
+
+
+def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
+                   commit: bool = True, judge_tasks: bool = True) -> sandbox.ResponseBuilder:
+    """Plan one round for an already-advanced planner state.
+
+    ``commit=False`` makes the call a pure preview: the task pipeline still
+    decides what it *would* do, but nothing about the cycle is remembered, so a
+    preview can never accept or end a task.
+
+    ``judge_tasks=False`` skips the local judge fixture entirely. The simulator
+    needs that for its end-of-round preview: the round has already been judged
+    with the commands that really executed, and judging it again would corrupt
+    the task result bookkeeping.
+    """
+    turn = Turn.load(payload)
+    commands: dict[int, dict[str, Any]] = {}
+    if turn.is_day:
+        _day(turn, commands, payload, planner_state)
+    else:
+        _night(turn, commands, payload, planner_state)
+
+    if commit:
+        job = _task_step(turn, commands, payload, planner_state)
+    else:
+        # A preview must not be able to change anything, and the pipeline writes
+        # into `tasks` (solver notes, cycle phase, cooldowns). Running it on a
+        # detached copy keeps the read-only promise while still showing the user
+        # the command the pipeline would issue.
+        scratch = _detached_planner(planner_state)
+        job = _task_step(turn, commands, payload, scratch)
+        plan = job.get("plan") if job else None
+        if plan is not None and plan.kind in ("prompt", "cmd"):
+            job = None  # a preview never claims a judge channel
+    # Capture what the pipeline decided before anything else can overwrite it.
+    pipeline_pioneer = None
+    if job and job.get("claimed"):
+        pioneer_role = turn.pioneer()
+        if pioneer_role is not None:
+            pipeline_pioneer = commands.get(pioneer_role.unit_id)
+    # A pipeline claim must survive the defence planner: `_day` / `_night` already
+    # ran above and may have queued a tower-post move or an attack for the same
+    # pioneer. The task frame is turn-sensitive (hold range, timeout) while
+    # defence positioning is not, so the task command always wins — including when
+    # the pipeline deliberately issued nothing (a hold), in which case the defence
+    # claim is dropped rather than allowed to walk the pioneer out of the ring.
+    if job and job.get("claimed"):
+        pioneer = turn.pioneer()
+        pioneer_command = pipeline_pioneer
+        for role in turn.controllable():
+            if role.kind != PIONEER:
+                continue
+            if pioneer_command is not None:
+                commands[role.unit_id] = pioneer_command
+            else:
+                commands.pop(role.unit_id, None)
+    # Treasure work outranks the ordinary task walk: the window is narrow and the
+    # altar is somewhere else entirely, so the pioneer must commit while it can.
+    # It must not *re-run* over a purchase or summon the day plan already issued —
+    # this pass rebuilt the command and replaced the `buy` with a walk to the altar
+    # or the task point, which is what stopped the errand from ever completing.
+    pioneer_role = turn.pioneer()
+    issued = (commands.get(pioneer_role.unit_id) if pioneer_role is not None else None) or {}
+    already_acting = issued.get("action") in ("buy", "summonTreasure")
+    if not (job and job.get("claimed")) and not already_acting:
+        pioneer = turn.pioneer()
+        if pioneer is not None:
+            altar = _treasure_step(turn, payload, pioneer)
+            if altar is not None:
+                commands[pioneer.unit_id] = altar
+    # No pipeline claim this round. During the day the pioneer's job is the task
+    # loop (任务书 §五): walk to a ready point, or stand on the one it is waiting
+    # for. Defence positioning must not drag it back — that produced an
+    # oscillation between two cells with every task point left unvisited.
+    # The treasure itinerary only commits when the trip is essentially free (see
+    # `_treasure_errand`), so when it has issued a command the day planner must not
+    # overwrite it: the task walk would otherwise walk the pioneer straight back
+    # towards the task point, which is what kept the errand from ever arriving.
+    treasure_claimed = bool(
+        pioneer_role is not None
+        and commands.get(pioneer_role.unit_id)
+        and (commands[pioneer_role.unit_id].get("action") in ("buy", "summonTreasure")
+             or payload.get("_treasureRound") == turn.round_no))
+    if not (job and job.get("claimed")) and not already_acting and not treasure_claimed:
+        pioneer = turn.pioneer()
+        if pioneer is not None:
+            has_work, task_move = _task_walk(turn, pioneer, payload)
+            if has_work:
+                if task_move is not None:
+                    commands[pioneer.unit_id] = task_move
+                else:
+                    commands.pop(pioneer.unit_id, None)
+    commands = reconcile(turn, payload, commands)
+    response = sandbox.ResponseBuilder()
+    response.commands = {str(key): value for key, value in commands.items()}
+    plan = job.get("plan") if job else None
+    if plan is not None:
+        if plan.kind == "prompt":
+            if planner_state.judge.llm_available(bool(planner_state.tasks.get("cycle"))):
+                response.prompt = plan.prompt or None
+        elif plan.kind == "cmd":
+            if planner_state.tasks.get("cycle"):
+                response.execute = plan.command or None
+    if commit and job and job.get("note"):
+        planner_state.tasks["last_note"] = job["note"]
+    if judge_tasks and isinstance(payload.get("_demo"), dict) and commit:
+        judge_local_tasks(payload, response.commands, planner_state)
+    return response
+
+
+def _detached_planner(planner_state: Any) -> Any:
+    """Copy of the planner state whose task memory is safe to mutate."""
+    scratch = planner.PlannerState()
+    scratch.judge = planner_state.judge
+    scratch.tasks = _detached_tasks(planner_state.tasks)
+    return scratch
+
+
+def _detached_tasks(tasks_state: dict[str, Any]) -> dict[str, Any]:
+    """Shallow copy of the task notes with the live cycle swapped for a copy."""
+    copy = dict(tasks_state)
+    cycle = tasks_state.get("cycle")
+    if isinstance(cycle, tasks.TaskCycle):
+        clone = tasks.TaskCycle(
+            point=dict(cycle.point), accepted_round=cycle.accepted_round,
+            task_type=cycle.task_type, description=cycle.description,
+            timeout_rounds=cycle.timeout_rounds, score_reward=cycle.score_reward,
+            gold_reward=cycle.gold_reward, last_answer=cycle.last_answer,
+            answer_source=cycle.answer_source, phase=cycle.phase,
+            end_reason=cycle.end_reason, ended_round=cycle.ended_round,
+            submissions=list(cycle.submissions),
+        )
+        copy["cycle"] = clone
+    copy["solver_notes"] = dict(tasks_state.get("solver_notes") or {})
+    return copy
+
+
+def _planner_state(payload: dict[str, Any]) -> Any:
+    """Planner memory: private to a simulated match, digest-keyed for the judge.
+
+    Only a *generated* local match (``_demo.seed``) keeps planner memory inside
+    the payload. A plain observation — the judge path, or an imported sample —
+    must never have non-serializable state written into it, because that payload
+    is exactly what the strategy is handed and what gets exported.
+    """
+    meta = payload.get("_demo")
+    if isinstance(meta, dict) and "seed" in meta:
+        state = meta.get("planner")
+        if not isinstance(state, planner.PlannerState):
+            state = planner.PlannerState()
+            meta["planner"] = state
+        return state
+    return planner.state_for(payload)
+
+
+def judge_local_tasks(payload: dict[str, Any], commands: dict[str, Any],
+                      planner_state: Any) -> None:
+    """Advance the local judge fixture with this round's executed commands.
+
+    Public because the simulator owns the round loop: it must judge with the
+    commands that really ran, and only once per round. The judge-facing path
+    reaches the same code through :func:`respond`.
+    """
+    meta = payload.get("_demo")
+    world = meta.get("task_world") if isinstance(meta, dict) else None
+    if not world:
+        return
+    from . import taskworld
+    events: list[str] = []
+    report = taskworld.advance(payload, world, events)
+    payload["teamOur"]["playerTasks"] = taskworld.player_tasks(
+        payload, world, payload["teamOur"].get("type", "challenger"))
+    meta["task_report"] = report
+    meta["task_events"] = events
+    if not report.get("phaseTask"):
+        payload["phaseTask"] = ""
+    if report.get("rewards"):
+        planner_state.tasks["last_reward"] = report["rewards"]
+    if report.get("ended"):
+        planner_state.tasks["cycle"] = None
+        planner_state.tasks["cooldown_until"] = int(payload.get("roundNo") or 1) + tasks.REFRESH_ROUNDS
+        planner_state.tasks["solver_notes"] = {}
+
+
+def _locally_judge_tasks(payload: dict[str, Any], commands: dict[str, Any],
+                         planner_state: Any) -> None:
+    """Backwards-compatible alias used by :func:`respond`."""
+    judge_local_tasks(payload, commands, planner_state)
+
+
+def _task_step(turn: Turn, commands: dict[int, dict[str, Any]],
+               payload: dict[str, Any], planner_state: Any, *,
+               commit: bool = True) -> dict[str, Any] | None:
+    """Give the task pipeline its turn, and let it claim the pioneer."""
+    pioneer = turn.pioneer()
+    if pioneer is None:
+        return None
+    # Treasure work already issued this round wins. It is a one-cell, one-round
+    # action (a purchase at the shop, a summon at the altar) with a hard deadline,
+    # while the task walk is repeatable — and letting the pipeline claim the pioneer
+    # here replaced the purchase with a walk, so the errand never completed.
+    existing = commands.get(pioneer.unit_id) or {}
+    if existing.get("action") in ("buy", "summonTreasure"):
+        return None
+    # The task loop must also stand aside when the treasure trip is affordable and
+    # can still finish: the window is one-shot while a task point comes back after
+    # its refresh (任务书 §五). This is a narrow condition — the items must be
+    # payable, or the walk must fit inside the remaining window — so it does not
+    # starve the task loop, which an unconditional priority did (measured 150–260
+    # points worse).
+    if _treasure_claims_pioneer(turn, payload, pioneer):
+        return None
+    team = (payload.get("teamOur") or {}).get("type", "")
+    # An imported request snapshot (官方示例) may carry no playerTasks and no task
+    # points at all; then there is nothing to do and the pipeline stays out of
+    # the way. A running cycle always keeps the pipeline alive, and so does a
+    # generator that publishes the points only through map zones.
+    has_points = bool(TASK_PIPELINE.own_points(payload, team))
+    if not has_points and not planner_state.tasks.get("cycle"):
+        return None
+    # A preview must not be able to start or end a task.
+    if not commit and not planner_state.tasks.get("cycle"):
+        return None
+    in_task = bool(planner_state.tasks.get("cycle"))
+    # Night belongs to the defence (任务书 §4.7): the pioneer must be at a weapon,
+    # not walking to a task point. A task already in flight is still held, and the
+    # hold rule keeps the pioneer on the point, which the towers do not need.
+    if not turn.is_day and not in_task:
+        return None
+    plan = None
+    claimed = False
+    pipeline = TASK_PIPELINE
+    pending = planner_state.judge.pending_cmd
+    try:
+        command, plan = pipeline.step(
+            state=payload, turn=turn, pioneer=pioneer,
+            judge=planner_state.judge, notes=planner_state.tasks,
+            is_day=turn.is_day, pending=pending,
+        )
+    except Exception as error:  # a solver bug must not cost us the round
+        if commit:
+            planner_state.tasks["last_error"] = f"{type(error).__name__}: {error}"
+        return None
+    if commit and plan is not None and plan.kind == "accept":
+        # Remember the accepted point immediately: the hold range has to be
+        # enforced from this round on, before the judge publishes phaseTask.
+        zone = pipeline.on_point(payload, team, pioneer.pos)
+        planner_state.tasks["cycle"] = tasks.TaskCycle(
+            point=dict(zone["pos"]) if zone else dict(pioneer.pos.dump()),
+            accepted_round=turn.round_no,
+            task_type="自进化类",
+            description="",
+            timeout_rounds=0,
+        )
+        planner_state.tasks["solver_notes"] = {}
+    elif commit and (in_task or planner_state.tasks.get("cycle")):
+        _sync_cycle(payload, turn, planner_state)
+    if planner_state.tasks.get("cycle") or plan is not None:
+        # The task pipeline owns the pioneer for this round: a defence move would
+        # walk it out of the task ring (ending the task) or cancel the walk to the
+        # point. The claim is recorded so the caller can honour it too.
+        commands.pop(pioneer.unit_id, None)
+        claimed = True
+    if command:
+        commands[pioneer.unit_id] = command
+    return {"plan": plan, "in_task": bool(planner_state.tasks.get("cycle")),
+            "claimed": claimed,
+            "note": getattr(plan, "purpose", "") if plan else ""}
+
+
+def _sync_cycle(payload: dict[str, Any], turn: Turn, planner_state: Any) -> None:
+    """Keep the recorded cycle's description/timeout in line with the observation.
+
+    ``phaseTask`` and ``timeoutRounds`` are published by the judge; when they
+    arrive we adopt them instead of guessing.
+    """
+    cycle = planner_state.tasks.get("cycle")
+    if cycle is None:
+        return
+    description = str(payload.get("phaseTask") or "")
+    if description and description != cycle.description:
+        cycle.description = description
+    for point in payload["teamOur"].get("playerTasks") or []:
+        pos = point.get("taskPosition") or {}
+        if {"x": pos.get("x"), "y": pos.get("y")} == cycle.point:
+            timeout = int(point.get("timeoutRounds") or 0)
+            if timeout and timeout != cycle.timeout_rounds:
+                cycle.timeout_rounds = timeout
+                cycle.accepted_round = turn.round_no
+            cycle.task_type = str(point.get("taskType") or cycle.task_type)
+            break
+    if not cycle.description and not cycle.timeout_rounds:
+        # The judge has not published the task yet; keep holding without timing
+        # out locally, because we do not know the official timeout.
+        cycle.accepted_round = turn.round_no
+
+
+def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
+         planner_state: Any = None) -> None:
+    # Return before night instead of waiting until robots arrive.
+    if (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
+        _night(turn, commands, state)
+        return
+    sites = _tower_sites(turn)
+    order = _wall_order(turn)
+    standing_towers = {unit.pos for unit in turn.weapons()}
+    standing_walls = {unit.pos for unit in turn.walls()}
+    occupied = turn.occupied_cells()
+    towers_missing = [pos for pos in sites if pos not in standing_towers]
+    walls_missing = [pos for pos in order if pos not in standing_walls]
+    free_towers = [pos for pos in towers_missing if pos not in occupied]
+    free_walls = [pos for pos in walls_missing if pos not in occupied]
+
+    claimed: set[Pos] = set()
+    busy: set[int] = set()
+    # Roles the treasure itinerary has claimed for this round. The tower-post loop at
+    # the end of `_day` must not overwrite them: it would replace the `buy` or
+    # `summonTreasure` command with a move, which is exactly how the pioneer ended
+    # up strolling past the shop without ever purchasing anything.
+    reserved: set[int] = set()
+    # A committed errand owns its worker across days: neutral points can be far
+    # from the base, so a one-day round trip is often impossible. The mission is
+    # abandoned as soon as returning before dusk is at risk.
+    errands = state.get("_demo", {}).get("errands") if isinstance(state.get("_demo"), dict) else None
+    # The treasure itinerary is deliberately independent of that ledger: it is
+    # derived each round from the published rumour, the pioneer's backpack and its
+    # gold. Tying it to `_demo` (as the first version did) meant it never ran on
+    # the official stateless POST, where `_demo` is stripped from the request.
+    # A treasure window is a hard deadline, so it gets the pioneer's turn first.
+    pioneer = turn.pioneer()
+    if pioneer is not None and pioneer.unit_id not in commands:
+        if _treasure_errand(turn, pioneer, commands, state, errands):
+            busy.add(pioneer.unit_id)
+            reserved.add(pioneer.unit_id)
+    if isinstance(state, dict):
+        # Tell the later stages of this round that the treasure itinerary owns the
+        # pioneer, so the task walk does not walk it back to the task point.
+        state["_treasureRound"] = turn.round_no if reserved else None
+    if errands is not None:
+        # Starting an errand must come before the construction plan: once a
+        # worker leaves for the vendor the defence plan must not re-assign it,
+        # otherwise a multi-day trip could never finish.
+        for role in turn.workers():
+            if role.unit_id in commands:
+                continue
+            if _start_errand(turn, role, commands, state, errands, busy):
+                busy.add(role.unit_id)
+                break
+        for role in turn.workers():
+            if _errand_mission(turn, role, commands, state, errands):
+                busy.add(role.unit_id)
+    # A trip already under way owns the team's spare worker: the metal run must
+    # not start a second one and bypass the one-errand-at-a-time ledger.
+    errand_owners = {int(key) for key, mission in (errands or {}).items() if mission}
+    # One route memo per planning pass: the metal decision probes many candidate
+    # mines and stand cells, and every miss is a bounded A* search (R01: the
+    # response must stay well inside 5s).
+    routes = _RouteCost(turn)
+    for role in turn.workers():
+        if role.unit_id in busy:
+            continue
+        _worker_day(
+            turn, role, sites, free_towers, free_walls, claimed, commands, state, busy,
+            other_errand=bool(errand_owners - {role.unit_id}), routes=routes,
+        )
+    # Tasks come last so a task command always wins the pioneer: the task frame
+    # is turn-sensitive (timeout, hold range) while defence positioning is not.
+    for role, tower in _tower_pairs(turn):
+        if role.kind != PIONEER:
+            continue
+        # A role already claimed this round keeps its command: the reward for
+        # walking away from the shop is losing the whole errand.
+        if role.unit_id in reserved:
+            continue
+        # A pioneer running a task must not be re-assigned to a tower post: the
+        # walk back would break the hold range and end the task (任务书 §五). The
+        # pipeline already issued its command, so an existing entry is a claim.
+        # At night an open task releases the pioneer, because defence comes first.
+        if turn.is_day and (role.unit_id in commands
+                            or pioneer_is_busy(role, state, planner_state)):
+            continue
+        if distance(role.pos, tower.pos) <= 1 and role.pos not in walls_missing:
+            continue
+        step = _step_toward(turn, role, tower.pos, claimed, inside_only=True)
+        if step is not None:
+            commands[role.unit_id] = move_command(step)
+
+
+def pioneer_is_busy(role: Any, payload: dict[str, Any], planner_state: Any) -> bool:
+    """True while the pioneer owes its turn to the task pipeline.
+
+    Either memory says a cycle is open, or the judge is publishing a task text —
+    the stateless judge path has only the latter, and both must keep the pioneer
+    away from tower posts.
+    """
+    if planner_state is not None and planner_state.tasks.get("cycle"):
+        return True
+    return bool(str((payload or {}).get("phaseTask") or "").strip())
+
+
+def _task_walk(turn: Turn, pioneer: Unit, state: dict[str, Any]
+               ) -> tuple[bool, dict[str, Any] | None]:
+    """Decide the pioneer's *movement* for a task point, from published data only.
+
+    Returns ``(has_work, command)``:
+
+    * ``(False, None)`` — nothing to do, the caller may position the pioneer for
+      defence;
+    * ``(True, command)`` — walk toward a ready point;
+    * ``(True, None)``  — stay put, because the pioneer is already standing on the
+      point it is waiting for. This is the important case: without it the defence
+      planner walks the pioneer home, and it spends the whole day shuttling while
+      the task point waits.
+
+    Everything comes from ``playerTasks`` (isValid / coldDownRounds), so the
+    decision is identical whether or not the caller keeps planner memory — the
+    official POST is stateless.
+    """
+    if not turn.is_day:
+        return False, None
+    team = (state.get("teamOur") or {}).get("type", "")
+    own_cells = {
+        Pos.load(zone["pos"]) for zone in (state.get("mapInfo") or {}).get("zones") or ()
+        if str(zone.get("neutralType", "")).startswith(team)
+        and "TaskPoint" in str(zone.get("neutralType", ""))
+    }
+    ready: list[Pos] = []
+    cooling: list[tuple[int, Pos]] = []
+    for entry in (state.get("teamOur") or {}).get("playerTasks") or []:
+        position = entry.get("taskPosition") or {}
+        if not position:
+            continue
+        goal = Pos(int(position.get("x", -1)), int(position.get("y", -1)))
+        if own_cells and goal not in own_cells:
+            continue  # only our own points exist for us (任务书 §4.6.2)
+        cooldown = int(entry.get("coldDownRounds") or 0)
+        if entry.get("isValid", True) and cooldown <= 0:
+            ready.append(goal)
+        elif 0 < cooldown <= CAMP_MAX_COOLDOWN:
+            cooling.append((cooldown, goal))
+
+    candidates = ready or [goal for _cooldown, goal in cooling]
+    if not candidates:
+        return False, None
+    # Pick between several points by arrival, not by raw distance: a point that is
+    # still cooling can be the better target when its refresh finishes about when
+    # we would get there. Task points are far apart (a full map crossing is ~40
+    # rounds), so committing to the wrong one costs a whole game day. With a single
+    # candidate this is exactly the old nearest-point behaviour.
+    def arrival_key(goal: Pos) -> tuple[float, int, int]:
+        wait = 0
+        for cooldown, candidate in cooling:
+            if candidate == goal:
+                wait = cooldown
+                break
+        walk = distance(pioneer.pos, goal)
+        return (max(walk, wait), walk, goal.x, goal.y)
+
+    goal = min(candidates, key=arrival_key)
+    if distance(pioneer.pos, goal) <= 1:
+        return True, None  # standing on it: hold, and let the pipeline act
+    step = tasks.walk_to_ring(turn, pioneer, goal)
+    if step is None:
+        return False, None
+    return True, move_command(step)
+
+
+def _camp_command(turn: Turn, pioneer: Unit, state: dict[str, Any]) -> dict[str, Any] | None:
+    """Stand by a cooling task point instead of walking home and back.
+
+    A task point 20+ cells from the base costs roughly a 40-round round trip per
+    task, while the official refresh is only 30 rounds (任务书 §五). Waiting next
+    to the point turns the next task into a single step. The cost is real: the
+    pioneer is not at a weapon at night, so this only happens during the day.
+
+    Note the clock: day is rounds 1..70 and the defence return starts at 55, so
+    the task window is only ~55 rounds per game day. A point 20 cells away needs
+    roughly 20 rounds to reach, which fits — but only if the walk is allowed to
+    start inside that window rather than being treated as already too late.
+    """
+    if not turn.is_day:
+        return None
+    team = (state.get("teamOur") or {}).get("type", "")
+    waiting: list[tuple[int, Pos]] = []
+    for entry in (state.get("teamOur") or {}).get("playerTasks") or []:
+        cooldown = int(entry.get("coldDownRounds") or 0)
+        if 0 >= cooldown or cooldown > CAMP_MAX_COOLDOWN:
+            continue
+        position = entry.get("taskPosition") or {}
+        waiting.append((cooldown, Pos(int(position.get("x", -1)), int(position.get("y", -1)))))
+    if not waiting:
+        return None
+    cooldown, goal = min(waiting, key=lambda item: (item[0], item[1].x, item[1].y))
+    if not any(Pos.load(zone["pos"]) == goal for zone in
+               [z for z in (state.get("mapInfo") or {}).get("zones") or ()
+                if str(z.get("neutralType", "")).startswith(team)
+                and "TaskPoint" in str(z.get("neutralType", ""))]):
+        return None
+    if distance(pioneer.pos, goal) <= 1:
+        return None  # already standing by; no need to spend the turn
+    # The point is an obstacle, so approach its ring rather than the cell itself.
+    step = tasks.walk_to_ring(turn, pioneer, goal)
+    if step is None:
+        return None
+    return move_command(step)
+
+
+def _treasure_claims_pioneer(turn: Turn, state: dict[str, Any], pioneer: Unit) -> bool:
+    """True when the treasure trip is worth interrupting the task loop for.
+
+    Deliberately narrow: only when the pioneer can already pay for the rite (so the
+    trip is just travel and a summon), or when the window is open and the altar is
+    reachable before it shuts. A wider condition starved the task loop.
+    """
+    if not turn.is_day or pioneer is None:
+        return False
+    notes = treasure.treasure_notes(state, (state.get("teamOur") or {}).get("type", ""),
+                                    turn.round_no)
+    if not notes.get("known") or notes.get("taken") or not notes.get("site"):
+        return False
+    site = Pos(int(notes["site"].get("x", -1)), int(notes["site"].get("y", -1)))
+    bag = [str(item) for item in pioneer.backpack]
+    required = [str(item) for item in notes.get("items") or ()]
+    missing = [item for item in required if bag.count(item) < required.count(item)]
+    closes_at = int(notes.get("closesAt") or 0)
+    if not missing:
+        return turn.round_no + distance(pioneer.pos, site) <= closes_at
+    prices = shop_prices(state)
+    affordable = any(prices.get(item, 10 ** 9) <= turn.gold for item in missing)
+    if not affordable:
+        return False
+    travel = _distance_to_shop(turn, state) + distance(_shop_cell(turn), site)
+    return turn.round_no + travel <= closes_at
+
+
+def _treasure_step(turn: Turn, payload: dict[str, Any], pioneer: Unit) -> dict[str, Any] | None:
+    """Send the pioneer to the altar once the rite can actually be paid for.
+
+    The official text leaves site, conditions and timing to be inferred from the
+    rumours (任务书 §5.2), so the local fixture publishes them through
+    `treasure_notes`. Nothing here guesses: the pioneer only goes when the window
+    is open, the treasure is untaken, and the required 任务用品 are already in its
+    backpack — otherwise the trip is a wasted day.
+    """
+    notes = treasure.treasure_notes(payload, (payload.get("teamOur") or {}).get("type", ""),
+                                    turn.round_no)
+    if not notes.get("known") or not notes.get("open") or notes.get("taken"):
+        return None
+    bag = [str(item) for item in pioneer.backpack]
+    required = [str(item) for item in notes.get("items") or ()]
+    if any(bag.count(item) < required.count(item) for item in set(required)):
+        return None      # cannot pay yet; the shop plan owns that errand
+    site = Pos(int(notes["site"].get("x", -1)), int(notes["site"].get("y", -1)))
+    if distance(pioneer.pos, site) <= 1:
+        return {"action": "summonTreasure", "targetPos": [site.dump()],
+                "item": required}
+    step = tasks.walk_to_ring(turn, pioneer, site)
+    if step is None:
+        return None
+    return move_command(step)
+
+
+def _treasure_errand(turn: Turn, pioneer: Unit, commands: dict[int, dict[str, Any]],
+                     state: dict[str, Any], errands: dict[str, Any] | None) -> bool:
+    """Run the treasure itinerary: buy the 任务用品, then walk to the altar.
+
+    Deliberately **memory-free**: everything is derived each round from the
+    published notes plus the pioneer's own backpack and gold. That matters because
+    the official POST is stateless — a plan that only lives in the errand ledger of
+    one planner instance silently does nothing on the stateless path, which is
+    exactly how the first version of this failed (it bought nothing in a real
+    match while looking correct in a trace).
+
+    Only when the window is close enough to matter and the pioneer can afford the
+    items. Returns True when this consumed the pioneer's turn.
+    """
+    if not turn.is_day:
+        return False
+    key = str(pioneer.unit_id)
+    if errands is not None:
+        mission = errands.get(key)
+        if mission is not None and mission.get("goal") not in ("shop", "altar"):
+            return False
+    notes = treasure.treasure_notes(state, (state.get("teamOur") or {}).get("type", ""),
+                                    turn.round_no)
+    if not notes.get("known") or notes.get("taken") or not notes.get("site"):
+        if errands is not None:
+            errands.pop(key, None)
+        return False
+    site = Pos(int(notes["site"].get("x", -1)), int(notes["site"].get("y", -1)))
+    required = [str(item) for item in notes.get("items") or ()]
+    bag = [str(item) for item in pioneer.backpack]
+    missing = [item for item in required if bag.count(item) < required.count(item)]
+    prices = shop_prices(state)
+    gold = available_gold(turn, state, commands, replacing=pioneer.unit_id)
+    wanted = [item for item in missing if prices.get(item, 10 ** 9) <= gold]
+
+    if missing:
+        # Nothing affordable right now: raise the gold instead of loitering at the
+        # shop, and try again when the miner's takings allow it.
+        if not wanted:
+            return False
+        at_shop = _adjacent_zone(state, pioneer.pos, "weaponShop")
+        if not at_shop:
+            shop_cell = _shop_cell(turn)
+            travel = distance(pioneer.pos, shop_cell) + distance(shop_cell, site)
+            closes_at = int(notes["closesAt"])
+            # Two ways the trip pays off, and both must be considered together:
+            # arriving before the window opens (then waiting at the altar), or
+            # arriving during the window. Requiring the first alone blocked every
+            # errand whose window was closer than the walk — seed 1's window opens
+            # only ~4 rounds after the pioneer first has the gold.
+            if turn.round_no + travel > closes_at:
+                return False      # cannot finish even if it left now
+            if not notes.get("open") and turn.round_no + travel > int(notes["opensAt"]):
+                # It will arrive after the window opens: fine, as long as it still
+                # gets there before the window shuts, which the check above proved.
+                pass
+            return _walk_to_zone(turn, pioneer, "weaponShop", commands)
+        # At the shop: buy what the rite needs and the gold covers.
+        commands[pioneer.unit_id] = {"action": "buy", "name": wanted[0]}
+        return True
+
+    if not notes.get("open"):
+        return False
+    if distance(pioneer.pos, site) <= 1:
+        commands[pioneer.unit_id] = {"action": "summonTreasure",
+                                     "targetPos": [site.dump()], "item": required}
+        if errands is not None:
+            errands.pop(key, None)
+        return True
+    step = tasks.walk_to_ring(turn, pioneer, site)
+    if step is None:
+        return False
+    commands[pioneer.unit_id] = move_command(step)
+    if errands is not None:
+        errands[key] = {"goal": "altar", "site": dict(notes["site"])}
+    return True
+
+
+def _shop_cell(turn: Turn) -> Pos:
+    """The weapon shop's own cell (the map has one; a fallback keeps it total)."""
+    for pos, kind in sorted(turn.zones.items(), key=lambda item: (item[0].x, item[0].y)):
+        if kind == "weaponShop":
+            return pos
+    return Pos(-1, -1)
+
+
+def _distance_to_shop(turn: Turn, state: dict[str, Any]) -> int:
+    """Distance from the pioneer to the weapon shop, or 0 when it is not visible."""
+    pioneer = turn.pioneer()
+    shops = [pos for pos, kind in turn.zones.items() if kind == "weaponShop"]
+    if pioneer is None or not shops:
+        return 0
+    return min(distance(pioneer.pos, pos) for pos in shops)
+
+
+def _economy_open(turn: Turn) -> bool:
+    """True between mid-morning and the dusk return window of the current day.
+
+    A round-index test rather than a round-number test keeps this correct across
+    all ten days (R02) without hard-coding any day boundary.
+    """
+    index = (turn.round_no - 1) % 130
+    return ECONOMY_WINDOW_START <= index < RETURN_BEFORE_NIGHT
+
+
+def _is_return_phase(turn: Turn) -> bool:
+    """Evening: errands must come home so night defence is not short-handed."""
+    return (turn.round_no - 1) % 130 >= RETURN_SAFE_INDEX
+
+
+def _towers_done(turn: Turn) -> bool:
+    """The three towers are the top priority; trade waits until they stand."""
+    return len(turn.weapons()) >= 3
+
+
+def _errand_mission(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
+                    state: dict[str, Any], errands: dict[str, Any]) -> bool:
+    """Continue or finish an errand already assigned to this worker.
+
+    Returns True when the worker's turn is consumed by the mission. The mission
+    ends as soon as the work is done, the evening return starts, or the reason
+    for going disappears (prices gone, surplus sold, gold spent).
+    """
+    key = str(role.unit_id)
+    mission = errands.get(key)
+    if not mission:
+        return False
+    goal = mission.get("goal")
+    if goal == "vendor" and not _should_sell(turn, role, state):
+        errands.pop(key, None)
+        return False
+    if goal == "shop" and (not _should_buy(turn, state) or _metal_needed(turn, role, state)):
+        # A shop trip yields to a metal run the crew can still make: standing at
+        # the shop with nothing worth buying used to consume every daylight
+        # round, so the workers never reached an ore they could sell.
+        errands.pop(key, None)
+        return False
+    if _adjacent_zone(state, role.pos, goal):
+        if _try_trade(turn, role, commands, state):
+            if goal == "vendor" and not _should_sell(turn, role, state):
+                errands.pop(key, None)
+            return True
+        return False
+    if _is_return_phase(turn):
+        errands.pop(key, None)
+        return False
+    return _walk_to_zone(turn, role, goal, commands)
+
+
+def _start_errand(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
+                  state: dict[str, Any], errands: dict[str, Any] | None,
+                  busy: set[int] | None = None) -> bool:
+    """Assign a new errand when the defence is stable enough to spare a worker."""
+    if errands is None or not _economy_open(turn) or not _towers_done(turn):
+        return False
+    if role.unit_id in commands or role.unit_id in (busy or set()):
+        return False
+    if any(mission for mission in errands.values()) or any(
+            mission.get("home") for mission in errands.values()):
+        return False
+    if _should_sell(turn, role, state):
+        errands[str(role.unit_id)] = {"goal": "vendor"}
+        if _walk_to_zone(turn, role, "vendor", commands):
+            return True
+        errands.pop(str(role.unit_id), None)
+        return False
+    if _should_buy(turn, state) and not _metal_needed(turn, role, state):
+        errands[str(role.unit_id)] = {"goal": "shop"}
+        if _walk_to_zone(turn, role, "weaponShop", commands):
+            return True
+        errands.pop(str(role.unit_id), None)
+    return False
+
+
+def _metal_needed(turn: Turn, role: Unit, state: dict[str, Any],
+                  routes: Any = None) -> bool:
+    """True when some worker still owes the day a metal run.
+
+    A dispatched shop walk owns the team's one errand for the rest of the day, so
+    it must not be started while any worker could instead be mining: gold in the
+    treasury is no use if nobody ever mines the ore that pays for the next
+    upgrade. Checking the whole crew matters because the worker that can reach a
+    mine is often not the one the errand loop visits first.
+    """
+    routes = routes if routes is not None else _RouteCost(turn)
+    return any(_worker_metal_ready(turn, worker, state, routes.for_role(worker))
+               for worker in turn.workers())
+
+
+def _worker_metal_ready(turn: Turn, role: Unit, state: dict[str, Any],
+                        cost_of: Any = None) -> bool:
+    """True when this one worker has metal it can mine and later sell."""
+    if role.backpack_full:
+        # A full bag is not mineable; whether it is sellable is decided by the
+        # ordinary errand order in front of the metal run.
+        return False
+    cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
+    if _vendor_route(turn, role, cost_of) is None:
+        # Ore that could never reach a vendor is not worth the trip, so the buy
+        # errand keeps its ordinary priority.
+        return False
+    return _metal_target(turn, role, state, cost_of) is not None
+
+
+def _worker_day(
+    turn: Turn,
+    role: Unit,
+    sites: tuple[Pos, ...],
+    towers_missing: list[Pos],
+    walls_missing: list[Pos],
+    claimed: set[Pos],
+    commands: dict[int, dict[str, Any]],
+    state: dict[str, Any],
+    busy: set[int],
+    *,
+    other_errand: bool = False,
+    routes: Any = None,
+) -> None:
+    planned = sum(
+        cmd.get("action") == "build" and cmd.get("name") in TOWER_LOADOUT
+        for cmd in commands.values()
+    )
+    if (towers_missing and available_gold(turn, state, commands) >= WEAPON_BUILD_COST
+            and len(turn.weapons()) + planned < 3):
+        # Slots reorder as towers are retained; choose the missing type by count,
+        # not by that moving slot index. Otherwise mixed loadouts duplicate a type.
+        built = Counter(unit.kind for unit in turn.weapons())
+        built.update(cmd['name'] for cmd in commands.values()
+                     if cmd.get('action') == 'build' and cmd.get('name') in TOWER_LOADOUT)
+        desired = Counter(TOWER_LOADOUT)
+        missing_kind = next((kind for kind in TOWER_LOADOUT if built[kind] < desired[kind]), None)
+        if missing_kind is None:
+            return
+        for index, site in enumerate(sites):
+            if site in towers_missing and site not in claimed:
+                _build_or_walk(
+                    turn, role, site, missing_kind, claimed, commands,
+                )
+                towers_missing.remove(site)
+                busy.add(role.unit_id)
+                return
+    # Economy first when standing next to the shop: gold buys towers, upgrades
+    # and defensive items, and the vendor price only exists while we are there.
+    if _try_trade(turn, role, commands, state):
+        busy.add(role.unit_id)
+        return
+    # The wall ring is the standing priority. While it is unfinished the worker
+    # gathers and places stone; only afterwards may it spend the day on ore.
+    if walls_missing:
+        stones = role.backpack.count(WALL_MATERIAL)
+        mine = _adjacent_mine(turn, role)
+        if mine is not None and stones < STONE_BATCH and not role.backpack_full:
+            commands[role.unit_id] = collect_command(mine)
+            claimed.add(mine)
+            busy.add(role.unit_id)
+            return
+        if stones:
+            for site in walls_missing:
+                if site not in claimed:
+                    _build_or_walk(turn, role, site, WALL, claimed, commands)
+                    walls_missing.remove(site)
+                    busy.add(role.unit_id)
+                    return
+            return
+        _mine(turn, role, claimed, commands)
+        busy.add(role.unit_id)
+        return
+    # Defences stand. Until now `if not walls_missing: return` ended the day
+    # here, so a completed defence never earned its upkeep back: the metal
+    # branches below were unreachable. A worker carrying metal now walks it to
+    # the vendor (the errand ledger owns that leg when it is available);
+    # otherwise it gathers the dearest ore the vendor actually buys.
+    _mine_metal(turn, role, claimed, commands, state, other_errand=other_errand,
+                routes=routes)
+
+
+def _sellable_metals(state: dict[str, Any]) -> dict[str, int]:
+    """Current vendor price per ore, ignoring anything it does not buy.
+
+    R06: the acquisition list moves with the news. An ore with no published
+    price (or price 0) is never mined — it could not be turned into gold.
+    """
+    prices = vendor_prices(state)
+    return {kind: int(prices[kind]) for kind in ("copper", "iron")
+            if int(prices.get(kind, 0)) > 0}
+
+
+def _metal_carried(role: Unit, state: dict[str, Any]) -> int:
+    """Total backpack cells of ores the vendor currently buys."""
+    sellable = _sellable_metals(state)
+    return sum(1 for item in role.backpack if item in sellable)
+
+
+def _vendor_cells(turn: Turn) -> list[Pos]:
+    """Vendor cells in the published map, sorted for a stable walk target."""
+    return sorted((pos for pos, kind in turn.zones.items() if kind == "vendor"),
+                  key=lambda pos: (pos.x, pos.y))
+
+
+def _vendor_route(turn: Turn, role: Unit, cost_of: Any = None) -> tuple[Pos, int] | None:
+    """A standable cell next to a vendor and its verified route length, if any.
+
+    ``next_step`` only answers for a goal it can actually reach, so a vendor
+    behind terrain, walls or occupied cells reports no route — which is what
+    stops a loaded worker from walking at it forever.
+    """
+    cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
+    best = None
+    for vendor in _vendor_cells(turn):
+        if distance(role.pos, vendor) <= 1:
+            return role.pos, 0
+        for stand in _neighbours(vendor):
+            if not _free_cell(turn, role, stand):
+                continue
+            if next_step(turn, role, stand) is None:
+                continue
+            cost = cost_of(role.pos, stand)
+            if best is None or cost < best[1]:
+                best = (stand, cost)
+    return best
+
+
+def _free_cell(turn: Turn, role: Unit, pos: Pos) -> bool:
+    """True when `pos` is land and nothing stands on it (the role itself aside).
+
+    `_stand_cells` filters by `claimed`, which is empty when a candidate is
+    evaluated ahead of time. A goal that is already occupied (an existing tower,
+    a wall, a robot) can never be reached — `next_step` refuses it — so ranking
+    candidates by route length must skip those cells first.
+    """
+    return turn.land(pos) and pos not in turn.blocked(role)
+
+
+def _route_cost(turn: Turn, start: Pos, goal: Pos) -> int:
+    """Verified shortest step count between two cells; `big` when unreachable.
+
+    Uses the same bounded search as ``next_step``, so it never claims a route
+    through obstacles that the walk itself could not take. A cell is always
+    reachable from itself — without that, a goal the role happens to be standing
+    on (its own cell, which `blocked` counts as occupied by other movers) would
+    be reported as unreachable and a zero-length walk would look impossible.
+    """
+    if start == goal:
+        return 0
+    cost = _cost_to_goal(turn, start, goal, turn.width * turn.height * 2)
+    return cost if cost < 10 ** 9 else 10 ** 6
+
+
+class _RouteCost:
+    """Per-planning-pass memo of `_route_cost`, so candidate scans stay cheap.
+
+    A planning pass evaluates the same start/goal pairs from several helpers
+    (vendor route, mine approach, home leg). Each miss is a bounded A* search, so
+    without the memo a worker-rich round could spend seconds on repeated probing
+    and risk the 5s response limit (R01).
+
+    Scope rules: one instance is created inside a single `_day` call and is never
+    stored in the observation, the planner state or any module global, so it
+    cannot outlive the Turn it was built from or leak between requests, maps,
+    teams or rounds. Entries are keyed by the moving role as well as the cells,
+    because `turn.blocked(role)` depends on which role is moving: a cell occupied
+    for one worker may be free for another.
+    """
+
+    def __init__(self, turn: Turn, role: Unit | None = None):
+        self._turn = turn
+        self._role = role
+        self._cache: dict[tuple[int, Pos, Pos], int] = {}
+
+    def for_role(self, role: Unit) -> "_RoleRoutes":
+        return _RoleRoutes(self, role)
+
+    def __call__(self, start: Pos, goal: Pos) -> int:
+        if self._role is None:
+            raise TypeError("a role-free memo must be used through for_role()")
+        return self.cost(self._role, start, goal)
+
+    def cost(self, role: Unit, start: Pos, goal: Pos) -> int:
+        key = (role.unit_id, start, goal)
+        cached = self._cache.get(key)
+        if cached is None:
+            cached = _route_cost(self._turn, start, goal)
+            self._cache[key] = cached
+        return cached
+
+
+class _RoleRoutes:
+    """A role-bound view of one pass's route memo: ``cost(start, goal)``."""
+
+    __slots__ = ("_routes", "_role")
+
+    def __init__(self, routes: _RouteCost, role: Unit):
+        self._routes = routes
+        self._role = role
+
+    def __call__(self, start: Pos, goal: Pos) -> int:
+        return self._routes.cost(self._role, start, goal)
+
+
+def _mine_approach(turn: Turn, role: Unit, mine: Pos,
+                   cost_of: Any = None) -> tuple[Pos, int] | None:
+    """A standable, free, *reachable* cell next to `mine` and its route length.
+
+    A cell behind a sealed ring, or one an existing tower already occupies, is
+    not an approach: the worker could not walk there, so the trip must not start.
+    """
+    cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
+    best = None
+    for stand in sorted((cell for cell in _stand_cells(turn, role, mine, set())
+                         if _free_cell(turn, role, cell)),
+                        key=lambda pos: (distance(role.pos, pos), pos.x, pos.y)):
+        cost = cost_of(role.pos, stand)
+        if cost >= 10 ** 6:
+            continue
+        if best is None or cost < best[1]:
+            best = (stand, cost)
+    return best
+
+
+def _metal_target(turn: Turn, role: Unit, state: dict[str, Any],
+                  cost_of: Any = None) -> Pos | None:
+    """Closest reachable in-range mine of the dearest ore still worth mining.
+
+    Returns None when no mine is usable, which is what keeps a worker from
+    chasing a missing, depleted, unreachable or vendor-less mine.
+    """
+    cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
+    prices = _sellable_metals(state)
+    for material in sorted(prices, key=lambda kind: (-prices[kind], kind)):
+        if role.backpack.count(material) >= METAL_BATCH:
+            continue  # This ore already fills a run: sell it before mining more.
+        mines = sorted(
+            (pos for pos, kind in turn.zones.items()
+             if kind == material and distance(role.pos, pos) <= ORE_MAX_DISTANCE),
+            key=lambda pos: (distance(role.pos, pos), pos.x, pos.y),
+        )
+        for mine in mines:
+            if _metal_trip_fits(turn, role, mine, state, cost_of) is None:
+                continue
+            return mine
+    return None
+
+
+def _metal_batch_needed(role: Unit, state: dict[str, Any]) -> int:
+    """Ore the worker must still gather before the vendor trip pays off.
+
+    The sale itself is the existing policy's decision (`_should_sell` over the
+    published surplus threshold), so the budget must not demand a whole
+    `METAL_BATCH` when that policy will sell earlier — a full-batch requirement
+    rejected trips that really were profitable and left the worker oscillating
+    near the base. `METAL_BATCH` stays the cap: ore already in the bag counts.
+    """
+    return max(0, min(METAL_BATCH, ECONOMY_MIN_SURPLUS) - _metal_carried(role, state))
+
+
+def _metal_trip_fits(turn: Turn, role: Unit, mine: Pos, state: dict[str, Any],
+                     cost_of: Any = None) -> tuple[Pos, int] | None:
+    """The route to a mine, or None when the whole trip does not fit the day.
+
+    Route lengths come from the same bounded A* the walk itself uses, so the
+    budget accounts for walls, terrain and occupied cells rather than for a
+    straight line. `ORE_MAX_DISTANCE` alone is measured from the role and says
+    nothing about how far the base has been left behind; this budget does: walk
+    to the mine, gather the rest of a payable batch, walk home, and still be back
+    before the dusk hand-off. A trip that does not fit is not started at all,
+    which is more conservative than starting it and turning back half-way.
+    """
+    cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
+    station = turn.station()
+    if station is None or _vendor_route(turn, role, cost_of) is None:
+        return None
+    approach = _mine_approach(turn, role, mine, cost_of)
+    if approach is None:
+        return None
+    stand, to_mine = approach
+    # Home is a free cell *next to* the base, never a base cell: the base
+    # footprint is a blocked zone, so a route to its own coordinates does not
+    # exist and would make every trip look impossible.
+    homes = [cell for cell in _stand_cells(turn, role, station.pos, set())
+             if _free_cell(turn, role, cell)]
+    if not homes:
+        return None
+    home = min(homes, key=lambda cell: cost_of(stand, cell))
+    # One move per round (R02), one ore per collect (R03), plus one round of
+    # slack. The budget is measured against the dusk hand-off: the trip must end
+    # before the day's economy window does, so `_economy_open` and the evening
+    # return keep working exactly as before.
+    budget = RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
+    trip = to_mine + _metal_batch_needed(role, state) + cost_of(stand, home) + 1
+    return approach if trip <= budget else None
+
+
+def _mine_metal(turn: Turn, role: Unit, claimed: set[Pos],
+                commands: dict[int, dict[str, Any]], state: dict[str, Any],
+                *, other_errand: bool = False, routes: Any = None) -> bool:
+    """Gather a metal batch, or carry a finished one off to the vendor.
+
+    Sell-ready comes first so a full backpack never blocks the sale. The trip is
+    bounded by the day's economy window and by a route budget, so the worker is
+    never still out at dusk: night defence keeps its crew (R02). While *another*
+    worker holds the team's one errand, this worker stays on the ordinary plan
+    instead of starting a second trip.
+    """
+    if not _economy_open(turn) or other_errand:
+        return False
+    cost_of = routes.for_role(role) if routes is not None else _RouteCost(turn, role)
+    if _vendor_route(turn, role, cost_of) is None:
+        # A vendor we cannot walk to makes ore worthless: never start mining
+        # that could not be sold (R06), and never walk at an unreachable target.
+        return False
+    carrying = _metal_carried(role, state)
+    if carrying >= METAL_BATCH:
+        # A full batch in hand and no errand ledger to carry it: walk it to the
+        # vendor. With the ledger present `_start_errand`/`_errand_mission`
+        # already own this leg; this keeps the stateless judge path working.
+        # Sell-ready is checked before `backpack_full`, so a full bag still walks.
+        return _walk_to_zone(turn, role, "vendor", commands)
+    if role.backpack_full:
+        return False
+    target = _metal_target(turn, role, state, cost_of)
+    if target is None:
+        return False
+    if role.pos != target and distance(role.pos, target) <= 1:
+        commands[role.unit_id] = collect_command(target)
+        claimed.add(target)
+        return True
+    step = _step_toward(turn, role, target, claimed)
+    if step is not None:
+        commands[role.unit_id] = move_command(step)
+        return True
+    return False
+
+
+def _run_errand(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
+                state: dict[str, Any], busy: set[int]) -> bool:
+    """Backwards-compatible single-shot errand: sell or buy if already in range.
+
+    Used by callers that do not own mission state; the day loop uses the
+    mission-aware ``_start_errand``/``_errand_mission`` pair instead.
+    """
+    if role.unit_id in commands or role.unit_id in busy:
+        return False
+    if _try_trade(turn, role, commands, state):
+        busy.add(role.unit_id)
+        return True
+    return False
+
+
+def _should_sell(turn: Turn, role: Unit, state: dict[str, Any]) -> bool:
+    """True when carrying enough surplus that a trip to the vendor pays off.
+
+    A reserve of stone is always kept for wall building and repairs, so the
+    economy can never strip the defence of its building material.
+    """
+    role_state = _role_state(state, role.unit_id)
+    if role_state is None:
+        return False
+    sellable = sellable_inventory(role_state, state)
+    if not sellable:
+        return False
+    stones_needed = max(0, len(_wall_order(turn)) - len(turn.walls()))
+    surplus = 0
+    for material, amount in sellable.items():
+        if material == WALL_MATERIAL:
+            keep = STONE_BATCH if stones_needed else WALL_RESERVE
+            surplus += max(0, amount - keep)
+        else:
+            surplus += amount
+    return surplus >= ECONOMY_MIN_SURPLUS
+
+
+def _should_buy(turn: Turn, state: dict[str, Any]) -> bool:
+    """True when gold could buy something the defence still needs.
+
+    A reserve is kept for the next tower/wall so trading never starves defence.
+    """
+    prices = shop_prices(state)
+    if not prices:
+        return False
+    if len(turn.weapons()) < 3:
+        return False
+    reserve = WEAPON_BUILD_COST
+    if turn.gold < reserve + min(prices.values()):
+        return False
+    return (turn.round_no - 1) % 130 < RETURN_BEFORE_NIGHT
+
+
+def _walk_to_zone(turn: Turn, role: Unit, kind: str,
+                  commands: dict[int, dict[str, Any]]) -> bool:
+    """Step toward the closest free cell adjacent to a neutral zone."""
+    cells = [unit.pos for unit in turn.ours if unit.health > 0] + \
+            [unit.pos for unit in turn.enemies if unit.health > 0] + \
+            [robot.pos for robot in turn.robots if robot.health > 0]
+    blocked = set(cells) | {pos for pos, zone_kind in turn.zones.items() if zone_kind != "land"}
+    goals = sorted(
+        (pos for pos in turn.zones if turn.zones[pos] == kind),
+        key=lambda pos: (distance(role.pos, pos), pos.x, pos.y),
+    )
+    for goal in goals:
+        if distance(role.pos, goal) <= 1:
+            # Already in range: the trade branch above owns what to do here.
+            return False
+        stands = [cell for cell in _neighbours(goal)
+                  if turn.land(cell) and cell not in blocked]
+        stands.sort(key=lambda cell: (distance(role.pos, cell), cell.x, cell.y))
+        for stand in stands:
+            if stand == role.pos:
+                return False
+            step = next_step(turn, role, stand)
+            if step is not None:
+                commands[role.unit_id] = move_command(step)
+                return True
+    return False
+
+
+def _try_trade(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
+               state: dict[str, Any]) -> bool:
+    """Sell surplus material and buy what the defence needs, but only in place.
+
+    Every branch requires the real adjacency the official rules demand (小贩 /
+    武器商店 周围一格内), read from the observation. A command that could not
+    execute is never sent, so a failure here always means a genuine conflict.
+    """
+    if role.unit_id in commands:
+        return False
+    role_state = _role_state(state, role.unit_id)
+    if role_state is None:
+        return False
+    # Selling: at a vendor, keep the stone the walls still need.
+    if _adjacent_zone(state, role.pos, "vendor"):
+        prices = vendor_prices(state)
+        stones_needed = max(0, len(_wall_order(turn)) - len(turn.walls()))
+        for material, amount in sorted(sellable_inventory(role_state, state).items()):
+            if material == WALL_MATERIAL:
+                keep = STONE_BATCH if stones_needed else WALL_RESERVE
+                surplus = max(0, amount - keep)
+            else:
+                surplus = amount
+            if surplus > 0 and int(prices.get(material, 0)) > 0:
+                commands[role.unit_id] = sell_command(material, surplus)
+                return True
+    # Buying: only while standing at the weapon shop.
+    if _adjacent_zone(state, role.pos, "weaponShop"):
+        item = _shop_choice(turn, role, state, commands)
+        if item is not None:
+            plan = buy_plan(role_state, state, item, available_gold(turn, state, commands))
+            if plan is not None:
+                _amount, _cost = plan
+                commands[role.unit_id] = buy_command(item, 1)
+                return True
+    return False
+
+
+def _adjacent_zone(state: dict[str, Any], pos: Pos, kind: str) -> bool:
+    """Standing within one cell of a neutral zone of `kind` (R06)."""
+    for zone in (state.get("mapInfo") or {}).get("zones") or ():
+        if zone.get("neutralType") != kind:
+            continue
+        cell = zone.get("pos") or {}
+        if distance(pos, Pos(int(cell.get("x", -99)), int(cell.get("y", -99)))) <= 1:
+            return True
+    return False
+
+
+def _shop_choice(turn: Turn, role: Unit, state: dict[str, Any],
+                 commands: dict[int, dict[str, Any]]) -> str | None:
+    """Pick the most useful affordable item while standing at the weapon shop.
+
+    Priority: upgrade a tower we already stand next to, then a wall upgrade,
+    then a base upgrade, then battlefield reagents. Every candidate must be
+    legal for the building it targets, so a voucher is never wasted.
+    """
+    prices = shop_prices(state)
+    gold = available_gold(turn, state, commands)
+    planned_items = [cmd.get("name") for cmd in commands.values() if cmd.get("action") == "buy"]
+
+    def affordable(name: str) -> bool:
+        price = prices.get(name)
+        return price is not None and price <= gold
+
+    for building in sorted(turn.ours, key=lambda unit: (unit.kind, unit.pos.x, unit.pos.y)):
+        if distance(role.pos, building.pos) > 1:
+            continue
+        for item in sorted(prices):
+            if item in planned_items:
+                continue
+            if not can_upgrade(item, building.kind, building.level):
+                continue
+            if affordable(item):
+                return item
+    # Reagents we can actually use later: they sit in the backpack until needed.
+    fallback = []
+    if gold >= prices.get(BOMB, 10 ** 9) + 25:
+        fallback.append(BOMB)
+    if any(unit.health <= 0 for unit in turn.ours):
+        fallback.append(MEDICINE)
+    if any(unit.kind == WALL and unit.health < 1000 for unit in turn.ours):
+        fallback.append(WALL_FIXER)
+    for item in fallback:
+        if item in planned_items:
+            continue
+        if affordable(item):
+            return item
+    return None
+
+
+def _role_state(state: dict[str, Any], unit_id: int) -> dict[str, Any] | None:
+    for role in (state.get("teamOur") or {}).get("roles") or ():
+        if role.get("id") == unit_id:
+            return role
+    return None
+
+
+def _adjacent_mine(turn: Turn, role: Unit) -> Pos | None:
+    mines = sorted(
+        (
+            mine for mine in turn.stone_mines()
+            if role.pos != mine and distance(role.pos, mine) <= 1
+        ),
+        key=lambda pos: (distance(role.pos, pos), pos.x, pos.y),
+    )
+    return mines[0] if mines else None
+
+
+def _night(turn: Turn, commands: dict[int, dict[str, Any]],
+           state: dict[str, Any] | None = None, planner_state: Any = None) -> None:
+    claimed: set[Pos] = set()
+    pairs = _tower_pairs(turn)
+    if state is not None:
+        for uid, command in nightwork.plan(turn, state, pairs).items():
+            commands.setdefault(uid, command)
+    # Battlefield reagents first: a bomb or a dizzy on a clustered wave is worth
+    # more than one extra shot, and items resolve before robot movement (R06).
+    if state is not None and _try_battle_items(turn, commands, state):
+        pass
+    for role, tower in pairs:
+        if role.unit_id in commands:
+            continue
+        if distance(role.pos, tower.pos) <= 1:
+            if turn.is_day or tower.cooldown > 0:
+                continue
+            targets = _aim_points(turn, tower)
+            if targets:
+                commands[tower.unit_id] = attack_command_multi(role.unit_id, targets)
+            continue
+        step = _step_toward(turn, role, tower.pos, claimed)
+        if step is not None:
+            commands[role.unit_id] = move_command(step)
+
+
+def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
+                      state: dict[str, Any]) -> bool:
+    """Use a bomb when a 3×3 blast covers several robots and we hold one.
+
+    Only committed when the blast is clearly worth it: the item costs 100 gold
+    and the strategy must not spend it on a single small robot.
+    """
+    from .protocol import BOMB_RADIUS
+    best: tuple[int, Pos, Unit] | None = None
+    for role in turn.controllable():
+        if role.unit_id in commands:
+            continue
+        role_state = _role_state(state, role.unit_id)
+        if not role_state or count_item(role_state, BOMB) <= 0:
+            continue
+        for robot in turn.robots:
+            if robot.health <= 0:
+                continue
+            hits = sum(1 for other in turn.robots
+                       if other.health > 0 and distance(other.pos, robot.pos) <= BOMB_RADIUS)
+            if hits < 3:
+                continue
+            if best is None or hits > best[0]:
+                best = (hits, robot.pos, role)
+    if best is None:
+        return False
+    _hits, target, role = best
+    commands[role.unit_id] = use_command(BOMB, target)
+    return True
+
+
+def _tower_pairs(turn: Turn) -> tuple[tuple[Unit, Unit], ...]:
+    roles, towers = turn.controllable(), turn.weapons()
+    n = min(len(roles), len(towers))
+    if not n:
+        return ()
+    return min((tuple(zip(rs, ts)) for rs in permutations(roles, n)
+                for ts in permutations(towers, n)),
+               key=lambda pairs: sum(max(0, distance(r.pos, t.pos)-1) for r, t in pairs))
+
+
+def _attack_target(turn: Turn, tower: Unit) -> Pos | None:
+    """First aim point for a tower: the nearest robot inside its range."""
+    reach = tower.range_of_attack()
+    targets = [
+        robot for robot in turn.robots
+        if robot.health > 0 and distance(tower.pos, robot.pos) <= reach
+    ]
+    if not targets:
+        return None
+    nearest = min(
+        targets,
+        key=lambda robot: (distance(tower.pos, robot.pos), robot.robot_id),
+    )
+    return nearest.pos
+
+
+def _aim_points(turn: Turn, tower: Unit) -> list[Pos]:
+    """Legal aim points for one tower, chosen by the official weapon geometry.
+
+    * **加特林**: the nearest robot first, then the extra bullets go to targets
+      whose direction from the tower stays inside 90° of the first one — an
+      illegal cone makes the *whole* attack illegal, so this must be checked here
+      rather than discovered by the judge.
+    * **电磁狙击炮**: one aim point, chosen for the longest penetration line: the
+      total damage along the path is what the weapon actually deals.
+    * **火箭发射台**: up to level-many aim points, cluster-first (its damage is
+      20 centre / 10 splash), unchanged from the local strategy.
+    """
+    reach = tower.range_of_attack()
+    live = [robot for robot in turn.robots
+            if robot.health > 0 and distance(tower.pos, robot.pos) <= reach]
+    if not live:
+        return []
+    first = _attack_target(turn, tower)
+    if first is None:
+        return []
+    if tower.kind == "railgun":
+        best = None
+        for robot in live:
+            volley = ballistics.railgun_volley(tower.pos, tower.level, robot.pos,
+                                               turn.robots)
+            total = sum(hit["damage"] for hit in volley["hits"])
+            key = (-total, distance(tower.pos, robot.pos), robot.robot_id)
+            if best is None or key < best[0]:
+                best = (key, robot.pos)
+        return [best[1]] if best else [first]
+    if tower.kind == "gatling":
+        bullets = max(1, min(tower.level, 3))
+        chosen = [first]
+        remaining = [robot for robot in live if robot.pos != first]
+        # Greedy: each extra bullet goes to the target that adds the most damage
+        # while keeping every pair of directions within the cone.
+        while len(chosen) < bullets and remaining:
+            best = None
+            for robot in remaining:
+                candidate = chosen + [robot.pos]
+                if not ballistics.cone_legal(candidate, tower.pos):
+                    continue
+                volley = ballistics.gatling_volley(tower.pos, len(candidate), candidate,
+                                                   turn.robots)
+                gain = sum(shot["damage"] for shot in volley["shots"][len(chosen):])
+                key = (-gain, distance(tower.pos, robot.pos), robot.robot_id)
+                if best is None or key < best[0]:
+                    best = (key, robot)
+            if best is None:
+                break
+            chosen.append(best[1].pos)
+            remaining.remove(best[1])
+        # An illegal set would make the whole attack illegal, so fall back to the
+        # single nearest target rather than sending a command the judge refuses.
+        return chosen if ballistics.cone_legal(chosen, tower.pos) else [first]
+    # Rocket: cluster-first, up to level-many missiles. Repeat aim points are
+    # legal and their damage stacks (任务书 §4.5.4), so a lone target is simply
+    # aimed at with every missile.
+    bullets = max(1, min(tower.level, 3))
+    ranked = sorted(
+        live,
+        key=lambda robot: (
+            -sum(1 for other in live if distance(other.pos, robot.pos) <= 1),
+            distance(tower.pos, robot.pos), robot.robot_id,
+        ),
+    )
+    chosen: list[Pos] = []
+    for robot in ranked:
+        if len(chosen) >= bullets:
+            break
+        chosen.append(robot.pos)
+    while len(chosen) < bullets:
+        chosen.append(ranked[0].pos)
+    return chosen
+
+
+def _build_or_walk(
+    turn: Turn,
+    role: Unit,
+    target: Pos,
+    name: str,
+    claimed: set[Pos],
+    commands: dict[int, dict[str, Any]],
+) -> None:
+    if role.pos != target and distance(role.pos, target) <= 1:
+        commands[role.unit_id] = build_command(target, name)
+        claimed.add(target)
+        return
+    step = _step_toward(turn, role, target, claimed)
+    if step is not None:
+        commands[role.unit_id] = move_command(step)
+
+
+def _mine(
+    turn: Turn,
+    role: Unit,
+    claimed: set[Pos],
+    commands: dict[int, dict[str, Any]],
+) -> bool:
+    if role.backpack_full:
+        return False
+    mines = sorted(
+        (pos for pos in turn.stone_mines() if pos not in claimed),
+        key=lambda pos: (distance(role.pos, pos), pos.x, pos.y),
+    )
+    for mine in mines:
+        if role.pos != mine and distance(role.pos, mine) <= 1:
+            commands[role.unit_id] = collect_command(mine)
+            claimed.add(mine)
+            return True
+        step = _step_toward(turn, role, mine, claimed)
+        if step is not None:
+            commands[role.unit_id] = move_command(step)
+            return True
+    return False
+
+
+def _step_toward(
+    turn: Turn,
+    role: Unit,
+    target: Pos,
+    claimed: set[Pos],
+    *,
+    inside_only: bool = False,
+) -> Pos | None:
+    for stand in _stand_cells(turn, role, target, claimed, inside_only):
+        if stand == role.pos:
+            return None
+        step = next_step(turn, role, stand)
+        if step is None or step in claimed:
+            continue
+        claimed.add(step)
+        return step
+    return None
+
+
+def _stand_cells(
+    turn: Turn,
+    role: Unit,
+    target: Pos,
+    claimed: set[Pos],
+    inside_only: bool = False,
+) -> list[Pos]:
+    station = turn.station()
+    footprint = station_footprint(station.pos) if station else ()
+    blocked = turn.blocked(role)
+    cells = [
+        pos for pos in _neighbours(target)
+        if turn.land(pos)
+        and pos not in blocked
+        and (pos == role.pos or pos not in claimed)
+        and (
+            not inside_only
+            or _footprint_distance(pos, footprint) <= 1
+        )
+    ]
+    cells.sort(key=lambda pos: (distance(role.pos, pos), _footprint_distance(pos, footprint), pos.x, pos.y))
+    return cells
+
+
+def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
+    station = turn.station()
+    if station is None:
+        return ()
+    footprint = station_footprint(station.pos)
+    cells = [
+        pos for pos in _cells_at_distance(station.pos, 1) if turn.land(pos)
+    ]
+    # Stable geometry relative to the base, retaining existing towers and
+    # separating sites so controllers have room to stand.
+    chosen = [u.pos for u in turn.weapons()]
+    permanent = {p for u in turn.ours + turn.enemies
+                 if u.health > 0 and u.kind not in ('worker', 'pioneer')
+                 for p in turn.footprint(u)}
+    cells = [p for p in cells if p not in permanent]
+    while cells and len(chosen) < 3:
+        best = max(cells, key=lambda p: (min((distance(p,q) for q in chosen), default=0), -p.x, -p.y))
+        chosen.append(best)
+        cells.remove(best)
+    return tuple(chosen[:3])
+
+
+def _wall_order(turn: Turn) -> tuple[Pos, ...]:
+    """Cells of the local wall ring, with a gate the pioneer can always leave by.
+
+    The geometry is a local assumption (D01: the request carries no build-zone
+    field). What is *not* optional is the gate: a closed ring seals our own roles
+    in, and a robot standing in a one-cell gap is enough to trap the pioneer for
+    the whole match. The ring is therefore built around a two-cell opening.
+    """
+    station = turn.station()
+    if station is None:
+        return ()
+    footprint = station_footprint(station.pos)
+    xs = [pos.x for pos in footprint]
+    ys = [pos.y for pos in footprint]
+    xmin, xmax = min(xs), max(xs)
+    ymin, ymax = min(ys), max(ys)
+    gate = _gate_cells(xmin, xmax, ymin, ymax)
+    order = [
+        # Bottom edge stops two cells short of the right corner: that opening is
+        # the gate, so it is never walled even when the ring is finished.
+        *(Pos(x, ymin - 2) for x in range(xmax - 1, xmin - 3, -1)),
+        *(Pos(xmin - 2, y) for y in range(ymin - 1, ymax + 2)),
+        *(Pos(x, ymax + 2) for x in range(xmin - 2, xmax + 3)),
+        *(Pos(xmax + 2, y) for y in range(ymax + 1, ymin - 2, -1)),
+    ]
+    return tuple(pos for pos in order if pos not in gate and turn.land(pos))
+
+
+def _gate_cells(xmin: int, xmax: int, ymin: int, ymax: int) -> frozenset[Pos]:
+    """The two bottom-right ring cells deliberately left open as a gate."""
+    return frozenset({Pos(xmax + 2, ymin - 2), Pos(xmax + 1, ymin - 2)})
+
+
+def _ring_is_sealed(turn: Turn) -> bool:
+    """True when the ring around the base has no reachable way out.
+
+    Only used by tests and diagnostics: the strategy now always leaves a gate, so
+    this should never fire for a completed ring.
+    """
+    from collections import deque
+
+    station = turn.station()
+    pioneer = turn.pioneer()
+    if station is None or pioneer is None:
+        return False
+    gate = _gate_cells(min(p.x for p in station_footprint(station.pos)),
+                       max(p.x for p in station_footprint(station.pos)),
+                       min(p.y for p in station_footprint(station.pos)),
+                       max(p.y for p in station_footprint(station.pos)))
+    if not gate <= {pos for pos in turn.zones if turn.zones[pos] == "land"}:
+        return False
+    blocked = turn.blocked(pioneer)
+    seen = {pioneer.pos}
+    queue = deque([pioneer.pos])
+    while queue:
+        current = queue.popleft()
+        if current in gate:
+            return False
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if dx == 0 and dy == 0:
+                    continue
+                nxt = Pos(current.x + dx, current.y + dy)
+                if nxt in seen or not turn.land(nxt) or nxt in blocked:
+                    continue
+                seen.add(nxt)
+                queue.append(nxt)
+    return True
+
+
+def _cells_at_distance(station_pos: Pos, radius: int) -> tuple[Pos, ...]:
+    footprint = station_footprint(station_pos)
+    xs = [pos.x for pos in footprint]
+    ys = [pos.y for pos in footprint]
+    cells = []
+    for x in range(min(xs) - radius, max(xs) + radius + 1):
+        for y in range(min(ys) - radius, max(ys) + radius + 1):
+            pos = Pos(x, y)
+            if pos in footprint:
+                continue
+            if _footprint_distance(pos, footprint) == radius:
+                cells.append(pos)
+    return tuple(cells)
+
+
+def _footprint_distance(pos: Pos, footprint: tuple[Pos, ...]) -> int:
+    if not footprint:
+        return 0
+    return min(distance(pos, cell) for cell in footprint)
+
+
+def _neighbours(pos: Pos) -> tuple[Pos, ...]:
+    return tuple(
+        Pos(pos.x + dx, pos.y + dy) for dx, dy in _NEIGHBOUR_STEPS
+    )

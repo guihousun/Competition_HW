@@ -1,0 +1,36 @@
+{
+  "round": 411,
+  "commanded": {
+    "10011": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 5,
+          "y": 25
+        }
+      ]
+    }
+  },
+  "at_target_before": [
+    {
+      "id": 40000,
+      "kind": "wall",
+      "health": 1000
+    }
+  ],
+  "at_target_after": [
+    {
+      "id": 10011,
+      "kind": "pioneer",
+      "health": 200
+    },
+    {
+      "id": 40000,
+      "kind": "wall",
+      "health": 1000
+    }
+  ],
+  "results": {
+    "10011": true
+  }
+}
