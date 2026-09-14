@@ -41,6 +41,7 @@
 
 - 选手以 HTTP server 启动，端口由系统传入，监听 `0.0.0.0`；启动示例为 `bash run.sh port`。
 - 保持官方字段名、大小写、类型及枚举；角色 ID 由判题器分配，响应使用收到的 ID。
+- 敌我以当前请求的 `teamOur` / `teamEnemy` 为准，己方阵营读取 `teamOur.type`（`challenger` / `defender`）；我方既可能红方，也可能蓝方。不得按颜色、出生方位或角色 ID 前缀判定己方。任务点归属与机器人 `targetTeam` 均与当前己方阵营比较（接口§1.3、§1.5；用户澄清2026-09-14）。
 - 输出 `roleCommandMap`；`prompt` 和 `executeCmd` 按功能使用。不得要求判题器提供本地新增字段。
 - `controllerId` 为字符串，`targetPos` 是坐标数组，不可改成单个对象。
 - 每角色每轮至多一条指令；攻击以武器 ID 为键，操控者每轮只能操控一座武器且不能另做一个动作。
