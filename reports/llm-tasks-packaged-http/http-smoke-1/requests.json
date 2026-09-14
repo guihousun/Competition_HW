@@ -1,0 +1,1172 @@
+[
+  {
+    "round": 1,
+    "http_ms": 87.73800000199117,
+    "input_bytes": 3655,
+    "command_count": 3,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 2,
+    "http_ms": 43.55450000730343,
+    "input_bytes": 4189,
+    "command_count": 3,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 3,
+    "http_ms": 19.433900015428662,
+    "input_bytes": 5087,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 4,
+    "http_ms": 21.62409998709336,
+    "input_bytes": 3835,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 5,
+    "http_ms": 20.148000010522082,
+    "input_bytes": 4046,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 6,
+    "http_ms": 18.749099981505424,
+    "input_bytes": 4046,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 7,
+    "http_ms": 17.325499997241423,
+    "input_bytes": 4046,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 8,
+    "http_ms": 15.599100006511435,
+    "input_bytes": 4046,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 9,
+    "http_ms": 13.771799975074828,
+    "input_bytes": 4046,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 10,
+    "http_ms": 8.796999987680465,
+    "input_bytes": 4047,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 11,
+    "http_ms": 32.40170000935905,
+    "input_bytes": 4047,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 12,
+    "http_ms": 9.916499984683469,
+    "input_bytes": 4054,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 13,
+    "http_ms": 9.659000003011897,
+    "input_bytes": 4063,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 14,
+    "http_ms": 9.362699987832457,
+    "input_bytes": 4072,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 15,
+    "http_ms": 10.315999999875203,
+    "input_bytes": 4081,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 16,
+    "http_ms": 13.174199993954971,
+    "input_bytes": 4090,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 17,
+    "http_ms": 36.43509998801164,
+    "input_bytes": 4098,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 18,
+    "http_ms": 15.35400000284426,
+    "input_bytes": 4108,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 19,
+    "http_ms": 16.797499993117526,
+    "input_bytes": 4117,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 20,
+    "http_ms": 17.11260000593029,
+    "input_bytes": 4126,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 21,
+    "http_ms": 20.823600003495812,
+    "input_bytes": 4136,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 22,
+    "http_ms": 21.300499996868894,
+    "input_bytes": 4143,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 23,
+    "http_ms": 5.810400005429983,
+    "input_bytes": 4321,
+    "command_count": 2,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 24,
+    "http_ms": 5.683900002622977,
+    "input_bytes": 4536,
+    "command_count": 2,
+    "prompt": false,
+    "tool": true,
+    "task_ended": null
+  },
+  {
+    "round": 25,
+    "http_ms": 4.3154000013601035,
+    "input_bytes": 4348,
+    "command_count": 2,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 26,
+    "http_ms": 4.071000003023073,
+    "input_bytes": 4594,
+    "command_count": 2,
+    "prompt": false,
+    "tool": true,
+    "task_ended": null
+  },
+  {
+    "round": 27,
+    "http_ms": 5.066100013209507,
+    "input_bytes": 4495,
+    "command_count": 2,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 28,
+    "http_ms": 3.491799987386912,
+    "input_bytes": 4656,
+    "command_count": 2,
+    "prompt": false,
+    "tool": true,
+    "task_ended": null
+  },
+  {
+    "round": 29,
+    "http_ms": 4.939800011925399,
+    "input_bytes": 4515,
+    "command_count": 2,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 30,
+    "http_ms": 4.043599998112768,
+    "input_bytes": 4819,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 31,
+    "http_ms": 6.312899990007281,
+    "input_bytes": 4489,
+    "command_count": 2,
+    "prompt": false,
+    "tool": false,
+    "task_ended": "completed"
+  },
+  {
+    "round": 32,
+    "http_ms": 7.186600007116795,
+    "input_bytes": 4405,
+    "command_count": 2,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 33,
+    "http_ms": 65.92490000184625,
+    "input_bytes": 4405,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 34,
+    "http_ms": 39.31089999969117,
+    "input_bytes": 4516,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 35,
+    "http_ms": 35.81579998717643,
+    "input_bytes": 4515,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 36,
+    "http_ms": 41.86299999128096,
+    "input_bytes": 4612,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 37,
+    "http_ms": 38.62509998725727,
+    "input_bytes": 4612,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 38,
+    "http_ms": 26.58579999115318,
+    "input_bytes": 4612,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 39,
+    "http_ms": 26.929999992717057,
+    "input_bytes": 4611,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 40,
+    "http_ms": 22.642399999313056,
+    "input_bytes": 4611,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 41,
+    "http_ms": 36.3229000067804,
+    "input_bytes": 4706,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 42,
+    "http_ms": 30.5213000101503,
+    "input_bytes": 4801,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 43,
+    "http_ms": 25.247199984733015,
+    "input_bytes": 4801,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 44,
+    "http_ms": 26.408500008983538,
+    "input_bytes": 4991,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 45,
+    "http_ms": 19.225900003220886,
+    "input_bytes": 4991,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 46,
+    "http_ms": 32.132399996044114,
+    "input_bytes": 4991,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 47,
+    "http_ms": 14.523199992254376,
+    "input_bytes": 4991,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 48,
+    "http_ms": 13.146100012818351,
+    "input_bytes": 4991,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 49,
+    "http_ms": 10.191500012297183,
+    "input_bytes": 4991,
+    "command_count": 2,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 50,
+    "http_ms": 10.490599990589544,
+    "input_bytes": 5071,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 51,
+    "http_ms": 27.66320001683198,
+    "input_bytes": 5087,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 52,
+    "http_ms": 15.996400004951283,
+    "input_bytes": 5183,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 53,
+    "http_ms": 16.486400010762736,
+    "input_bytes": 5182,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 54,
+    "http_ms": 20.220000005792826,
+    "input_bytes": 5182,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 55,
+    "http_ms": 46.610599994892254,
+    "input_bytes": 5277,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 56,
+    "http_ms": 22.158300009323284,
+    "input_bytes": 5372,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 57,
+    "http_ms": 52.17189999530092,
+    "input_bytes": 5372,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 58,
+    "http_ms": 50.16379998414777,
+    "input_bytes": 5372,
+    "command_count": 3,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 59,
+    "http_ms": 62.822200008668005,
+    "input_bytes": 5539,
+    "command_count": 2,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 60,
+    "http_ms": 55.4444000008516,
+    "input_bytes": 5746,
+    "command_count": 1,
+    "prompt": false,
+    "tool": true,
+    "task_ended": null
+  },
+  {
+    "round": 61,
+    "http_ms": 38.449999992735684,
+    "input_bytes": 5534,
+    "command_count": 1,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 62,
+    "http_ms": 16.09459999599494,
+    "input_bytes": 5771,
+    "command_count": 0,
+    "prompt": false,
+    "tool": true,
+    "task_ended": null
+  },
+  {
+    "round": 63,
+    "http_ms": 16.71850000275299,
+    "input_bytes": 5644,
+    "command_count": 0,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 64,
+    "http_ms": 16.880899987882003,
+    "input_bytes": 5803,
+    "command_count": 0,
+    "prompt": false,
+    "tool": true,
+    "task_ended": null
+  },
+  {
+    "round": 65,
+    "http_ms": 16.555899986997247,
+    "input_bytes": 5554,
+    "command_count": 0,
+    "prompt": true,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 66,
+    "http_ms": 37.7745000005234,
+    "input_bytes": 5848,
+    "command_count": 1,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 67,
+    "http_ms": 15.484100003959611,
+    "input_bytes": 5508,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": "completed"
+  },
+  {
+    "round": 68,
+    "http_ms": 15.479999972740188,
+    "input_bytes": 5331,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 69,
+    "http_ms": 53.655499999877065,
+    "input_bytes": 5331,
+    "command_count": 1,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 70,
+    "http_ms": 29.928999982075766,
+    "input_bytes": 5344,
+    "command_count": 1,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 71,
+    "http_ms": 15.831099997740239,
+    "input_bytes": 5605,
+    "command_count": 2,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 72,
+    "http_ms": 15.553499979432672,
+    "input_bytes": 5620,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 73,
+    "http_ms": 15.969799977028742,
+    "input_bytes": 5592,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 74,
+    "http_ms": 15.452999999979511,
+    "input_bytes": 5592,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 75,
+    "http_ms": 16.57899998826906,
+    "input_bytes": 5592,
+    "command_count": 2,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 76,
+    "http_ms": 27.58460000040941,
+    "input_bytes": 5619,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 77,
+    "http_ms": 15.542700013611466,
+    "input_bytes": 5591,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 78,
+    "http_ms": 15.444699994986877,
+    "input_bytes": 5591,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 79,
+    "http_ms": 16.07710000826046,
+    "input_bytes": 5591,
+    "command_count": 2,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 80,
+    "http_ms": 15.886600012890995,
+    "input_bytes": 5618,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 81,
+    "http_ms": 16.19230001233518,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 82,
+    "http_ms": 18.208199995569885,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 83,
+    "http_ms": 16.384200018364936,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 84,
+    "http_ms": 15.649000008124858,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 85,
+    "http_ms": 15.635899995686486,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 86,
+    "http_ms": 15.980099997250363,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 87,
+    "http_ms": 16.996300022583455,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 88,
+    "http_ms": 16.455900011351332,
+    "input_bytes": 5590,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 89,
+    "http_ms": 17.619000020204112,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 90,
+    "http_ms": 16.871499974513426,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 91,
+    "http_ms": 15.9597999881953,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 92,
+    "http_ms": 16.415499994764104,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 93,
+    "http_ms": 16.352000006008893,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 94,
+    "http_ms": 16.37329999357462,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 95,
+    "http_ms": 18.715199985308573,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 96,
+    "http_ms": 16.210900008445606,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 97,
+    "http_ms": 15.671300003305078,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 98,
+    "http_ms": 15.834999998332933,
+    "input_bytes": 5588,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 99,
+    "http_ms": 15.792199992574751,
+    "input_bytes": 5588,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 100,
+    "http_ms": 16.46339998114854,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 101,
+    "http_ms": 16.22670001233928,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 102,
+    "http_ms": 16.223999991780147,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 103,
+    "http_ms": 16.75529999192804,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 104,
+    "http_ms": 16.089799988549203,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 105,
+    "http_ms": 16.412800003308803,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 106,
+    "http_ms": 15.58049998129718,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 107,
+    "http_ms": 15.67090000025928,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 108,
+    "http_ms": 15.308500005630776,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 109,
+    "http_ms": 36.09390000929125,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 110,
+    "http_ms": 17.209399986313656,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 111,
+    "http_ms": 16.202200000407174,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 112,
+    "http_ms": 38.15560002112761,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 113,
+    "http_ms": 15.517699997872114,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 114,
+    "http_ms": 16.491300018969923,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 115,
+    "http_ms": 15.788600023370236,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 116,
+    "http_ms": 15.997700014850125,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 117,
+    "http_ms": 15.88120000087656,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 118,
+    "http_ms": 15.872799995122477,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 119,
+    "http_ms": 16.57020000857301,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 120,
+    "http_ms": 15.982599987182766,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 121,
+    "http_ms": 32.97570001450367,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 122,
+    "http_ms": 16.06810002704151,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 123,
+    "http_ms": 37.276500021107495,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 124,
+    "http_ms": 16.12310000928119,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 125,
+    "http_ms": 16.76300002145581,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 126,
+    "http_ms": 16.497400007210672,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 127,
+    "http_ms": 16.33790001505986,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 128,
+    "http_ms": 16.205399995669723,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 129,
+    "http_ms": 19.095199997536838,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  },
+  {
+    "round": 130,
+    "http_ms": 18.0664999934379,
+    "input_bytes": 5589,
+    "command_count": 0,
+    "prompt": false,
+    "tool": false,
+    "task_ended": null
+  }
+]
