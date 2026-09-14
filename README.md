@@ -8,6 +8,8 @@
 
 LLM能力建设：[测试候选与回退开关](docs/AGENT_CANDIDATE.md) · [本地Agent演示](docs/LOCAL_LLM.md) · [交付验证](reports/llm-tasks-delivery/README.md) · [总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md)。
 
+当前审计：[剩余实现缺口](specs/LLM_TASKS_FINAL_AUDIT.md)。长传闻检索、迟到消息的日期不确定性和结构化冲突记忆仍在补齐，测试候选不代表整个开发goal已完成。
+
 《未来战争》参赛策略与本地端到端调试平台，Python 3.11+，无第三方依赖。
 基于 `Demo/CoreGeek.tar.gz` 示例扩展，覆盖防御、经济、自进化任务Agent、新闻解释和多日寻宝；本地模拟仍有已登记的官方规则差异。
 
