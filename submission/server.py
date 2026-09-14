@@ -10,7 +10,7 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from .brain import respond
+from .brain import respond, decision_report
 from .scenarios import observation
 from . import diagnostics, telemetry
 
@@ -29,6 +29,7 @@ class Handler(BaseHTTPRequestHandler):
         response = {'roleCommandMap': {}}
         invalid = False
         fault = None
+        decision = None
         started = time.perf_counter()
         try:
             length = int(self.headers.get('Content-Length') or 0)
@@ -43,6 +44,10 @@ class Handler(BaseHTTPRequestHandler):
         if not invalid:
             try:
                 response = respond(observation(payload))
+                try:
+                    decision = decision_report()
+                except Exception:
+                    decision = None
             except Exception as error:
                 LOGGER.error('decision failed (%s)', type(error).__name__)
                 try:
@@ -65,13 +70,13 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             try:
                 telemetry.submit(ticket, raw, body, sent=sent, plan_ms=elapsed,
-                                 invalid_input=invalid, fault=fault)
+                                 invalid_input=invalid, fault=fault, decision=decision)
             except Exception:
                 pass
         try:
             diagnostics.response_summary(payload, response, plan_ms=elapsed, invalid_input=invalid,
                                          decision_exception='internal_error' if fault else None,
-                                         event_id=getattr(ticket, 'event_id', None))
+                                         event_id=getattr(ticket, 'event_id', None), decision=decision)
         except Exception:
             pass
 

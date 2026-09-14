@@ -76,7 +76,8 @@ class FlatPackageTests(unittest.TestCase):
             names=candidate.getnames()
             self.assertTrue(all(not n.startswith(('CoreGeek/Demo/','CoreGeek/web/')) for n in names))
             self.assertIn('CoreGeek/src/agent/server.py',names)
-            self.assertEqual(candidate.extractfile('CoreGeek/src/agent/server.py').read(),(ROOT/'submission/server.py').read_bytes())
+            committed = subprocess.check_output(['git','-C',str(self.repo),'show','HEAD:submission/server.py'])
+            self.assertEqual(candidate.extractfile('CoreGeek/src/agent/server.py').read(), committed)
 
     def test_repeated_build_is_byte_identical(self):
         second=self.root/'second/CoreGeek.tar.gz'

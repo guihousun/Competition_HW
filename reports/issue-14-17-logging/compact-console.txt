@@ -1,0 +1,35 @@
+digest s=5b9f2b/? r=1 start=1 phase=day base=1500 lvl=1 workers=2 pioneers=1 weapons=0 walls=0 robots=0
+digest anomaly s=5b9f2b/? what=first_errors r=14 total=1
+digest rollup s=5b9f2b/? r=1..20 turns=20 phase=day hp_min=1500 hp_last=1500 walls=0 robots=0 ready=1..3 cmds=51 actions=move:36,collect:10,build:3,acceptTask:1,submitAnswer:1 accept=1 submit=1 errors=1 plan_max=8.8
+digest anomaly s=5b9f2b/? what=first_action_false r=40 n=1
+digest rollup s=5b9f2b/? r=21..40 turns=20 phase=day hp_min=1500 hp_last=1500 walls=0..7 robots=0 ready=3 cmds=41 actions=move:23,collect:10,build:7,acceptTask:1 accept=1 errors=1 false=1 plan_max=19.4
+digest anomaly s=5b9f2b/? what=first_empty r=53 reason=unclassified base=1500 ready=3 robots=0
+digest rollup s=5b9f2b/? r=41..60 turns=20 phase=day hp_min=1500 hp_last=1500 walls=7..17 robots=0 ready=3 cmds=38 actions=move:19,build:10,acceptTask:9 accept=9 empty=unclassified:2 false=8 plan_max=118.2
+digest phase s=5b9f2b/? r=71 now=night base=1500 robots=70
+digest anomaly s=5b9f2b/? what=first_robots r=71 visible=70
+digest rollup s=5b9f2b/? r=61..80 turns=20 phase=night controllers=20010:2,20012:2 hp_min=1500 hp_last=1500 walls=17 robots=0..70 ready=1..3 cmds=17 actions=move:11,attack:4,acceptTask:1,submitAnswer:1 accept=1 submit=1 empty=unclassified:5 errors=2 false=1 plan_max=38.8
+digest rollup s=5b9f2b/? r=81..100 turns=20 phase=night controllers=20010:5,20012:5 hp_min=1500 hp_last=1500 walls=17 robots=51..68 ready=1..2 cmds=10 actions=attack:10 empty=unclassified:10 plan_max=2.6
+digest anomaly s=5b9f2b/? what=first_base_damage r=102 hp=1490 observed_damage=10
+digest rollup s=5b9f2b/? r=101..120 turns=20 phase=night controllers=20010:5,20012:5 hp_min=1325 hp_last=1325 dmg=175 walls=16 robots=32..48 ready=1..2 cmds=10 actions=attack:10 empty=unclassified:10 plan_max=6.5
+digest phase s=5b9f2b/? r=131 now=day base=1325 robots=0
+digest rollup s=5b9f2b/? r=121..140 turns=20 phase=day hp_min=1325 hp_last=1325 walls=16 robots=0..31 ready=2..3 cmds=3 actions=move:3 empty=unclassified:18 plan_max=5.9
+digest rollup s=5b9f2b/? r=141..160 turns=20 phase=day hp_min=1325 hp_last=1325 walls=16..17 robots=0 ready=3 cmds=46 actions=move:33,collect:12,build:1 empty=unclassified:2 plan_max=196.1
+digest rollup s=5b9f2b/? r=161..180 turns=20 phase=day hp_min=1325 hp_last=1325 walls=17 robots=0 ready=3 cmds=30 actions=move:16,collect:8,acceptTask:4,sell:1,submitAnswer:1 accept=4 submit=1 errors=2 false=3 plan_max=184.1
+digest rollup s=5b9f2b/? r=181..200 turns=20 phase=day hp_min=1325 hp_last=1325 walls=17 robots=0 ready=3 cmds=38 actions=move:27,acceptTask:10,sell:1 accept=10 empty=unclassified:2 false=10 plan_max=89.5
+digest phase s=5b9f2b/? r=201 now=night base=1325 robots=45
+digest rollup s=5b9f2b/? r=201..220 turns=20 phase=night controllers=20010:5,20012:4,20011:2 hp_min=1325 hp_last=1325 walls=17 robots=37..45 ready=0..3 cooling=3 cmds=25 actions=move:14,attack:11 empty=unclassified:3 plan_max=102.2
+digest rollup s=5b9f2b/? r=221..240 turns=20 phase=night controllers=20010:5,20012:5,20011:3 hp_min=1060 hp_last=1060 dmg=265 walls=15..17 robots=10..37 ready=0..2 cooling=7 cmds=13 actions=attack:13 empty=unclassified:10 plan_max=3.0
+digest base_low s=5b9f2b/? r=244 hp=1000 threshold=1000
+digest rollup s=5b9f2b/? r=241..260 turns=20 phase=night controllers=20010:4,20012:4 hp_min=900 hp_last=900 dmg=160 walls=14..15 robots=0..10 ready=1..3 cmds=8 actions=attack:8 empty=unclassified:12 plan_max=1.2
+digest phase s=5b9f2b/? r=261 now=day base=900 robots=0
+digest rollup s=5b9f2b/? r=261..280 turns=20 phase=day hp_min=900 hp_last=900 walls=14..16 robots=0 ready=3 cmds=40 actions=move:28,collect:10,build:2 plan_max=10.4
+digest rollup s=5b9f2b/? r=281..300 turns=20 phase=day hp_min=900 hp_last=900 walls=16..17 robots=0 ready=3 cmds=6 actions=move:5,build:1 empty=unclassified:14 plan_max=51.9
+digest rollup s=5b9f2b/? r=301..320 turns=20 phase=day hp_min=900 hp_last=900 walls=17 robots=0 ready=3 cmds=25 actions=move:22,acceptTask:3 accept=3 empty=unclassified:3 false=2 plan_max=70.5
+digest phase s=5b9f2b/? r=331 now=night base=900 robots=58
+digest rollup s=5b9f2b/? r=321..340 turns=20 phase=night controllers=20010:2,20012:2 hp_min=900 hp_last=900 walls=17 robots=0..58 ready=1..3 cmds=34 actions=move:25,acceptTask:5,attack:4 accept=5 empty=unclassified:1 false=6 plan_max=98.5
+digest base_low s=5b9f2b/? r=354 hp=700 threshold=750
+digest base_low s=5b9f2b/? r=357 hp=460 threshold=500
+digest base_low s=5b9f2b/? r=360 hp=220 threshold=250
+digest rollup s=5b9f2b/? r=341..360 turns=20 phase=night controllers=20010:5,20011:5,20012:5 hp_min=220 hp_last=220 dmg=680 walls=12..17 robots=44..57 ready=0..2 cooling=8 cmds=18 actions=attack:15,move:3 empty=unclassified:8 plan_max=62.9
+digest base_low s=5b9f2b/? r=362 hp=60 threshold=100
+digest rollup s=5b9f2b/? r=361..362 turns=2 final=1 phase=night controllers=20010:1 hp_min=60 hp_last=60 dmg=160 walls=12 robots=36..40 ready=0..1 cooling=1 cmds=1 actions=attack:1 empty=unclassified:1 plan_max=2.2

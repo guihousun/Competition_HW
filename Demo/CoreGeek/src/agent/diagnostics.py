@@ -45,6 +45,10 @@ CONTROLLERS = ("worker", "pioneer")
 WEAPONS = ("gatling", "railgun", "rocket")
 ACTION_KEYS = ("move", "build", "attack", "collect", "sell", "buy", "acceptTask",
                "submitAnswer", "summonTreasure", "use", "drop", "remove")
+# Official judge error codes (接口文档 v1.0): only code 4 is a reported command
+# error. 1/2 are task-timeout/answer errors, 3 network, 5 LLM quota, 0 unknown.
+ERROR_NAMED_CODES = (1, 2, 3, 4, 5)
+DECISION_TEXT_LIMIT = 80
 
 _summary_emitter = None
 _identity_emitted = False
@@ -393,13 +397,78 @@ def _tally(roles: list[dict[str, Any]]) -> tuple[int | None, int]:
     return sum(1 for role in roles if _health_state(role) == "observed_positive"), 0
 
 
+def _team_type(request: Any) -> str | None:
+    team = request.get("teamOur") if isinstance(request, dict) else None
+    kind = team.get("type") if isinstance(team, dict) else None
+    return kind if isinstance(kind, str) and kind else None
+
+
+def _robots_targeting_us(request: Any, our_type: str | None) -> int | None:
+    """Robots whose ``targetTeam`` is our side — None when that field is absent.
+
+    Global visible robots are not threats to us; ``targetTeam`` is the only
+    published field that links a robot to a side, and it is not always present.
+    A partially reported field stays unknown instead of implying zero.
+    """
+    if our_type is None or not isinstance(request, dict):
+        return None
+    group = request.get("robot")
+    roles = group.get("roles") if isinstance(group, dict) else None
+    if not isinstance(roles, list) or not roles:
+        return None
+    values = [role.get("targetTeam") for role in roles if isinstance(role, dict)]
+    if len(values) != len(roles) or any(value is None for value in values):
+        return None
+    return sum(1 for value in values if value == our_type)
+
+
+def _errors(request: Any) -> dict[str, Any]:
+    """Exact judge error-code histogram; missing stays unknown, never zero.
+
+    ``errorCode`` must be a real integer (bool/str/float/list are malformed and
+    land in the unknown bucket). Code 0 is the published "unknown" code.
+    """
+    out: dict[str, Any] = {"judge_errors_total": None, "errors_by_code": None,
+                           "command_errors": None, "task_errors": None,
+                           "llm_quota_errors": None, "network_errors": None,
+                           "unknown_errors": None}
+    errors = request.get("errors") if isinstance(request, dict) else None
+    if not isinstance(errors, list):
+        return out
+    by_code: dict[int, int] = {}
+    unknown = 0
+    for entry in errors:
+        code = entry.get("errorCode") if isinstance(entry, dict) else None
+        if isinstance(code, bool) or not isinstance(code, int):
+            unknown += 1
+            continue
+        by_code[code] = by_code.get(code, 0) + 1
+        if code not in ERROR_NAMED_CODES and code != 0:
+            unknown += 1
+    out["judge_errors_total"] = len(errors)
+    out["errors_by_code"] = by_code
+    out["command_errors"] = by_code.get(4, 0)
+    out["task_errors"] = by_code.get(1, 0) + by_code.get(2, 0)
+    out["llm_quota_errors"] = by_code.get(5, 0)
+    out["network_errors"] = by_code.get(3, 0)
+    out["unknown_errors"] = unknown + by_code.get(0, 0)
+    return out
+
+
 def _counts(request: Any) -> dict[str, Any]:
     ours = _roles(request, "teamOur")
     out: dict[str, Any] = {"base_hp": None, "base_level": None, "base_health_state": None,
                            "workers_live": None, "pioneers_live": None, "weapons_live": None,
                            "weapons_ready": None, "walls_live": None, "health_unknown": 0,
                            "cooldown_unknown": 0, "task_items_in_backpack": None,
-                           "action_results_false": None, "protocol_errors": None}
+                           "action_results_false": None, "protocol_errors": None,
+                           "gold": None, "score": None, "team_roles_live": None,
+                           "weapon_counts": None, "weapon_levels": None}
+    team = request.get("teamOur") if isinstance(request, dict) else None
+    if isinstance(team, dict):
+        out["gold"] = _as_int(team.get("goldNum"))
+        out["score"] = _as_int(team.get("totalScore"))
+    out.update(_errors(request))
     if ours is None:
         return out
     unknown_total = 0
@@ -411,12 +480,26 @@ def _counts(request: Any) -> dict[str, Any]:
     weapons = [r for r in ours if r.get("roleType") in WEAPONS]
     out["weapons_live"], unknown = _tally(weapons)
     unknown_total += unknown
+    if out["weapons_live"] is not None:
+        out["weapon_counts"] = {
+            kind: sum(1 for r in weapons if r.get("roleType") == kind and _alive(r))
+            for kind in WEAPONS
+        }
     alive_weapons = [r for r in weapons if _alive(r)]
+    if out["weapons_live"] is not None:
+        levels = {}
+        for role in alive_weapons:
+            level = _as_int(role.get('level'))
+            label = str(role['roleType'])+'.L'+str(level if level is not None else '?')
+            levels[label] = levels.get(label, 0)+1
+        out['weapon_levels'] = levels
     states = [_cooldown_state(r) for r in alive_weapons]
     out["cooldown_unknown"] = states.count("unknown")
     if states and out["weapons_live"] is not None:
         out["weapons_ready"] = None if out["cooldown_unknown"] else states.count("ready")
     out["health_unknown"] = unknown_total
+    total_roles, total_unknown = _tally(ours)
+    out["team_roles_live"] = None if total_unknown else total_roles
     stations = [r for r in ours if r.get("roleType") == "station"]
     if stations:
         station = max(stations, key=lambda r: _as_float(r.get("health")) or float("-inf"))
@@ -440,9 +523,10 @@ def _counts(request: Any) -> dict[str, Any]:
     results = request.get("lastRoundRoleActionResults") if isinstance(request, dict) else None
     if isinstance(results, dict):
         out["action_results_false"] = sum(1 for value in results.values() if value is False)
-    errors = request.get("errors") if isinstance(request, dict) else None
-    if isinstance(errors, list):
-        out["protocol_errors"] = len(errors)
+    # Compatibility field. It counts reported command errors (errorCode 4) only;
+    # task/answer/network/quota failures are NOT protocol violations, and this is
+    # never proof that the judge disqualified the run.
+    out["protocol_errors"] = out["command_errors"]
     return out
 
 
@@ -519,17 +603,139 @@ def _phase(round_no: int | None) -> str | None:
     return "day" if offset < DAY_ROUNDS else "night"
 
 
+def _bounded_text(value: Any, limit: int = DECISION_TEXT_LIMIT) -> str | None:
+    """Only accept a short, clean string; anything else stays unknown."""
+    if not isinstance(value, str) or not value or len(value) > limit:
+        return None
+    return value if value.isprintable() else None
+
+
+def _bounded_ids(value: Any) -> int | None:
+    """Supervisor ``relevant_robots`` is a COUNT integer, never a robot id list."""
+    return _as_int(value)
+
+
+def _bounded_point(value: Any) -> dict[str, int] | None:
+    """Bounded ``{x, y}`` coordinates; anything else stays absent."""
+    if not isinstance(value, dict):
+        return None
+    point: dict[str, int] = {}
+    for axis in ("x", "y"):
+        number = _as_int(value.get(axis))
+        if number is not None:
+            point[axis] = number
+    return point or None
+
+
+def _bounded_bool_or_text(value: Any) -> Any:
+    """Keep a real bool; otherwise accept a short clean string, else None."""
+    if isinstance(value, bool):
+        return value
+    return _bounded_text(value)
+
+
+def _bounded_decision(decision: Any) -> dict[str, Any] | None:
+    """Allowlisted, bounded view of the optional supervisor decision report.
+
+    Accepted interface (Codex-owned): ``supervisor`` carries ``mode``,
+    ``reserve_pioneer``, ``reason``, the **count** ``relevant_robots``,
+    ``return_steps_lower_bound``, ``ready_workers`` and ``visible_pressure_hp``;
+    ``task`` carries the direct fields ``phase``, ``cycle_active``,
+    ``plan_kind``, ``pending_command``, ``pending_prompt`` and the nested
+    ``acceptance_status`` (``phase``, ``point`` {x,y}, ``retry_after``,
+    ``reason``). Unknown keys are dropped, absent fields stay absent, and a
+    report that carries nothing usable becomes ``None`` instead of an invented
+    record. Nested ``cycle``/``last_plan`` are only tolerated as a fallback.
+    """
+    if not isinstance(decision, dict):
+        return None
+    out: dict[str, Any] = {}
+    supervisor = decision.get("supervisor")
+    if isinstance(supervisor, dict):
+        record: dict[str, Any] = {}
+        for key in ("mode", "reason"):
+            text = _bounded_text(supervisor.get(key))
+            if text is not None:
+                record[key] = text
+        advice = supervisor.get("recommended_reserve")
+        if isinstance(advice, bool):
+            record["recommended_reserve"] = advice
+        reserve = supervisor.get("reserve_pioneer")
+        if isinstance(reserve, bool):
+            record["reserve_pioneer"] = reserve
+        else:
+            bound = _as_int(reserve)
+            if bound is not None:
+                record["reserve_pioneer"] = bound
+        for key in ("return_steps_lower_bound", "relevant_robots",
+                    "ready_workers", "visible_pressure_hp"):
+            number = _as_int(supervisor.get(key))
+            if number is not None:
+                record[key] = number
+        if record:
+            out["supervisor"] = record
+    task = decision.get("task")
+    if isinstance(task, dict):
+        record = {}
+        phase = _bounded_text(task.get("phase"))
+        if phase is not None:
+            record["phase"] = phase
+        if isinstance(task.get("cycle_active"), bool):
+            record["cycle_active"] = task["cycle_active"]
+        plan_kind = _bounded_text(task.get("plan_kind"))
+        if plan_kind is not None:
+            record["plan_kind"] = plan_kind
+        pending_command = _bounded_bool_or_text(task.get("pending_command"))
+        if pending_command is not None:
+            record["pending_command"] = pending_command
+        pending_prompt = _bounded_bool_or_text(task.get("pending_prompt"))
+        if pending_prompt is not None:
+            record["pending_prompt"] = pending_prompt
+        # Fallback only: the accepted interface uses the direct fields above.
+        cycle = task.get("cycle")
+        if isinstance(cycle, dict) and "phase" not in record:
+            fallback = _bounded_text(cycle.get("phase"))
+            if fallback is not None:
+                record["phase"] = fallback
+        plan = task.get("last_plan")
+        if isinstance(plan, dict) and "plan_kind" not in record:
+            fallback = _bounded_text(plan.get("kind"))
+            if fallback is not None:
+                record["plan_kind"] = fallback
+        status = task.get("acceptance_status")
+        if isinstance(status, dict):
+            view: dict[str, Any] = {}
+            for key in ("phase", "reason"):
+                text = _bounded_text(status.get(key))
+                if text is not None:
+                    view[key] = text
+            point = _bounded_point(status.get("point"))
+            if point is not None:
+                view["point"] = point
+            retry = _as_int(status.get("retry_after"))
+            if retry is not None:
+                view["retry_after"] = retry
+            if view:
+                record["acceptance_status"] = view
+        if record:
+            out["task"] = record
+    return out or None
+
+
 # ---------------------------------------------------------------------------
 # response summary
 # ---------------------------------------------------------------------------
 
 def build_summary(request: Any, response: Any, *, plan_ms: float | None = None,
                   invalid_input: bool = False, decision_exception: str | None = None,
-                  event_id: str | None = None) -> dict[str, Any]:
+                  event_id: str | None = None,
+                  decision: dict[str, Any] | None = None) -> dict[str, Any]:
     """Bounded structured summary of one judge request/response pair.
 
     Reads only the observation and the response that already exist: it never runs
-    planning again and never mutates PlannerState.
+    planning again and never mutates PlannerState. ``decision`` is the optional
+    supervisor report Codex captures in the HTTP handler and passes in
+    explicitly; ``None`` keeps the historical summary shape.
     """
     round_no = _as_int(request.get("roundNo")) if isinstance(request, dict) else None
     counts = _counts(request)
@@ -559,21 +765,37 @@ def build_summary(request: Any, response: Any, *, plan_ms: float | None = None,
         "health_unknown": counts.get("health_unknown"),
         "cooldown_unknown": counts.get("cooldown_unknown"),
         "robots_visible": _robots_visible(request),
+        "robots_targeting_us": _robots_targeting_us(request, _team_type(request)),
         "controllers": _controller_summary(request, response),
         "task_items_in_backpack": counts.get("task_items_in_backpack"),
         "task_items_carriers": counts.get("task_items_carriers"),
         "action_results_false": counts["action_results_false"],
         "protocol_errors": counts["protocol_errors"],
+        "gold": counts.get("gold"),
+        "score": counts.get("score"),
+        "team_roles_live": counts.get("team_roles_live"),
+        "weapon_counts": counts.get("weapon_counts"),
+        "weapon_levels": counts.get("weapon_levels"),
+        "judge_errors_total": counts.get("judge_errors_total"),
+        "errors_by_code": counts.get("errors_by_code"),
+        "command_errors": counts.get("command_errors"),
+        "task_errors": counts.get("task_errors"),
+        "llm_quota_errors": counts.get("llm_quota_errors"),
+        "network_errors": counts.get("network_errors"),
+        "unknown_errors": counts.get("unknown_errors"),
         "plan_ms": None if plan_ms is None else round(float(plan_ms), 1),
         "empty_reason": None,
     })
+    report = _bounded_decision(decision)
+    if report is not None:
+        summary["decision"] = report
     if invalid_input:
         summary["empty_reason"] = "invalid_input"
     elif decision_exception:
         summary["empty_reason"] = "decision_exception"
     elif tally[0] == 0:
         summary["empty_reason"] = classify_empty(
-            counts, tally,
+            counts, tally, robots_visible=summary["robots_visible"],
             channel_only=bool(summary["has_prompt"] or summary["has_execute_cmd"]))
     if decision_exception:
         summary["decision_error"] = decision_exception
@@ -581,11 +803,14 @@ def build_summary(request: Any, response: Any, *, plan_ms: float | None = None,
 
 
 def classify_empty(counts: dict[str, Any], tally: tuple[Any, Any, Any],
-                   channel_only: bool = False) -> str:
+                   channel_only: bool = False,
+                   robots_visible: int | None = None) -> str:
     """Observable category for an empty command map — never a causal claim.
 
     Unknown health is not death: with missing data the category stays
     ``unclassified`` instead of asserting a destroyed base or cleared robots.
+    ``all_weapons_cooling`` and ``ready_weapons_no_attack`` are observable
+    states only; the digest never invents a tactical reason from thin data.
     """
     if channel_only:
         return "channel_only"
@@ -602,24 +827,48 @@ def classify_empty(counts: dict[str, Any], tally: tuple[Any, Any, Any],
         return "no_live_controllers"
     if counts.get("weapons_live") == 0:
         return "no_weapons"
-    return "unclassified"
+    ready = counts.get("weapons_ready")
+    if ready is None:
+        return "unclassified"          # cooldown unknown: no reason is fabricated
+    if ready == 0:
+        return "all_weapons_cooling"
+    if robots_visible == 0:
+        return "observed_no_robots"
+    return "ready_weapons_no_attack"
 
 
-def emit_response_summary(summary: dict[str, Any]) -> None:
-    """Print one summary line. Never raises (fail open)."""
+def emit_response_summary(summary: dict[str, Any], stream: str | None = None) -> None:
+    """Console emission for one structured summary. Never raises (fail open).
+
+    ``COMPETITION_HW_CONSOLE=compact`` (default) routes through the bounded
+    console digest; ``full`` restores the historical one-line JSON summary;
+    ``off`` silences this console stream only. The JSONL trace is unaffected.
+    """
     try:
-        _emit("response " + json.dumps(summary, ensure_ascii=False, sort_keys=True,
-                                       separators=(",", ":")))
+        from . import console_digest
+        console_digest.emit_summary(summary, emitter=_emit, stream=stream)
     except Exception:  # noqa: BLE001 - diagnostics must never affect the judge path
         return
 
 
 def response_summary(request: Any, response: Any, **kwargs: Any) -> None:
-    """Convenience wrapper used by the HTTP hook: build + emit, swallowing errors."""
+    """Convenience wrapper used by the HTTP hook: build + emit, swallowing errors.
+
+    The supervisor ``decision`` report (Codex-owned) rides through ``kwargs`` so
+    the flat submission server needs no change; it is always passed explicitly,
+    never looked up from a background thread's context.
+    """
     try:
-        emit_response_summary(build_summary(request, response, **kwargs))
+        summary = build_summary(request, response, **kwargs)
     except Exception:  # noqa: BLE001
         return
+    stream = None
+    try:
+        from . import console_digest
+        stream = console_digest.stream_token(request, summary.get("event"))
+    except Exception:  # noqa: BLE001
+        stream = None
+    emit_response_summary(summary, stream=stream)
 
 
 class Timer:

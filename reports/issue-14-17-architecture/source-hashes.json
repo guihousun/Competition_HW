@@ -1,0 +1,13 @@
+{
+  "Demo/CoreGeek/src/agent/brain.py": "66da44c6cfa36aeb927003cc46b58e242346091d58a6660300a266fad52dc641",
+  "Demo/CoreGeek/src/agent/coordination.py": "48abac2a5f7a22cbaa4e9079a0ba4fd1f0b35e1faa37e236dd67d00a7f06d92e",
+  "Demo/CoreGeek/src/agent/tasks.py": "52ab4bc9bd2b77b17142bca0471439e45c1b72ca3e8f655af18ef45d8d137527",
+  "Demo/CoreGeek/src/agent/planner.py": "86430c65bc9485768cad993b78d5148b7df7c67e4dcf4f00e518e676324060f8",
+  "Demo/CoreGeek/src/agent/policy_supervisor.py": "7280e55a03b0c99ec44869be453e27828be2a75b65c167291d54e8d667833463",
+  "Demo/CoreGeek/src/agent/task_lifecycle.py": "4ea4780b7fdaef535d26b236e3f21daa1be7f56293e2587572a03bd25e712d18",
+  "Demo/CoreGeek/src/agent/diagnostics.py": "a6e5de7c9868fa0f3196be05a9f9ca7536c6a2d354aed40ef3f7d6b364e806db",
+  "Demo/CoreGeek/src/agent/console_digest.py": "a166d6ef76f318bf136b36d1b4761157153e41e9d7211bad92d81108db65d88f",
+  "Demo/CoreGeek/src/agent/telemetry.py": "5b512c0122214181a73803d70419a50b96a326992702b78c295461250f450d70",
+  "Demo/CoreGeek/src/agent/server.py": "20c40a4352c5a5b8bc234a74dd25dc24fbe3ed069195e42e82d9e07623a39cb6",
+  "submission/server.py": "b6a0f434cc972e53c7b951c72730398895af65032580ebb497bfd6edd2464b57"
+}

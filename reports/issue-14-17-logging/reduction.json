@@ -1,0 +1,45 @@
+{
+  "compact": {
+    "bytes": 5026,
+    "lines": 35
+  },
+  "compact_totals": {
+    "accept": 34,
+    "errors": 6,
+    "submit": 3,
+    "observed_damage": 1440
+  },
+  "conservation": {
+    "accept": true,
+    "error_total": true,
+    "submit": true,
+    "observed_damage": true
+  },
+  "dump": "reports/issue-14-17-logging/compact-console.txt",
+  "duplicates_removed": 0,
+  "expected": {
+    "accept": 34,
+    "error_total": 6,
+    "observed_damage": 1440,
+    "phase_changes": 5,
+    "submit": 3
+  },
+  "inputs": [
+    "parsed-responses.json"
+  ],
+  "old": {
+    "bytes": 249384,
+    "lines": 362
+  },
+  "reduction": {
+    "byte_reduction": 0.9798,
+    "bytes": 249384,
+    "bytes_new": 5026,
+    "line_reduction": 0.9033,
+    "lines": 362,
+    "lines_new": 35
+  },
+  "rows": 362,
+  "tool": "analyze_console",
+  "warnings": []
+}

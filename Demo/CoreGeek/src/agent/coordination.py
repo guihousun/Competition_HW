@@ -66,7 +66,17 @@ def reconcile(turn: Turn, payload: dict[str, Any],
     accepted = {}
     remaining = turn.gold
     prices = shop_prices(payload)
+    living = {str(role.unit_id) for role in turn.controllable()}
+    direct = {str(uid) for uid in commands if str(uid) in living}
+    controllers_used = set()
     for uid, command in commands.items():
+        if command.get('action') == 'attack':
+            controller = str(command.get('controllerId'))
+            # Explicit role work (including a task override) releases its weapon
+            # claim. One controller cannot operate two weapons in the same turn.
+            if controller not in living or controller in direct or controller in controllers_used:
+                continue
+            controllers_used.add(controller)
         cost = _cost(command, prices)
         if cost is None or cost > remaining:
             continue

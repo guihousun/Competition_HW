@@ -157,6 +157,117 @@ class SummaryTests(unittest.TestCase):
         diagnostics.response_summary({"roundNo": 1}, {"roleCommandMap": {}})  # must not raise
 
 
+class ErrorAndEnrichmentTests(unittest.TestCase):
+    """Independent expectations for error categorization and bounded evidence."""
+
+    def summary(self, request, response=None):
+        return diagnostics.build_summary(request, response or {"roleCommandMap": {}})
+
+    def test_mixed_error_codes_are_categorized_exactly(self):
+        payload = observation([role(10013, "station", 1500)],
+                              errors=[{"errorCode": 1}, {"errorCode": 2}, {"errorCode": 2},
+                                      {"errorCode": 3}, {"errorCode": 4}, {"errorCode": 5},
+                                      {"errorCode": 0}])
+        summary = self.summary(payload)
+        self.assertEqual(summary["judge_errors_total"], 7)
+        self.assertEqual(summary["errors_by_code"], {0: 1, 1: 1, 2: 2, 3: 1, 4: 1, 5: 1})
+        self.assertEqual(summary["command_errors"], 1)
+        self.assertEqual(summary["task_errors"], 3)
+        self.assertEqual(summary["network_errors"], 1)
+        self.assertEqual(summary["llm_quota_errors"], 1)
+        self.assertEqual(summary["unknown_errors"], 1)
+        self.assertEqual(summary["protocol_errors"], 1)
+
+    def test_task_and_answer_failures_are_not_protocol_errors(self):
+        payload = observation([role(10013, "station", 1500)],
+                              errors=[{"errorCode": 1}, {"errorCode": 2}])
+        summary = self.summary(payload)
+        self.assertEqual(summary["task_errors"], 2)
+        self.assertEqual(summary["protocol_errors"], 0,
+                         "a task timeout/answer error is not a protocol violation")
+
+    def test_malformed_error_values_count_as_unknown(self):
+        payload = observation([role(10013, "station", 1500)],
+                              errors=[{"errorCode": 4}, {"errorCode": "2"}, {"errorCode": None},
+                                      {"errorCode": 7}, {"errorCode": True}, {"errorCode": {"x": 1}},
+                                      {"description": "no code"}])
+        summary = self.summary(payload)
+        self.assertEqual(summary["judge_errors_total"], 7)
+        self.assertEqual(summary["command_errors"], 1)
+        self.assertEqual(summary["task_errors"], 0)
+        self.assertEqual(summary["unknown_errors"], 6)
+
+    def test_absent_or_non_list_errors_stay_unknown_not_zero(self):
+        absent = observation([role(10013, "station", 1500)])
+        del absent["errors"]
+        non_list = observation([role(10013, "station", 1500)], errors="boom")
+        null = observation([role(10013, "station", 1500)], errors=None)
+        for payload in (absent, non_list, null):
+            summary = self.summary(payload)
+            self.assertIsNone(summary["judge_errors_total"])
+            self.assertIsNone(summary["errors_by_code"])
+            self.assertIsNone(summary["protocol_errors"])
+
+    def test_empty_error_list_is_an_observed_zero(self):
+        summary = self.summary(observation([role(10013, "station", 1500)]))
+        self.assertEqual(summary["judge_errors_total"], 0)
+        self.assertEqual(summary["protocol_errors"], 0)
+
+    def test_bounded_evidence_from_the_actual_request(self):
+        roles = [role(10013, "station", 1500),
+                 role(10020, "gatling", 1000, cooldown=0),
+                 role(10030, "railgun", 1000, cooldown=3),
+                 role(10010, "worker", 220),
+                 role(10011, "pioneer", 200)]
+        payload = observation(roles,
+                              robot={"roles": [
+                                  {"id": 1, "roleType": "smallRobot", "health": 40,
+                                   "targetTeam": "challenger"},
+                                  {"id": 2, "roleType": "largeRobot", "health": 2000,
+                                   "targetTeam": "defender"}]})
+        payload["teamOur"].update({"goldNum": 75, "totalScore": 280})
+        payload["lastRoundRoleActionResults"] = {"10010": False, "10011": True}
+        summary = self.summary(payload)
+        self.assertEqual(summary["gold"], 75)
+        self.assertEqual(summary["score"], 280)
+        self.assertEqual(summary["weapon_counts"], {"gatling": 1, "railgun": 1, "rocket": 0})
+        self.assertEqual(summary["team_roles_live"], 5)
+        self.assertEqual(summary["robots_visible"], 2)
+        self.assertEqual(summary["robots_targeting_us"], 1,
+                         "global robots are not threats; only targetTeam is a link")
+        self.assertEqual(summary["action_results_false"], 1)
+
+    def test_missing_target_team_stays_unknown(self):
+        payload = observation([role(10013, "station", 1500)],
+                              robot={"roles": [{"id": 1, "roleType": "smallRobot", "health": 40}]})
+        self.assertIsNone(self.summary(payload)["robots_targeting_us"])
+
+    def test_decision_report_is_optional_and_bounded(self):
+        payload = observation([role(10013, "station", 1500)])
+        self.assertNotIn("decision", self.summary(payload))
+        summary = diagnostics.build_summary(
+            payload, {"roleCommandMap": {}},
+            decision={"supervisor": {"mode": "cautious", "reason": "base_low",
+                                     "reserve_pioneer": True, "return_steps_lower_bound": 4,
+                                     "relevant_robots": 4, "ready_workers": 2,
+                                     "visible_pressure_hp": 35},
+                      "task": {"phase": "moving", "cycle_active": True, "plan_kind": "goto",
+                               "pending_command": "move", "pending_prompt": False,
+                               "acceptance_status": {"phase": "moving",
+                                                     "point": {"x": 14, "y": 17},
+                                                     "retry_after": 2, "reason": "cooldown"}}})
+        report = summary["decision"]
+        self.assertEqual(report["supervisor"]["mode"], "cautious")
+        self.assertEqual(report["supervisor"]["relevant_robots"], 4)
+        self.assertEqual(report["task"]["phase"], "moving")
+        self.assertEqual(report["task"]["acceptance_status"]["point"], {"x": 14, "y": 17})
+        self.assertEqual(report["task"]["acceptance_status"]["phase"], "moving")
+        blob = json.dumps(report, ensure_ascii=False)
+        self.assertNotIn("note", blob)
+        self.assertNotIn("api_key", blob)
+        self.assertNotIn("unknown_key", blob)
+
+
 class IdentityTests(unittest.TestCase):
     def test_verified_manifest_outranks_parent_git_commit(self):
         import tempfile
@@ -244,3 +355,12 @@ class IdentityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IntegratedDecisionTests(unittest.TestCase):
+    def test_boolean_pending_state_and_advice_survive(self):
+        from agent.diagnostics import build_summary
+        report={'supervisor':{'mode':'watch','reserve_pioneer':False,'recommended_reserve':True},
+                'task':{'pending_command':False,'pending_prompt':True}}
+        result=build_summary({}, {'roleCommandMap':{}}, decision=report)
+        self.assertEqual(result['decision'],report)

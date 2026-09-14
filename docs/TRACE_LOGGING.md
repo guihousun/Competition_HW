@@ -6,7 +6,7 @@
 
 正常使用 `python main.py 8080`、包内 `python main3.py 8080` 或 `bash run.sh <port>` 启动后，比赛 POST 自动记录到项目/解包根目录的 `logs/<UTC时间-随机后缀>/`。每次启动独立目录，不覆盖旧局。
 
-控制台保留简短 `identity`、`response` 行；`response` 行中的 `event` 对应详细日志里的 `event_id`。详细文件包括：
+控制台默认只保留启动 `identity` 行与精简 `digest` 行（首回合、阶段切换、首个异常、基地血量阈值、监督器状态转变、每 20 回合汇总），不再逐回合打印整段 JSON；`COMPETITION_HW_CONSOLE=full` 恢复旧的逐回合 `response` 行，`=off` 只关控制台。`response`/`digest` 行中的回合号对应详细日志的回合，`event` 对应 `event_id`。模式与字段含义见 `docs/CONSOLE_LOGGING.md`。控制台过滤与详细记录相互独立：任何模式下每个收到的回合都会写入 trace。详细文件包括：
 
 | 内容 | 用途 |
 |---|---|

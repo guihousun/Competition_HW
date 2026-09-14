@@ -1,0 +1,27 @@
+HISTORICAL DSH FIRST DRAFT — superseded by the final 486-test integrated PASS in ../issue-14-17-architecture/REVIEW.md.
+
+Full suite recorded once on the frozen change set.
+
+Command: python -m unittest discover -s tests -v
+Scope:   worktree ds-recovery, base 02a3140903e9bdf28703c97cd11b0e507baee522
+Result:  Ran 453 tests, FAILED (failures=1)
+
+Only failure (checkout-line-ending verification issue, NOT a logging regression):
+  tests/test_competition_package.py:79
+  test_entry_and_pyproject_are_exact_original_sample_bytes
+  committed-LF archive member CoreGeek/src/agent/server.py
+  != checkout-CRLF bytes of submission/server.py
+Cause: global core.autocrlf=true; the comparison should read committed source
+       bytes. submission/server.py, the builder and that test are out of scope
+       for this change set and were not modified.
+Evidence: tests.test_competition_package -> 6 tests OK with core.autocrlf=false.
+Owner:  Codex fixes the comparison to committed source bytes during integration
+        and reruns the full suite.
+
+Focused green on the frozen change set:
+  tests.test_console_digest + tests.test_diagnostics + tests.test_telemetry
+  + tests.test_build_submission + tests.test_diagnostics_review
+  -> Ran 101 tests, OK
+
+The verbose 63 KB log was not copied into the repository; this summary is the
+aggregate record.

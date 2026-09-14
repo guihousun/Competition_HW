@@ -14,11 +14,12 @@ and writes it back, so the planner stays a pure function of (observation, state)
 from __future__ import annotations
 
 import threading
+from copy import deepcopy
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
 from .sandbox import CommandResult, JudgeState, PendingRequest
-from .tasks import TaskCycle
+from .tasks import TaskCycle, Submission
 
 
 @dataclass
@@ -52,6 +53,9 @@ class PlannerState:
                 "last_note": str(self.tasks.get("last_note") or ""),
                 "last_error": str(self.tasks.get("last_error") or ""),
                 "solver_notes": dict(self.tasks.get("solver_notes") or {}),
+                "accept_retries": deepcopy(self.tasks.get('accept_retries') or {}),
+                "acceptance_status": deepcopy(self.tasks.get('acceptance_status') or {}),
+                "supervisor": deepcopy(self.tasks.get('supervisor') or {}),
                 "cycle": (None if cycle is None else {
                     "point": dict(getattr(cycle, "point", {}) or {}),
                     "accepted_round": int(getattr(cycle, "accepted_round", 0) or 0),
@@ -61,6 +65,7 @@ class PlannerState:
                     "phase": str(getattr(cycle, "phase", "") or ""),
                     "last_answer": getattr(cycle, "last_answer", None),
                     "best_rate": float(getattr(cycle, "best_rate", 0.0) or 0.0),
+                    "submissions": [asdict(item) for item in cycle.submissions],
                 }),
             },
             "judge": {
@@ -106,12 +111,18 @@ class PlannerState:
             cycle.phase = str(raw_cycle.get("phase") or "")
             cycle.last_answer = raw_cycle.get("last_answer")
             cycle.best_rate = float(raw_cycle.get("best_rate") or 0.0)
+            for item in raw_cycle.get('submissions') or []:
+                if isinstance(item,dict) and isinstance(item.get('round_no'),int) and isinstance(item.get('answer'),str):
+                    cycle.submissions.append(Submission(item['round_no'],item['answer'],str(item.get('source') or 'restored')))
         state.tasks = {
             "cycle": cycle,
             "cooldown_until": int(tasks.get("cooldown_until") or 0),
             "last_note": str(tasks.get("last_note") or ""),
             "last_error": str(tasks.get("last_error") or ""),
             "solver_notes": dict(tasks.get("solver_notes") or {}),
+            "accept_retries": deepcopy(tasks.get('accept_retries')) if isinstance(tasks.get('accept_retries'),dict) else {},
+            "acceptance_status": deepcopy(tasks.get('acceptance_status')) if isinstance(tasks.get('acceptance_status'),dict) else {},
+            "supervisor": deepcopy(tasks.get('supervisor')) if isinstance(tasks.get('supervisor'),dict) else {},
         }
         judge = dump.get("judge") if isinstance(dump.get("judge"), dict) else {}
         state.judge.llm_used_today = int(judge.get("llmUsedToday") or 0)

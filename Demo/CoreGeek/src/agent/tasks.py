@@ -25,6 +25,7 @@ from typing import Any, Callable, Iterable
 
 from .protocol import PIONEER, Pos, Turn, Unit, distance, station_footprint
 from .sandbox import PendingRequest, shell
+from . import task_lifecycle
 
 # 任务书 §五: after a task ends the point needs 30 rounds before it is ready.
 REFRESH_ROUNDS = 30
@@ -68,11 +69,11 @@ class TaskCycle:
     ended_round: int = 0
 
     @property
-    def deadline(self) -> int:
-        return self.accepted_round + max(0, self.timeout_rounds)
+    def deadline(self) -> int | None:
+        return self.accepted_round + self.timeout_rounds if self.timeout_rounds > 0 else None
 
-    def rounds_left(self, round_no: int) -> int:
-        return self.deadline - round_no
+    def rounds_left(self, round_no: int) -> int | None:
+        return self.deadline - round_no if self.deadline is not None else None
 
     def record(self, round_no: int, answer: str, source: str) -> None:
         """Keep every answer: a timeout is scored on the best pass rate so far."""
@@ -458,9 +459,9 @@ class TaskPipeline:
     @classmethod
     def published_points(cls, state: dict[str, Any], team: str) -> list[dict[str, Any]]:
         """The ``playerTasks`` view, filled in from zones when absent."""
-        published = (state.get("teamOur") or {}).get("playerTasks") or []
-        if published:
-            return published
+        published = (state.get("teamOur") or {}).get("playerTasks")
+        if isinstance(published, list):
+            return published  # An explicit empty offer list is authoritative.
         default = {"scoreReward": 50, "goldReward": 30, "timeoutRounds": 0,
                    "coldDownRounds": 0, "isValid": True}
         return [dict(default, taskPosition=dict(zone["pos"]),
@@ -520,25 +521,27 @@ class TaskPipeline:
         description = str(state.get("phaseTask") or "").strip()
         if not description:
             return None
-        timeout = 0
-        point: dict[str, int] = {}
-        for series in (state["teamOur"].get("playerTasks") or [],):
-            for entry in series:
-                position = entry.get("taskPosition") or {}
-                if not position:
-                    continue
-                timeout = int(entry.get("timeoutRounds") or 0) or timeout
-                point = {"x": int(position.get("x", -1)), "y": int(position.get("y", -1))}
-                break
-        if not point:
-            zones = self.own_points(state, team)
-            if zones:
-                point = dict(zones[0]["pos"])
-        return TaskCycle(point=point or {"x": -1, "y": -1},
+        pioneer = turn.pioneer()
+        if pioneer is None:
+            return None
+        zones = self.own_points(state, team)
+        candidates = []
+        for entry in self.published_points(state, team):
+            point = entry.get('taskPosition')
+            if not point:
+                continue
+            separation = min(distance(pioneer.pos, cell)
+                             for cell in task_lifecycle.region_cells(point, zones))
+            if separation <= HOLD_RANGE:
+                candidates.append((separation, point['x'], point['y'], entry))
+        if not candidates:
+            return None  # No evidence of a current, reachable task region.
+        entry = min(candidates, key=lambda item: item[:3])[3]
+        return TaskCycle(point=dict(entry['taskPosition']),
                          accepted_round=turn.round_no,
-                         task_type="自进化类",
+                         task_type=str(entry.get('taskType') or '自进化类'),
                          description=description,
-                         timeout_rounds=timeout)
+                         timeout_rounds=int(entry.get('timeoutRounds') or 0))
 
     # -- phases ------------------------------------------------------------
     def _maybe_accept(self, state: dict[str, Any], turn: Turn, pioneer: Unit,
@@ -565,26 +568,23 @@ class TaskPipeline:
         if not own_points:
             return None, None
         points = self.published_points(state, team)
-        if points and all(not point.get("isValid", True) for point in points):
-            return None, None
         # The observation publishes per-point readiness; trust it over our guess.
         # `coldDownRounds` is the point's own refresh countdown (任务书 §五: 30
         # rounds after a task ends), so a cooling point is not acceptable yet even
         # when the judge still marks it valid.
-        ready_points = [p for p in points
-                        if p.get("isValid", True) and p.get("taskPosition")
-                        and int(p.get("coldDownRounds") or 0) <= 0]
-        if ready_points:
-            targets = [Pos.load(p["taskPosition"]) for p in ready_points]
-        else:
-            targets = [cell for zone in own_points for cell in self.point_cells(zone)]
+        regions = task_lifecycle.ready_regions(points,own_points,notes,turn.round_no)
+        targets = [cell for _anchor,cells in regions for cell in cells]
         if not targets:
             return None, None
-        here = self.on_point(state, team, pioneer.pos)
-        if here is not None:
-            return {"action": "acceptTask"}, Plan(kind="accept", purpose="已站在己方任务点，领取任务")
+        for anchor,cells in regions:
+            if min(distance(pioneer.pos,cell) for cell in cells)<=HOLD_RANGE:
+                notes['accept_target']=anchor
+                return {"action": "acceptTask"}, Plan(kind="accept", purpose="已站在可领取的己方任务点，领取任务")
         goal = min(targets, key=lambda pos: (distance(pioneer.pos, pos), pos.x, pos.y))
-        return self._walk_to(turn, pioneer, goal, notes)
+        command,plan=self._walk_to(turn, pioneer, goal, notes)
+        if plan is not None and plan.kind=='accept':
+            notes['accept_target']=next(anchor for anchor,cells in regions if goal in cells)
+        return command,plan
 
     def _advance(self, state: dict[str, Any], turn: Turn, pioneer: Unit, team: str,
                  cycle: TaskCycle, judge: Any, notes: dict[str, Any], *,
@@ -595,13 +595,26 @@ class TaskPipeline:
         #    answers for a task that already ended, and every such command is an
         #    execution failure.
         published = str(state.get("phaseTask") or "")
-        if cycle.submissions and not published:
-            cycle.end(turn.round_no, "判题器已结束任务")
-            notes["cycle"] = None
-            notes["cooldown_until"] = turn.round_no + REFRESH_ROUNDS
-            notes["solver_notes"] = {}
-            return None, Plan(kind="task_end", purpose="任务已由判题器结算")
-
+        if not cycle.description and not published:
+            results=state.get('lastRoundRoleActionResults') or {}
+            rejected=isinstance(results,dict) and (results.get(str(pioneer.unit_id),results.get(pioneer.unit_id)) is False)
+            age=turn.round_no-cycle.accepted_round
+            if rejected or age>task_lifecycle.TUNING.observation_wait:
+                reason='accept_rejected' if rejected else 'task_not_published'
+                task_lifecycle.defer(notes,cycle.point,turn.round_no,reason)
+                notes['cycle']=None
+                notes['solver_notes']={}
+                return None,Plan(kind='accept_unconfirmed',purpose='领取未确认，按任务点退避重试')
+            notes['acceptance_status']={'phase':'awaiting_observation','point':dict(cycle.point),
+                                        'sent_round':cycle.accepted_round}
+            return None,Plan(kind='wait',purpose='等待判题器发布任务原文')
+        if published and not cycle.description:
+            cycle.description=published
+            for point in self.published_points(state,team):
+                if point.get('taskPosition')==cycle.point:
+                    cycle.timeout_rounds=int(point.get('timeoutRounds') or 0)
+                    break
+            task_lifecycle.confirm(notes,cycle.point)
         # 1. Endings the frame defines, checked before any new work.
         end_reason = self._ending(state, turn, pioneer, team, cycle)
         if end_reason:
@@ -609,6 +622,13 @@ class TaskPipeline:
             notes["cycle"] = None
             notes["cooldown_until"] = turn.round_no + REFRESH_ROUNDS
             return None, Plan(kind="task_end", purpose=f"任务结束：{end_reason}")
+
+        if (cycle.submissions or cycle.description) and 'phaseTask' in state and not published:
+            cycle.end(turn.round_no, "判题器已结束任务")
+            notes["cycle"] = None
+            notes["cooldown_until"] = turn.round_no + REFRESH_ROUNDS
+            notes["solver_notes"] = {}
+            return None, Plan(kind="task_end", purpose="任务已由判题器结算")
 
         here = self.on_point(state, team, pioneer.pos)
         if here is None:
@@ -640,7 +660,7 @@ class TaskPipeline:
             if not notes.get("solver_notes", {}).get("llm_asked") and cycle.description:
                 return None, Plan(kind="prompt",
                                   prompt=self._default_prompt(cycle), purpose="无可判定规则，交给 LLM")
-            if cycle.rounds_left(turn.round_no) <= SUBMIT_MARGIN:
+            if cycle.timeout_rounds and cycle.rounds_left(turn.round_no) <= SUBMIT_MARGIN:
                 cycle.end(turn.round_no, "超时无解")
                 notes["cycle"] = None
                 notes["cooldown_until"] = turn.round_no + REFRESH_ROUNDS
@@ -673,12 +693,10 @@ class TaskPipeline:
             return "开拓者死亡"
         if cycle.timeout_rounds and cycle.rounds_left(turn.round_no) <= 0:
             return "任务超时"
-        if self.on_point(state, team, pioneer.pos) is None and \
-                min((distance(pioneer.pos, cell)
-                     for zone in self.own_points(state, team)
-                     for cell in self.point_cells(zone)), default=99) > HOLD_RANGE + 1:
-            # Officially leaving the ring ends the task; one extra cell of slack
-            # avoids ending it on the very round we step back in.
+        if cycle.point and min(distance(pioneer.pos,cell) for cell in
+                               task_lifecycle.region_cells(cycle.point,self.own_points(state,team))) > HOLD_RANGE:
+            # The accepted point owns this task. Entering another point cannot
+            # preserve it, and the official hold distance has no extra slack.
             return "离开任务点范围"
         return ""
 

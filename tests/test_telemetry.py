@@ -248,3 +248,34 @@ assert rec.close()
         self.assertEqual(rows[0]['response'],expected)
         self.assertTrue(rows[0]['response_sent'])
         self.assertNotIn('PRIVATE_HEADER_ONLY',json.dumps(rows))
+
+
+class DecisionTraceTests(unittest.TestCase):
+    setUp=TraceTests.setUp
+    recorder=TraceTests.recorder
+    turns=TraceTests.turns
+    add=TraceTests.add
+    def test_explanation_is_frozen_per_request_and_absent_from_wire(self):
+        rec=self.recorder()
+        decision={'supervisor':{'mode':'defend','reserve_pioneer':True,'reason':'base_damaged'},
+                  'task':{'phase':'paused_for_defence'}}
+        ticket=rec.begin()
+        rec.submit(ticket,json.dumps(observation()).encode(),b'{"roleCommandMap":{}}',decision=decision)
+        decision['supervisor']['mode']='mutated-after-submit'
+        rows=self.turns(rec)
+        self.assertEqual(rows[0]['decision']['supervisor']['mode'],'defend')
+        self.assertEqual(rows[0]['summary']['decision']['supervisor']['mode'],'defend')
+        self.assertEqual(rows[0]['response'],{'roleCommandMap':{}})
+
+    def test_console_off_still_records_every_turn(self):
+        rec=self.recorder(queue_size=64)
+        with patch.dict('os.environ',{'COMPETITION_HW_CONSOLE':'off'}):
+            for n in range(1,26):self.add(rec,observation(n))
+        self.assertEqual([r['round'] for r in self.turns(rec)],list(range(1,26)))
+
+    def test_large_explanation_is_bounded_without_losing_wire_data(self):
+        rec=self.recorder()
+        rec.submit(rec.begin(),json.dumps(observation()).encode(),b'{"roleCommandMap":{}}',decision={'x':'a'*10000})
+        row=self.turns(rec)[0]
+        self.assertEqual(row['decision'],{'unavailable':'decision_size_limit'})
+        self.assertEqual(row['response'],{'roleCommandMap':{}})

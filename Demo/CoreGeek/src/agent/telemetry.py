@@ -190,8 +190,16 @@ class Recorder:
         if len(self.dropped_indices) < 64:
             self.dropped_indices.append(index)
 
-    def submit(self, ticket, raw, response, *, sent=True, plan_ms=0.0, invalid_input=False, fault=None):
-        size = len(raw) + len(response)
+    def submit(self, ticket, raw, response, *, sent=True, plan_ms=0.0, invalid_input=False, fault=None, decision=None):
+        # Freeze on the HTTP thread. ContextVars are not inherited by the writer,
+        # and a later request must not mutate this request's explanation.
+        try:
+            decision_raw = json.dumps(clean(decision), ensure_ascii=False, allow_nan=False).encode('utf-8')
+            if len(decision_raw) > 8192:
+                decision_raw = b'{"unavailable":"decision_size_limit"}'
+        except (TypeError, ValueError, RecursionError):
+            decision_raw = b'{"unavailable":"decision_encoding"}'
+        size = len(raw) + len(response) + len(decision_raw)
         elapsed_ms = (time.perf_counter() - ticket.started) * 1000
         with self.lock:
             reason = ('closed' if self.stopping.is_set() else self.disabled_reason or
@@ -201,7 +209,7 @@ class Recorder:
                 self._drop(ticket.index, reason)
                 return False
             try:
-                self.queue.put_nowait((ticket, raw, response, size, sent, plan_ms, elapsed_ms, invalid_input, fault))
+                self.queue.put_nowait((ticket, raw, response, size, sent, plan_ms, elapsed_ms, invalid_input, fault, decision_raw))
             except queue.Full:
                 self._drop(ticket.index, 'queue_full')
                 return False
@@ -246,7 +254,8 @@ class Recorder:
         os.replace(temp, path)
 
     def _event(self, item):
-        ticket, raw, response_raw, _, sent, plan_ms, elapsed_ms, invalid_input, fault = item
+        ticket, raw, response_raw, _, sent, plan_ms, elapsed_ms, invalid_input, fault, decision_raw = item
+        decision = json.loads(decision_raw)
         request, changed_request, request_error = decode(raw)
         response, changed_response, response_error = decode(response_raw)
         round_no = request.get('roundNo') if isinstance(request, dict) else None
@@ -270,7 +279,7 @@ class Recorder:
                  'index': ticket.index, 'stream_key': key, 'round': round_no, 'received_at': ticket.received_at,
                  'recorded_at': utcnow(), 'plan_ms': round(plan_ms, 3), 'http_elapsed_ms': round(elapsed_ms, 3),
                  'http_status_attempted': 200, 'response_sent': sent, 'invalid_input': invalid_input,
-                 'fault': clean(fault), 'request_bytes': len(raw), 'response_bytes': len(response_raw),
+                 'fault': clean(fault), 'decision': decision, 'request_bytes': len(raw), 'response_bytes': len(response_raw),
                  'request_sha256': hashlib.sha256(raw).hexdigest(),
                  'response_sha256': hashlib.sha256(response_raw).hexdigest(),
                  'request': request, 'response': response, 'request_decode_error': request_error,
@@ -284,7 +293,7 @@ class Recorder:
             from .diagnostics import build_summary
             event['summary'] = build_summary(request, response, plan_ms=plan_ms, invalid_input=invalid_input,
                                              decision_exception='internal_error' if fault else None,
-                                             event_id=ticket.event_id)
+                                             event_id=ticket.event_id, decision=decision)
         except Exception:
             event['summary'] = {'unavailable': True}
         if continuity == 'consecutive':

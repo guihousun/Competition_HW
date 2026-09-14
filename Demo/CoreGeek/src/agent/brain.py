@@ -1,8 +1,10 @@
 from typing import Any
 from collections import Counter
+from contextvars import ContextVar
+from copy import deepcopy
 from itertools import combinations, permutations
 
-from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork
+from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor
 from .grid import _cost_to_goal, next_step
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -71,6 +73,12 @@ RETURN_SAFE_INDEX = 50
 CAMP_MAX_COOLDOWN = 34
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
+_DECISION_REPORT = ContextVar('competition_decision_report',default=None)
+
+
+def decision_report():
+    """Current request's local explanation; never part of official response JSON."""
+    return deepcopy(_DECISION_REPORT.get())
 
 # Defence geometry is recomputed for every wall/tower question asked about one
 # snapshot (the layout alone is needed by the tower choice, the wall order, the
@@ -107,6 +115,7 @@ def respond(payload: dict[str, Any]) -> dict[str, Any]:
     round, plans, and emits ``roleCommandMap`` plus at most one ``prompt`` or
     ``executeCmd``.
     """
+    _DECISION_REPORT.set(None)
     state = _planner_state(payload)
     round_no = Turn.load(payload).round_no
     state.note_round(round_no)
@@ -134,13 +143,43 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     the task result bookkeeping.
     """
     turn = Turn.load(payload)
+    if commit:
+        _DECISION_REPORT.set(None)
     commands: dict[int, dict[str, Any]] = {}
+    pioneer = turn.pioneer()
+    tower_pairs = _tower_pairs(turn)
+    pioneer_tower = next((tower for role,tower in tower_pairs
+                          if pioneer is not None and role.unit_id == pioneer.unit_id),None)
+    cycle = planner_state.tasks.get('cycle')
+    committed_work = bool(cycle and cycle.description and not cycle.ended_round)
+    if pioneer is not None:
+        # Only public rumours and actually held items establish a commitment.
+        notes = treasure.notes_from_news(payload, turn.round_no)
+        site = notes.get('site')
+        required = notes.get('items') or []
+        committed_work = committed_work or bool(notes.get('known') and not notes.get('taken')
+            and site and required and all(pioneer.backpack.count(item) >= required.count(item) for item in required)
+            and turn.round_no + max(0, distance(pioneer.pos, Pos.load(site))-1) <= int(notes.get('closesAt') or 0))
+    directive = policy_supervisor.evaluate(turn,payload,pioneer_tower,tower_pairs=tower_pairs,
+                                          committed_work=committed_work,dusk_index=RETURN_BEFORE_NIGHT)
+    if commit:
+        planner_state.tasks['supervisor'] = directive.summary()
     if turn.is_day:
         _day(turn, commands, payload, planner_state)
     else:
         _night(turn, commands, payload, planner_state)
 
-    if commit:
+    if directive.reserve_pioneer and turn.is_day and pioneer is not None:
+        # Workers keep their day plan. Only the needed pioneer returns early.
+        commands.pop(pioneer.unit_id,None)
+        if pioneer_tower is not None and distance(pioneer.pos,pioneer_tower.pos)>1:
+            target=_step_toward(turn,pioneer,pioneer_tower.pos,set())
+            if target is not None:commands[pioneer.unit_id]=move_command(target)
+    if directive.reserve_pioneer:
+        # Pending judge results were already ingested by respond(). Keep task
+        # memory, but do not let a hold, task walk, or treasure claim steal a post.
+        job = None
+    elif commit:
         job = _task_step(turn, commands, payload, planner_state)
     else:
         # A preview must not be able to change anything, and the pipeline writes
@@ -160,8 +199,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             pipeline_pioneer = commands.get(pioneer_role.unit_id)
     # A pipeline claim must survive the defence planner: `_day` / `_night` already
     # ran above and may have queued a tower-post move or an attack for the same
-    # pioneer. The task frame is turn-sensitive (hold range, timeout) while
-    # defence positioning is not, so the task command always wins — including when
+    # pioneer. The task frame is turn-sensitive (hold range, timeout) once admitted
+    # by the supervisor, so an admitted task command wins — including when
     # the pipeline deliberately issued nothing (a hold), in which case the defence
     # claim is dropped rather than allowed to walk the pioneer out of the ring.
     if job and job.get("claimed"):
@@ -182,7 +221,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     pioneer_role = turn.pioneer()
     issued = (commands.get(pioneer_role.unit_id) if pioneer_role is not None else None) or {}
     already_acting = issued.get("action") in ("buy", "summonTreasure")
-    if not (job and job.get("claimed")) and not already_acting:
+    if not directive.reserve_pioneer and not (job and job.get("claimed")) and not already_acting:
         pioneer = turn.pioneer()
         if pioneer is not None:
             altar = _treasure_step(turn, payload, pioneer)
@@ -201,7 +240,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         and commands.get(pioneer_role.unit_id)
         and (commands[pioneer_role.unit_id].get("action") in ("buy", "summonTreasure")
              or payload.get("_treasureRound") == turn.round_no))
-    if not (job and job.get("claimed")) and not already_acting and not treasure_claimed:
+    if not directive.reserve_pioneer and not (job and job.get("claimed")) and not already_acting and not treasure_claimed:
         pioneer = turn.pioneer()
         if pioneer is not None:
             has_work, task_move = _task_walk(turn, pioneer, payload)
@@ -210,6 +249,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                     commands[pioneer.unit_id] = task_move
                 else:
                     commands.pop(pioneer.unit_id, None)
+    if job and job.get('claimed') and pioneer_role is not None:
+        # A task hold is also a role claim even though it has no wire command.
+        for uid, command in list(commands.items()):
+            if command.get('action') == 'attack' and str(command.get('controllerId')) == str(pioneer_role.unit_id):
+                commands.pop(uid)
     commands = reconcile(turn, payload, commands)
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
@@ -225,6 +269,16 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         planner_state.tasks["last_note"] = job["note"]
     if judge_tasks and isinstance(payload.get("_demo"), dict) and commit:
         judge_local_tasks(payload, response.commands, planner_state)
+    if commit:
+        cycle=planner_state.tasks.get('cycle')
+        judge_state=getattr(planner_state,'judge',None)
+        _DECISION_REPORT.set({'supervisor':directive.summary(),
+                             'task':{'phase':'paused_for_defence' if directive.reserve_pioneer else (cycle.phase if cycle else 'idle'),
+                                     'cycle_active':bool(cycle),
+                                     'plan_kind':getattr(plan,'kind',None),
+                                     'acceptance_status':deepcopy(planner_state.tasks.get('acceptance_status') or {}),
+                                     'pending_command':getattr(judge_state,'pending_cmd',None) is not None if judge_state is not None else None,
+                                     'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
     return response
 
 
@@ -237,22 +291,8 @@ def _detached_planner(planner_state: Any) -> Any:
 
 
 def _detached_tasks(tasks_state: dict[str, Any]) -> dict[str, Any]:
-    """Shallow copy of the task notes with the live cycle swapped for a copy."""
-    copy = dict(tasks_state)
-    cycle = tasks_state.get("cycle")
-    if isinstance(cycle, tasks.TaskCycle):
-        clone = tasks.TaskCycle(
-            point=dict(cycle.point), accepted_round=cycle.accepted_round,
-            task_type=cycle.task_type, description=cycle.description,
-            timeout_rounds=cycle.timeout_rounds, score_reward=cycle.score_reward,
-            gold_reward=cycle.gold_reward, last_answer=cycle.last_answer,
-            answer_source=cycle.answer_source, phase=cycle.phase,
-            end_reason=cycle.end_reason, ended_round=cycle.ended_round,
-            submissions=list(cycle.submissions),
-        )
-        copy["cycle"] = clone
-    copy["solver_notes"] = dict(tasks_state.get("solver_notes") or {})
-    return copy
+    """Detached preview state, including nested retry and submission records."""
+    return deepcopy(tasks_state)
 
 
 def _planner_state(payload: dict[str, Any]) -> Any:
@@ -365,8 +405,9 @@ def _task_step(turn: Turn, commands: dict[int, dict[str, Any]],
         # Remember the accepted point immediately: the hold range has to be
         # enforced from this round on, before the judge publishes phaseTask.
         zone = pipeline.on_point(payload, team, pioneer.pos)
+        accepted_point=planner_state.tasks.pop('accept_target',None)
         planner_state.tasks["cycle"] = tasks.TaskCycle(
-            point=dict(zone["pos"]) if zone else dict(pioneer.pos.dump()),
+            point=accepted_point or (dict(zone["pos"]) if zone else dict(pioneer.pos.dump())),
             accepted_round=turn.round_no,
             task_type="自进化类",
             description="",
@@ -406,13 +447,9 @@ def _sync_cycle(payload: dict[str, Any], turn: Turn, planner_state: Any) -> None
             timeout = int(point.get("timeoutRounds") or 0)
             if timeout and timeout != cycle.timeout_rounds:
                 cycle.timeout_rounds = timeout
-                cycle.accepted_round = turn.round_no
             cycle.task_type = str(point.get("taskType") or cycle.task_type)
             break
-    if not cycle.description and not cycle.timeout_rounds:
-        # The judge has not published the task yet; keep holding without timing
-        # out locally, because we do not know the official timeout.
-        cycle.accepted_round = turn.round_no
+    # Unknown timeout/description does not reset the original acceptance attempt.
 
 
 def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],

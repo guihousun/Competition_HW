@@ -162,8 +162,13 @@ class Handler(BaseHTTPRequestHandler):
         started = time.perf_counter()
         decision_error: str | None = None
         fault = None
+        decision = None
         try:
             response = respond(observation(payload))
+            try:
+                decision = decision_report()
+            except Exception:
+                decision = None
         except Exception as error:
             LOGGER.error("decision failed (%s); details are in the local trace", type(error).__name__)
             response = {"roleCommandMap": {}}
@@ -178,13 +183,13 @@ class Handler(BaseHTTPRequestHandler):
         # Planning duration covers only this request handling region: startup time
         # is never reported as a request timeout.
         plan_ms = (time.perf_counter() - started) * 1000.0
-        LOGGER.info("round %s -> %d commands", payload.get("roundNo"),
+        LOGGER.debug("round %s -> %d commands", payload.get("roundNo"),
                     len(response["roleCommandMap"]))
         self._judge_response(ticket, raw, payload, response, plan_ms,
-                             decision_exception=decision_error, fault=fault)
+                             decision_exception=decision_error, fault=fault, decision=decision)
 
     def _judge_response(self, ticket, raw, payload, response, plan_ms, *,
-                        invalid_input=False, decision_exception=None, fault=None):
+                        invalid_input=False, decision_exception=None, fault=None, decision=None):
         body = json.dumps(response, ensure_ascii=False).encode('utf-8')
         sent = False
         try:
@@ -195,15 +200,15 @@ class Handler(BaseHTTPRequestHandler):
             # Redaction, diffing and all file I/O happen on the writer thread.
             try:
                 telemetry.submit(ticket, raw, body, sent=sent, plan_ms=plan_ms,
-                                 invalid_input=invalid_input, fault=fault)
+                                 invalid_input=invalid_input, fault=fault, decision=decision)
             except Exception:
                 pass
         self._diagnose(payload, response, plan_ms, invalid_input=invalid_input,
                        decision_exception=decision_exception,
-                       event_id=getattr(ticket, 'event_id', None))
+                       event_id=getattr(ticket, 'event_id', None), decision=decision)
 
     def _diagnose(self, payload, response, plan_ms: float, *, invalid_input: bool = False,
-                  decision_exception: str | None = None, event_id: str | None = None) -> None:
+                  decision_exception: str | None = None, event_id: str | None = None, decision=None) -> None:
         """Local engineering metadata only; never alters the judge response.
 
         Called after the response bytes are written, and fully fail-open: a
@@ -212,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             diagnostics.response_summary(payload, response, plan_ms=plan_ms,
                                          invalid_input=invalid_input,
-                                         decision_exception=decision_exception, event_id=event_id)
+                                         decision_exception=decision_exception, event_id=event_id, decision=decision)
         except Exception:  # pragma: no cover - defence in depth
             LOGGER.debug("diagnostics summary skipped")
 
