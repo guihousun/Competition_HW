@@ -12,12 +12,13 @@ page. They are optional; removing them does not affect the judge path.
 import json
 import logging
 import time
+import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import debug, diagnostics, twomatch, recordings
+from . import debug, diagnostics, telemetry, twomatch, recordings
 from .brain import decide, respond
 from .scenarios import observation
 
@@ -133,6 +134,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         local = path.startswith("/debug/")
+        try:
+            ticket = None if local else telemetry.begin()
+        except Exception:
+            ticket = None
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length)
         try:
@@ -142,15 +147,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(400, {"error": f"请求体不是合法 JSON：{error}"})
             else:
                 # Official contract: answer a usable (empty) command map, never an error.
-                self._json(200, {"roleCommandMap": {}})
-                self._diagnose(None, {"roleCommandMap": {}}, 0.0, invalid_input=True)
+                self._judge_response(ticket, raw, None, {"roleCommandMap": {}}, 0.0, invalid_input=True)
             return
         if not isinstance(payload, dict):
             if local:
                 self._json(400, {"error": "请求体必须是 JSON 对象"})
             else:
-                self._json(200, {"roleCommandMap": {}})
-                self._diagnose(None, {"roleCommandMap": {}}, 0.0, invalid_input=True)
+                self._judge_response(ticket, raw, None, {"roleCommandMap": {}}, 0.0, invalid_input=True)
             return
         if path.startswith("/debug/"):
             self._debug_post(path, payload)
@@ -158,22 +161,49 @@ class Handler(BaseHTTPRequestHandler):
         # Competition path: never surface an error page or a hang to a judge.
         started = time.perf_counter()
         decision_error: str | None = None
+        fault = None
         try:
             response = respond(observation(payload))
-        except Exception:
-            LOGGER.exception("decision failed")
+        except Exception as error:
+            LOGGER.error("decision failed (%s); details are in the local trace", type(error).__name__)
             response = {"roleCommandMap": {}}
             decision_error = "internal_error"
+            try:
+                fault = {'category': 'decision_exception', 'type': type(error).__name__,
+                         'message': telemetry.clean(str(error))[:500],
+                         'frames': [{'file': Path(frame.filename).name, 'function': frame.name, 'line': frame.lineno}
+                                    for frame in traceback.extract_tb(error.__traceback__)[-12:]]}
+            except Exception:
+                fault = {'category': 'decision_exception'}
         # Planning duration covers only this request handling region: startup time
         # is never reported as a request timeout.
         plan_ms = (time.perf_counter() - started) * 1000.0
         LOGGER.info("round %s -> %d commands", payload.get("roundNo"),
                     len(response["roleCommandMap"]))
-        self._json(200, response)
-        self._diagnose(payload, response, plan_ms, decision_exception=decision_error)
+        self._judge_response(ticket, raw, payload, response, plan_ms,
+                             decision_exception=decision_error, fault=fault)
+
+    def _judge_response(self, ticket, raw, payload, response, plan_ms, *,
+                        invalid_input=False, decision_exception=None, fault=None):
+        body = json.dumps(response, ensure_ascii=False).encode('utf-8')
+        sent = False
+        try:
+            self._send(200, body, 'application/json; charset=utf-8')
+            sent = True
+        finally:
+            # Immutable wire bytes go to a bounded queue AFTER the HTTP write.
+            # Redaction, diffing and all file I/O happen on the writer thread.
+            try:
+                telemetry.submit(ticket, raw, body, sent=sent, plan_ms=plan_ms,
+                                 invalid_input=invalid_input, fault=fault)
+            except Exception:
+                pass
+        self._diagnose(payload, response, plan_ms, invalid_input=invalid_input,
+                       decision_exception=decision_exception,
+                       event_id=getattr(ticket, 'event_id', None))
 
     def _diagnose(self, payload, response, plan_ms: float, *, invalid_input: bool = False,
-                  decision_exception: str | None = None) -> None:
+                  decision_exception: str | None = None, event_id: str | None = None) -> None:
         """Local engineering metadata only; never alters the judge response.
 
         Called after the response bytes are written, and fully fail-open: a
@@ -182,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             diagnostics.response_summary(payload, response, plan_ms=plan_ms,
                                          invalid_input=invalid_input,
-                                         decision_exception=decision_exception)
+                                         decision_exception=decision_exception, event_id=event_id)
         except Exception:  # pragma: no cover - defence in depth
             LOGGER.debug("diagnostics summary skipped")
 

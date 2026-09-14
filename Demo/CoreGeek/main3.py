@@ -26,15 +26,20 @@ def main() -> None:
         format="%(asctime)s | %(message)s",
     )
 
-    from agent import diagnostics
+    from agent import diagnostics, telemetry
 
     diagnostics.utf8_stdout()
-    diagnostics.emit_startup_identity(entry=sys.argv[0] or "main3.py", root=root)
+    identity = diagnostics.emit_startup_identity(entry=sys.argv[0] or "main3.py", root=root)
+    trace = telemetry.configure(root.parent.parent, identity)
 
     from agent.server import serve
 
     logging.info("listening on 0.0.0.0:%d", port)
-    serve(port)
+    try:
+        serve(port)
+    finally:
+        if trace is not None:
+            trace.close()
 
 
 if __name__ == "__main__":

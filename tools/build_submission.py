@@ -61,7 +61,9 @@ COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 ROOT_FILES = ("main.py", "run.sh")
 # Support assets served by the local web/debug extension.
 WEB_PREFIX = "web/"
-DOC_FILES = ("docs/request.txt", "docs/response.txt", "docs/任务书.md", "docs/接口文档.md")
+DOC_FILES = ("docs/request.txt", "docs/response.txt", "docs/任务书.md", "docs/接口文档.md",
+             "docs/TRACE_LOGGING.md")
+TOOL_FILES = ("tools/trace_tool.py",)
 # Layout reference only; never packaged.
 KEEP_OUT = ("Demo/CoreGeek.tar.gz",)
 # Generated compatibility files (bundle path → committed source path).
@@ -170,7 +172,7 @@ def select_files(paths: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
             continue
         if rel.startswith("Demo/CoreGeek/src/") or rel == "Demo/CoreGeek/main3.py":
             accepted.append(rel)
-        elif rel in ROOT_FILES or rel in DOC_FILES or rel.startswith(WEB_PREFIX):
+        elif rel in ROOT_FILES or rel in DOC_FILES or rel in TOOL_FILES or rel.startswith(WEB_PREFIX):
             accepted.append(rel)
         else:
             excluded.append((rel, "outside the submission allowlist"))
