@@ -131,6 +131,7 @@ class TeamAgent:
             "task", confirmation.generation, confirmation.source_digest,
             kind=proposal["kind"], payload=proposal["payload"], purpose=proposal["purpose"],
             in_task=True, priority=40,
+            operation_id=proposal["token"],
             nonce=proposal["token"] if proposal["kind"] == "prompt" else "",
             expected_result_shape="plan_json" if proposal["kind"] == "prompt" else "command_output")
         if request is None:

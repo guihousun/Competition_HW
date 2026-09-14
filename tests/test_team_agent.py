@@ -152,6 +152,31 @@ class TeamAgentIntegrationTests(unittest.TestCase):
         payload = observation(round_no=4, role_pos=(6, 5), phase_task=cycle.description)
         self.assertFalse(task_context.public_task_confirmed(payload, cycle).confirmed)
 
+    def test_explicit_reread_is_a_new_operation_but_third_repeat_stops(self):
+        self.run_round()
+        command = "cat /brief/README.txt"
+        request_ids = []
+        for _ in range(2):
+            issued = self.run_round(llm=self.model_reply("run", command))
+            self.assertEqual(issued.get("executeCmd"), command)
+            request_ids.append(self.state.team_agent.link["request_id"])
+            result = local_task_sandbox.execute(command, self.case["sandbox_fixture"], active=True)
+            self.assertIn("prompt", self.run_round(command=result))
+        self.assertNotEqual(*request_ids)
+        stopped = self.run_round(llm=self.model_reply("run", command))
+        self.assertNotIn("executeCmd", stopped)
+        self.assertEqual(self.state.team_agent.task.commands, 2)
+        self.assertEqual(self.state.team_agent.task.stage, "stopped")
+
+    def test_same_operation_offered_twice_has_one_queue_entry(self):
+        router = self.state.ensure_llm_router()
+        a = router.offer("task", "g", "s", kind="cmd", payload="cat /doc", operation_id="operation-1")
+        b = router.offer("task", "g", "s", kind="cmd", payload="cat /doc", operation_id="operation-1")
+        c = router.offer("task", "g", "s", kind="cmd", payload="cat /doc", operation_id="operation-2")
+        self.assertIs(a, b)
+        self.assertIsNot(a, c)
+        self.assertEqual(len(router.queue), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

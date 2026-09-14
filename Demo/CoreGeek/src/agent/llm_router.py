@@ -341,7 +341,7 @@ class LLMRouter:
     def offer(self, owner: str, generation: Any, source_digest: Any, *,
               kind: str, payload: Any, purpose: str = "",
               expected_result_shape: str = "text", in_task: bool = False,
-              priority: int = 100, nonce: str = "") -> Request | None:
+              priority: int = 100, nonce: str = "", operation_id: str = "") -> Request | None:
         """Queue a request. Never charges quota and never changes the response.
 
         An oversized payload is **rejected**, never silently chopped: a chopped
@@ -360,8 +360,15 @@ class LLMRouter:
             return None
         if nonce and not NONCE_RE.match(nonce):
             return None
+        if not isinstance(operation_id, str) or len(operation_id) > 160:
+            return None
         generation = str(generation or "none")
         content_key = context_digest(owner, generation, kind, payload)
+        if operation_id:
+            # A fresh controller operation may intentionally reread the same
+            # document. Repeated offers of that operation still deduplicate.
+            # This local identity is not an official result-correlation token.
+            content_key = context_digest(owner, generation, kind, payload, operation_id)
         for existing in self.queue:
             if existing.content_key == content_key and existing.status == "queued":
                 return existing

@@ -1,6 +1,6 @@
 # 三类任务的Agent集成接缝
 
-状态：2026-09-15，TaskAgent/SkillLibrary与共享路由已接入brain和模拟器；661项完整测试通过，脚本化模型覆盖7次实际任务结算。真实模型集成实验仍在等待原请求，新闻/宝藏推理与整局验证未完成。证据见reports/llm-tasks-p1-integration。
+状态：2026-09-15，TaskAgent/SkillLibrary与共享路由已接入brain和模拟器；661项完整测试通过，脚本化模型覆盖7次实际任务结算。真实模型集成3组任务全部通过，共14次请求（含可见网络失败后的恢复），源码f060d10固定。证据见reports/llm-tasks-p1-integration及reports/llm-tasks-real-integration。新闻/宝藏推理与整局验证未完成。
 类别：内部架构/策略优化；R01、R07及LLM_TASKS_ROADMAP.md保持不变。
 
 ## 队伍与任务
