@@ -4,6 +4,8 @@
 不用去 Release 找附件，也不要上传 `Demo/CoreGeek.tar.gz`（官方原始示例）。
 根目录的 `CoreGeek.tar.gz.sha256` 用于校验，`CoreGeek.manifest.json` 记录包内源码版本。
 
+本轮反馈迭代：[策略架构](docs/POLICY_ARCHITECTURE.md) · [精简日志](docs/CONSOLE_LOGGING.md) · [验证报告](reports/issue-14-17-architecture/REVIEW.md)。
+
 《未来战争》参赛策略与本地端到端调试平台，Python 3.11+，无第三方依赖。
 基于 `Demo/CoreGeek.tar.gz` 示例扩展，当前策略覆盖防御生存子集。
 

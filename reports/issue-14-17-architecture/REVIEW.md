@@ -38,3 +38,7 @@
 最终 Python 3.11.10 全套 `python -m unittest discover -s tests -v`：**486项通过**，236.633秒。`git diff --check` 通过。包括34项console、27项diagnostics、20项telemetry、22项架构回归；此前集成时发现缺少judge对象的轻量测试状态兼容问题，已修复且全套重跑通过。原始日志不是完整可重放观测链，本轮不能重现官方每次扣血或购买机会，不能伪造内网PASS。下一次建议保留新包身份与关键异常前后回合，并尽可能导出JSONL原始观测用于本地与平台逐步对齐。
 
 最终包探测另外覆盖：同一事件流的HTTP后处理可能迟到，控制台使用事件序号避免误判重启和重复HP下降；日志专项35项通过。此为整套486项通过后的日志工具小修，未改策略/协议输出，完整包会重新验证。
+
+## 交付包验证
+
+源码 `e0a960806381999e29a85bca4630b8caf599a627`，包 SHA256 `b6b8c658848817b765bb45e8c3502556dc0a0221eb9f7a4deace774056fc48dc`，152765字节。根目录 CoreGeek.tar.gz/sha256/manifest 一起入Git。Windows/Ubuntu均使用Python3.11.10，原版main3入口、Linux bash run.sh、trace目录不可写、trace关闭、full日志共10项包探测全部通过；每项25次POST。启用trace时25/25完整捕获且附决策说明，官方响应没有新增字段；compact 7行、full 25行。均为本地验证，来源Issue继续等待同一新包的真实平台复测，不关闭或标记内网PASS。

@@ -1,5 +1,5 @@
 {
-  "commit": "07f24a2cdcfef01b571b781ac308a59b78edfa95",
+  "commit": "e0a960806381999e29a85bca4630b8caf599a627",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -8,9 +8,9 @@
   ],
   "files": [
     {
-      "bytes": 6434,
+      "bytes": 6877,
       "path": "CoreGeek/docs/TRACE_LOGGING.md",
-      "sha256": "6201cc16a41c3ff4d6cbd9c7651c89fc03d123b745eaa817e99335538957894f",
+      "sha256": "42c852702da13e595bf40c231fdb908624560ad9351bf6582ccd487b1bd3ab98",
       "source": "docs/TRACE_LOGGING.md"
     },
     {
@@ -68,15 +68,21 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 85003,
+      "bytes": 87666,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "8bc7188bbf8cc732a5d382d24c232790dd7abe08306079e6f2c7c5bbed40518c",
+      "sha256": "5f8e588b708b508b8616fb935b47f315065a90fc9b29f8b0b6cd3009a08ddb8e",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
-      "bytes": 5533,
+      "bytes": 32355,
+      "path": "CoreGeek/src/agent/console_digest.py",
+      "sha256": "b6851a6b5a7779d29bcf57e20d28e57dc759bc8d72d888e23469907bef3ccd37",
+      "source": "Demo/CoreGeek/src/agent/console_digest.py"
+    },
+    {
+      "bytes": 6128,
       "path": "CoreGeek/src/agent/coordination.py",
-      "sha256": "735a4f3e1f3e687dd31ac09b0770f8a24794c5049a12ab3b993d635d9131d758",
+      "sha256": "570fa0db13ea7bc48297dc9f85957a697b27960058d80c6cc6d9a9743e701794",
       "source": "Demo/CoreGeek/src/agent/coordination.py"
     },
     {
@@ -98,9 +104,9 @@
       "source": "Demo/CoreGeek/src/agent/defense_layout.py"
     },
     {
-      "bytes": 25907,
+      "bytes": 37107,
       "path": "CoreGeek/src/agent/diagnostics.py",
-      "sha256": "26d9d04815c96fcb19d69f464c57e655962ed0829f3f31e00e239737c531b178",
+      "sha256": "43d60897696d04790d06692489d11524ac39620daab9dec46a1daf324ef5664b",
       "source": "Demo/CoreGeek/src/agent/diagnostics.py"
     },
     {
@@ -134,10 +140,16 @@
       "source": "Demo/CoreGeek/src/agent/nightwork.py"
     },
     {
-      "bytes": 11631,
+      "bytes": 12682,
       "path": "CoreGeek/src/agent/planner.py",
-      "sha256": "fab280b858f4e12cf951b39f38f790c3f09fcd2a3cc54fb523b26572010a3a9e",
+      "sha256": "c3a896e923638859992375b0b1142a47e2f0f2a5fb8a9ce7074a4a0da7d60109",
       "source": "Demo/CoreGeek/src/agent/planner.py"
+    },
+    {
+      "bytes": 4153,
+      "path": "CoreGeek/src/agent/policy_supervisor.py",
+      "sha256": "f79ea96b832a220290c7e73f26f07defeeb0968fc4026d82b9783c2268e9cd6c",
+      "source": "Demo/CoreGeek/src/agent/policy_supervisor.py"
     },
     {
       "bytes": 11563,
@@ -164,9 +176,9 @@
       "source": "Demo/CoreGeek/src/agent/scenarios.py"
     },
     {
-      "bytes": 3963,
+      "bytes": 4182,
       "path": "CoreGeek/src/agent/server.py",
-      "sha256": "8490c6bce71650ff0d7cd1dadc51ec7e5fa51595fe0ae5fb9f624c93d9eecb08",
+      "sha256": "3782b90947e8b36479a36eb4e5668de9222601f6315ff7bba21536d512a3289c",
       "source": "submission/server.py"
     },
     {
@@ -176,9 +188,15 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 32211,
+      "bytes": 2392,
+      "path": "CoreGeek/src/agent/task_lifecycle.py",
+      "sha256": "4ea4780b7fdaef535d26b236e3f21daa1be7f56293e2587572a03bd25e712d18",
+      "source": "Demo/CoreGeek/src/agent/task_lifecycle.py"
+    },
+    {
+      "bytes": 33848,
       "path": "CoreGeek/src/agent/tasks.py",
-      "sha256": "0704db957d4846270036f69f62fca846b2a32f40773ba223ac04a7dbbcb74359",
+      "sha256": "11aea7b6295776a5043bf7b48d10aebdac2e8a4e6bcdbe8ecaf24d5d8f5cb2d5",
       "source": "Demo/CoreGeek/src/agent/tasks.py"
     },
     {
@@ -188,9 +206,9 @@
       "source": "Demo/CoreGeek/src/agent/taskworld.py"
     },
     {
-      "bytes": 18376,
+      "bytes": 19036,
       "path": "CoreGeek/src/agent/telemetry.py",
-      "sha256": "d23dbe0faffc26e80c927aa213a030d2a1b320fdece8ec4f8e079e9b62e62e98",
+      "sha256": "ba33d27b3c0addd88a569bb4edceb2778ebb6c068bf2e472d2883beedbca8fa1",
       "source": "Demo/CoreGeek/src/agent/telemetry.py"
     },
     {
@@ -237,5 +255,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "7bc9846a265bccfee09601f630dea4e8bd185b15e70de2f11daf20373ced57ad"
+  "source_digest": "8cf375f94f86476e6193750b31a08d3185d666b85422c50eb91c77953701dc5e"
 }
