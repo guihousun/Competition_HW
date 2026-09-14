@@ -19,7 +19,9 @@ Get-Content .\CoreGeek.tar.gz.sha256
 ```
 
 根目录压缩包是 Codex 已构建并验证的交付物，不需要用户再去找 Release 或自行打包。
-本次包内源码 SHA 为 `0bb66723a1bf72309e1ae95d52ac355b54bcc142`，包含详细日志，尚不含未完成的 DSH 防御优化。
+包内源码 SHA 见 `CoreGeek.manifest.json` 的 `commit`。平台报告旧包 `failure` 后，参赛包已改用官方原版 `main3.py` 和 `pyproject.toml` 的原始字节，直接加载同级 `src/agent/server.py`；不再转入 `Demo/CoreGeek/` 子目录。
+参赛 HTTP 服务不加载网页、录制器或模拟器；根路径 GET 仅返回就绪 JSON。源码仓库的 `python main.py` 仍提供本地可视化。
+这项兼容性收敛尚需平台复测，不能据此声称已经定位或修复 `failure`。未完成的 DSH 防御优化不混入参赛包。
 上传的是 `.tar.gz` 文件，不是同目录的校验/清单文件，也不是 `Demo/` 中的原始示例。
 
 包先由确定的源码 SHA 构建，再由后续交付提交加入仓库；因此包内 SHA 可以与包含二进制的仓库 HEAD 不同。
@@ -92,14 +94,14 @@ POST 应返回含 `roleCommandMap` 的 JSON；浏览器打开 http://localhost:8
 
 ```powershell
 $sha = git rev-parse HEAD
-python tools/build_submission.py build --repo . --ref $sha --output "dist/$sha/CoreGeek.tar.gz"
+python tools/build_competition.py --repo . --ref $sha --output "dist/$sha/CoreGeek.tar.gz"
 python tools/build_submission.py verify --archive "dist/$sha/CoreGeek.tar.gz" --sidecar "dist/$sha/CoreGeek.tar.gz.sha256"
 ```
 
 - `verify` 会检查：真实 gzip（含 **CRC/尾部完整性**，截断包会被拒绝）、“ZIP 改名 `.tar.gz`”、
   单一 `CoreGeek/` 根目录与 `CoreGeek/main3.py` 入口、必需文件、逐文件哈希与源摘要、
   重复成员/清单项、路径穿越与特殊成员、旁车哈希。
-- 文件名 `CoreGeek.tar.gz`、根目录 `CoreGeek/`、入口 `main3.py` 是与**官方示例包一致**的兼容性选择，
+- 文件名 `CoreGeek.tar.gz`、根目录 `CoreGeek/`、直接入口 `main3.py` 是与**官方示例包一致**的兼容性选择，
   **不是**已证实的平台要求；包的精确身份以清单和哈希为准。
 - 可上传文件在 `dist/<本次SHA>/CoreGeek.tar.gz`，旁边是 `.sha256`；重复构建同一目录会拒绝覆盖，可复用已验证产物或另选新输出目录。
   工具仅包含指定提交的内容，不包含未提交改动。发布评论另行提供实际测试记录。
@@ -121,8 +123,8 @@ python main3.py 8080
 按平台要求**直接上传** `CoreGeek.tar.gz`（若平台需要其它文件名/形态，以平台提示为准并回报）。
 官方文档指定的启动形式为 `bash run.sh <平台指定端口>`，监听 `0.0.0.0`。
 本包另保留 `python3 main3.py <平台指定端口>` 兼容示例入口。
-包内根目录同时有 `main.py`、`main3.py`、`run.sh` 和 `pyproject.toml`，实际运行代码保持在
-`Demo/CoreGeek/` 下。无需在内网联网安装 Python 依赖；实际 Python/沙盒版本仍需平台核对。
+包内根目录有 `main.py`、`main3.py`、`run.sh` 和 `pyproject.toml`，实际运行代码在同级 `src/agent/`。
+没有外部服务依赖，无需在内网联网安装 Python 依赖；实际 Python/沙盒版本仍需平台核对。
 回测后把下面内容贴回原 Issue：
 
 ```text

@@ -14,7 +14,8 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'Demo/CoreGeek/src'))
+RUNTIME = ROOT/'src' if (ROOT/'src/agent').is_dir() else ROOT/'Demo/CoreGeek/src'
+sys.path.insert(0, str(RUNTIME))
 from agent.telemetry import SCHEMA, clean, differences, observed, runtime_fingerprint
 
 MAX_LINE = 16*1024*1024
@@ -198,7 +199,7 @@ def replay(path, output):
     """A fresh CLI process owns planner memory. Emitted channels are never executed."""
     from agent.brain import respond
     from agent.diagnostics import startup_identity
-    identity = startup_identity(entry='trace_tool.py', root=ROOT/'Demo/CoreGeek')
+    identity = startup_identity(entry='trace_tool.py', root=RUNTIME.parent)
     target = new_output(output)
     count = matched = skipped = 0
     first, previous, gaps, quality = {}, {}, [], {}
