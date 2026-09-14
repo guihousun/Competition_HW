@@ -1,0 +1,7 @@
+{
+  "source_issue": 7,
+  "interface_equal_ignoring_whitespace": true,
+  "issue_section_chars": 7255,
+  "local_chars": 7255,
+  "python_version_evidence": "user screenshot 2026-09-14: 3.11.10; Issue 6: Python 3.11 and installed library list"
+}
