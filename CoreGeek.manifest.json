@@ -1,5 +1,5 @@
 {
-  "commit": "ed6e646dc05dfd339383c75aac2c16d47d7f3c61",
+  "commit": "ddca27eb3b3ec2d40d7d4b30d9f06fc9bad93d71",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 87666,
+      "bytes": 96549,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "5f8e588b708b508b8616fb935b47f315065a90fc9b29f8b0b6cd3009a08ddb8e",
+      "sha256": "c8ff4348b7cd04dc08601e78c73d0a08b1069f69b623f06236449de6599f9444",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -86,15 +86,15 @@
       "source": "Demo/CoreGeek/src/agent/coordination.py"
     },
     {
-      "bytes": 20462,
+      "bytes": 21952,
       "path": "CoreGeek/src/agent/debug.py",
-      "sha256": "adcfa3d2eac48ab4807bace09bb85a9eaa19493b7f35bc7f0dd86a6405c7e92e",
+      "sha256": "80e19567cc6b6e35b0a0532ef413cc6839fcd7e5002ecf9c360903ec3ddc7769",
       "source": "Demo/CoreGeek/src/agent/debug.py"
     },
     {
-      "bytes": 3801,
+      "bytes": 5563,
       "path": "CoreGeek/src/agent/deepseek_client.py",
-      "sha256": "e90005b5fe887c2f005ad9e1a9e6bb44fe2e3573a415805290f6a3c4fe2a286e",
+      "sha256": "bd9f623ba5c5d1ed9931c97cb8ff7945dde1c0ee13c256f4e1c72c433d8a759f",
       "source": "Demo/CoreGeek/src/agent/deepseek_client.py"
     },
     {
@@ -110,16 +110,34 @@
       "source": "Demo/CoreGeek/src/agent/diagnostics.py"
     },
     {
+      "bytes": 7315,
+      "path": "CoreGeek/src/agent/evidence_memory.py",
+      "sha256": "ae737d7bd1e2136a4bfc09bb6c834bd41c450ca360b626ed671d179f485c1a35",
+      "source": "Demo/CoreGeek/src/agent/evidence_memory.py"
+    },
+    {
       "bytes": 5803,
       "path": "CoreGeek/src/agent/grid.py",
       "sha256": "9f84afadce6808bbe456d8eb10759e341e03d71d16fed9bf268d508925e7aa67",
       "source": "Demo/CoreGeek/src/agent/grid.py"
     },
     {
-      "bytes": 4479,
+      "bytes": 39115,
+      "path": "CoreGeek/src/agent/llm_router.py",
+      "sha256": "feadade63a88dc27aa0e8f0e0cd45048a2318b1f725f409fd7ba69ca7e8cae61",
+      "source": "Demo/CoreGeek/src/agent/llm_router.py"
+    },
+    {
+      "bytes": 5712,
       "path": "CoreGeek/src/agent/local_llm.py",
-      "sha256": "cf030d363c8057f712c97bca11beaa6ef526e812262399d5739959ba3838ce1e",
+      "sha256": "7a1381688a832d1697c526bc9c5222273020f72c4ae8c7584687ad7a7fd4a29a",
       "source": "Demo/CoreGeek/src/agent/local_llm.py"
+    },
+    {
+      "bytes": 6415,
+      "path": "CoreGeek/src/agent/local_scripted_model.py",
+      "sha256": "a4419fd8fa49dcc420c440f9d90e0460e7a39ea8a2172d53a87231418d95bf58",
+      "source": "Demo/CoreGeek/src/agent/local_scripted_model.py"
     },
     {
       "bytes": 3614,
@@ -128,10 +146,16 @@
       "source": "Demo/CoreGeek/src/agent/local_task_cases.py"
     },
     {
-      "bytes": 6425,
+      "bytes": 7303,
       "path": "CoreGeek/src/agent/local_task_sandbox.py",
-      "sha256": "cc464956edde5828a92e1e5e8670e8285d009d6b662c385aaa253782b472492b",
+      "sha256": "b14de2ca8132b02a583d62f412b46b239a950116e2573758bc696f27d1d6178e",
       "source": "Demo/CoreGeek/src/agent/local_task_sandbox.py"
+    },
+    {
+      "bytes": 4892,
+      "path": "CoreGeek/src/agent/local_world_news.py",
+      "sha256": "143ba7a65f92ef4081cb3f3e0931f02e2a7952e484d2670bde9da63cce5f7f0e",
+      "source": "Demo/CoreGeek/src/agent/local_world_news.py"
     },
     {
       "bytes": 8950,
@@ -152,9 +176,9 @@
       "source": "Demo/CoreGeek/src/agent/nightwork.py"
     },
     {
-      "bytes": 12682,
+      "bytes": 21281,
       "path": "CoreGeek/src/agent/planner.py",
-      "sha256": "c3a896e923638859992375b0b1142a47e2f0f2a5fb8a9ce7074a4a0da7d60109",
+      "sha256": "950cf24adb2d73f6f6d2ff8fd3573e57cbbcb571514a0f6f1c48c4bea829227f",
       "source": "Demo/CoreGeek/src/agent/planner.py"
     },
     {
@@ -182,22 +206,34 @@
       "source": "Demo/CoreGeek/src/agent/sandbox.py"
     },
     {
-      "bytes": 8954,
+      "bytes": 9267,
       "path": "CoreGeek/src/agent/scenarios.py",
-      "sha256": "d1dad9e1c948fb5bbe617eb50400d9378943844d9b849f205362c212ce481285",
+      "sha256": "8a24eaa95e97b26fe5e757a552d20af214bd8a80d9590499854a019226dbba93",
       "source": "Demo/CoreGeek/src/agent/scenarios.py"
     },
     {
-      "bytes": 4182,
+      "bytes": 4414,
       "path": "CoreGeek/src/agent/server.py",
-      "sha256": "3782b90947e8b36479a36eb4e5668de9222601f6315ff7bba21536d512a3289c",
+      "sha256": "e17e33f5875b1599ded7f05c202fe03076ca288d8ffab8b34fc57d1d5f9ebd0d",
       "source": "submission/server.py"
     },
     {
-      "bytes": 43290,
+      "bytes": 45176,
       "path": "CoreGeek/src/agent/simulator.py",
-      "sha256": "f83f9dd6145f8f5168869080f1c67d6f5733a9850669412740d275cfcbbd4b15",
+      "sha256": "658e358cc57d53013be3110e8206c77548d97d60ebc11640641f610a60737ce7",
       "source": "Demo/CoreGeek/src/agent/simulator.py"
+    },
+    {
+      "bytes": 19107,
+      "path": "CoreGeek/src/agent/task_agent.py",
+      "sha256": "8c041b02d4bf3fde29867ffcd8d540f719e06a82a9ad9b4ff1b4a9c17673788e",
+      "source": "Demo/CoreGeek/src/agent/task_agent.py"
+    },
+    {
+      "bytes": 30287,
+      "path": "CoreGeek/src/agent/task_context.py",
+      "sha256": "1b2b425b3a635169ae42ad4b01a0f09359d5316b9e848f1ed253757c0f25b099",
+      "source": "Demo/CoreGeek/src/agent/task_context.py"
     },
     {
       "bytes": 2392,
@@ -206,9 +242,15 @@
       "source": "Demo/CoreGeek/src/agent/task_lifecycle.py"
     },
     {
-      "bytes": 34488,
+      "bytes": 6633,
+      "path": "CoreGeek/src/agent/task_skills.py",
+      "sha256": "3c786ee1c10d936d163c3f5c928053eeb5639a798254fbc832ef462749c465df",
+      "source": "Demo/CoreGeek/src/agent/task_skills.py"
+    },
+    {
+      "bytes": 34821,
       "path": "CoreGeek/src/agent/tasks.py",
-      "sha256": "54f36a6d2e2a696a29806ea188674f6b8d967d0f6761a0bb487c3f322a49d351",
+      "sha256": "9805cea015074985ea58f9a452a0e78ed57f1fc8e10e9624403228aef13d3b1d",
       "source": "Demo/CoreGeek/src/agent/tasks.py"
     },
     {
@@ -216,6 +258,12 @@
       "path": "CoreGeek/src/agent/taskworld.py",
       "sha256": "d2609d14aba50b273d04a29611cbf4ca4d7809ee7053504c2a952370a2c79ca1",
       "source": "Demo/CoreGeek/src/agent/taskworld.py"
+    },
+    {
+      "bytes": 16532,
+      "path": "CoreGeek/src/agent/team_agent.py",
+      "sha256": "5fa91f98d12f6b628f17659c8651ac9f395112dd02778f8c97e399d800700a6e",
+      "source": "Demo/CoreGeek/src/agent/team_agent.py"
     },
     {
       "bytes": 19036,
@@ -248,6 +296,12 @@
       "source": "Demo/CoreGeek/src/agent/vision.py"
     },
     {
+      "bytes": 21698,
+      "path": "CoreGeek/src/agent/world_agent.py",
+      "sha256": "fd1b1a40f5e02e681cb5a139930d6996b894d9cfeb07005ecc0cfd5f16ef5e31",
+      "source": "Demo/CoreGeek/src/agent/world_agent.py"
+    },
+    {
       "bytes": 15170,
       "path": "CoreGeek/tools/trace_tool.py",
       "sha256": "59e9402af3e2f26ba2204b2353890647e8ab51e6c976a193cb79e5e3e54df076",
@@ -267,5 +321,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "2b2cb168881509c8e3ab9d916b90c9a7fa3ce867c26866cbb1e20851c609808b"
+  "source_digest": "32444c6bbaa6fea1b1d78482ea957fb8912d7a4243959fb275c873898107465d"
 }

@@ -30,5 +30,6 @@
 仍需在真实地图/真实题目上回传请求、响应与结算，继续校准策略。未知固定刷新坐标、
 完整官方沙盒和其他DEVELOPMENT_RULES.md差异均未因本地通过消失。
 
-交付时请使用与包内manifest相符的完整源码SHA；根目录CoreGeek.tar.gz将在最终验证后更新。
-当前旧包、内部实验包和正式交付包不可混用，具体交付SHA以交付记录为准。
+根目录CoreGeek.tar.gz已按[交付验证](../reports/llm-tasks-delivery/README.md)完成默认配置与实际包检查。
+回测请同时记录交付提交SHA与manifest中的源码SHA；二者不同是预期行为。
+内部实验包和交付包不可混用，具体包哈希以交付记录为准。

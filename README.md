@@ -6,10 +6,10 @@
 
 本轮反馈迭代：[策略架构](docs/POLICY_ARCHITECTURE.md) · [精简日志](docs/CONSOLE_LOGGING.md) · [验证报告](reports/issue-14-17-architecture/REVIEW.md)。
 
-LLM能力建设：[总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md) · [P0a首批验收](reports/llm-tasks-p0a/REVIEW.md) · [P0b下一阶段设计](specs/LLM_TASKS_P0B.md)。
+LLM能力建设：[测试候选与回退开关](docs/AGENT_CANDIDATE.md) · [本地Agent演示](docs/LOCAL_LLM.md) · [交付验证](reports/llm-tasks-delivery/README.md) · [总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md)。
 
 《未来战争》参赛策略与本地端到端调试平台，Python 3.11+，无第三方依赖。
-基于 `Demo/CoreGeek.tar.gz` 示例扩展，当前策略覆盖防御生存子集。
+基于 `Demo/CoreGeek.tar.gz` 示例扩展，覆盖防御、经济、自进化任务Agent、新闻解释和多日寻宝；本地模拟仍有已登记的官方规则差异。
 
 公司电脑固定使用 `codex/sgh`：`git switch codex/sgh` 后运行 `git pull --ff-only origin codex/sgh`。
 每次记录 `git rev-parse HEAD`；内部工作分支由 Codex 管理。Codex 会把审核过的参赛包提交到根目录，详见下方参赛说明。
@@ -20,15 +20,17 @@ LLM能力建设：[总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md) · [P0a�
 python main.py 8080
 ```
 
-浏览器打开 http://localhost:8080/ ，选择种子、阵营、压力，点击「新建对局」，再用
+浏览器打开 http://localhost:8080/ ，选择种子、阵营、压力，点击「开始模拟」，再用
 `播放 / 暂停 / 单步 / 退一步 / 重置` 走完整条链路。画面是完整的俯视战场（基地、角色、
 炮台、围墙、矿区、商店、任务点、机器人、昼夜与战斗特效），左栏是控制台，右栏为主要游戏画面。
 
-- 「⏺ 录制 600 回合」或「⏺ 录制到终局」让服务端逐回合录制，之后可拖时间轴任意回看。
+- 「对局设置 → Agent演示 → 三类任务综合 → 启动Agent演示」可体验完整认知链路，默认脚本模型，无API费用。
+- 「录像与复盘 → 生成前600轮回放 / 生成整场回放」让服务端逐回合录制，之后可拖时间轴任意回看。
 - 「请求 / 响应」页签可编辑请求 JSON 并只跑策略，用于单回合决策对照。
 - 修改 Python 或 `web/` 下的文件后停止旧进程再启动；网页资源以 `no-store` 返回。
 
-Linux 判题入口：`bash run.sh <port>`。官方请求使用根路径 POST，返回 `roleCommandMap`。
+Linux 判题入口：`bash run.sh <port>`。官方请求使用根路径 POST，返回 `roleCommandMap` 及按需的 `prompt` / `executeCmd`。
+参赛包只提供判题服务；网页从源码目录启动。参赛入口不直接调用OpenRouter，模型和沙盒请求由平台处理。
 
 ## 文档
 
@@ -50,7 +52,7 @@ Linux 判题入口：`bash run.sh <port>`。官方请求使用根路径 POST，�
 
 ## 验证
 
-本次完整提交的检查范围与结果见 [发布验证记录](reports/SUBMISSION_20260914.md)。
+Agent候选的检查范围与结果见 [交付验证记录](reports/llm-tasks-delivery/README.md)；[早期提交记录](reports/SUBMISSION_20260914.md)保留为历史证据。
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -61,7 +63,7 @@ python benchmark.py --seeds 101 --pressure 3
 测试覆盖协议与结算（Python）、以及前端纯逻辑（坐标翻转、动画起点必须是已提交坐标、
 昼夜切分、血量/射程表、未知类型降级、特效上限）。基准通过真实 HTTP 调用策略，每轮审计后
 驱动模拟；保存初始状态、每轮动作/事件、终局统计。报告位于 `reports/`，可复查相同种子。
-`_demo` 私有信息不会进入策略。
+正式入口和模型请求使用公开观测；本地自动模拟另有工程状态。`tools/verify_agent_http.py`可用外部响应模式独立结算HTTP服务的决策，避免同时运行本地策略。
 
 ## 当前范围
 
