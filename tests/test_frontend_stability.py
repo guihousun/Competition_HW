@@ -739,6 +739,30 @@ function stubPost() {
     assert(document.getElementById('agent-stage').textContent === '等待模型', 'old settlement does not override an active task');
   });
 
+  await check('World evidence separates public sources, inference and missing conditions', async () => {
+    resetApp();
+    const world = liveWorld(12);
+    world.state.roundNo = 132;
+    world.state.vendorShopList = [{name:'iron',price:6}];
+    world.state._demo = {planner:{teamAgent:{world:{
+      sources:{news:[{id:'abcdef123456',firstRound:1,text:'<script>明日停矿</script>',truncated:true}],treasure:[]},
+      status:{news:'invalid_reply'},
+      news_events:[{resource:'iron',availability:'unavailable',startDay:2,endDay:3,priceDirection:'up'}],
+      hypothesis:{site:{x:3,y:4},items:['StarSand','StarSand'],opensAt:null,closesAt:null,uncertain:true}
+    }}}};
+    HW.experience.updateAgent(world);
+    const source = document.getElementById('agent-news-sources');
+    assert(source.textContent.includes('<script>明日停矿</script>') && source.textContent.includes('仅保留片段'), 'source is literal with truncation stated');
+    assert(document.getElementById('agent-news-inferences').textContent.includes('第 2—3 天'), 'dated prediction is separate');
+    assert(document.getElementById('agent-news-prices').textContent.includes('6 金币'), 'actual observation price is shown');
+    assert(document.getElementById('agent-news-unknown').textContent.includes('此前资料'), 'stale inference is not advertised as a fresh confirmed result');
+    assert(document.getElementById('agent-treasure-inferences').textContent.includes('StarSand、StarSand'), 'duplicate requirements remain visible');
+    assert(document.getElementById('agent-treasure-unknown').textContent.includes('开启与关闭回合'), 'unknown window is explicit');
+    source.scrollTop = 83;
+    HW.experience.updateAgent(world);
+    assert(source.scrollTop === 83, 'same source does not reset scroll');
+  });
+
   process.stdout.write(JSON.stringify(checks));
 })().catch((error) => {
   process.stdout.write(JSON.stringify([{ name: 'harness', ok: false, error: String((error && error.stack) || error) }]));
