@@ -92,7 +92,11 @@ def after_step(result):
     meta = state.get('_demo') or {}
     request = result.get('judgeRequest') or {}
     if request.get('executeCmd'):
-        state['lastCmdResult'] = '[JUDGER_ERROR]\n本地沙盒执行器未接入'
+        from .local_task_sandbox import active_task_fixture, execute
+        fixture = active_task_fixture(state)
+        state['lastCmdResult'] = (execute(request['executeCmd'], fixture, active=True)
+                                  if fixture is not None else
+                                  '[JUDGER_ERROR]\n本地沙盒执行器未接入：此场景没有虚拟沙盒 fixture')
     if not request.get('prompt'):
         return result
     if not meta.get('llm_enabled'):

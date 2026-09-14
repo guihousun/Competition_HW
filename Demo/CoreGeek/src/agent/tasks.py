@@ -77,8 +77,8 @@ class TaskCycle:
 
     def record(self, round_no: int, answer: str, source: str) -> None:
         """Keep every answer: a timeout is scored on the best pass rate so far."""
-        answer = " ".join(str(answer).split())
-        if not answer:
+        answer = str(answer)
+        if not answer.strip():
             raise TaskError("答案不能为空")
         self.submissions.append(Submission(round_no, answer, source))
         self.last_answer = answer

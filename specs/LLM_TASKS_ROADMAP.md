@@ -177,11 +177,15 @@ LLM内部计划采用受校验的结构：kind（inspect/run/check/answer/need_i
 ## 10. 进度与首批工作
 
 - [x] P0a：注册器排序与额度/状态回归已实现并经Codex审核；验证见[首批报告](../reports/llm-tasks-p0a/REVIEW.md)。
-- [ ] P0b：共享LLM通道与上下文底座。
-- [ ] P1：自进化多轮求解。
+- [ ] P0b：共享LLM通道与上下文底座，DSH原生会话正在实施，尚待审核。
+- [ ] P1：自进化多轮求解；判题反馈和虚拟沙盒基础已编写，完整Agent仍待接入。
 - [ ] P2：SOP复用。
 - [ ] P3：新闻推理。
 - [ ] P4：多日宝藏推理。
 - [ ] P5：综合验收与内网反馈。
 
 下一阶段接口草案见 [P0b子Spec](LLM_TASKS_P0B.md)，待P0a审核后绑定新base和派单；不把本路线图当成允许一次修改全部模块的派单。
+
+2026-09-15：P0b已绑定34f838a派单；后续边界见[P1多轮求解](LLM_TASKS_P1.md)、
+[P3/P4新闻与多日宝藏](LLM_TASKS_P3_P4.md)。P1本地判题与沙盒基础的覆盖范围见
+[审核记录](../reports/llm-tasks-p1-foundation/README.md)，不替代模型自主解题与整局验收。

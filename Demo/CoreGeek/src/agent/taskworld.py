@@ -21,6 +21,7 @@ the ring, and a timeout scoring the best pass rate submitted so far.
 from __future__ import annotations
 
 import random
+import json
 from copy import deepcopy
 from typing import Any
 
@@ -36,7 +37,7 @@ DEFAULT_TIMEOUT = 25
 POINT_KINDS = ("自进化类1", "自进化类2")
 
 _TEMPLATES = (
-    ("机房巡检", "机房：A3 温度：{a} 湿度：{b}", "机房={room}; 温度={a}; 湿度={b}"),
+    ("机房巡检", "机房：{room} 温度：{a} 湿度：{b}", "机房={room}; 温度={a}; 湿度={b}"),
     ("接口探测", "服务：{room} 端口：{a} 协议：{b}", "服务={room}; 端口={a}; 协议={b}"),
     ("能耗统计", "区域：{room} 用电：{a} 用水：{b}", "区域={room}; 用电={a}; 用水={b}"),
 )
@@ -125,7 +126,7 @@ def player_tasks(state: dict[str, Any], world: dict[str, Any],
 
 
 def _pass_rate(answer: str, expected: str) -> float:
-    """字段级通过率（任务书 §六：正确字段数 / 全量字段数）。"""
+    """Local fixture field grading, not a published universal judge algorithm."""
     def fields(text: str) -> dict[str, str]:
         out: dict[str, str] = {}
         for chunk in str(text).replace("；", ";").split(";"):
@@ -140,6 +141,39 @@ def _pass_rate(answer: str, expected: str) -> float:
         return 0.0
     hits = sum(1 for key, value in want.items() if got.get(key) == value)
     return hits / len(want)
+
+
+def _grade(answer: str, active: dict[str, Any]) -> float:
+    """Fixture-specific output contracts; never make malformed JSON pass."""
+    mode = active.get('grading', 'fields')
+    expected = active['answer']
+    if mode == 'exact':
+        return float(answer == expected)
+    if mode == 'json_fields':
+        try:
+            def unique(pairs):
+                result = {}
+                for key, value in pairs:
+                    if key in result:
+                        raise ValueError('duplicate key')
+                    result[key] = value
+                return result
+            def reject_constant(value):
+                raise ValueError('nonfinite constant')
+            want = json.loads(expected, object_pairs_hook=unique, parse_constant=reject_constant)
+            got = json.loads(answer, object_pairs_hook=unique, parse_constant=reject_constant)
+            if not isinstance(want, dict) or not want or not isinstance(got, dict):
+                return 0.0
+            # Extra fields violate this fixture's explicit output contract.
+            if set(got) - set(want):
+                return 0.0
+            return sum(k in got and type(got[k]) is type(v) and got[k] == v
+                       for k, v in want.items()) / len(want)
+        except (TypeError, ValueError, RecursionError):
+            return 0.0
+    if mode == 'fields':
+        return _pass_rate(answer, expected)
+    return 0.0  # unknown local judge contract cannot produce success
 
 
 def advance(state: dict[str, Any], world: dict[str, Any], events: list[str]) -> dict[str, Any]:
@@ -193,33 +227,41 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
         command = (state.get("_engine") or {}).get("lastCommands") or {}
         answer = active.get("pending_answer")
         if answer is not None:
-            rate = _pass_rate(answer, active["answer"])
-            active["best_rate"] = max(active["best_rate"], rate)
+            rate = _grade(answer, active)
             if rate >= active["best_rate"]:
                 active["best_answer"] = answer
-            used = max(1, round_no - active["accepted"])
-            # 任务书 §六: full credit adds 5 × 标准回合数 / 实际回合数 on top of
-            # the reward; partial credit is the reward times the pass rate.
-            if rate >= 1.0:
-                score = int(active["score"] + 5 * active["timeout"] / used)
-            else:
-                score = int(active["score"] * rate)
-            gold = int(active["gold"] * rate)
-            state["teamOur"]["totalScore"] = int(state["teamOur"].get("totalScore") or 0) + score
-            state["teamOur"]["goldNum"] = int(state["teamOur"].get("goldNum") or 0) + gold
-            events.append(f"任务结算：通过率 {rate:.0%}，积分 +{score}，金币 +{gold}")
-            report["rewards"] = {"rate": rate, "score": score, "gold": gold,
-                                 "answer": answer, "expected": active["answer"],
-                                 "bestRate": active["best_rate"]}
+            active["best_rate"] = max(active["best_rate"], rate)
             active["pending_answer"] = None
-            book["active"] = None
-            book["cooldown"] = REFRESH_ROUNDS
-            book["tasks_left"] = max(0, book["tasks_left"] - 1)
-            report["ended"] = "completed"
-            state["phaseTask"] = ""
-            return report
+            report["submission"] = {"rate": rate, "bestRate": active["best_rate"]}
+            # An incorrect/partial answer is feedback, not a task ending
+            # (任务书 §五、§六; 接口 §1.7 errorCode 2). Keep the task open
+            # so a solver can inspect feedback and submit an improved answer.
+            # Rates are local judge diagnostics, never new official fields.
+            if rate < 1.0:
+                state.setdefault("errors", []).append({
+                    "errorCode": 2, "description": "答案不正确或不完全正确"})
+                events.append("任务答案未完全正确，继续作答")
+            if rate >= 1.0:
+                used = max(1, round_no - active["accepted"])
+                score = int(active["score"] + 5 * active["timeout"] / used)
+                gold = int(active["gold"])
+                state["teamOur"]["totalScore"] = int(state["teamOur"].get("totalScore") or 0) + score
+                state["teamOur"]["goldNum"] = int(state["teamOur"].get("goldNum") or 0) + gold
+                events.append(f"任务结算：通过率 {rate:.0%}，积分 +{score}，金币 +{gold}")
+                report["rewards"] = {"rate": rate, "score": score, "gold": gold,
+                                     "answer": answer, "expected": active["answer"],
+                                     "bestRate": active["best_rate"]}
+                book["active"] = None
+                book["cooldown"] = REFRESH_ROUNDS
+                book["tasks_left"] = max(0, book["tasks_left"] - 1)
+                report["ended"] = "completed"
+                state["phaseTask"] = ""
+                return report
         if expired or not in_ring:
-            reason = "超时" if expired else "离开任务点范围"
+            reason = "超时" if expired else ("开拓者死亡" if pioneer is None else "离开任务点范围")
+            if expired:
+                state.setdefault("errors", []).append({
+                    "errorCode": 1, "description": "任务超时"})
             if active["best_rate"] > 0:
                 score = int(active["score"] * active["best_rate"])
                 gold = int(active["gold"] * active["best_rate"])
@@ -273,6 +315,12 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
         world["generated"] = ordinal + 1
         rng = random.Random(world["seed"] * 104729 + ordinal * 7717 + 13)
         description, answer = _payload_for(rng)
+        # Explicit local task suites support actual document/query loops. The
+        # private environment, answer and future cases stay out of observations.
+        suite = world.get('agent_cases') or []
+        case = deepcopy(suite[ordinal % len(suite)]) if suite else None
+        if case:
+            description, answer = case['description'], case['answer']
         if world.pop('llm_demo_once', False):
             description = '【本地LLM演示】计算十七加二十五。返回一个键值对，字段名 result，值为阿拉伯整数，不要解释。'
             answer = 'result=42'
@@ -290,6 +338,10 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
             "best_answer": "",
             "pending_answer": None,
         }
+        if case:
+            book['active'].update(grading=case.get('grading', 'exact'),
+                                  fixture_id=case['id'],
+                                  sandbox_fixture=case.get('sandbox_fixture', {}))
         state["phaseTask"] = description
         events.append(f"接取任务：{description.splitlines()[0]}")
         report["accepted"] = description

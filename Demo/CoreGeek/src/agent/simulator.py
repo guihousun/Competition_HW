@@ -325,6 +325,9 @@ def step(payload, commands=None):
     # Judge replies belong to the previous request, not all future tasks.
     state['llmResp'] = ''
     state['lastCmdResult'] = ''
+    # Errors describe the preceding operation, not every future observation.
+    # The planner has consumed them above; this step publishes fresh feedback.
+    state['errors'] = []
     plan_commands = planning.commands
     planner_state.note_submission(planning.prompt, planning.execute, turn.round_no,
                                   bool(planner_state.tasks.get('cycle')))
@@ -470,8 +473,8 @@ def step(payload, commands=None):
                                 'point': dict(zone['pos'])})
                 events.append(f"{uid} 在己方任务点领取任务")
         elif action == 'submitAnswer' and unit['roleType'] == 'pioneer':
-            answer = ' '.join(str(command.get('taskAnswer') or '').split())
-            if not answer or not state.get('phaseTask'):
+            answer = str(command.get('taskAnswer') or '')
+            if not answer.strip() or not state.get('phaseTask'):
                 events.append(f'{uid} 提交答案未执行：没有已领取的任务或答案为空')
             else:
                 outcomes[uid] = True
