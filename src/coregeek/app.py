@@ -33,9 +33,6 @@ EMPTY_BODY = b'{"roleCommandMap":{},"prompt":"","executeCmd":""}'
 LOG_PROMPT_MAX = 100000
 
 
-prompt = ""
-executeCmd = ""
-
 def run(port: int) -> None:
     LOGGER.info("listening on 0.0.0.0:%d", port)
     server.serve(port, handle)
@@ -44,8 +41,6 @@ def run(port: int) -> None:
 def handle(raw: bytes) -> bytes:
     """处理一个回合。**不抛异常**，返回的字节永远是合法响应。"""
     try:
-        prompt = ""
-        executeCmd = ""
         payload = json.loads(raw.decode("utf-8")) if raw else {}
         turn = model.load(payload)
         if turn is None:
