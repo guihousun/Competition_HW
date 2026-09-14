@@ -28,7 +28,9 @@
     "user_test_branch": "codex/sgh",
     "internal_branches_managed_by": "codex",
     "integrate_after": "Codex review and required local checks; never unfinished DSH changes",
-    "submission_path": "dist/<SHA>/CoreGeek.tar.gz",
+    "submission_path": "CoreGeek.tar.gz",
+    "submission_tracked_in_git": true,
+    "package_identity": "CoreGeek.manifest.json commit identifies built source; delivery commit may follow it",
     "record_tested_sha": true
   },
   "runtime_directory": ".workflow",

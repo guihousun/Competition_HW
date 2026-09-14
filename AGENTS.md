@@ -36,7 +36,8 @@
 公司电脑固定拉取 `codex/sgh`，不要求用户在每次任务后切换工作分支或 detached HEAD。
 内部可用隔离分支/工作树完成实施和审核；Codex 审核及相关本地检查通过后，直接将可测试候选整合并推送到 `codex/sgh`。
 这是测试集成分支，合入不代表内网或官方 PASS；未完成、未审核的 DSH 改动不得合入。
-每次交付写明实际 SHA，并将同 SHA 参赛包放在 `dist/<SHA>/CoreGeek.tar.gz`，提供路径或 Release 链接。
+每次交付将验证过的 `CoreGeek.tar.gz`、`CoreGeek.tar.gz.sha256`、`CoreGeek.manifest.json` 提交到仓库根目录，用户 git pull 后即可上传。
+记录包内源码 SHA 与交付提交 SHA；先由确定的源码提交构建，再提交二进制产物，不要求两者自引用一致。
 官方通过声明和正式稳定版本晋升仍需相应 SHA 的真实内网证据，不自动关闭来源 Issue。
 
 ## 执行分工与额度（用户要求，2026-09-13）
