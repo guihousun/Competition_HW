@@ -313,7 +313,8 @@ class MetalCollectionTests(unittest.TestCase):
                 worker = next(u for u in turn.workers() if u.unit_id == 10010)
                 self.assertEqual(worker.pos, Pos(*WORKER))
                 self.assertEqual(distance(worker.pos, Pos(*MINE)), 1)
-                self.assertFalse(worker.pos in turn.occupied_cells() - {worker.pos})
+                self.assertFalse(any(worker.pos in turn.footprint(u)
+                                     for u in turn.ours + turn.enemies if u.unit_id != worker.unit_id))
                 self.assertIsNotNone(brain._vendor_route(turn, worker))
                 self.assertEqual(metal_command(state), collect_command(Pos(*MINE)))
 

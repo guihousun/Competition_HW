@@ -91,8 +91,8 @@ HTTP）：
 冷启动（该快照第一次见到）约 24 ms，其中包含一次内部连通图的构建与 299 个炮位组合
 的搜索；同一快照的后续询问约 4 ms。作为对照，在引入内部连通图与缓存之前，同一探针
 测得本地场景冷启动约 **449 ms**（开发期观测，非本版本可复现数字）。130 轮配对本地
-对局里**逐轮策略决策**的最大值：候选 53–136 ms（首轮最慢），基线 35–154 ms ——
-候选没有变慢。数字见 [latency.json](../reports/issue-12-defence/latency.json) 与
+对局里**逐轮策略决策**的最大值：候选 47–134 ms，基线 41–128 ms ——
+候选在部分场景变慢、部分变快；这些单次本地测量不能证明普遍提速。数字见 [latency.json](../reports/issue-12-defence/latency.json) 与
 [latency-uncached.json](../reports/issue-12-defence/latency-uncached.json)。
 
 ## 假设与未覆盖
@@ -116,6 +116,8 @@ git diff --check
 
 `tests/test_defense_layout.py` 的 32 项检查用手写字面坐标与独立的匹配/泛洪实现，
 不调用 `_demo`，不复用被测匹配器；`tests/test_scenarios.py`、`tests/test_baseline.py`、
-`tests/test_metal_economy.py` 的旧断言按新几何更新。另有一个方向压力夹具（仅测试）：
-在进攻侧固定放 35 个机器人（三列、前 5 个更高血量），断言“有无怪群布局一致”且炮塔
-仍朝进攻侧；机器人位置与血量是假设（协议里机器人没有类型/颜色字段），引擎与策略不变。
+`tests/test_metal_economy.py` 的旧断言按新几何更新。另有一个观测不变性夹具：
+在进攻侧放置 35 个 smallRobot / 40 HP 合成观测，仅验证“有无怪群布局一致”。
+位置和数量属于本地夹具；官方有 roleType 字段，颜色与兵种的对应尚未确认。这不是 35 怪战斗通过证据。
+
+最终交付审核与模拟器同步验证见 [CODEX_REVIEW.md](../reports/issue-12-defence/CODEX_REVIEW.md)。

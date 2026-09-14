@@ -53,5 +53,7 @@
     "D01 local build-region assumption: radius-2 wall ring, radius-1 weapon ring",
     "local spawn fixtures and wave composition, not official spawn data",
     "positions/type composition of the stress fixture are hypotheses; robots carry no type"
-  ]
+  ],
+  "evidence_source_commit": "6260b152979165659d30907efdae96dca9bf2786",
+  "evidence_scope": "Original DSH snapshot; file hashes resolve at evidence_source_commit, not later Codex integration. See CODEX_REVIEW.md for corrections and final validation."
 }

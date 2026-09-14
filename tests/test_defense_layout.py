@@ -71,7 +71,7 @@ def board(base=REPORTED, *, towers=(), walls=(), blocked=(), workers=True,
                         "roles": roles, "playerTasks": []},
             "teamEnemy": {"roles": []},
             "robot": {"roles": [{"id": 90000 + index, "pos": {"x": x, "y": y},
-                                 "health": health}
+                                 "health": health, "roleType": "smallRobot"}
                                 for index, (x, y, health) in enumerate(robots)]},
             "vendorShopList": [], "weaponShopList": []}
 
@@ -468,13 +468,11 @@ class IntegrationTests(unittest.TestCase):
 
 
 def stress_cluster(approach, base):
-    """A fixed robot cluster on the approach side, as a direction stress fixture.
+    """35 synthetic smallRobot observations; geometry invariance only.
 
-    The *positions* are a hypothesis about one night's wave, taken from the Issue
-    12 connector snapshot (~2/3 of the map width away, roughly 35 robots); the
-    protocol gives robots no type, so the "30 regular + 5 elite" split is modelled
-    only as health. Nothing here is an official field, and the strategy must not
-    read it — that is part of what the tests below assert.
+    Positions and count are a local fixture, not official spawn evidence or a
+    combat benchmark. roleType is an official field and smallRobot has 40 HP.
+    Issue 12's colours do not establish an official type mapping.
     """
     x, y = base
     if approach == "E":
@@ -487,8 +485,7 @@ def stress_cluster(approach, base):
     for index, column in enumerate(columns):
         height = 12 if index < 2 else 11
         for row in range(height):
-            elite = index == 0 and row < 5
-            cluster.append((column, y - 5 + row, 400 if elite else 200))
+            cluster.append((column, y - 5 + row, 40))
     return cluster
 
 

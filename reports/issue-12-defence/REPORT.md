@@ -1,5 +1,7 @@
 # Issue #12 防御朝向与后方出口：本地验证报告
 
+> DSH 原始证据绑定提交 `6260b152979165659d30907efdae96dca9bf2786`。本报告的 392 项与首夜数据属于该历史快照；最终整合验证另见 CODEX_REVIEW.md。文案已修正过度的性能/夹具解释。
+
 类别：**策略优化 / R02、R03**；几何口径为本地假设 **D01**。规格
 [specs/issue-12.md](../../specs/issue-12.md)，实现说明
 [docs/ISSUE_12_DEFENCE.md](../../docs/ISSUE_12_DEFENCE.md)。
@@ -18,7 +20,7 @@
 | 仓库 | `guihousun/Competition_HW` |
 | Issue | #12（平台 attack_map，被测提交 SHA 字段 `dd5cf55…`） |
 | 基线提交 | `dd5cf5577c55f421342e571f64757fafa79bbfaf` |
-| 候选 | 本工作树未提交代码（Codex 负责发布） |
+| 候选 | 原 DSH 快照，提交见 metadata.json 的 evidence_source_commit |
 | `Demo/CoreGeek/src/agent/*.py` 组合 SHA-256 | 基线 `4278dd679f8ef7224212e74740508d22bcd5b9ec63c2eafb7e4cf02fa90c6a2a`；候选 `eb925f79abf451217c8a1e1c42b775f8a4ef0a2d5be355e0e6476b3ad2f1c025`（逐文件见 [metadata.json](metadata.json)） |
 | 本地参数 | 压力 1（本地参数），130 轮，蓝方 `challenger` + 红方 `defender` |
 | 运行器 | 本机 Python 3.11（`C:/Users/27334/miniconda3/python.exe`） |
@@ -74,7 +76,7 @@ Issue 自身的“测试结果”字段写 PASS，正文却写“只活了一回
 | 逐轮策略决策耗时 均值 / 最大 / p95 (ms) | 10.8/41.6/31.6；10.1/48.4/34.3；24.9/127.7/36.2；7.4/41.1/26.6 | 17.4/78.6/30.7；12.1/47.4/31.4；7.0/52.0/27.2；15.3/133.7/26.3 |
 
 逐轮耗时由运行器包裹 `plan_for_state` 得到，含策略决策，不含模拟结算；最大值出现在
-冷启动首轮。候选没有比基线慢。原始数据：[comparison.json](comparison/comparison.json)
+冷启动首轮。候选在部分场景的均值/峰值增加，部分下降；不能据此宣称普遍提速。原始数据：[comparison.json](comparison/comparison.json)
 （含 `raw-baseline.json` / `raw-candidate.json` 与逐格墙序）。
 
 ## 三、性能
@@ -92,7 +94,7 @@ Issue 自身的“测试结果”字段写 PASS，正文却写“只活了一回
 
 ## 四、独立审计与回归
 
-Codex 的独立坐标审计脚本（不导入被测模块、按字面坐标与独立泛洪/匹配判断）
+Codex 的独立坐标审计脚本（调用被测布局入口，预期按字面坐标与独立泛洪/匹配判断）
 `review_layout.py --source . --output independent-audit-candidate.json --require-improved`
 在 9 个用例上全部成立（`east_open`、`west_open`、`north_open`、`retain_old`、
 `blocked_front`、`edge_base`、`blocked_rear`、`blocked_outside_rear`、`legacy_ring`）：
@@ -106,8 +108,8 @@ Codex 的独立坐标审计脚本（不导入被测模块、按字面坐标与�
 `tests/test_scenarios.py`、`tests/test_baseline.py`、`tests/test_metal_economy.py` 的旧
 断言按新几何更新。
 
-方向压力夹具（仅测试，不改引擎/策略）：在进攻侧固定放置 35 个机器人（三列，前 5 个血量
-400 当作“精英”，其余 200；位置与血量是**假设**，协议里机器人没有类型/颜色字段），断言
+原始 DSH 的 35 行机器人夹具未提供官方 roleType，且使用了自定义血量，不能称为战斗压力测试。
+Codex 审核后已改为 35 个 smallRobot / 40 HP 的合成观测，仅断言
 “同一快照加不加怪群，布局与炮位完全一致”且炮塔仍朝进攻侧 —— 即朝向来自地图几何先验，
 不读取可见怪群。
 
@@ -133,4 +135,4 @@ git diff --check
 - 130 轮首夜内双方基地都未掉血，本地无法区分防守强度；更长赛程与真实进攻强度未覆盖。
 - 整圈已被旧墙封死时无法在不发 `remove` 的前提下重开出口，只能报告
   `exit_usable=False`。
-- 未跑官方内网；Issue #12 仍为 open，未提交/推送/合并，无对应 SHA 的内网 PASS。
+- 未跑官方内网；本报告产生时尚未发布；最新整合状态见 CODEX_REVIEW.md，无对应 SHA 的内网 PASS。
