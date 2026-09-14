@@ -5,6 +5,7 @@ official sample. The local web server remains a separate repository entry.
 """
 import json
 import logging
+import os
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -93,6 +94,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port):
+    # Match the reviewed local Agent entry. Explicit off values remain valid for
+    # ablation/rollback; WorldAgent inherits the task switch unless overridden.
+    os.environ.setdefault('COMPETITION_HW_TASK_AGENT', 'on')
     # Bind before optional logging work. No local viewer or simulator is imported.
     http = ThreadingHTTPServer(('0.0.0.0', port), Handler)
     trace = None
