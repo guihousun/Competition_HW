@@ -411,12 +411,15 @@ class HandleTest(unittest.TestCase):
         task, ask = asked_after_sending()
         self.assertIn("【本轮任务】：短题目", task)
         self.assertIn("【上一轮模型回复】：无", task)
-        #: `prompt` **打全文**（第 20 步）：模板头、工具清单、「沉淀的 SOP」那个槽、
-        #: 题目原文全在这一行里 —— 这四样**实盘上只有这里看得见**（本地 e2e 的"LLM"
-        #: 是我们自己写的，只证明解析自洽）。第 25 步起题目在「# 对话记录」的首条里。
-        self.assertIn("【本轮提问】：# Agent定位", ask)
-        for piece in ("# 可使用的工具", "- SOP2Prompt：", "# 沉淀的 SOP", "# 对话记录", "【题目】\n短题目"):
-            self.assertIn(piece, ask)
+        #: `prompt` **打出来**（第 20 步起全文、第 28 步起是 **messages JSON**）：
+        #: 模板头、工具清单、「沉淀的 SOP」那个槽、题目原文全在里面 —— 这四样
+        #: **实盘上只有这里看得见**（本地 e2e 的"LLM"是我们自己写的，只证明解析自洽）。
+        self.assertTrue(ask.startswith(ASK), ask[:20])
+        messages = json.loads(ask[len(ASK):])  # 短题 ⇒ 没到上限，整串都在这行里
+        self.assertEqual([m["role"] for m in messages], ["system", "user"])
+        self.assertEqual(messages[1]["content"], "短题目")
+        for piece in ("# Agent定位", "# 可使用的工具", "- SOP2Prompt：", "# 沉淀的 SOP"):
+            self.assertIn(piece, messages[0]["content"])
 
         #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**（省 LLM 额度）
         task, ask = asked_after_sending(llmResp="答案")
@@ -500,7 +503,8 @@ class HandleTest(unittest.TestCase):
             LOG_PROMPT_MAX + len(f"…（共 {len(full)} 字）"),
             "提问那一格该是『上限字 + 留痕那句话』—— 超长必须留痕、且有界",
         )
-        self.assertTrue(asked.startswith("# Agent定位"), asked[:20])
+        #: 第 28 步起 prompt 是 **messages JSON**：截断从头截，开头一定是 system 消息
+        self.assertTrue(asked.startswith('[{"role":"system","content":"# Agent定位'), asked[:40])
         self.assertIn(f"共 {len(full)} 字", asked)
 
     def test_attack_through_the_real_payload_path(self):
@@ -654,8 +658,17 @@ class HandleTest(unittest.TestCase):
         #    命令也在会话里（第 25 步：发命令那轮记下的回复，在这里第一次看得见）
         raw["lastCmdResult"] = "[exitCode:0]\n2"
         body = ask()
-        self.assertIn("[exitCode:0]\n2", body["prompt"])
-        self.assertIn("【你的回复】\n<tool><tool_name>executeCmd</tool_name>", body["prompt"])
+        messages = json.loads(body["prompt"])
+        self.assertEqual(
+            messages[2],
+            {
+                "role": "assistant",
+                "content": '<tool><tool_name>executeCmd</tool_name>'
+                '<tool_param>python -c "print(1+1)"</tool_param></tool>',
+            },
+        )
+        self.assertEqual(messages[3]["role"], "user")
+        self.assertIn("[exitCode:0]\n2", messages[3]["content"])
         self.assertEqual(body["executeCmd"], "")
 
         # ④ LLM 给出答案 ⇒ **只交 `<answer>` 里的内容**（不是整段回复）
@@ -671,15 +684,20 @@ class HandleTest(unittest.TestCase):
 
         # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，**同时照旧提交**
         #    （两条通道独立：提问在推进，而按接口文档 L140 取"通过率最高"、重交零成本）
-        #    ⚠️ 第 25 步起 prompt 里有两份"它说过的话"，各归各的：**会话记录**收整段原文
-        #    （`【你的回复】<answer>晴 26 度</answer>` —— 它真说过的话），**纠错块**收的
-        #    必须是**交上去的那一份**（`answer_of` 解包后的 `晴 26 度`）—— 后者带标签的话
+        #    ⚠️ 第 25 步起会话里有两份"它说过的话"，各归各的：**assistant 消息**收整段
+        #    原文（`<answer>晴 26 度</answer>` —— 它真说过的话），**纠错块**收的必须是
+        #    **交上去的那一份**（`answer_of` 解包后的 `晴 26 度`）—— 后者带标签的话
         #    LLM 会以为自己交了一堆标签，去改一个并不存在的问题。
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
-        self.assertIn("【你的回复】\n<answer>晴 26 度</answer>", body["prompt"])
+        messages = json.loads(body["prompt"])
         self.assertIn(
-            "【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。", body["prompt"]
+            "<answer>晴 26 度</answer>",
+            [m["content"] for m in messages if m["role"] == "assistant"],
+        )
+        self.assertIn(
+            "【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。",
+            [m["content"] for m in messages if m["role"] == "user"],
         )
         self.assertEqual(body["executeCmd"], "")
         self.assertEqual(
@@ -3111,13 +3129,14 @@ class TaskChannelTest(unittest.TestCase):
         output = "[exitCode:0]\n" + "y" * 5000
         prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
         self.assertEqual(execute, "")
-        self.assertIn(output, prompt)
+        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
+        self.assertIn(output, users[-1])
 
     def test_the_reply_is_remembered_even_on_command_rounds(self):
         """**发命令那一轮也记回复**（第 25 步 `AGENT.hear` 的存在理由）：③ 那轮没有
         prompt，但它的工具调用必须进会话 —— 否则回灌那一轮 LLM 看见的是
-        "题目 → 莫名其妙的结果"，它自己要的命令凭空消失了。粘住的 `llmResp`
-        顺带被去重（与最后一条 assistant 相同 ⇒ 不进表第二遍）。
+        "题目 → 莫名其妙的结果"，它自己要的命令凭空消失。粘住的 `llmResp`
+        顺带被去重（assistant 只出现一次）。
         """
         call = "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>"
         task_channel(self._turn(self.TASK))  # ⑥ 首问（会话从这道题开始）
@@ -3128,9 +3147,14 @@ class TaskChannelTest(unittest.TestCase):
             self._turn(self.TASK, call, cmd_result="[exitCode:0]\n2")  # ② 回灌（llmResp 粘住）
         )
         self.assertEqual(execute, "")
-        self.assertIn("【你的回复】\n" + call, prompt)
-        self.assertEqual(prompt.count("【你的回复】"), 1, "粘住的回复不进表第二遍")
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\n2", prompt)
+        self.assertEqual(
+            [(m["role"], m["content"]) for m in json.loads(prompt)][1:],
+            [
+                ("user", self.TASK),
+                ("assistant", call),
+                ("user", "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"),
+            ],
+        )
 
     def test_a_result_already_in_hand_blocks_the_next_command(self):
         """⚠️ **沙盒刚交作业这一轮，绝不能再发命令** —— 判据 2 必须压在判据 3 前面。
@@ -3143,7 +3167,8 @@ class TaskChannelTest(unittest.TestCase):
             self._turn(self.TASK, llm_resp="<tool>ls</tool>", cmd_result="[exitCode:0]\nok")
         )
         self.assertEqual(execute, "", "沙盒刚交作业，这轮不许再发命令")
-        self.assertIn("[exitCode:0]\nok", prompt)
+        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
+        self.assertIn("[exitCode:0]\nok", users[-1])
 
     def test_a_result_and_a_rejection_come_back_together(self):
         """⚠️ **沙盒结果与"答错了"是同一个分支的两面，不能互相吞掉。**
@@ -3162,9 +3187,10 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, "")
-        self.assertIn("[exitCode:0]\n晴", prompt)
-        self.assertIn(self.ANSWER, prompt)
-        self.assertIn(self.RETRY_MARK, prompt)
+        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
+        self.assertIn("[exitCode:0]\n晴", users[-1])
+        self.assertIn(self.ANSWER, users[-1])
+        self.assertIn(self.RETRY_MARK, users[-1])
 
     def test_a_rejection_needs_an_answer_to_blame(self):
         """带纠错那一段的**前提是"手上真有一个被否掉的答案"**，两个反例都要挡住。
@@ -3246,11 +3272,12 @@ class TaskChannelTest(unittest.TestCase):
                     prompt = task_channel(
                         self._turn(self.TASK, llm_resp=reply, errors=(Error(2, "答案不正确"),))
                     )[0]
-                    #: 钉**纠错块整块原文**：会话记录里可以有带标签的回复（那是它真说过的话），
-                    #: 但骂的必须是**交上去的那一份**（`answer_of` 解包后的）。
+                    #: 钉**纠错块整块原文**：会话里可以有带标签的 assistant 消息（那是它
+                    #: 真说过的话），但骂的必须是**交上去的那一份**（`answer_of` 解包后的）。
+                    users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
                     self.assertIn(
                         f"【你上一次提交的答案被判定为不正确】\n{expected}\n请重新作答。",
-                        prompt,
+                        users[-1],
                     )
 
     def test_only_the_answer_error_triggers_the_retry(self):
@@ -3271,7 +3298,8 @@ class TaskChannelTest(unittest.TestCase):
         for output in ("[TIMEOUT]\n部分输出", "[JUDGER_ERROR]\n沙盒挂了", "[exitCode:127]\nno"):
             with self.subTest(output=output):
                 prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
-                self.assertIn(output, prompt)
+                users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
+                self.assertIn(output, users[-1])
                 self.assertEqual(execute, "")
 
     def test_prompt_and_command_are_never_both_set(self):
@@ -3634,11 +3662,11 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("【上一条命令的执行结果", plain)
         self.assertNotIn("【你上一次提交的答案", plain)
 
-        with_result = self.agent.chat("题目", result="[exitCode:0]\nok")
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result)
+        with_result = json.loads(self.agent.chat("题目", result="[exitCode:0]\nok"))
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result[-1]["content"])
 
-        with_retry = self.agent.chat("题目", retry="晴 26 度")
-        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry)
+        with_retry = json.loads(self.agent.chat("题目", retry="晴 26 度"))
+        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry[-1]["content"])
 
     def test_a_stored_sop_shows_up_in_the_next_prompt(self):
         """**这就是"自进化"的全部可观测证据**：存过一次之后，后面每一份 prompt 都带着它。
@@ -3653,12 +3681,18 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_same_task_accumulates_its_conversation(self):
         """**同一个 task = 同一个上下文**（第 25 步的立身之本）：第二次提问里看得见
         题目、它自己的回复与回灌；第一次提问里则什么回复都还没有。"""
-        first = self.agent.chat("题")
+        first = json.loads(self.agent.chat("题"))
         self.agent.hear("<tool>ls</tool>")
-        second = self.agent.chat("题", result="[exitCode:0]\nok")
-        self.assertNotIn("【你的回复】", first)
-        self.assertIn("【你的回复】\n<tool>ls</tool>", second)
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", second)
+        second = json.loads(self.agent.chat("题", result="[exitCode:0]\nok"))
+        self.assertEqual([m["role"] for m in first], ["system", "user"])
+        self.assertEqual(
+            [(m["role"], m["content"]) for m in second][1:],
+            [
+                ("user", "题"),
+                ("assistant", "<tool>ls</tool>"),
+                ("user", "【上一条命令的执行结果（原文）】\n[exitCode:0]\nok"),
+            ],
+        )
 
     def test_a_different_task_starts_a_fresh_conversation(self):
         """换题 ⇒ 新会话：旧题的往来一个字都不带过来（身份判据 = **题目原文**）。"""
@@ -3682,7 +3716,9 @@ class ChatPromptTest(unittest.TestCase):
         self.agent.chat("题")
         self.agent.hear("上一场的回复")
         self.agent.reset()
-        self.assertNotIn("【你的回复】", self.agent.chat("题"))
+        self.assertEqual(
+            [m["role"] for m in json.loads(self.agent.chat("题"))], ["system", "user"]
+        )
 
     def test_the_system_is_refreshed_every_round(self):
         """system（四段 header）**每轮现刷**：同一道题进行中沉淀的 SOP，下一轮就看得见
@@ -3698,85 +3734,105 @@ class ChatPromptTest(unittest.TestCase):
 
         题目原文与沙盒输出都是**任意文本**，python 代码片段里 `{}` 太常见了；
         二次扫描会在 `chat` 里直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。
-        SOP 是第三个替换值（第 19 步起由 `Agent` 传进来），所以三处一起钉。
-        """
+        SOP 是第三个替换值（由 `Agent` 传进 `PROMPT.format`），三处一起钉；
+        会话正文则走 `json.dumps`，与 `format` 无关。"""
         self.agent.SOP2Prompt("SOP 里有 {sop} 和 {0}")
-        prompt = self.agent.chat("题目 {task} {0} {}", result="{'a': 1}")
-        self.assertIn("题目 {task} {0} {}", prompt)
-        self.assertIn("{'a': 1}", prompt)
-        self.assertIn("SOP 里有 {sop} 和 {0}", prompt)
+        messages = json.loads(self.agent.chat("题目 {task} {0} {}", result="{'a': 1}"))
+        contents = [m["content"] for m in messages]
+        self.assertIn("题目 {task} {0} {}", contents)
+        self.assertIn("【上一条命令的执行结果（原文）】\n{'a': 1}", contents)
+        self.assertIn("SOP 里有 {sop} 和 {0}", messages[0]["content"])
 
 
 class ContextTest(unittest.TestCase):
-    """`Context` —— 任务内全量会话上下文（第 25 步）。
+    """`Context` —— 任务内全量会话上下文（第 25 步；第 28 步起渲染成**标准 messages JSON**）。
 
-    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串，"会话"的落地形态就是
-    **每回合把整个会话渲染进 prompt**。这里钉 Context 本身：构造即问、进表规则、
+    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串；第 28 步起它是一个
+    JSON 数组 `[{"role": "system"/"user"/"assistant", "content": ...}]`（标准 chat 格式 ——
+    自造的文本版式用户实测**效果非常差**，已弃）。这里钉 Context 本身：构造即问、进表规则、
     粘住去重、全量保真。跨回合接线在 `ChatPromptTest`，判据链接线在 `TaskChannelTest`，
     端到端在 `HandleTest.test_the_task_loop_through_handle`。
     """
 
+    SYSTEM = "# Agent定位\n（占位 header）"
+
     def setUp(self) -> None:
         self.ctx = Context("请查询北京天气")
-        #: system 由 Agent 每次发送前刷新（四段 header），这里只给个占位证明它被拼进去
-        self.ctx.system = "# Agent定位\n（占位 header）"
+        #: system 由 Agent 每次发送前刷新（四段 header），这里给个占位证明它进 JSON
+        self.ctx.system = self.SYSTEM
+
+    def messages(self) -> list[dict]:
+        return json.loads(self.ctx.render())
 
     def test_a_fresh_context_opens_with_the_task(self):
-        """**构造即问**：首条 user 消息 = 【题目】+ 题目原文；`task` 即身份。"""
-        prompt = self.ctx.render()
+        """**构造即问**：首条 user 消息 = 题目**原文** —— 结构由 role 表达，
+        正文不再加 `【题目】` 这类包装（那是文本版式的补丁）。"""
         self.assertEqual(self.ctx.task, "请查询北京天气")
-        self.assertIn("# Agent定位\n（占位 header）\n\n# 对话记录\n\n【题目】\n请查询北京天气", prompt)
-        self.assertNotIn("【你的回复】", prompt)
+        self.assertEqual(
+            self.messages(),
+            [
+                {"role": "system", "content": self.SYSTEM},
+                {"role": "user", "content": "请查询北京天气"},
+            ],
+        )
 
     def test_hear_records_the_reply_verbatim(self):
-        """回复**原文**进表 —— 会话记的是它真说过的话（纠错块才收解包后的那份）。"""
+        """回复**原文**进 assistant 消息 —— 会话记的是它真说过的话
+        （纠错块才收 `answer_of` 解包后的那份）。"""
         self.ctx.hear("<tool>ls</tool>")
-        self.assertIn("【你的回复】\n<tool>ls</tool>", self.ctx.render())
+        self.assertEqual(
+            self.messages()[-1], {"role": "assistant", "content": "<tool>ls</tool>"}
+        )
 
     def test_a_sticky_reply_is_heard_only_once(self):
         """`llmResp` 可能粘住（接口文档对它一个字没写、对 `lastCmdResult` 却写明不粘）
         ⇒ 与**最后一条消息**相同的回复不进表第二遍。"""
         self.ctx.hear("同一条回复")
         self.ctx.hear("同一条回复")
-        self.assertEqual(self.ctx.render().count("【你的回复】"), 1)
+        self.assertEqual(
+            [m["role"] for m in self.messages()], ["system", "user", "assistant"]
+        )
 
     def test_a_repeat_after_another_message_is_heard_again(self):
         """中间隔了别的消息之后又来同文 ⇒ **记**：那不是粘住，是真的又说了。"""
         self.ctx.hear("同一句话")
         self.ctx.nudge()
         self.ctx.hear("同一句话")
-        self.assertEqual(self.ctx.render().count("【你的回复】"), 2)
+        self.assertEqual(
+            [m["role"] for m in self.messages()],
+            ["system", "user", "assistant", "user", "assistant"],
+        )
 
     def test_feed_adds_the_two_titled_blocks(self):
-        """回灌轮的 user 消息：两个标题逐字沿用旧模板（`{}` 一个都不动）。"""
+        """回灌轮的 user 消息：沙盒结果与（或）纠错 —— 标题留在 content 里当内容标签
+        （沙盒输出是任意文本，没标签分不清哪段是什么）。"""
         self.ctx.feed("[exitCode:0]\n2", "晴 26 度")
-        prompt = self.ctx.render()
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\n2", prompt)
-        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。", prompt)
+        content = self.messages()[-1]["content"]
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\n2", content)
+        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。", content)
 
     def test_nudge_appends_the_standing_line(self):
         """无新内容的重问轮 ⇒ 一句固定收尾（会话不能停在它自己的输出上）。"""
         self.ctx.hear("<tool ls")
         self.ctx.nudge()
-        self.assertIn("请继续。", self.ctx.render())
+        self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
 
     def test_every_message_survives_verbatim_and_in_order(self):
         """**全量、不截断、逐字**（用户拍板"先不压缩"）：题目/回复/结果里的 `{}`、
-        换行、标签一个都不许动，顺序就是进表的顺序 —— 渲染是**拼接**，不走 `str.format`。"""
+        换行、标签一个都不许动，顺序就是进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。"""
         self.ctx.hear("回复 {'a': 1}")
         self.ctx.feed("结果 {task} {0}", "")
         self.ctx.hear("<answer>答案</answer>")
-        prompt = self.ctx.render()
-        for piece in (
-            "【题目】\n请查询北京天气",
-            "【你的回复】\n回复 {'a': 1}",
-            "【上一条命令的执行结果（原文）】\n结果 {task} {0}",
-            "【你的回复】\n<answer>答案</answer>",
-        ):
-            self.assertIn(piece, prompt)
-        self.assertLess(prompt.index("请查询北京天气"), prompt.index("回复 {'a': 1}"))
-        self.assertLess(prompt.index("回复 {'a': 1}"), prompt.index("结果 {task} {0}"))
-        self.assertLess(prompt.index("结果 {task} {0}"), prompt.index("<answer>答案</answer>"))
+        self.assertEqual(
+            [m["content"] for m in self.messages()],
+            [
+                self.SYSTEM,
+                "请查询北京天气",
+                "回复 {'a': 1}",
+                "【上一条命令的执行结果（原文）】\n结果 {task} {0}",
+                "<answer>答案</answer>",
+            ],
+        )
 
 
 class ToolReplyParseTest(unittest.TestCase):

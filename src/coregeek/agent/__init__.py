@@ -8,8 +8,9 @@
 ```
 agent/
 ├── agent.py    class Agent：状态（SOP + Context）+ 工具表 + chat / hear / tool_call / tool_desc
-├── chat.py     四段模板（system header）+ 三个谓词（**纯函数**）
-├── context.py  Context：任务内会话的存储与渲染（**零包内 import**，措辞在这里、状态在 Agent）
+├── chat.py     四段模板（system 消息的内容）+ 三个谓词（**纯函数**）
+├── context.py  Context：任务内会话的存储与渲染（**标准 messages JSON**，只依赖标准库；
+│               措辞在这里、状态在 Agent）
 └── tools/      cmd.executeCmd（原样搬命令）/ sop.store（存储规则）
 ```
 
