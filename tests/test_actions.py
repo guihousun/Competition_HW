@@ -172,6 +172,38 @@ class MoveWireTest(unittest.TestCase):
         self.assertIsInstance(wire["num"], int)
         self.assertNotIsInstance(wire["num"], bool)
 
+    def test_buy_wire_shape(self):
+        """`buy` 在武器商店旁用（§4.4：**全部角色**）：`name` = **商品名**
+        （`weaponShopList.name` 那套词，如 `WeaponUpgradeVoucher1`）、`num` 是 Int
+        （接口文档 §2.2，不填默认 1，支持批量）。与 `sell` 的矿种、`build` 的建筑名
+        是同一个 `name` 约定。
+
+        ⚠️ 没有实证报文（`docs/response.txt` 只有 move/build/remove），形状从接口文档推。
+        """
+        wire = actions.Buy("worker", "WeaponUpgradeVoucher1", 1).to_wire()
+        self.assertEqual(wire, {"action": "buy", "name": "WeaponUpgradeVoucher1", "num": 1})
+        self.assertIsInstance(wire["num"], int)
+
+    def test_use_wire_shape(self):
+        """`use` 用升级券：`name` + `targetPos` —— 券须**站在目标建筑周围一格内**并
+        指定目标位置（任务书 L292）。已 level3 再用不生效、非法使用不消耗（L293-294）
+        ⇒ 发错顶多白跑一趟，不碰红线。⚠️ 没有实证报文，形状从接口文档推。"""
+        self.assertEqual(
+            actions.Use("worker", "WeaponUpgradeVoucher1", Pos(12, 22)).to_wire(),
+            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 12, "y": 22}]},
+        )
+
+    def test_buy_and_use_are_allowed_for_both_roles(self):
+        """§4.4 最右列：buy / use 都是**全部角色**（开拓者也能买卖，与 sell 同列）。"""
+        for role_type in ("worker", "pioneer"):
+            with self.subTest(role_type=role_type):
+                self.assertEqual(
+                    actions.Buy(role_type, "WallFixer", 1).to_wire()["action"], "buy"
+                )
+                self.assertEqual(
+                    actions.Use(role_type, "WallFixer", Pos(1, 1)).to_wire()["action"], "use"
+                )
+
 
 class GateTest(unittest.TestCase):
     """`BaseAction` 的校验机制本身 —— 这一步的主要交付物。"""
@@ -504,7 +536,10 @@ class HandleTest(unittest.TestCase):
             "提问那一格该是『上限字 + 留痕那句话』—— 超长必须留痕、且有界",
         )
         #: 第 28 步起 prompt 是 **messages JSON**：截断从头截，开头一定是 system 消息
-        self.assertTrue(asked.startswith('[{"role":"system","content":"# Agent定位'), asked[:40])
+        #:（模板以换行开头 —— 用户手改的版式，JSON 里转义成 `\n`）
+        self.assertTrue(
+            asked.startswith('[{"role":"system","content":"\\n# Agent定位'), asked[:40]
+        )
         self.assertIn(f"共 {len(full)} 字", asked)
 
     def test_attack_through_the_real_payload_path(self):
@@ -847,11 +882,29 @@ class ParseTest(unittest.TestCase):
         )
         for weapon in turn.weapons:
             self.assertEqual(turn.map.cells[weapon.pos.y][weapon.pos.x], weapon.kind)
-
         self.assertEqual(
             sorted((r.pos.x, r.pos.y, r.health) for r in turn.robots),
             [(4, 4, 40), (4, 5, 500), (5, 4, 60), (5, 5, 800)],
         )
+
+    def test_weapons_carry_their_level(self):
+        """武器带 `level`（接口文档：仅建筑持有、初始 1）—— 升级线靠它认"还升得动"，
+        摘要也打它（"升级成没成"只有日志能回答）。样例三座全 L1。"""
+        self.assertEqual(
+            {w.id: w.level for w in self._turn().weapons},
+            {10020: 1, 10030: 1, 10040: 1},
+        )
+
+    def test_shop_prices_come_from_the_payload(self):
+        """顶层 `weaponShopList` → `Turn.shop_prices`（与 `vendor_prices` 同一套解析；
+        样例实证：升级券1=100、券2=150）。**不写死价格**——与矿价同一条原则。"""
+        self.assertEqual(self._turn().shop_prices.get("WeaponUpgradeVoucher1"), 100)
+        self.assertEqual(self._turn().shop_prices.get("WeaponUpgradeVoucher2"), 150)
+
+    def test_weapon_shops_are_an_index_of_their_own(self):
+        """武器商店是格子（`zones` 的 `weaponShop`，挡路）—— 买券得走到它旁边。
+        样例在 (25,20)。"""
+        self.assertEqual(self._turn().map.shops, frozenset({Pos(25, 20)}))
 
     def test_vendor_prices_come_from_the_payload_verbatim(self):
         """价目**照抄载荷**，不写死 —— 样例是 1/3/5，事件期间会变（任务书 L386）。
@@ -1186,7 +1239,7 @@ class TurnSummaryTest(unittest.TestCase):
         self.assertEqual(
             lines[0],
             "【回合】 85（夜里） ｜ 【金币】 20 | 【武器】 3/3："
-            "10020 gatling(9,24)r4 10030 railgun(10,25)r7 10040 rocket(9,25)r∞c3",
+            "10020 gatling(9,24)L1r4 10030 railgun(10,25)L1r7 10040 rocket(9,25)L1r∞c3",
         )
         self.assertEqual(
             lines[1],
@@ -1220,8 +1273,8 @@ class TurnSummaryTest(unittest.TestCase):
             ),
         )
         line = _blocks(turn.summary())[0]
-        self.assertIn("1 gatling(9,24)r?", line)
-        self.assertIn("2 gatling(9,25)r0", line)
+        self.assertIn("1 gatling(9,24)L1r?", line)
+        self.assertIn("2 gatling(9,25)L1r0", line)
         # 冷却 -1 与 0 都是"没有冷却"，都不该出现 `c`
         self.assertNotIn("c-1", line)
         self.assertNotIn("r0c0", line)
@@ -2062,6 +2115,47 @@ class SpareOreTest(unittest.TestCase):
             "墙砌完了 ⇒ 才轮到最值钱的铜",
         )
 
+    def test_a_feasible_cheap_mine_beats_an_infeasible_pricy_one(self):
+        """第 29 步修闲置：**先把"走得动、回得来"的矿筛出来、再按价挑** —— 旧版按价
+        挑了最贵的、发现走不回来就整段放弃（"挖好石头就在家里等着"的根源）。
+        回程参照 = **最近的武器位**（夜里要在炮前，机器人到进攻范围前必须站回去）。"""
+        cheap, pricy = Pos(14, 24), Pos(34, 24)
+        ores = {cheap: "stone", pricy: "copper"}
+        #: round_no=55 ⇒ 白天剩 16，扣余量 5 ⇒ 11：近处石头 1+5=6 走得动，
+        #: 远处铜 19+25=44 走不动 —— 旧版会因此整段放弃（{}）
+        turn = self._turn(Pos(15, 24), self.SAMPLE_PRICES, ores=ores, round_no=55)
+        self.assertEqual(self._collect_at(turn), cheap, "铜来不及回 ⇒ 就近采石头，别闲置")
+
+    def test_sells_on_the_way_when_the_vendor_is_close_to_the_route(self):
+        """第 29 步"顺路卖矿"：去矿的路上，小贩绕路 ≤ 2 格 ⇒ 先绕去卖（贴上它的那回合
+        `_sell_ore` 自然出手），之后再继续去矿。
+
+        夹具故意让 `_sell_ore` 自己的"够本门"不成立（1 块铜值 5 < 2×4）—— 顺路这条
+        才会被单独点亮。小贩放在**东南**、矿在**正东**：绕路 4+6-10=0 格，正"在路上"。"""
+        mine = Pos(30, 24)
+        vendor = Pos(24, 28)
+        entries = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station"},
+            self.RING,
+            {mine: "iron"},
+            {vendor: "vendor"},
+        )
+        turn = Turn(
+            round_no=1,
+            map=Map((41, 32), entries),
+            roles=(Worker(1, Pos(20, 24), {"copper": 1}),),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=self.SAMPLE_PRICES,
+        )
+        step = self._move_to(turn)
+        self.assertLess(
+            step.dist(vendor),
+            Pos(20, 24).dist(vendor),
+            "该朝小贩（东南）绕一步，不是直奔矿去",
+        )
+
 
 class SellOreTest(unittest.TestCase):
     """墙砌满之后的白天：**把矿背到小贩跟前卖掉**（第 22 步）。
@@ -2099,6 +2193,7 @@ class SellOreTest(unittest.TestCase):
         prices: dict[str, int] | None = None,
         vendor: Pos | None = VENDOR,
         round_no: int = 1,
+        roles: tuple[BaseRole, ...] | None = None,
     ) -> Turn:
         entries = _terrain(
             self.WEAPONS,
@@ -2110,7 +2205,7 @@ class SellOreTest(unittest.TestCase):
         return Turn(
             round_no=round_no,
             map=Map((41, 32), entries),
-            roles=(Worker(1, pos, bag),),
+            roles=roles if roles is not None else (Worker(1, pos, bag),),
             gold=0,
             weapons=self.WEAPONS,
             vendor_prices=(
@@ -2158,6 +2253,22 @@ class SellOreTest(unittest.TestCase):
         """
         cmd = self._sold(self._turn(Pos(20, 23), {"stone": 6}))
         self.assertEqual(cmd, {"action": "sell", "name": "stone", "num": 6})
+
+    def test_an_idle_pioneer_with_goods_goes_selling(self):
+        """第 29 步：任务点全空（都在冷却/做完）⇒ 开拓者去卖矿（`sell` 可用角色是"全部"）。
+
+        ⚠️ 游戏规则限制了这条线的上限：`collect` **仅工人**、**没有转移物品的指令**
+        ⇒ 开拓者背包里通常没矿 —— 结构留着，要等它从任务/宝藏拿到可卖物才真正跑得起来。
+        """
+        turn = self._turn(
+            Pos(30, 24),
+            {"copper": 4},
+            roles=(Pioneer(10011, Pos(30, 24), {"copper": 4}),),
+        )
+        cmd = plan(turn)["10011"]
+        self.assertEqual(cmd["action"], "move", "没任务可接 ⇒ 去卖矿")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), Pos(30, 24).dist(self.VENDOR), "朝小贩走")
 
     def test_a_full_load_that_does_not_pay_for_the_trip_is_not_worth_walking(self):
         """货**不够本** ⇒ 一步都不走，留在矿边接着采（阈值 = 2 × 距离 = 20 金币）。
@@ -2238,6 +2349,141 @@ class SellOreTest(unittest.TestCase):
         cmd = plan(turn)["1"]
         self.assertNotEqual(cmd["action"], "sell", cmd)
         self.assertEqual(cmd["action"], "move", cmd)
+
+
+class UpgradeLineTest(unittest.TestCase):
+    """第 29 步：买得起就**优先**升级武器（用户拍板）—— 买券 → 走到目标武器 → 用券。
+
+    优先链按**群体打击**判（用户授权我判断）：**加特林 > 火箭 > 电磁** ——
+    加特林 +1 颗子弹 = 每回合 +10、无冷却、弹道必命中，两颗可分打两台（90° 锥内），
+    一夜 60 回合最多 +600、射程 +2 让它更早接敌；火箭 +1 枚对簇约 +30/齐射，
+    但 3 回合冷却一夜只 ~20 轮齐射、依赖扎堆；电磁单目标、能量对满血机器人（≥40 血）
+    不穿透 ⇒ 群体价值最低。链：gatling→2 → rocket→2 → gatling→3 → railgun→2 → …
+
+    无状态：拿没拿券看**背包**（买完金变少、包里多一张，两个阶段天然可分）；
+    跑腿者 = 持券的工人，没有持券者 ⇒ 名册上第一个工人（别人照常采/卖）。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = (
+        Weapon(10020, "gatling", Pos(12, 22), 4, 0),
+        Weapon(10030, "railgun", Pos(12, 25), 7, 0),
+        Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 0),
+    )
+    RING = {c: WALL for c in wall_cells(BASE, 41)}
+    SHOP = Pos(25, 20)  # 样例的武器商店位
+    PRICES = {"WeaponUpgradeVoucher1": 100, "WeaponUpgradeVoucher2": 150}
+    ORE = Pos(36, 24)  # 跑腿之外工人该去采的那座矿
+
+    def _turn(
+        self,
+        *,
+        gold: int = 0,
+        bag: dict[str, int] | None = None,
+        pos: Pos = Pos(15, 24),  # 盒子**外面**（穿门绕行会把第一步甩向反方向）
+        round_no: int = 1,
+        weapons: tuple[Weapon, ...] | None = None,
+        roles: tuple[BaseRole, ...] | None = None,
+        shop: bool = True,
+    ) -> Turn:
+        return Turn(
+            round_no=round_no,
+            map=Map(
+                (41, 32),
+                _terrain(
+                    weapons if weapons is not None else self.WEAPONS,
+                    {self.BASE: "station", **({self.SHOP: "weaponShop"} if shop else {})},
+                    self.RING,
+                    {self.ORE: "copper"},
+                ),
+            ),
+            roles=roles if roles is not None else (Worker(1, pos, bag or {}),),
+            gold=gold,
+            weapons=weapons if weapons is not None else self.WEAPONS,
+            vendor_prices={"stone": 1, "iron": 3, "copper": 5},
+            shop_prices=self.PRICES,
+        )
+
+    def test_walks_to_the_shop_when_the_upgrade_is_affordable(self):
+        """金够、加特林还是 L1 ⇒ 墙砌完后**第一件事是跑商店**（用户拍板"优先升级"，
+        优先于采矿——场上明明有矿也不去）。"""
+        cmd = plan(self._turn(gold=100))["1"]
+        self.assertEqual(cmd["action"], "move", "该朝武器商店走，不是去采矿")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), Pos(15, 24).dist(self.SHOP), "朝商店方向")
+
+    def test_buys_the_voucher_when_adjacent_to_the_shop(self):
+        """贴着商店 ⇒ `buy`（一回合一条指令，一次只买一张）。"""
+        self.assertEqual(
+            plan(self._turn(gold=100, pos=Pos(25, 21)))["1"],
+            {"action": "buy", "name": "WeaponUpgradeVoucher1", "num": 1},
+        )
+
+    def test_the_holder_walks_to_the_gatling(self):
+        """持券者直奔**目标武器**（优先链第一个：加特林）—— 终点就是炮位，
+        用完券正好站岗，不用留回程。"""
+        cmd = plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(20, 20)))["1"]
+        self.assertEqual(cmd["action"], "move")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(Pos(12, 22)), Pos(20, 20).dist(Pos(12, 22)), "朝加特林走")
+
+    def test_uses_the_voucher_when_adjacent_to_the_target(self):
+        """贴着目标武器 ⇒ `use`，`targetPos` = 目标武器的位置（任务书 L292）。"""
+        self.assertEqual(
+            plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(12, 23)))["1"],
+            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 12, "y": 22}]},
+        )
+
+    def test_a_maxed_gatling_passes_the_ticket_to_the_rocket(self):
+        """优先链顺延：加特林已 L2 ⇒ 目标换火箭（同是 L1 ⇒ 还是券1）。"""
+        weapons = (
+            Weapon(10020, "gatling", Pos(12, 22), 5, 0, 2),
+            Weapon(10030, "railgun", Pos(12, 25), 7, 0),
+            Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 0),
+        )
+        self.assertEqual(
+            plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(9, 24), weapons=weapons))["1"],
+            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 9, "y": 25}]},
+        )
+
+    def test_only_one_worker_runs_the_errand(self):
+        """两个工人 ⇒ 只有跑腿者去商店，另一个照常采矿（火力/经济两不误）。"""
+        roles = (Worker(1, Pos(15, 24)), Worker(2, Pos(15, 25)))
+        cmds = plan(self._turn(gold=100, roles=roles))
+        step1 = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertLess(step1.dist(self.SHOP), Pos(15, 24).dist(self.SHOP), "1 号（名册第一个）去商店")
+        step2 = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertLess(step2.dist(self.ORE), Pos(15, 25).dist(self.ORE), "2 号去采矿")
+
+    def test_gold_short_of_the_ticket_means_no_errand(self):
+        """金不够（99 < 100）⇒ 不跑腿，去采矿 —— 价目逐回合从 `weaponShopList` 读。"""
+        cmd = plan(self._turn(gold=99))["1"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.ORE), Pos(15, 24).dist(self.ORE), "钱不够 ⇒ 照常采矿")
+
+    def test_no_errand_when_the_trip_does_not_fit_the_day(self):
+        """整趟（商店 → 目标武器，含买/用两个动作回合）来不及 ⇒ 今天不动身。
+        对照：同一局面白天还长时是动身的。"""
+        self.assertIn("1", plan(self._turn(gold=100, round_no=1)), "白天还长 ⇒ 动身")
+        self.assertEqual(
+            plan(self._turn(gold=100, round_no=66)), {}, "来不及 ⇒ 哪也不去（矿也来不及）"
+        )
+
+    def test_no_errand_without_a_shop_or_a_target(self):
+        """降级方向：地图上没商店 / 武器全升满 ⇒ 不跑腿，照常采矿。"""
+        weapons = (
+            Weapon(10020, "gatling", Pos(12, 22), 7, 0, 3),
+            Weapon(10030, "railgun", Pos(12, 25), 10, 0, 3),
+            Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 0, 3),
+        )
+        for name, turn in (
+            ("没商店", self._turn(gold=999, shop=False)),
+            ("全升满", self._turn(gold=999, weapons=weapons)),
+        ):
+            with self.subTest(case=name):
+                cmd = plan(turn)["1"]
+                step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+                self.assertLess(step.dist(self.ORE), Pos(15, 24).dist(self.ORE), "照常采矿")
 
 
 class TwoWallBuildersTest(unittest.TestCase):
@@ -3648,10 +3894,19 @@ class ChatPromptTest(unittest.TestCase):
 
         这是唯一能提高"LLM 照抄概率"的杠杆：描述得含糊一点，它就自己发明第三种形状，
         而那种失败**本地测不出来**（我们的解析自洽，判题器认不认只有实盘知道）。
+        第 29 步用户手改：工具形状给成**多行块**（更利于照抄），单行的 `executeCmd`
+        示例保留 —— 两种写法 `tool_of` 都解析得了（`strip` 去首尾空白）。
         """
-        prompt = self.agent.chat("题目")
-        self.assertIn("<tool><tool_name>工具名</tool_name><tool_param>参数原文</tool_param></tool>", prompt)
-        self.assertIn("<answer>答案本身</answer>", prompt)
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        self.assertIn(
+            "<tool>\n    <tool_name>\n        工具名\n    </tool_name>\n    <tool_param>\n        参数原文\n    </tool_param>\n</tool>",
+            system,
+        )
+        self.assertIn(
+            "例：<tool><tool_name>executeCmd</tool_name><tool_param>cat /tmp/a.txt</tool_param></tool>",
+            system,
+        )
+        self.assertIn("<answer>答案本身</answer>", system)
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))

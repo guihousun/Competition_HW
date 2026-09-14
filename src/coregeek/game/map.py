@@ -3,8 +3,9 @@
 三个用途：**寻路**（只问 `blocked`，不问格子里是什么）、**打印日志**（`render()`）、
 **建造**（`station` 是可建造环的原点，接口文档里没有可建造区字段，只能这样推）。
 
-`ores` 是采矿线的料源（矿点 → 矿种），`vendors` 是卖矿线的目标点（`frozenset[Pos]`，
-小贩是**格子**不是单位，只能从网格认）。每格只有一个类别、不含属性：血量/等级/射程/
+`ores` 是采矿线的料源（矿点 → 矿种），`vendors` 是卖矿线的目标点、`shops` 是买券线的
+目标点（都是 `frozenset[Pos]`，只要坐标 —— 小贩/商店是**格子**不是单位，只能从网格认）。
+每格只有一个类别、不含属性：血量/等级/射程/
 冷却一概不进来，用到时再说（它们落在 `world.Weapon` 那份带 id 的名册上）。
 """
 
@@ -28,9 +29,12 @@ IRON = "iron"
 COPPER = "copper"
 ORE_KINDS = frozenset({STONE, IRON, COPPER})
 
-#: 基地与小贩（都是 `neutralType` 里的类别名）。基地是 2×2，`pos` 只给左上角。
+#: 基地、小贩与武器商店（都是 `neutralType` 里的类别名）。基地是 2×2，`pos` 只给左上角；
+#: 小贩是卖矿的目标点（`vendors`），武器商店是买券的目标点（`shops`）—— 都是**格子**
+#: 不是单位，只能从网格认，且一样挡路。
 STATION = "station"
 VENDOR = "vendor"
+WEAPON_SHOP = "weaponShop"
 
 #: 单位/角色 → `(我方字符, 敌方字符)`。**大小写区分敌我**。
 _RENDER_SIDED: dict[str, tuple[str, str]] = {
@@ -153,6 +157,7 @@ class Map:
             self.blocked: frozenset[Pos] = frozenset()
             self.ores: Mapping[Pos, str] = MappingProxyType({})
             self.vendors: frozenset[Pos] = frozenset()
+            self.shops: frozenset[Pos] = frozenset()
             self.station: Pos | None = None
             return
 
@@ -179,6 +184,7 @@ class Map:
         blocked: set[Pos] = set()
         ores: dict[Pos, str] = {}
         vendors: set[Pos] = set()
+        shops: set[Pos] = set()
         for y, row in enumerate(self.cells):
             for x, kind in enumerate(row):
                 if not kind:
@@ -189,9 +195,12 @@ class Map:
                     ores[pos] = kind
                 elif kind == VENDOR:
                     vendors.add(pos)
+                elif kind == WEAPON_SHOP:
+                    shops.add(pos)
         self.blocked = frozenset(blocked)
         self.ores = MappingProxyType(ores)
         self.vendors = frozenset(vendors)
+        self.shops = frozenset(shops)
 
     def render(self) -> str:
         """可打印的**整块**：上下各一行 `—` 标尺 + `height` 行 × `width` 列网格。

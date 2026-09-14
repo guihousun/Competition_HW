@@ -39,9 +39,10 @@ def _listed(items: tuple[Any, ...], fmt: Callable[[Any], str], sep: str = " ") -
 
 
 class Weapon(NamedTuple):
-    """我方一座武器工事 —— 开火要用到的全部信息。
+    """我方一座武器工事 —— 开火与升级要用到的全部信息。
 
-    **没有 `level`**：`targetPos` 的数量 = 武器等级数，而我们的武器永远是 L1。
+    **`level` 缺省 1**（接口文档：仅建筑持有、初始 1；样例三座全 L1）—— 升级线靠它认
+    "还升得动"，摘要也打它（"升级成没成"只有日志能回答）。
     **没有 `health`**：只在解析时用它筛掉已毁的炮，存下来没人读。
     """
 
@@ -54,6 +55,9 @@ class Weapon(NamedTuple):
     cooldown: int
     """冷却**剩余回合数**；只有火箭发射台有（发射后 3 回合空窗），加特林/电磁炮恒 0。
     样例里没有这个字段 ⇒ `model._int` 给 -1 ⇒ `> 0` 为假 ⇒ 照打。"""
+    level: int = 1
+    """当前等级（1..3）。**默认 1**：字段缺失按文档的"初始等级 1"算，别当成 -1
+    （-1 会被升级线当成"还升得动"去买券，白跑一趟）。"""
 
 
 class Error(NamedTuple):
@@ -111,6 +115,10 @@ class Turn(NamedTuple):
     #: （那只是样例的价目，官方消息会让价格波动）。查不到的矿种按 0 算（不去采它）；
     #: 缺失 ⇒ 空表 ⇒ 不去采"最值钱的矿"（没有价格就无从挑）。只读：它是逐回合抄来的事实。
     vendor_prices: Mapping[str, int] = MappingProxyType({})
+    #: 武器商店的**价目** `{商品名: 单价}`（顶层 `weaponShopList`，样例实证券1=100/券2=150）。
+    #: 升级线按它算"买不买得起"—— 与矿价同一条原则：**不写死**。查不到的商品按 0 算
+    #: ⇒ 买不起 ⇒ 不跑腿。只读：逐回合抄来的事实。
+    shop_prices: Mapping[str, int] = MappingProxyType({})
     #: 判题器**本轮**报的错。空元组 = 本轮没报错。**这是"任务为什么一直失败"唯一的答案来源**。
     errors: tuple[Error, ...] = ()
     #: 上回合各实体的动作**合法性**回执（key 是角色/武器 id、value = 是否合法）。
@@ -166,7 +174,7 @@ class Turn(NamedTuple):
                 else ("∞" if w.attack_range >= UNLIMITED_RANGE else str(w.attack_range))
             )
             cooldown = f"c{w.cooldown}" if w.cooldown > 0 else ""
-            return f"{w.id} {w.kind}({w.pos.x},{w.pos.y})r{span}{cooldown}"
+            return f"{w.id} {w.kind}({w.pos.x},{w.pos.y})L{w.level}r{span}{cooldown}"
 
         def role(r: BaseRole) -> str:
             #: 三种矿**都打**（卖矿那条线要它 —— "工人有铜却不去卖"只有这里能回答）。

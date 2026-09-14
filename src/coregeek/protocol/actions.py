@@ -186,6 +186,52 @@ class Sell(BaseAction):
         return {"action": self.code, "name": self.name, "num": self.num}
 
 
+class Buy(BaseAction):
+    """在武器商店买一件商品。**须站在武器商店周围一格内**（§4.4），**可用角色是"全部"**。
+
+    `name` 是**商品名**（英文，与 `weaponShopList.name` 同一套词，如 `WeaponUpgradeVoucher1`）
+    —— 与 `sell` 的矿种、`build` 的建筑名同一个 `name` 约定；`num` 是 Int（不填默认 1，
+    支持批量）。**能力列没有昼夜限制** ⇒ 昼夜门由 `planner` 把关（这条线只在白天跑）。
+    ⚠️ 形状从接口文档推，**没有实证报文**（与 `sell` 同一类风险）。
+    """
+
+    code = "buy"
+    roles = ALL
+
+    def __init__(self, role_type: str, name: str, num: int) -> None:
+        super().__init__(role_type)
+        self.name = name
+        #: 接口文档标的是 Int —— 别让 str 漏进 JSON（与 `Sell.num` 同一条规则）
+        self.num = num
+
+    def to_wire(self) -> dict[str, Any]:
+        return {"action": self.code, "name": self.name, "num": self.num}
+
+
+class Use(BaseAction):
+    """使用背包里的一件商品。**可用角色是"全部"**。本步只用于**升级券**：
+    须**站在目标建筑周围一格内**并指定 `targetPos`（任务书 L292）⇒ `target` 必填。
+
+    已 level3 再用不生效、券不消耗；非法使用也不消耗（L293-294）⇒ 发错顶多白跑一趟，
+    不碰红线。⚠️ 形状从接口文档推，**没有实证报文**。
+    """
+
+    code = "use"
+    roles = ALL
+
+    def __init__(self, role_type: str, name: str, target: Pos) -> None:
+        super().__init__(role_type)
+        self.name = name
+        self.target = target
+
+    def to_wire(self) -> dict[str, Any]:
+        return {
+            "action": self.code,
+            "name": self.name,
+            "targetPos": [{"x": self.target.x, "y": self.target.y}],
+        }
+
+
 class AcceptTask(BaseAction):
     """领取任务。**仅开拓者**，**无额外参数**。
 

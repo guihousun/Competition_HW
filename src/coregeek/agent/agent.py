@@ -36,13 +36,13 @@ class Agent:
         self._tools: dict[str, tuple[Callable[[str], str], str]] = {
             "executeCmd": (
                 executeCmd,
-                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。"
-                "参数 = 命令原文；执行结果下一回合原文发给你。",
+                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。当命令涉及到文件path时，若无法判定文件的位置，先找到文件的位置\n"
+                "参数 = 命令原文；",
             ),
             "SOP2Prompt": (
                 self.SOP2Prompt,
-                "把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段，"
-                "参数 = SOP 全文。它不产出命令、当回合也没有回执，但从此每道题都会看到它。",
+                "把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段\n"
+                "参数 = SOP 全文。",
             ),
         }
 

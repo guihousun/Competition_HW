@@ -62,6 +62,26 @@ TIME_MARGIN = 5
 #: ⚠️ **石头只在"墙砌完了"那一支里才卖得出去** —— 调用点 `_build_walls` 已经保证了这一点。
 SELLABLE = (STONE, IRON, COPPER)
 
+#: 升级优先链：`(武器类别, 目标等级)`，先命中先用。判据是**群体打击**（第 29 步，用户授权）：
+#: **加特林**最优先 —— +1 颗子弹 = 每回合 +10、无冷却、弹道必命中，两颗可分打两台
+#: （90° 锥内），一夜 60 回合最多 +600，射程 +2 还让它更早接敌；**火箭**次之 —— +1 枚
+#: 对簇约 +30/齐射，但 3 回合冷却一夜只 ~20 轮齐射、依赖机器人扎堆；**电磁**最后 ——
+#: 单目标，能量对满血机器人（≥40 血）不穿透，群体价值最低。
+UPGRADE_CHAIN = (
+    ("gatling", 2),
+    ("rocket", 2),
+    ("gatling", 3),
+    ("railgun", 2),
+    ("rocket", 3),
+    ("railgun", 3),
+)
+
+#: 升级券的商品名（`weaponShopList.name` 那套词；价目逐回合从载荷读，样例实证 100/150）。
+VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
+
+#: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
+DETOUR_MAX = 2
+
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     cmds: dict[str, dict[str, Any]] = {}
@@ -100,7 +120,13 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             continue
 
         if isinstance(role, Pioneer):
-            _take_task(role, turn, cmds, claimed)
+            if turn.task_points:
+                _take_task(role, turn, cmds, claimed)
+            else:
+                # 任务点全空（冷却/做完）⇒ 开拓者去卖矿（第 29 步，用户指定）。
+                # ⚠️ `collect` 仅工人、没有转移指令 ⇒ 它背包里通常没矿 —— 这条线
+                # 要等它从任务/宝藏拿到可卖物才真正跑得起来；没货 ⇒ 待命（空指令合法）。
+                _sell_ore(role, turn, cmds, claimed, frozenset())
             continue
 
         if not isinstance(role, Worker):
@@ -292,9 +318,11 @@ def _build_walls(
     """
     free = [c for c in _ring(turn) if c not in sites]
     if not free:
-        # 墙砌满了 ⇒ **先卖矿、卖不动再采矿**。卖矿没有位置独占性（各卖各的背包），不进 `sites`。
+        # 墙砌满了 ⇒ **先卖矿、买得起就去升级、最后才去采**（第 29 步的顺序：升级优先于
+        # 采矿是用户拍板；卖在最前是因为卖来的钱正好补上券的差价）。
         if not _sell_ore(role, turn, cmds, claimed, sites):
-            _mine_spare_ore(role, turn, cmds, claimed, sites)
+            if not _upgrade_line(role, turn, cmds, claimed):
+                _mine_spare_ore(role, turn, cmds, claimed, sites)
         return
     if gated:
         return  # 还砌得动，但这回合砌下去就把人关住了 ⇒ 一格都不砌（待命，**不是**"砌完了"）
@@ -412,11 +440,12 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
 
 
 def _sell_ore(
-    role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
+    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
 ) -> bool:
-    """墙砌完了 ⇒ 把小贩肯收的矿背过去换金币。**这一回合没去卖就返回 `False`**（调用方接着去采矿）。
+    """把小贩肯收的矿背过去换金币。**这一回合没去卖就返回 `False`**（调用方接着去采）。
 
-    四条门，任一条不成立就 `False`：
+    卖的可用角色是**全部**（§4.4）—— 工人（墙砌完后的主线）与开拓者（任务点全空时，
+    第 29 步）都走这里。四条门，任一条不成立就 `False`：
 
     ① **有货**：`_best_load` 从 `SELLABLE` 里挑收购价最高的一种；
     ② **有小贩**：`Map.vendors` 空就无处可卖；
@@ -463,21 +492,112 @@ def _best_load(role: Worker, prices: Mapping[str, int]) -> tuple[str, int]:
 def _mine_spare_ore(
     role: Worker, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], sites: set[Pos]
 ) -> None:
-    """墙砌完了 ⇒ 白天不再闲着，去采**收购价最高**的矿。
+    """墙砌完了 ⇒ 白天不再闲着：**就近**采买得动、回得来的矿（第 29 步修闲置）。
 
-    这一趟没有工地可回，参照点换成**基地**（夜里的炮位就在基地四周）：不够走个来回就不动身。
-    **拿不到收购价就哪儿也不去**。它只管采不管运 —— 运是 `_sell_ore`（在它之前先试一次）。
+    与旧版的差别：**先把"走得动、回得来"的矿筛出来、再按价挑** —— 旧版按价挑了最贵的、
+    发现走不回来就整段放弃（"挖好石头就在家里等着"的根源）。回程参照 = **最近的武器位**
+    （夜里要在炮前，机器人到进攻范围前必须站回去；没有武器才用基地）。
+    **顺路卖矿**（`_detour_sell`）：手里有货、去矿的路上绕去小贩不超过 `DETOUR_MAX` 格
+    ⇒ 先绕过去（贴上它的那回合 `_sell_ore` 自然出手），之后再继续去矿。
+    **拿不到收购价就哪儿也不去**；一座可行的矿都没有 ⇒ 待命（空指令合法）。
     """
     station = turn.map.station
-    mine = _pick_ore(role.pos, turn.map.ores, turn.vendor_prices, want_stone=False)
+    posts = [w.pos for w in turn.weapons] or ([station] if station else [])
+    budget = turn.day_rounds_left - TIME_MARGIN
+    #: 先筛可行（走过去 + 从矿回到炮位），再交给 `_pick_ore` 按价挑
+    feasible = {
+        p: kind
+        for p, kind in turn.map.ores.items()
+        if posts and role.pos.dist(p) + min(p.dist(post) for post in posts) <= budget
+    }
+    mine = _pick_ore(role.pos, feasible, turn.vendor_prices, want_stone=False)
     if station is None or mine is None:
         return
-    if role.pos.dist(mine) + mine.dist(station) > turn.day_rounds_left - TIME_MARGIN:
+    if _detour_sell(role, turn, cmds, claimed, mine):
         return
     if role.pos.dist(mine) <= 1:
         _emit(cmds, role, actions.Collect, mine)
         return
     _step(role, mine, turn, cmds, claimed, sites)
+
+
+def _detour_sell(
+    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], mine: Pos
+) -> bool:
+    """去矿的路上**顺路卖矿**：绕去小贩比直走多花 ≤ `DETOUR_MAX` 格 ⇒ 先朝小贩迈一步。
+
+    贴上小贩的那一回合同一条链里更早的 `_sell_ore` 自然把货出手（贴着跳过够本门），
+    卖完没货、绕路条件消失，下一回合继续去矿。货里得有**小贩肯收**的（价 > 0）。
+    已经贴着矿就别绕了（这一回合该采）。
+    """
+    if role.pos.dist(mine) <= 1:
+        return False
+    if not any(
+        turn.vendor_prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > 0 for kind in SELLABLE
+    ):
+        return False
+    direct = role.pos.dist(mine)
+    for vendor in sorted(turn.map.vendors):
+        if role.pos.dist(vendor) + vendor.dist(mine) - direct <= DETOUR_MAX:
+            return _step(role, vendor, turn, cmds, claimed)
+    return False
+
+
+def _upgrade_line(
+    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos]
+) -> bool:
+    """墙砌完后的**第二优先**（第 29 步，用户拍板"买得起就优先升级"）：买券 → 走到目标
+    武器 → 用券。这一回合没发指令就返回 `False`（调用方接着去采矿）。
+
+    **无状态**：拿没拿券看**背包**（买完金变少、包里多一张，两个阶段天然可分，跨夜也不丢
+    —— 背包物品保留）。跑腿者 = **持券的那个工人**；没人持券 ⇒ 名册上第一个工人
+    （别的工人照常卖/采）。**只在白天跑**（这条挂在 `_build_walls` 的白天支路上；夜里
+    `_defend` 会把人接回炮位，明早预算重算、接着走）。
+    """
+    workers = [r for r in turn.roles if isinstance(r, Worker)]
+    holder = next(
+        (r for r in workers if any(name in r.bag for name in VOUCHER.values())), None
+    )
+    if (holder or (workers[0] if workers else None)) is not role:
+        return False  # 跑腿的是别人；持券者不在场（比如夜里阵亡）⇒ 券先躺在包里
+    target = _upgrade_target(turn)
+    if target is None:
+        return False
+    weapon, voucher = target
+    budget = turn.day_rounds_left - TIME_MARGIN
+    if voucher in role.bag:
+        # 持券阶段：终点就是炮位，用完正好站岗 —— 不用留回程
+        if role.pos.dist(weapon.pos) <= 1:
+            return _emit(cmds, role, actions.Use, voucher, weapon.pos)
+        if role.pos.dist(weapon.pos) + 1 > budget:
+            return False  # 今天来不及走到 ⇒ 待命，明天接着走
+        return _step(role, weapon.pos, turn, cmds, claimed)
+    # 买券阶段：整趟 = 走到商店 + 买到武器 + 买/用两个动作回合
+    price = turn.shop_prices.get(voucher, 0)
+    if price <= 0 or turn.gold < price:
+        return False
+    if not turn.map.shops:
+        return False
+    shop = min(turn.map.shops, key=lambda s: (role.pos.dist(s), s))
+    if role.pos.dist(shop) <= 1:
+        return _emit(cmds, role, actions.Buy, voucher, 1)
+    if role.pos.dist(shop) + shop.dist(weapon.pos) + 2 > budget:
+        return False
+    return _step(role, shop, turn, cmds, claimed)
+
+
+def _upgrade_target(turn: Turn) -> tuple[Weapon, str] | None:
+    """优先链上第一座还升得动的武器 + 该买的那张券名。全升满 ⇒ `None`。
+
+    按 `(类别, 目标等级)` 沿 `UPGRADE_CHAIN` 找；同类多座按 id 排（并列不能取决于
+    payload 顺序）。券只认"从几级升"（V1 = 任何 L1 武器），不绑定类别。
+    """
+    by_id = sorted(turn.weapons, key=lambda w: w.id)
+    for kind, want in UPGRADE_CHAIN:
+        for weapon in by_id:
+            if weapon.kind == kind and weapon.level == want - 1:
+                return weapon, VOUCHER[want]
+    return None
 
 
 def _pick_ore(

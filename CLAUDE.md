@@ -37,9 +37,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
    | 局面 | 行 | 字节 |
    |---|---|---|
-   | 干净回合 | 7 | 506 |
-   | 有回执 | 9 | 599 |
-   | 提问那轮（题目 400 字） | 9 | 4190 |
+   | 干净回合 | 7 | 512 |
+   | 有回执 | 9 | 605 |
+   | 提问那轮（题目 400 字） | 9 | 4288 |
    | **顶格（题目/回复/沙盒各 40000 字）** | 11 | **≈605000** |
 
    ⇒ 若判题器**不读** stdout，顶格回合**一回合**就写满 64KB 管道 ⇒ 阻塞到响应超时 ⇒ 直通红线。
@@ -70,7 +70,7 @@ src/coregeek/
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
 │   ├── model.py      payload → Turn（容错解析；含判题器回执 `errors` / `lastRoundRoleActionResults`
 │   │                 与**沙盒回执** `lastCmdResult`）
-│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack` / `sell` / `acceptTask` / `submitAnswer`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）。`describe` 第 20 步起**通用摊开**（有什么字段打什么，字符串值过 `app` 递进来的 `clip`），不再维护字段清单 ⇒ `sell` 的 `name`/`num` 自动就打得出来
+│   └── actions.py    BaseAction + 各动作（`move` / `build` / `collect` / `attack` / `sell` / `buy` / `use` / `acceptTask` / `submitAnswer`）。**创建即校验**，唯一懂线上动作格式的地方（`to_wire` 写、`describe` 读）。`describe` 第 20 步起**通用摊开**（有什么字段打什么，字符串值过 `app` 递进来的 `clip`），不再维护字段清单 ⇒ `sell` 的 `name`/`num`、`buy` 的 `name`/`num`、`use` 的 `name`/`targetPos` 自动就打得出来
 ├── agent/            **叶子包，只依赖标准库**：跟 LLM 说什么、怎么解析它的回复
 │   ├── __init__.py   **不再是空的**（第 19 步）：`from .agent import Agent` + **`AGENT = Agent()`**
 │   │                 —— ⚠️ **跨回合状态（两处）都在这一个实例上**（`_sop` 整场；`_context` 任务内）
@@ -94,19 +94,23 @@ src/coregeek/
     │                 + 基地几何：`base_cells` / `weapon_cells` / `weapon_sites` / `wall_cells`
     │                 （正/背面方向判据在 `_front_back`，**只此一处**）
     │                 + `box_cells`（防御盒子 36 格）/ `step_outside`（迈出盒子的第一步，第 17 步的闸门用）
-    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`ores`/`vendors`/`station`
+    ├── map.py        Map：格子矩阵（每格一个**类别**）+ `blocked`/`ores`/`vendors`/`shops`/`station`
     │                 + `render()`（**整块**：上下各一行 `—` 标尺 + 每行 `│`…`|`；
     │                   第 23 步把行号槽与两行数字标尺去掉了）+ `LEGEND`（图例，**由 `_NAMES` 生成**）。
-    │                 **纯地形**：武器名册不在这里（见 world.py），第 10 步把 `Map.weapons` 删了
+    │                 **纯地形**：武器名册不在这里（见 world.py），第 10 步把 `Map.weapons` 删了。
+    │                 `shops`（第 29 步）= 武器商店格子（`zones` 的 `weaponShop`），买券线的目标点
     ├── roles.py      §4.5.2 的 Pioneer / Worker（各带自己的 `bag`，`stone` 是它的**派生属性**）；`make()` 只认角色，建筑返回 None
     ├── world.py      Turn（round_no / map / roles / gold / weapons / robots / task_points
-    │                 / phase_task / llm_resp / cmd_result / vendor_prices / errors / action_results）
+    │                 / phase_task / llm_resp / cmd_result / vendor_prices / shop_prices / errors / action_results）
     │                 + `within` / `is_day` / `day_rounds_left` / **`summary()`（四块，各占一行）**
-    │                 + `Weapon`（id/kind/pos/attack_range/cooldown）、`Robot`（pos/health）、
+    │                 + `Weapon`（id/kind/pos/attack_range/cooldown/**level**）、`Robot`（pos/health）、
     │                 `Error`（code/description，**码不翻译成文字**）三个 NamedTuple
-    └── planner.py    决策。**策略只写在这里**（白天：**开拓者去接任务**、工人建武器 → 采石砌墙
+    └── planner.py    决策。**策略只写在这里**（白天：**开拓者去接任务**（任务点全空且背包有货
+                      ⇒ 去卖矿，第 29 步）、工人建武器 → 采石砌墙
                       （14 格 + 防关人闸门 `_trapped`；**站在目标格上先挪开** `_step_aside`）
-                      → 墙砌完**先卖后采**（`_sell_ore` 卖不动才 `_mine_spare_ore`）；
+                      → 墙砌完**先卖、再升级、后就近采**（`_sell_ore` → `_upgrade_line`
+                      买券用券（第 29 步，优先链 gatling>rocket>railgun）→ `_mine_spare_ore`
+                      **可行矿里挑价高的**（第 29 步修闲置）+ 顺路 `_detour_sell` 绕小贩）；
                       夜里：**所有没被任务钉住的角色**回炮位，贴着就按**最大伤害落点**开火
                       （火箭全场算中心+溅射、加特林/电磁打有效伤害最高的，`assigned` 记账防挤将死者）
                       + `task_channel(turn)` 产出响应顶层的 `(prompt, executeCmd)`
@@ -209,6 +213,14 @@ game/planner → utils                  ← 第 23 步新增：任务行自己�
     `model._bag` 数成 `{物品名: 件数}`，`BaseRole.stone` 是 `bag[STONE]` 的**派生属性**
     （第 22 步从 int 字段改来；`_stones_to_mine` / `_build_walls` 三处调用一字未改）。
       容量字段是 `backPackCapability`（**大写 P**，不读）。
+- **买券/升级线（第 29 步，用户拍板"买得起就优先升级"）**：
+  - **`buy`（武器商店旁，全部角色）**：`name` = 商品名（`weaponShopList.name` 那套词）、`num` Int 默认 1；价目从顶层 `weaponShopList` 逐回合读（`Turn.shop_prices`，样例实证：券1=100、券2=150）—— **不写死**，查不到按 0 ⇒ 买不起 ⇒ 不跑腿。⚠️ **没有实证报文**（与 `sell` 同一类风险）。
+  - **`use`（全部角色）**：升级券须**站在目标建筑周围一格内**并指定 `targetPos`（任务书 L292）；已 level3 再用**不生效、券不消耗**，非法使用也不消耗（L293-294）⇒ 发错顶多白跑一趟、不碰红线。
+  - **武器带 `level`**（接口文档：仅建筑持有、初始 1；`model` 缺失按 1 算，别给 -1—— 会被升级线当成"还升得动"白跑一趟）。摘要的武器行打 `L{level}`（"升级成没成"只有日志能回答）。
+  - **升级优先链（我判的，群体打击口径）：加特林 > 火箭 > 电磁**。加特林 +1 颗子弹 = 每回合 +10、无冷却、弹道必命中、两颗可分打两台（90° 锥）、射程 +2 更早接敌；火箭 +1 枚对簇 +~30/齐射，但 3 回合冷却一夜只 ~20 轮、依赖扎堆；电磁单目标、能量对满血机器人（≥40 血）不穿透。链：gatling→2 → rocket→2 → gatling→3 → railgun→2 → rocket→3 → railgun→3（`UPGRADE_CHAIN`）。
+  - **无状态编排**（`planner._upgrade_line`）：拿没拿券看**背包**（买完金变少、包里多一张，两阶段天然可分；跨夜背包保留）；跑腿者 = 持券的工人 / 名册第一个工人；整趟（商店→武器 + 买/用两动作）来得及才出发（`day_rounds_left − TIME_MARGIN`）；**只在白天跑**（夜里 `_defend` 接回炮位，明早接着走）；持券阶段的终点就是炮位（用完正好站岗，不留回程）。
+  - **就近采矿修闲置（同步第 29 步）**：`_mine_spare_ore` **先把"走得动、回得来"的矿筛出来再按价挑**（旧版挑了最贵的发现走不回来就整段放弃 —— "挖好石头在家等着"的根源）；回程参照 = **最近的武器位**（机器人到进攻范围前必须站回炮前）。**顺路卖矿 `_detour_sell`**：去矿路上绕去小贩 ≤ `DETOUR_MAX`(2) 格 ⇒ 先绕（贴上那回合 `_sell_ore` 自然出手）。
+  - **开拓者无任务时卖矿（用户指定）**：任务点全空（冷却/做完）⇒ 白天开拓者走 `_sell_ore`。⚠️ **规则限制**：`collect` 仅工人、**没有转移物品的指令** ⇒ 开拓者背包里通常没矿 —— 结构在，要等它从任务/宝藏拿到可卖物才真正跑得起来。
 - **地图边界不在任务书 L85 的"阻挡移动"清单里**（那一列只写了建筑/角色/机器人/中立单位/任务点/矿区）。贪心挪一格时几乎撞不到，**但 BFS 会绕到图外去**，所以 `step_toward` 自己按 `Map.size = (width, height)`（取自 `mapInfo.width/height`）挡住 `(0,0)~(width-1,height-1)` 之外。越界算"指令非法"还是"执行失败"文档没写，不走一定安全。`size` 无效（≤0）⇒ `Map` 矩阵为空 ⇒ 无格可走 ⇒ **单位不动**，这是故意的降级。
 - **`step_toward` 的终点是"贴着 goal 的一格"，不是 goal 本身**——因为 goal 通常是挡路的（矿/建筑/武器操控位）。⚠️ `build` 的落点是**空地**（第 7 步回头核过这条契约）：**结论是不用改** —— 建造格在环上是空的，BFS 只在可通行格上展开、并停在距 goal 一格处，那正好就是 `build` 要求的站位。建墙同理。
 - **没有转移物品的指令**（`drop` 只丢不捡，没有拾取）→ 每个角色的背包就是自己的料仓，"A 买 B 用"行不通。
@@ -305,8 +317,15 @@ game/planner → utils                  ← 第 23 步新增：任务行自己�
 
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
-`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**231 条**。
-进度见 `docs/design/code-task.md`（当前到第 28 步：**prompt 换成标准 messages JSON**——
+`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**249 条**。
+进度见 `docs/design/code-task.md`（当前到第 29 步：**经济线四件套**——① 修工人闲置：
+`_mine_spare_ore` 先筛可行（走得到 + 回得来，回程 = 最近武器位）再按价挑；② 顺路卖矿
+`_detour_sell`（绕路 ≤ 2 格先绕小贩）；③ 任务点全空 ⇒ 开拓者去卖矿（规则限制：它采不了
+矿、没转移 ⇒ 通常没货，结构留位）；④ **升级券线**：`buy`/`use` 入 actions、`Weapon.level`
+/`Turn.shop_prices`/`Map.shops` 入解析，`_upgrade_line` 无状态编排（背包认券、跑腿者唯一、
+来得及才出发），**优先链 gatling>rocket>railgun**（群体打击口径：加特林每回合+10 无冷却
+双弹分打 > 火箭齐射+30 但 3 回合冷却 > 电磁单目标）；249 条全绿；第 28 步是**prompt 换成
+标准 messages JSON**——
 `Context.render` 输出 `[{"role":"system"/"user"/"assistant","content":…}]` 的紧凑
 `json.dumps` 串（自造的 `# 对话记录` 文本版式用户实测**效果非常差**、已弃；结构由
 role 表达、正文即原文，`【题目】`/`【你的回复】` 包装删除）；消息模型、判据链、

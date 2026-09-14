@@ -41,6 +41,7 @@ def load(payload: Any) -> Turn | None:
         errors=_errors(payload),
         action_results=_action_results(payload),
         vendor_prices=_vendor_prices(payload),
+        shop_prices=_shop_prices(payload),
     )
 
 
@@ -146,6 +147,8 @@ def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
                 pos=pos,
                 attack_range=_int(node.get("attackRange")),
                 cooldown=_int(node.get("cooldown")),
+                # 缺失按文档的"初始等级 1"算：-1 会被升级线当成"还升得动"去买券
+                level=max(1, _int(node.get("level"))),
             )
         )
     return tuple(out)
@@ -199,6 +202,22 @@ def _vendor_prices(payload: dict[str, Any]) -> Mapping[str, int]:
     """
     out: dict[str, int] = {}
     for node in _items(payload, "vendorShopList"):
+        if not isinstance(node, dict):
+            continue
+        name, price = node.get("name"), _int(node.get("price"))
+        if isinstance(name, str) and price >= 0:
+            out[name] = price
+    return MappingProxyType(out)
+
+
+def _shop_prices(payload: dict[str, Any]) -> Mapping[str, int]:
+    """顶层 `weaponShopList` → `{商品名: 单价}`（与 `_vendor_prices` 同一套解析）。
+
+    升级线按它算"买不买得起"—— 样例实证券1=100/券2=150，但与矿价同一条原则：
+    **不写死**。查不到的商品按 0 算 ⇒ 买不起 ⇒ 不跑腿（故意的降级方向）。
+    """
+    out: dict[str, int] = {}
+    for node in _items(payload, "weaponShopList"):
         if not isinstance(node, dict):
             continue
         name, price = node.get("name"), _int(node.get("price"))
