@@ -11,6 +11,7 @@ PROVIDER = 'OpenRouter'
 MODEL = 'deepseek/deepseek-v4.1-flash'
 EFFORT = 'max'
 API_EFFORT = 'xhigh'  # user-approved local max mapping, same as the DSH worker
+MAX_OUTPUT_TOKENS = 16384  # local budget: 4096 truncated a measured xhigh news response
 
 
 def credential():
@@ -59,10 +60,13 @@ class ProviderResponseError(RuntimeError):
 
 
 class DeepSeekClient:
-    def __init__(self, key=None, opener=None, timeout=60):
+    def __init__(self, key=None, opener=None, timeout=60, max_tokens=MAX_OUTPUT_TOKENS):
+        if type(max_tokens) is not int or not 1024 <= max_tokens <= 32768:
+            raise ValueError('invalid_local_output_budget')
         self._key = credential() if key is None else key
         self._opener = opener or urllib.request.build_opener(NoRedirect())
         self.timeout = timeout
+        self.max_tokens = max_tokens
 
     @property
     def configured(self):
@@ -75,7 +79,7 @@ class DeepSeekClient:
             raise ValueError('invalid_prompt_length')
         payload = {'model': MODEL, 'messages': [{'role': 'user', 'content': prompt}],
                    'reasoning': {'effort': API_EFFORT, 'exclude': True},
-                   'max_tokens': 4096, 'stream': False}
+                   'max_tokens': self.max_tokens, 'stream': False}
         request = urllib.request.Request(ENDPOINT, json.dumps(payload).encode('utf-8'),
                     {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + self._key})
         try:

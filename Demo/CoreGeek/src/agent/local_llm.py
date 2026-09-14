@@ -24,6 +24,7 @@ class LocalLLM:
         with self.lock:
             return {'provider': PROVIDER, 'model': MODEL, 'effort': EFFORT,
                     'configured': self._client().configured, 'calls': self.calls,
+                    'maxOutputTokens': getattr(self._client(), 'max_tokens', None),
                     'maxCalls': self.max_calls, 'note': '仅显式启用的本地场景调用，额度是本地费用保护，不是官方规则'}
 
     def set_limit(self, limit):

@@ -145,12 +145,19 @@ class LocalLLMTests(unittest.TestCase):
         body = json.loads(opener.request.data)
         self.assertEqual('deepseek/deepseek-v4.1-flash', body['model'])
         self.assertEqual({'effort': 'xhigh', 'exclude': True}, body['reasoning'])
+        self.assertEqual(16384, body['max_tokens'])
         self.assertEqual('https://openrouter.ai/api/v1/chat/completions', opener.request.full_url)
         self.assertNotIn('thinking', body)
         self.assertNotIn('reasoning_effort', body)
         self.assertNotIn('fake-unit-test-key', json.dumps(result))
         self.assertNotIn('private-reasoning', json.dumps(result))
         self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.invalid'))
+
+    def test_local_output_budget_is_bounded_and_reported(self):
+        self.assertEqual(8192, LocalLLM(DeepSeekClient(key='test', max_tokens=8192)).status()['maxOutputTokens'])
+        for value in (True, 0, 32769, '16384'):
+            with self.assertRaises(ValueError):
+                DeepSeekClient(key='test', max_tokens=value)
 
     def test_openrouter_credentials_do_not_fall_back_to_another_provider_key(self):
         with patch.dict('os.environ', {'OPENROUTER_API_KEY': 'openrouter-test', 'DEEPSEEK_API_KEY': 'other-provider'}, clear=True):
