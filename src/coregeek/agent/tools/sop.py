@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 SOP_MAX = 1000
 
 
-def store(current: str, sop: str) -> str:
+def store(current: str, sop: str, *, stripped: int = 0) -> str:
     """把 `sop` 存成新的 SOP，返回**新值**；内容没变 ⇒ **原样返回旧值、一个字都不打**。
 
     **是整段替换不是追加**：追加没有遗忘机制，几百回合下来 prompt 会被旧套路撑爆；
@@ -24,24 +24,33 @@ def store(current: str, sop: str) -> str:
 
     **内容没变就不吭声**：LLM 把同一段 SOP 反复喂进来时（`llm_resp` 粘住的典型症状），
     每回合打一行日志是白花 stdout 预算，而"又存了一遍同样的东西"不算"有事"。
+
+    `stripped` = 调用方（`Agent.SOP2Prompt`）在存**之前**挖掉了几处 `<answer>…</answer>`
+    （`chat.strip_answers`）—— 只进日志。⚠️ 因此 `sop` 是**挖过之后**的正文：
+    这里的"收到 N 字"数的是挖完的那一份，两者的差由 `describe` 那句话解释。
     """
     raw = sop if isinstance(sop, str) else ""
     text = raw[:SOP_MAX]
     if text == current:
         return current
-    LOGGER.info("【SOP 更新】：%s", describe(raw, text))
+    LOGGER.info("【SOP 更新】：%s", describe(raw, text, stripped))
     return text
 
 
-def describe(received: str, stored: str) -> str:
+def describe(received: str, stored: str, stripped: int = 0) -> str:
     """一条 SOP 更新的日志正文 —— **一行**，且**截断必须留痕**。
 
-    两个细节各有出处：**超上限时同时报"收到多少 / 存了多少"**（静默截断正是第 14 步
-    被叫醒的那个坑）；**换行转义成 `\\n`**（SOP 必然是多行的，不转义一条记录会变几十行，
-    而时间戳前缀只加在第一条物理行上）—— `\\r` 与 `\\n` 两个都要转，Windows 上模型回的多半是 `\\r\\n`。
+    三个细节各有出处：**超上限时同时报"收到多少 / 存了多少"**（静默截断正是第 14 步
+    被叫醒的那个坑）；**挖掉过 `<answer>` 段就报几处**（否则"收到 N 字、存 M 字"缺一句解释，
+    而这正是"LLM 又把答案格式写进 SOP 了"的唯一信号）；**换行转义成 `\\n`**（SOP 必然是多行的，
+    不转义一条记录会变几十行，而时间戳前缀只加在第一条物理行上）—— `\\r` 与 `\\n` 两个都要转，
+    Windows 上模型回的多半是 `\\r\\n`。
     """
     if not stored:
         return "清空"
     head = stored[:80].replace("\r", "\\r").replace("\n", "\\n")
-    note = f"（收到 {len(received)} 字，超上限截断）" if len(received) > len(stored) else ""
+    notes = [f"剔除 {stripped} 处 <answer> 段"] if stripped else []
+    if len(received) > len(stored):
+        notes.append(f"收到 {len(received)} 字，超上限截断")
+    note = f"（{'；'.join(notes)}）" if notes else ""
     return f"存 {len(stored)} 字{note}｜ 前 80 字：{head}"

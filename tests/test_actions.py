@@ -4084,8 +4084,11 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_broken_tool_tag_yields_no_command(self):
         """凑不齐的标签 ⇒ **没有命令可发**。别把半截标签当命令丢进沙盒。
 
-        ⚠️ 最后两条是第 18 步新增的**隐式子路径 ③′**：调用是完整的，但工具给不出命令
-        （`SOP2Prompt` / 未知工具 / 有名字没参数）。它们与"畸形"落同一个出口：**重问**。
+        ⚠️ 最后三条是第 18 步新增的**隐式子路径 ③′**：调用是完整的，但工具给不出命令
+        （`SOP2Prompt` / 未知工具 / 缺参数）。它们与"畸形"落同一个出口：**重问**。
+        ⚠️ `SOP2Prompt` 那两条的形状是**合法**的（第 36 步起它只声明 `sop`），"给不出命令"
+        与"调用作废"由此分家：前者照旧重问，后者见
+        `AgentToolCallTest.test_sop2prompt_stores_the_method_and_yields_no_command`。
         """
         replies = (
             "<tool ls",
@@ -4095,9 +4098,9 @@ class TaskChannelTest(unittest.TestCase):
             "<tool>  </tool>",
             "<tool><tool_name>executeCmd</tool_name></tool>",
             "<tool><tool_name>没这个工具</tool_name><tool_param>ls</tool_param></tool>",
+            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>方法</tool_param></tool>",
             "<tool><tool_name>SOP2Prompt</tool_name>"
             '<tool_param name="sop">方法</tool_param><tool_param name="answer">答案</tool_param></tool>',
-            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>方法</tool_param></tool>",  # 漏了 answer
         )
         for reply in replies:
             with self.subTest(reply=reply):
@@ -4108,64 +4111,83 @@ class TaskChannelTest(unittest.TestCase):
 
         `SOP2Prompt` 是最典型的一个 —— 它**当回合没有别的回执**，而下一轮 prompt 里
         那段「沉淀的 SOP」就是"调用成功了"的凭证（它自己看得见）。
-        ⚠️ 第 35 步起它多了一个必需的 `answer` 参数，所以这里给的正是**残缺形状**
-        （只给 sop）⇒ 整次调用作废、SOP 不落库、落在⑥重问。**"调用真的成了"那条路
-        （双参数 ⇒ 存下 SOP 且当回合作答）**见 `test_sinking_the_sop_rides_along_with_the_answer`。
+        ⚠️ 第 36 步起**沉淀与作答分家**：这条回复只沉淀、没作答 ⇒ **SOP 照样落库**
+        （`assertEqual(AGENT.sop, …)` 那一行就是那件事），丢的只是那一回合（重问）。
+        第 35 步那版把 `answer` 写成必需参数，于是这里曾经是"整次调用作废、SOP 不落库" ——
+        代价是 LLM 把答案写成块外 `<answer>` 时 SOP **静默**丢掉（判据 ⑤ 命中 ⇒ 连重问都没有）。
+        那是条死路：**"声明即必需"的参数没法同时又是一个可选的作答通道**。
+        **"沉淀 + 同轮作答"那条路**见 `test_sinking_the_sop_rides_along_with_the_answer`。
         ⚠️ 这条路径**不会活锁**：任务期间 prompt 不限量不计数（接口文档 L198），
         而出口有"LLM 改口 / `code 2` 带来的纠错段 / 它看见 SOP 段"三条。
         """
         prompt, execute = task_channel(self._turn(self.TASK, "<tool><tool_name>SOP2Prompt</tool_name><tool_param>先看目录</tool_param></tool>"))
         self.assertEqual(execute, "")
-        self.assertIn(self.TASK, prompt)
-        self.assertNotIn("先看目录", prompt, "漏了 answer ⇒ 整次调用作废，SOP 没落库")
-        self.assertEqual(AGENT.sop, "")
+        self.assertIn(self.TASK, prompt, "没作答 ⇒ 这一回合还得问")
+        self.assertIn("先看目录", prompt, "沉淀不许因为没作答就作废")
+        self.assertEqual(AGENT.sop, "先看目录")
 
     def test_sinking_the_sop_rides_along_with_the_answer(self):
         """⚠️ **沉淀 SOP 不许独占一回合** —— 它单独来一趟就得重问一次，等于白花一回合。
 
         任务是**按回合计分**的（`5 × 标准回合数 / (完成回合 − 接取回合)`），所以白花一回合
-        直接掉分。而代码侧本来就支持"同一条回复里既沉淀又作答"：答案在**同一个 `<tool>` 块
-        的参数里**（`<tool_param name="answer">`），`tool_of` 只认第一个块所以不受影响、
-        `answer_of` 的第 1 级直接从参数里取 ⇒ `task_channel` 走**判据 ⑤**（`("", "")`，
-        不是 ③′ → ⑥ 的重问）；同时 `plan` 里 `_answer_task` 独立用**同一个谓词**取答案，
-        当回合就 `submitAnswer`。⇒ 唯一的阻塞是 prompt 措辞，所以第 32 步一个字都没改判据链
-        （改措辞那条用例见 `ChatPromptTest.test_the_sop_round_must_carry_the_answer`）。
+        直接掉分。而代码侧本来就支持"同一条回复里既沉淀又作答"：工具块沉淀、**块外**的
+        `<answer>` 作答（`tool_of` 只认第一个块、`answer_of` 先把它整段挖掉再扫）⇒
+        `task_channel` 走**判据 ⑤**（`("", "")`，不是 ③′ → ⑥ 的重问）；同时 `plan` 里
+        `_answer_task` 独立用**同一个谓词**取答案，当回合就 `submitAnswer`。
+        ⇒ 唯一的阻塞是 prompt 措辞（那条用例见
+        `ChatPromptTest.test_the_sop_round_must_carry_the_answer`）。
 
-        ⚠️ 第 35 步把答案从"块外的 `<answer>`"挪进"块内的参数"是**为了防 SOP 正文污染**
-        （`SOP2Prompt` 沉淀的正文里几乎必然出现字面量 `<answer>…</answer>`），
-        但旧形状**照旧兼容**（`answer_of` 第 2 级仍扫块外的 `<answer>`）—— 两条形状都在这里钉。
-
-        反向验证：删掉 `answer_of` 的**参数优先**那一级 ⇒ 新形状这条取不到答案（挂）；
-        把第 3 级"像工具调用 ⇒ `""`"改成无条件的 ⇒ 旧形状那条挂。
+        ⚠️ 第 35 步曾把答案挪进**工具参数**（`<tool_param name="answer">`）来防 SOP 污染，
+        **第 36 步整个作废**（用户口径："SOP 工具只有一个参数，提交统一走 `<answer>`"）——
+        防污染改由两道闸门接管，见
+        `test_a_literal_in_the_sop_does_not_poison_the_submitted_answer`。
         """
-        replies = {
-            #: 新形状（prompt 要求的那个）：答案 = `answer` 参数
-            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">先找文件</tool_param>'
-            '<tool_param name="answer">晴 26 度</tool_param></tool>': "晴 26 度",
-            #: 旧形状（第 32 步那版）：一份回复里**两种形状都有** ⇒ 认**参数**那一份
+        reply = (
             "<tool><tool_name>SOP2Prompt</tool_name>"
-            '<tool_param name="sop">先找文件</tool_param><tool_param name="answer">晴 26 度</tool_param>'
-            "</tool>\n<answer>块外的另一份</answer>": "晴 26 度",
-        }
-        for reply, expected in replies.items():
-            with self.subTest(reply=reply):
-                AGENT.reset()
-                self.assertEqual(
-                    task_channel(self._turn(self.TASK, reply)),
-                    ("", ""),
-                    "既不该重问、也不该发命令",
-                )
-                self.assertEqual(AGENT.sop, "先找文件", "沉淀照样生效")
-                self.assertEqual(
-                    plan(self._turn(self.TASK, reply)).get("10011"),
-                    {"action": "submitAnswer", "taskAnswer": expected},
-                    "同一个回合里开拓者已经把答案交上去了",
-                )
+            '<tool_param name="sop">先找文件</tool_param></tool>\n<answer>晴 26 度</answer>'
+        )
+        AGENT.reset()
+        self.assertEqual(
+            task_channel(self._turn(self.TASK, reply)), ("", ""), "既不该重问、也不该发命令"
+        )
+        self.assertEqual(AGENT.sop, "先找文件", "沉淀照样生效")
+        self.assertEqual(
+            plan(self._turn(self.TASK, reply)).get("10011"),
+            {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
+            "同一个回合里开拓者已经把答案交上去了",
+        )
+
+    def test_a_literal_in_the_sop_does_not_poison_the_submitted_answer(self):
+        """⚠️ **端到端的污染守门员**（第 35 步那个真实缺陷的正面防线）。
+
+        SOP 正文里写着"答案要写成 `<answer>假答案</answer>` 的形状"—— 旧判据会把这个**示例**
+        当成答案交上去，而日志上完全看不出来（任务行只打原文）。现在两道闸门各管一头：
+
+        ① `answer_of` **先挖掉整个工具块** ⇒ 块内那些字面量够不着（交的是块外的 `晴 26 度`）；
+        ② `SOP2Prompt` **入库前挖掉成对的 `<answer>` 段** ⇒ 存下来的 SOP 也不会带着这对串
+        进后续每一份 prompt（`assertEqual(AGENT.sop, …)` 就是那件事）。
+
+        反向验证：① 退成"扫整条回复" ⇒ 交的是 `假答案`（挂）；② 去掉 `strip_answers` ⇒
+        存下来的 SOP 里带着 `假答案`（挂）。
+        """
+        reply = (
+            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">'
+            "答案要写成 <answer>假答案</answer> 的形状"
+            "</tool_param></tool>\n<answer>晴 26 度</answer>"
+        )
+        AGENT.reset()
+        self.assertEqual(task_channel(self._turn(self.TASK, reply)), ("", ""))
+        self.assertEqual(AGENT.sop, "答案要写成  的形状", "入库的那份里不许留这对标签")
+        self.assertEqual(
+            plan(self._turn(self.TASK, reply)).get("10011"),
+            {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
+            "交的是块外那份，不是 SOP 里的示例",
+        )
 
     def test_the_stored_sop_rides_along_in_every_later_prompt(self):
         """**自进化的可观测证据**：存过一次之后，后面每一份 prompt 都带着它 ——
         包括"回灌沙盒结果"与"带纠错重问"这两条分支。"""
-        AGENT.SOP2Prompt("先 ls 再算", "答案")
+        AGENT.SOP2Prompt("先 ls 再算")
         for turn in (
             self._turn(self.TASK),
             self._turn(self.TASK, cmd_result="[exitCode:0]\nok"),
@@ -4187,8 +4209,7 @@ class TaskChannelTest(unittest.TestCase):
         task_channel(
             self._turn(
                 self.TASK,
-                '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">先看目录</tool_param>'
-                '<tool_param name="answer">答案</tool_param></tool>',
+                '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">先看目录</tool_param></tool>',
             )
         )
         prompt, execute = task_channel(self._turn("另一道题"))
@@ -4336,9 +4357,11 @@ class TaskChannelTest(unittest.TestCase):
             "晴 26 度",
             "  晴 26 度\n",
             "<answer>晴 26 度</answer>\n补充一句",
-            #: 第 35 步的新通道：答案在工具参数里（`answer_of` 的第 1 级）
-            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">先找文件</tool_param>'
-            '<tool_param name="answer">晴 26 度</tool_param></tool>',
+            #: SOP 正文里的字面量 `<answer>` 不算答案（第 36 步：工具块先整段挖掉），
+            #: 真答案在块外 —— 这条同时钉"两个调用点都别去认块内那份"
+            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">'
+            "答案写成 <answer>假答案</answer> 的形状"
+            "</tool_param></tool>\n<answer>晴 26 度</answer>",
             "<tool>ls</tool>",
             "<tool ls",
             "",
@@ -4599,18 +4622,41 @@ class AgentToolCallTest(unittest.TestCase):
             self.agent.tool_call("SOP2Prompt", [("sop", "  "), ("answer", "答案")]), ""
         )
         self.assertEqual(self.agent.sop, "第一步：先 ls", "空白参数清不掉 SOP —— 闸门在工具之前")
+        #: 不认识的参数名（第 35 步那个 `answer` 通道已作废）**不参与闸门**：`sop` 在就放行
+        self.assertEqual(self.agent.tool_call("SOP2Prompt", [("sop", "第二步"), ("答案", "x")]), "")
+        self.assertEqual(self.agent.sop, "第二步")
+        #: 声明的 `sop` 一个都没有 ⇒ 整次调用作废，**SOP 一个字节都别动**
+        self.assertEqual(self.agent.tool_call("SOP2Prompt", [("answer", "答案")]), "")
+        self.assertEqual(self.agent.tool_call("SOP2Prompt", []), "")
+        self.assertEqual(self.agent.sop, "第二步")
 
-    def test_a_sop_call_without_an_answer_is_void(self):
-        """⚠️ **漏写 `answer` ⇒ 整次调用作废**（第 35 步定的代价，SOP 一个字节都不落库）。
+    def test_a_sop_containing_the_answer_tags_is_scrubbed_on_the_way_in(self):
+        """⚠️ 第 36 步（用户口径）：**`sop` 里成对的 `<answer>…</answer>` 入库前挖掉**。
 
-        这是"沉淀必须同轮作答"变成**协议层事实**的那一半：`answer` 在注册表里是必需参数，
-        `tool_call` 的"声明参数一个不少且非空"把整次调用挡在 `impl` 之前 —— 那一回合
-        落到判据 ⑥ 重问，LLM 下一轮就得把答案补上。写成"prompt 里求它一句"就退化成
-        "它只沉淀不写答案、我们白花一回合"（而且是**每一道题**都白花一回合）。
+        那段正文的用处正是讲"答案怎么写" ⇒ 它几乎必然带上这对标签；不挖掉，存下来的 SOP
+        就会带着这对串进后续每一份 prompt。与 `answer_of` 的"先挖工具块"叠在一起，
+        才是"答案不会被 SOP 污染"的完整保证（端到端那条见
+        `TaskChannelTest.test_a_literal_in_the_sop_does_not_poison_the_submitted_answer`）。
+        ⚠️ **挖掉、不是作废整次调用**（用户选的是前者）：沉淀是这个工具的全部价值，
+        不该因为它多写了一句示例就整段丢掉；挖了几处进日志 —— 那是"LLM 又把答案格式
+        写进 SOP 了"的唯一信号。
         """
-        self.agent.SOP2Prompt("先垫一版", "答案")
-        self.assertEqual(self.agent.tool_call("SOP2Prompt", [("sop", "新版方法")]), "")
-        self.assertEqual(self.agent.sop, "先垫一版", "调用作废 ⇒ SOP 照旧是上一版")
+        with self.assertLogs(level="INFO") as logs:
+            self.assertEqual(
+                self.agent.tool_call(
+                    "SOP2Prompt", [("sop", "先 ls。答案写成 <answer>示例</answer> 的形状。")]
+                ),
+                "",
+            )
+        self.assertEqual(self.agent.sop, "先 ls。答案写成  的形状。")
+        self.assertIn("剔除 1 处 <answer> 段", "\n".join(r.getMessage() for r in logs.records))
+        #: 多处 / 空块都算"这对串"，一次挖干净
+        self.agent.tool_call("SOP2Prompt", [("sop", "<answer></answer>先 ls<answer>x</answer>")])
+        self.assertEqual(self.agent.sop, "先 ls")
+        #: 半截的标记（有开无闭）**不挖** —— `answer_of` 认的也是成对块，
+        #: 半截标记在正文里只是普通文字（挖它等于替 LLM 改正文）
+        self.agent.tool_call("SOP2Prompt", [("sop", "写 <answer> 但没有闭标签")])
+        self.assertEqual(self.agent.sop, "写 <answer> 但没有闭标签")
 
     def test_an_unknown_tool_yields_no_command_and_no_exception(self):
         """未知工具 ⇒ 空串，**绝不抛**。
@@ -4641,8 +4687,10 @@ class AgentToolCallTest(unittest.TestCase):
         —— LLM 照着表写调用，不靠描述正文里的散文。"""
         desc = self.agent.tool_desc()
         self.assertIn("Params:\n    - cmd: 命令原文", desc)
-        #: 第 35 步：`SOP2Prompt` 多了一个必需的 `answer`（答案走参数通道，见 `chat.answer_of`）
-        self.assertIn("Params:\n    - sop: SOP 全文\n    - answer: 答案本身", desc)
+        #: 第 36 步：`SOP2Prompt` 只声明 `sop`（用户口径："SOP 工具只有一个参数、只做流程沉淀"）
+        #: —— 第 35 步那个作答用的 `answer` 参数**整个作废**（提交统一走 `<answer>`）
+        self.assertIn("Params:\n    - sop: SOP 全文", desc)
+        self.assertNotIn("- answer:", desc)
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
         self.assertIn(
             "## ToolName: 查询状态\nDescription: 测试用\nParams: （无参数）", self.agent.tool_desc()
@@ -4685,13 +4733,13 @@ class SopStateTest(unittest.TestCase):
         追加没有遗忘机制：几百回合下来 prompt 会被旧套路撑爆，而且"上一版不对"这件事
         LLM 自己重写一遍就能表达。
         """
-        self.agent.SOP2Prompt("第一版", "答案")
-        self.agent.SOP2Prompt("第二版", "答案")
+        self.agent.SOP2Prompt("第一版")
+        self.agent.SOP2Prompt("第二版")
         self.assertEqual(self.agent.sop, "第二版")
 
     def test_it_survives_across_calls(self):
         """存下来之后**下一个调用者读得到** —— 这就是"跨回合"的全部含义。"""
-        self.agent.SOP2Prompt("先看 ls 的输出再算", "答案")
+        self.agent.SOP2Prompt("先看 ls 的输出再算")
         self.assertEqual(self.agent.sop, "先看 ls 的输出再算")
         self.assertEqual(self.agent.sop, "先看 ls 的输出再算")
 
@@ -4701,14 +4749,14 @@ class SopStateTest(unittest.TestCase):
         退化的实现（状态写回某个模块级变量）会让这条挂 —— 而那种退化在实盘上的症状是
         "测试互相串味"，本地能看出来，但没这条用例就得等它串味了才知道。
         """
-        self.agent.SOP2Prompt("甲的方法", "答案")
+        self.agent.SOP2Prompt("甲的方法")
         self.assertEqual(Agent().sop, "")
 
     def test_the_sop_never_leaks_between_instances(self):
         """两个实例各存各的 —— 反向钉死"状态在模块级"那种退化。"""
         other = Agent()
-        self.agent.SOP2Prompt("甲", "答案")
-        other.SOP2Prompt("乙", "答案")
+        self.agent.SOP2Prompt("甲")
+        other.SOP2Prompt("乙")
         self.assertEqual(self.agent.sop, "甲")
         self.assertEqual(other.sop, "乙")
 
@@ -4720,8 +4768,8 @@ class SopStateTest(unittest.TestCase):
         调方法）把它挡住。
         """
         other = Agent()
-        self.agent.tool_call("SOP2Prompt", [(None, "甲走工具表"), ("answer", "答案")])
-        other.tool_call("SOP2Prompt", [(None, "乙走工具表"), ("answer", "答案")])
+        self.agent.tool_call("SOP2Prompt", [(None, "甲走工具表")])
+        other.tool_call("SOP2Prompt", [(None, "乙走工具表")])
         self.assertEqual(self.agent.sop, "甲走工具表")
         self.assertEqual(other.sop, "乙走工具表")
 
@@ -4735,12 +4783,12 @@ class SopStateTest(unittest.TestCase):
            自己身上那份一点没动。两种在实盘上的症状都是"**改了一处代码，另一处跟着变**"，
            而本地只有这条用例会先叫。
         """
-        self.agent.SOP2Prompt("要清掉的东西", "答案")
+        self.agent.SOP2Prompt("要清掉的东西")
         self.agent.reset()
         self.assertEqual(self.agent.sop, "")
         self.assertNotIn("要清掉的东西", self.agent.chat("题目"))
         #: 复位之后还能重新存（别把 reset 写成"把实例锁死"）
-        self.agent.SOP2Prompt("第二版", "答案")
+        self.agent.SOP2Prompt("第二版")
         self.assertIn("第二版", self.agent.chat("题目"))
 
     def test_an_overlong_sop_is_truncated_and_says_so(self):
@@ -4750,7 +4798,7 @@ class SopStateTest(unittest.TestCase):
         下一个人会以为是它只写了 1000 字。上限存在的理由是硬约束 5（prompt 每回合都发）。
         """
         with self.assertLogs(sop.__name__, level="INFO") as caught:
-            self.agent.SOP2Prompt("长" * 9000, "答案")
+            self.agent.SOP2Prompt("长" * 9000)
         self.assertEqual(len(self.agent.sop), sop.SOP_MAX)
         line = caught.records[0].getMessage()
         self.assertIn("9000", line)
@@ -4762,9 +4810,9 @@ class SopStateTest(unittest.TestCase):
         `llm_resp` 粘住时 LLM 会把同一段 SOP 反复喂进来，每回合打一行是白花 stdout 预算
         （硬约束 5），而"又存了一遍同样的东西"不算"有事"。
         """
-        self.agent.SOP2Prompt("一样的内容", "答案")
+        self.agent.SOP2Prompt("一样的内容")
         with self.assertNoLogs(sop.__name__, level="INFO"):
-            self.agent.SOP2Prompt("一样的内容", "答案")
+            self.agent.SOP2Prompt("一样的内容")
 
     def test_a_multiline_sop_is_logged_as_one_line(self):
         """SOP 必然是多行的 ⇒ 日志必须**打成一行**（换行转义）。
@@ -4773,7 +4821,7 @@ class SopStateTest(unittest.TestCase):
         （与 `app._log` 的"三块拼成一条"同一条理由）。
         """
         with self.assertLogs(sop.__name__, level="INFO") as caught:
-            self.agent.SOP2Prompt("第一步：ls\r\n第二步：cat", "答案")
+            self.agent.SOP2Prompt("第一步：ls\r\n第二步：cat")
         message = caught.records[0].getMessage()
         self.assertNotIn("\n", message)
         self.assertNotIn("\r", message)
@@ -4781,9 +4829,9 @@ class SopStateTest(unittest.TestCase):
 
     def test_clearing_is_silent_about_content(self):
         """清空（= 整段替换成空串）也要留一行 —— 否则"怎么没了"无从查起。"""
-        self.agent.SOP2Prompt("有内容", "答案")
+        self.agent.SOP2Prompt("有内容")
         with self.assertLogs(sop.__name__, level="INFO") as caught:
-            self.agent.SOP2Prompt("", "答案")
+            self.agent.SOP2Prompt("")
         self.assertEqual(self.agent.sop, "")
         self.assertEqual(len(caught.records), 1)
 
@@ -4846,21 +4894,28 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("<answer>答案本身</answer>", system)
 
     def test_the_sop_round_must_carry_the_answer(self):
-        """prompt 里必须有"沉淀 SOP 要和答案写在同一条回复里"这条**规则与示例**。
+        """prompt 里必须有"沉淀 SOP 与作答写在同一条回复里"这条**规则与示例**。
 
         它是省回合的唯一杠杆：代码侧早就支持同回合（`answer_of` + 判据 ⑤ + `_answer_task`
         三处共用同一个谓词，见
         `TaskChannelTest.test_sinking_the_sop_rides_along_with_the_answer`），
         但 prompt 不写的话，LLM 就按"一回合只输出一样东西"把沉淀单独占一回合 ——
         而那一回合在日志上看起来**完全正常**（有提问、无提交），只有分数会低。
+
+        ⚠️ 示例是**两块**（工具块 + 块外的 `<answer>`），不是第 35 步那个"答案塞进
+        `answer` 参数"的单块形状 —— 那个通道第 36 步整个作废了。
+        ⚠️ `sop` 里不许出现 `<answer>` 这对标签的**规则**也在这段里（用户口径）：
+        它是 `chat.strip_answers` 在代码侧兜底的那条规矩，必须让 LLM 先知道。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("必须把答案一起写上", system)
+        self.assertIn("它只沉淀、不产出命令", system)
+        self.assertIn("沉淀 SOP 与作答写在同一条回复里", system)
         self.assertIn(
-            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">沉淀的方法</tool_param>'
-            '<tool_param name="answer">答案本身</tool_param></tool>',
+            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">沉淀的方法</tool_param></tool>\n'
+            "<answer>答案本身</answer>",
             system,
         )
+        self.assertIn("不要出现 `<answer>` 与 `</answer>` 这对标签", system)
 
     def test_the_workflow_says_how_to_find_the_file(self):
         """`# 工作流` 那三条 = 第 35 步用户拍板的措辞，**附一段可以直接照抄的命令范式**。
@@ -4902,7 +4957,7 @@ class ChatPromptTest(unittest.TestCase):
         `chat` 读 `self._sop`）—— 走的是实例，不是"某个模块变量还在"
         （跨回合那条更强的证据在 `TaskChannelTest.test_the_singleton_carries_the_sop_across_turns`）。
         """
-        self.agent.SOP2Prompt("先看目录再动手", "答案")
+        self.agent.SOP2Prompt("先看目录再动手")
         self.assertIn("先看目录再动手", self.agent.chat("另一道题"))
 
     def test_the_same_task_accumulates_its_conversation(self):
@@ -4951,7 +5006,7 @@ class ChatPromptTest(unittest.TestCase):
         """system（五段 header）**每轮现刷**：同一道题进行中沉淀的 SOP，下一轮就看得见
         —— 这是 ③′（`SOP2Prompt` 不产出命令）"调用成功"的回执，冻在构造时就没了。"""
         first = self.agent.chat("题")
-        self.agent.SOP2Prompt("先 ls", "答案")
+        self.agent.SOP2Prompt("先 ls")
         second = self.agent.chat("题")
         self.assertNotIn("先 ls", first)
         self.assertIn("先 ls", second)
@@ -4963,7 +5018,7 @@ class ChatPromptTest(unittest.TestCase):
         二次扫描会在 `chat` 里直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。
         SOP 是第三个替换值（由 `Agent` 传进 `PROMPT.format`），三处一起钉；
         会话正文则走 `json.dumps`，与 `format` 无关。"""
-        self.agent.SOP2Prompt("SOP 里有 {sop} 和 {0}", "答案")
+        self.agent.SOP2Prompt("SOP 里有 {sop} 和 {0}")
         messages = json.loads(self.agent.chat("题目 {task} {0} {}", result="{'a': 1}"))
         contents = [m["content"] for m in messages]
         self.assertIn("题目 {task} {0} {}", contents)
@@ -5211,54 +5266,54 @@ class AnswerParseTest(unittest.TestCase):
         self.assertEqual(answer_of("</answer>"), "</answer>")
         self.assertEqual(answer_of(""), "")
 
-    def test_the_answer_param_beats_a_literal_in_the_sop(self):
-        """⚠️ **这一条就是第 35 步的全部理由**：答案的参数优先于任何 `<answer>` 字面量。
+    def test_a_literal_in_the_sop_is_not_the_answer(self):
+        """⚠️ **这一条是防 SOP 污染的全部理由**：工具块**里面**的 `<answer>` 一律不算答案。
 
-        `SOP2Prompt` 沉淀的正文讲的正是"答案要用 `<answer>` 包" ⇒ 里面几乎必然出现
-        **字面量** `<answer>…</answer>`。旧判据（回复里出现 `<answer` 就只认成对块）
-        扫到的是 SOP 里那一段 ⇒ **错答案被当成答案交上去**，而且日志上完全看不出来
+        `SOP2Prompt` 沉淀的正文讲的往往正是"答案要用 `<answer>` 包" ⇒ 里面几乎必然出现
+        **字面量** `<answer>…</answer>`。若不先挖掉工具块就扫（第 34 步之前的判据），
+        扫到的正是 SOP 里那一段 ⇒ **错答案被当成答案交上去**，而且日志上完全看不出来
         （任务行里打得出的只有原文，看不出哪一段被判成了答案）。
-        参数在工具块**内部**、按名字认 ⇒ 这类污染够不着第 1 级。
+        挖掉之后那一段压根够不着：**分不清"真答案"与"SOP 里的示例"时，宁可不交**。
 
-        反向验证：把参数优先那一级删掉 ⇒ 这里取到 `假答案`（挂）。
+        反向验证：把"先挖掉工具块再扫"改回"扫整条回复" ⇒ 这里取到 `假答案`（挂）。
         """
         reply = (
             '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">'
             "答案要写成 <answer>假答案</answer> 的形状"
-            '</tool_param><tool_param name="answer">真答案</tool_param></tool>'
+            "</tool_param></tool>"
         )
-        self.assertEqual(answer_of(reply), "真答案")
+        self.assertEqual(answer_of(reply), "")
+        #: 真答案落在块**外** ⇒ 照旧认（挖完剩下的正好是它）
+        self.assertEqual(answer_of(reply + "\n<answer>真答案</answer>"), "真答案")
 
-    def test_a_tool_block_with_an_answer_param_must_be_whole(self):
-        """参数**成对**才作数（与 `tool_of` 同一条"半截绝不当内容用"），且要非空。
+    def test_an_answer_outside_the_tool_block_is_the_only_place_it_counts(self):
+        """`<answer>` 落在 `<tool>` 块**之外**是唯一认它的地方（第 36 步的用户口径）。
 
-        半截的 `<tool_param name="answer">` 若被当答案交上去，交的就是一串标签原文
-        —— 那正是这套判据存在的理由（宁可这一回合不交）。
-        """
+        `SOP2Prompt` 只有一个参数（`sop`）⇒ "沉淀 + 作答"落在同一回合时是**两件事**：
+        工具块沉淀、块外的 `<answer>` 作答。
+        ⚠️ 第 35 步那条"答案塞进工具参数（`<tool_param name="answer">`）"的通道**已作废**
+        （用户口径：提交统一走 `<answer>`）。旧形状现在只会**丢掉那一回合的作答** ——
+        参数会被 `tool_call` 当认不出的名字忽略（`sop` 在 ⇒ 沉淀照旧落库），而块外没有
+        `<answer>` ⇒ 判据 ⑥ 重问。这是**有意**的：块内那对标签分不清是答案还是示例。"""
+        #: 唯一认的形状
+        self.assertEqual(
+            answer_of(
+                '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">方法</tool_param></tool>'
+                "\n<answer>晴 26 度</answer>"
+            ),
+            "晴 26 度",
+        )
+        #: 作废的旧形状：块内参数不是答案，块外也没有 ⇒ 这一回合不提交
         for reply in (
-            #: 有开无闭 ⇒ 取不出参数 ⇒ 落回"像工具调用 ⇒ `""`"
+            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">方法</tool_param>'
+            '<tool_param name="answer">晴 26 度</tool_param></tool>',
+            #: 半截的参数块（有开无闭）⇒ 参数取不出来 ⇒ 与上一条同路
             '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="answer">晴 26 度</tool>',
-            #: 参数在、但值是空白 ⇒ 与"没给"同义 ⇒ 不提交
-            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="answer">   </tool_param>'
-            "</tool>",
-            #: 完整调用、但压根没有 `answer` 参数（第 35 步起 `tool_call` 侧也会作废它）
-            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">方法</tool_param></tool>',
+            #: 值是空白 ⇒ 与"没给"同义
+            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="answer">   </tool_param></tool>',
         ):
             with self.subTest(reply=reply):
                 self.assertEqual(answer_of(reply), "")
-
-    def test_an_answer_outside_the_tool_block_still_works(self):
-        """旧形状（第 32 步那版）**不退化**：`<answer>` 块落在 `<tool>` 块之外照样认。
-
-        这是兼容层 —— 实盘上 LLM 完全可能混着用，而它现在**唯一**的后果是"这一回合
-        没带 `answer` 参数 ⇒ `tool_call` 不给命令"（`SOP2Prompt` 落库失败），
-        **绝不**是"答案被吞掉"。挖掉工具块再扫是为了这一条：挖完剩下的正好是块外那部分。
-        """
-        reply = (
-            '<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">方法</tool_param></tool>'
-            "\n<answer>晴 26 度</answer>"
-        )
-        self.assertEqual(answer_of(reply), "晴 26 度")
 
 
 if __name__ == "__main__":

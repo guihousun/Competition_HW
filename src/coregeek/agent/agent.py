@@ -15,7 +15,7 @@
 
 from collections.abc import Callable
 
-from .chat import PROMPT
+from .chat import PROMPT, strip_answers
 from .context import Context
 from .tools.cmd import executeCmd
 from .tools.sop import store
@@ -46,10 +46,11 @@ class Agent:
             "SOP2Prompt": (
                 self.SOP2Prompt,
                 "把你总结出的解题方法整段替换进后续每一份 prompt 的「沉淀的 SOP」段。"
-                "它不产出命令、当回合也没有回执，但从此每道题都会看到它。"
+                "它只沉淀、不产出命令、当回合也没有回执，但从此每道题都会看到它。"
                 "产出的sop应该是任务无关的，而是对方法的总结，且要尽量简短。"
-                "所以调用它的那一回合必须把答案一起写上。",
-                (("sop", "SOP 全文"), ("answer", "答案本身")),
+                "它不影响你作答：答案照旧写在工具块外的 `<answer>` 里，"
+                "两者写在同一条回复里即可。",
+                (("sop", "SOP 全文"),),
             ),
         }
 
@@ -154,19 +155,25 @@ class Agent:
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
-    def SOP2Prompt(self, sop: str, answer: str) -> str:
+    def SOP2Prompt(self, sop: str) -> str:
         """把 `sop` **整段替换**进「沉淀的 SOP」段。返回 `""` —— **它不产出命令**。
 
         存储规则（上限、截断留痕、内容没变就静默）在 `tools/sop.py`，这里只管
         **把新值记在自己身上**。方法名同时是注册表里的工具名。
 
-        ⚠️ **`answer` 不进 `_sop`、这里一个字节都不用**（第 35 步）：它**不是**本方法的数据，
-        而是"同轮作答"那条通道的载体 —— 读者是 `chat.answer_of`，它从**回复原文**的参数里
-        直接读 `<tool_param name="answer">`。写成必需参数是为了让"沉淀必须同轮作答"成为
-        **协议层的事实**（`tool_call` 的"声明参数一个不少且非空"照旧兜住），而不是靠 prompt
-        里的一句请求。代价：LLM 只沉淀不写答案 ⇒ 整次调用作废（SOP 也不落库），那一回合重问。
+        ⚠️ **只有一个参数、只做流程沉淀**（第 36 步的用户口径）：**答案不归这个工具管**。
+        同轮作答交给 `chat.answer_of`（答案写在工具块外的 `<answer>` 里）⇒ 沉淀与作答分家：
+        这一回合算不算作答由那个谓词判，两条都走不通就落到判据 ⑥ 重问 —— 而沉淀**已经落库**了，
+        丢的只是那一回合。（第 35 步曾把 `answer` 做成它的**必需**参数，那是条死路：声明即必需
+        的参数没法同时又是一个可选的作答通道，而 LLM 把答案写成块外的 `<answer>` 时那个版本会
+        **静默丢掉沉淀**、连重问都没有。）
+
+        ⚠️ **`sop` 里成对的 `<answer>…</answer>` 一定在入库前挖掉**（`chat.strip_answers`）：
+        那段正文的用处正是讲"答案怎么写"，不挖掉就会带着这对串进后续每一份 prompt。
+        **挖掉、不是作废整次调用** —— 沉淀是这个工具的全部价值，不该因为它多写一句示例就整段丢。
         """
-        self._sop = store(self._sop, sop)
+        sop, stripped = strip_answers(sop)
+        self._sop = store(self._sop, sop, stripped=stripped)
         return ""
 
     @property

@@ -344,7 +344,8 @@ def _take_task(
 def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) -> None:
     """服任务中：把手上的答案**原样**交上去。**这里从来不移动**（挪出任务点周围一格任务即作废）。
 
-    答案 = `answer_of(llmResp)`：`<answer>…</answer>` 里包着就取块内容，否则**原文即答案**。
+    答案 = `answer_of(llmResp)`：先挖掉工具块、认块外 `<answer>…</answer>` 里的内容，
+    再不然**原文即答案**（工具块**内**的 `<answer>` 一律不算 —— 那多半是 SOP 正文里的示例）。
     **空答案不发**（可能被判成"字段缺失"，那是红线里的"指令非法"）。
 
     **每回合都交**：判题器按"提交过的通过率最高的答案"算分，反复提交是预期用法；
