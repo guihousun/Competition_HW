@@ -87,7 +87,7 @@ ROUTER_ANSWER_INSTRUCTION = ("请按题目要求作答，只输出答案本身�
 
 def llm_router_enabled() -> bool:
     """True only when the operator explicitly enables the shared router."""
-    return world_agent_enabled() or os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+    return task_agent_enabled() or world_agent_enabled() or os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
 
 
 def task_agent_enabled() -> bool:
@@ -95,7 +95,8 @@ def task_agent_enabled() -> bool:
 
 
 def world_agent_enabled() -> bool:
-    return task_agent_enabled() or os.environ.get(WORLD_AGENT_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+    value = os.environ.get(WORLD_AGENT_ENV)
+    return task_agent_enabled() if value is None else value.strip().lower() in ("1", "on", "true", "yes")
 
 
 def _treasure_notes(payload, turn):
@@ -316,7 +317,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if plan is not None and plan.kind in ("prompt", "cmd"):
             _route_task_channel(payload, planner_state, plan, response, turn=turn)
         _emit_router_channel(payload, planner_state, response, turn=turn)
-        if world_agent_enabled() and planner_state.team_agent is not None:
+        if (world_agent_enabled() or task_agent_enabled()) and planner_state.team_agent is not None:
             planner_state.team_agent.acknowledge(payload, planner_state, response)
     elif plan is not None:
         if plan.kind == "prompt":

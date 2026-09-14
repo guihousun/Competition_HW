@@ -13,7 +13,7 @@ import json
 from typing import Any
 from .task_context import PROMPT_LIMIT
 
-SCHEMA = 'competition-task-agent/1'
+SCHEMA = 'competition-task-agent/2'
 MAX_PROMPTS = 8  # engineering limits for one task, not official LLM allowances
 MAX_COMMANDS = 8
 MAX_CONTEXT = 12000
@@ -46,6 +46,7 @@ class TaskAgent:
         self.prompts = 0
         self.commands = 0
         self.answers = 0
+        self.inspections = 0
         self.stage = 'idle'
         self.proposal = None
         self.pending = None
@@ -105,12 +106,15 @@ class TaskAgent:
             '你负责一个比赛沙盒任务。依据题目格式要求和真实工具回执逐步求解。\n'
             '工具命令由平台沙盒执行；不生成角色移动/攻击等官方动作。\n'
             '只返回一个JSON对象：{"request_id":"' + action['token'] + '","plan":{'
-            '"kind":"run|answer|need_info|give_up","command":"仅run需要",'
+            '"kind":"run|answer|inspect|need_info|give_up","command":"仅run需要",'
             '"answer":"仅answer需要，原样答案字符串","reason":"简短依据",'
             '"evidence_ids":["已提供的证据ID"]}}。不要输出隐藏思维链。\n'
             'run用于读取文档、查询或计算；查看退出码和结果后决定下一步。'
             'answer必须符合题目指定格式，不能默认改成键值对。'
             '遇到答案错误应检查数据和格式，修正后重新提交；不能声称已经通过判题。\n'
+            'inspect是读取已收到原文的本地记忆操作，不运行Shell。使用字段source_id（索引中的ID）、'
+            'offset（从0起）、length（1..2000），可选query为要查找的原文片段。'
+            '长资料先定位关键字，再读取附近内容；摘要截断不等于原文缺失。\n'
         )
         events = json.dumps([{**item, 'text': item['text'][:200],
                               'truncated': item['truncated'] or len(item['text']) > 200}
@@ -126,7 +130,7 @@ class TaskAgent:
     def acknowledge(self, token: str, *, round_no: int):
         """Call only after this proposal actually enters the emitted response."""
         action = self.proposal
-        if not action or action['token'] != token or self.pending or round_no <= self.last_emit_round:
+        if not action or action['kind'] == 'inspect' or action['token'] != token or self.pending or round_no <= self.last_emit_round:
             return False
         self.proposal = None
         self.last_emit_round = round_no
@@ -169,10 +173,10 @@ class TaskAgent:
             if envelope['request_id'] != token:
                 raise ValueError('wrong model correlation')
             plan = envelope['plan']
-            if not isinstance(plan, dict) or set(plan) - {'kind', 'command', 'answer', 'reason', 'evidence_ids'}:
+            if not isinstance(plan, dict) or set(plan) - {'kind', 'command', 'answer', 'reason', 'evidence_ids', 'source_id', 'offset', 'length', 'query'}:
                 raise ValueError('unsupported model fields')
             plan_kind = plan.get('kind')
-            if plan_kind not in ('run', 'answer', 'need_info', 'give_up'):
+            if plan_kind not in ('run', 'answer', 'inspect', 'need_info', 'give_up'):
                 raise ValueError('unsupported plan kind')
             ids = plan.get('evidence_ids')
             if not isinstance(ids, list) or not ids or len(ids) > 32 or any(
@@ -181,6 +185,22 @@ class TaskAgent:
             reason = plan.get('reason', '')
             if not isinstance(reason, str) or len(reason) > 400:
                 raise ValueError('invalid plan reason')
+            if plan_kind == 'inspect':
+                source_id = plan.get('source_id')
+                offset, length, query = plan.get('offset', 0), plan.get('length', 2000), plan.get('query', '')
+                if (source_id not in pending['evidence_ids'] or not isinstance(source_id, str)
+                        or type(offset) is not int or offset < 0 or type(length) is not int
+                        or not 1 <= length <= 2000 or not isinstance(query, str) or len(query) > 200
+                        or plan.get('command') or plan.get('answer')):
+                    raise ValueError('invalid memory operation')
+                if self.inspections >= 8:
+                    self.finish('memory_operation_limit', stopped=True)
+                    return False
+                self._propose('inspect', json.dumps({'source_id': source_id, 'offset': offset,
+                                                   'length': length, 'query': query}, ensure_ascii=False), reason)
+                return True
+            if any(key in plan for key in ('source_id', 'offset', 'length', 'query')):
+                raise ValueError('memory fields on a non-memory operation')
             if plan_kind in ('need_info', 'give_up'):
                 self.finish(reason or plan_kind, stopped=True)
                 return True
@@ -231,6 +251,17 @@ class TaskAgent:
         self.stage = 'stopped' if stopped else 'ended'
         self.stop_reason = str(reason)[:400]
 
+    def inspected(self, token, result, *, round_no):
+        """A bounded local read completed; it consumes no official channel."""
+        if (not self.proposal or self.proposal['kind'] != 'inspect'
+                or self.proposal['token'] != token or self.pending or self.inspections >= 8):
+            return False
+        self.inspections += 1
+        self.proposal = None
+        self.stage = 'ready'
+        self._event('memory_result', json.dumps(result, ensure_ascii=False), round_no)
+        return True
+
     def dump(self):
         return {'schema': SCHEMA, **deepcopy(self.__dict__)}
 
@@ -242,9 +273,11 @@ class TaskAgent:
                 raise ValueError('unknown schema or fields')
             if len(json.dumps(raw, ensure_ascii=False, allow_nan=False)) > 120000:
                 raise ValueError('oversized state')
-            for key in ('sequence', 'prompts', 'commands', 'answers', 'last_feedback_round', 'last_emit_round'):
+            for key in ('sequence', 'prompts', 'commands', 'answers', 'inspections', 'last_feedback_round', 'last_emit_round'):
                 if type(raw[key]) is not int or not 0 <= raw[key] <= 100000:
                     raise ValueError('invalid counter')
+            if raw['inspections'] > 8:
+                raise ValueError('invalid inspection count')
             for key, cap in (('generation', 160), ('source', 160), ('stop_reason', 400)):
                 if not isinstance(raw[key], str) or len(raw[key]) > cap:
                     raise ValueError('invalid identity')
@@ -271,7 +304,7 @@ class TaskAgent:
                 value = raw[key]
                 if value is None:
                     continue
-                if (not isinstance(value, dict) or value.get('kind') not in ('prompt', 'cmd', 'submit')
+                if (not isinstance(value, dict) or value.get('kind') not in ('prompt', 'cmd', 'submit', 'inspect')
                         or not isinstance(value.get('payload'), str) or len(value['payload']) > 24000
                         or not isinstance(value.get('token'), str) or len(value['token']) != 24
                         or not isinstance(value.get('purpose'), str) or len(value['purpose']) > 400
@@ -283,6 +316,14 @@ class TaskAgent:
                     ids = value.get('evidence_ids')
                     if not isinstance(ids, list) or len(ids) > 32 or any(not isinstance(v, str) or not v or len(v) > 160 for v in ids):
                         raise ValueError('invalid evidence index')
+                if value['kind'] == 'inspect':
+                    operation = _json_unique(value['payload'])
+                    if (not isinstance(operation, dict) or set(operation) != {'source_id', 'offset', 'length', 'query'}
+                            or not isinstance(operation['source_id'], str) or not 1 <= len(operation['source_id']) <= 160
+                            or type(operation['offset']) is not int or operation['offset'] < 0
+                            or type(operation['length']) is not int or not 1 <= operation['length'] <= 2000
+                            or not isinstance(operation['query'], str) or len(operation['query']) > 200):
+                        raise ValueError('invalid stored memory operation')
                 if key == 'pending':
                     fields.add('sent_round')
                     if type(value.get('sent_round')) is not int or value['sent_round'] != raw['last_emit_round'] or value['kind'] == 'submit':

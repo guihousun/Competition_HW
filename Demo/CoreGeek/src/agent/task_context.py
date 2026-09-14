@@ -468,6 +468,10 @@ class ContextEnvelope:
 
     def _truncation_footer(self) -> str:
         if self.trace_refs:
+            memory_refs = [str(r['name']) for r in self.trace_refs
+                           if r.get('kind') == 'agent_memory' and r.get('name')]
+            if memory_refs:
+                return "摘要已截断；完整已收原文在本地记忆中，可用inspect检索：" + ", ".join(memory_refs)
             refs = []
             for trace in self.trace_refs[:TRACE_LIMIT]:
                 name = trace.get("event_id") or trace.get("run_id") or trace.get("name")
