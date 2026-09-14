@@ -3,6 +3,9 @@
 《未来战争》参赛策略与本地端到端调试平台，Python 3.11+，无第三方依赖。
 基于 `Demo/CoreGeek.tar.gz` 示例扩展，当前策略覆盖防御生存子集。
 
+公司电脑固定使用 `codex/sgh`：`git switch codex/sgh` 后运行 `git pull --ff-only origin codex/sgh`。
+每次记录 `git rev-parse HEAD`；内部工作分支由 Codex 管理。构建后的上传包位于 `dist/<SHA>/CoreGeek.tar.gz`，详见下方参赛说明。
+
 ## 启动
 
 ```powershell

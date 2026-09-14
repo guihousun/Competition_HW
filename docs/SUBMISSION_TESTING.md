@@ -7,10 +7,12 @@
 被拒绝的字节我们没有看到，所以格式/上传/平台存储都仍是**未定位项**；下面把**包侧变量**降到最少：
 真实 gzip+tar、单一 `CoreGeek/` 根目录、`CoreGeek/main3.py` 入口、清单+旁车哈希。
 
-## 1. 下载候选包，或检出候选源码
+## 1. 固定使用 codex/sgh 获取测试版本
 
-公司电脑可以直接从 [Issue #10](https://github.com/guihousun/Competition_HW/issues/10)
-中的候选 Release 链接下载 **Assets → CoreGeek.tar.gz** 和 `CoreGeek.tar.gz.sha256`。
+`codex/sgh` 是公司电脑固定拉取的测试集成分支。Codex 审核并完成相关本地检查后，将可测试变更合入此分支；内部工作分支和 PR 由 Codex 管理，不要求参赛者反复切换。
+分支上的新版本仍可能等待内网验证，合入不等于官方 PASS。每次测试只需记录实际 SHA。
+
+也可以直接从 Issue 中最新交付评论的 Release 链接下载 **Assets → CoreGeek.tar.gz** 和 `CoreGeek.tar.gz.sha256`。
 对照该评论中的 SHA256 后，将压缩包原样上传平台。不要上传 GitHub 自动生成的
 `Source code (zip)` / `Source code (tar.gz)`；那是整个仓库快照，不是参赛打包工具的产物。
 
@@ -30,20 +32,18 @@ git rev-parse HEAD
 git status --short
 ```
 
-`aa6eb3e79c96e15e40ebc0c58817dd031ac6c933` 是**历史已发布基线**（示例日志那一版不是它）；
-后续每次回测都要从 Issue/PR 里给出的**候选提交 SHA**检出，**不要**用“最新/main/昨天那版”：
+以后更新始终使用同一组命令：
 
 ```powershell
-git fetch origin
-$candidate = "替换为 Issue 中给出的完整40位候选SHA"
-git checkout --detach $candidate
+git switch codex/sgh
+git pull --ff-only origin codex/sgh
 git rev-parse HEAD
 git status --short
 ```
 
-候选 SHA 由 Codex 在 PR/Issue 中公布；`git status --short` 应无输出。
-本候选分支为 `codex/issue-10-diagnostics`，以 `codex/sgh` 为合并目标；
-它修复打包和诊断能力，不包含尚未发布的策略学习实验。
+`git status --short` 应无输出；若公司电脑有自己的修改，先保留它们，不要用强制重置覆盖。
+把 `git rev-parse HEAD` 的实际结果附到 Issue。只有复现特定旧版本时才另行检出指定 SHA。
+源码 SHA 与 Release 包清单 SHA 需要分别核对：旧下载包不会随 `git pull` 自动更新。
 
 ## 2. 本地先自检（Windows / PowerShell）
 
@@ -74,8 +74,9 @@ POST 应返回含 `roleCommandMap` 的 JSON；浏览器打开 http://localhost:8
 ## 3. 构建并验证可上传的包（Codex 主导，本地可复核）
 
 ```powershell
-python tools/build_submission.py build --repo . --ref HEAD --output CoreGeek.tar.gz
-python tools/build_submission.py verify --archive CoreGeek.tar.gz --sidecar CoreGeek.tar.gz.sha256
+$sha = git rev-parse HEAD
+python tools/build_submission.py build --repo . --ref $sha --output "dist/$sha/CoreGeek.tar.gz"
+python tools/build_submission.py verify --archive "dist/$sha/CoreGeek.tar.gz" --sidecar "dist/$sha/CoreGeek.tar.gz.sha256"
 ```
 
 - `verify` 会检查：真实 gzip（含 **CRC/尾部完整性**，截断包会被拒绝）、“ZIP 改名 `.tar.gz`”、
@@ -83,13 +84,13 @@ python tools/build_submission.py verify --archive CoreGeek.tar.gz --sidecar Core
   重复成员/清单项、路径穿越与特殊成员、旁车哈希。
 - 文件名 `CoreGeek.tar.gz`、根目录 `CoreGeek/`、入口 `main3.py` 是与**官方示例包一致**的兼容性选择，
   **不是**已证实的平台要求；包的精确身份以清单和哈希为准。
-- 产物写到 `--output` 指定位置，旁边生成 `.sha256`；已有文件会被拒绝覆盖。
+- 可上传文件在 `dist/<本次SHA>/CoreGeek.tar.gz`，旁边是 `.sha256`；重复构建同一目录会拒绝覆盖，可复用已验证产物或另选新输出目录。
   工具仅包含指定提交的内容，不包含未提交改动。发布评论另行提供实际测试记录。
 
 解包后本地再跑一次（验证的是**将要上传的字节**，不是工作树）：
 
 ```powershell
-python tools/build_submission.py extract --archive CoreGeek.tar.gz --dest .\unpacked
+python tools/build_submission.py extract --archive "dist/$sha/CoreGeek.tar.gz" --dest .\unpacked
 cd .\unpacked\CoreGeek
 python main3.py 8080
 ```
@@ -130,9 +131,9 @@ LOGS: <identity 行 + 失败回合附近的 response 行；不要贴令牌/内�
 ## 5. 流程闭环（2 分钟轮询 → 设计 → 实现 → 审核 → 回测）
 
 `issue_poller`（每 2 分钟）→ 原 Codex 线程 → `workflow/state.py` 摘要与 Spec →
-DSH 专员或 Codex 实现 → Codex 审核 → 候选 PR、上传包与精确 SHA → 用户同 SHA 内网回测。
+DSH 专员或 Codex 实现 → Codex 审核及本地验证 → 合入固定 `codex/sgh` 测试分支、生成上传包与精确 SHA → 用户同 SHA 内网回测。
 **证据不完整不阻塞**：可并行做有界只读分析、独立可复现修复、身份/可观测性与候选包工具；
-需要 owner 的只有平台侧动作与真实回测。行为合并仍以**同 SHA 内网 PASS** 为准。
+需要 owner 的只有平台侧动作与真实回测。`codex/sgh` 允许等待内网验证的已审核候选；宣称官方通过或晋升正式稳定版本，仍须取得对应被测 SHA 的真实内网 PASS。
 
 ## 6. 边界（不要过度声明）
 

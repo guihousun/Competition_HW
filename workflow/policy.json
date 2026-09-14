@@ -23,7 +23,14 @@
   "allow_issue_replies": true,
   "allow_candidate_prs": true,
   "allow_reviewed_merge": true,
-  "merge_policy": "Codex review and required checks on current head; official behavior changes additionally require owner intranet PASS naming that exact head SHA",
+  "merge_policy": "Integrate reviewed candidates with required local checks into codex/sgh for company testing; integration is not intranet PASS. Official validation or stable release promotion requires real owner intranet evidence for the tested SHA.",
+  "delivery": {
+    "user_test_branch": "codex/sgh",
+    "internal_branches_managed_by": "codex",
+    "integrate_after": "Codex review and required local checks; never unfinished DSH changes",
+    "submission_path": "dist/<SHA>/CoreGeek.tar.gz",
+    "record_tested_sha": true
+  },
   "runtime_directory": ".workflow",
   "notes": "Worktree/prompt restrictions are not an OS sandbox. No automatic raw log upload. No model fallback.",
   "specialists": [
@@ -37,7 +44,7 @@
   "incomplete_evidence_policy": {
     "missing_sha_blocks": [
       "definitive_test_version_attribution",
-      "behavior_merge_without_same_sha_intranet_pass"
+      "official_validation_or_stable_promotion_without_same_sha_intranet_pass"
     ],
     "continue_without_sha": [
       "read_only_diagnosis",
