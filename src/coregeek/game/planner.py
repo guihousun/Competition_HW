@@ -26,13 +26,23 @@ from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
 from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
-from .world import Turn, Weapon
+from .world import Robot, Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
 #: 三座武器的**种类，下标与 `grid.weapon_sites()` 的落点一一对应**：后列火箭、前排两角加特林/电磁炮。
 #: 按射程配（后列离机器人最远）；数量上限 = 角色数 = 3（§4.5.1 原文"每种 ≤3"与"全局 ≤3"矛盾，取保守的）。
 WEAPONS_BY_SITE = ("rocket", "gatling", "railgun")
+
+#: 三种武器的 **L1 伤害**（任务书 §4.5.1 表格 + §4.5.4 补充说明；升级线没做 ⇒ 恒为 L1）：
+#: 加特林每颗子弹 10（沿弹道命中**最近**一台即消耗）；电磁狙击炮能量 10（沿弹道穿透、逐台扣减）；
+#: 火箭中心 20、落点周围 8 格溅射 10（导弹指哪打哪、多枚叠加——L1 只有一枚）。
+#: ⚠️ 机器人四种血量 40/60/500/800（§4.7.2）全都 ≥ 20 ⇒ L1 对满血机器人**不可能过量**，
+#: 伤害的差别只在机器人被打残之后。
+GATLING_SHOT = 10
+RAILGUN_ENERGY = 10
+ROCKET_CENTER = 20
+ROCKET_SPLASH = 10
 
 #: 建一座武器的金币（三种同价）。
 WEAPON_COST = 25
@@ -61,6 +71,8 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     sites: set[Pos] = set()
     #: 已被认领的**武器**（夜里一人只能操一座）
     taken: set[Pos] = set()
+    #: 本回合各机器人**已被许掉的伤害**（多炮协防的账：先开火的记上，后开的按剩余血挑目标）
+    assigned: dict[Pos, int] = {}
     budget = turn.gold
     slots = _slots(turn)
     #: 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
@@ -84,7 +96,7 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
                 continue
 
         if not turn.is_day:
-            _defend(role, turn, cmds, claimed, taken)  # 夜里还没被钉住的角色回炮位
+            _defend(role, turn, cmds, claimed, taken, assigned)  # 夜里还没被钉住的角色回炮位
             continue
 
         if isinstance(role, Pioneer):
@@ -498,7 +510,12 @@ def _pick_ore(
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────
 def _defend(
-    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos], taken: set[Pos]
+    role: BaseRole,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    taken: set[Pos],
+    assigned: dict[Pos, int],
 ) -> None:
     """夜里：走到最近的一座**还没被本回合别人认领**的武器旁，贴着就开火。所有角色都走这里。
 
@@ -517,7 +534,7 @@ def _defend(
             continue
         if role.pos.dist(weapon.pos) <= 1:
             taken.add(weapon.pos)
-            _fire(role, weapon, turn, cmds)  # 打不了就不发，但人已经站住了
+            _fire(role, weapon, turn, cmds, assigned)  # 打不了就不发，但人已经站住了
             return
         step = step_toward(role.pos, weapon.pos, turn.map.blocked | claimed, turn.map.size)
         if step is None or not _emit(cmds, role, actions.Move, step):
@@ -527,28 +544,106 @@ def _defend(
         return
 
 
-def _fire(role: BaseRole, weapon: Weapon, turn: Turn, cmds: dict[str, dict[str, Any]]) -> bool:
-    """贴着炮了：能打就打一发，返回发没发出去。**打不了就什么都不发**（空指令合法且不计异常）。
+def _fire(
+    role: BaseRole,
+    weapon: Weapon,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    assigned: dict[Pos, int],
+) -> bool:
+    """贴着炮了：按**最大伤害落点**开火（第 27 步的方针：**打死所有机器人**，
+    撤掉了第 10 步的"补刀残血"）。打不了就什么都不发（空指令合法且不计异常）。
 
     - **冷却中不打**（`cooldown > 0`）。⚠️ **字段缺失时不算冷却**（解析成 -1）—— 否则整晚一炮不开；
-    - **射程内没有机器人不打**（打空处是执行失败，白耗一次冷却，还看不出是"没敌人"还是"瞄错了"）；
-    - 目标 = **射程内血最少的**（补刀优先，距离作平手判定）。
-      ⚠️ **必须先按射程过滤、再取 min** —— 顺序写反就成了"拿全场最弱、但打不着的那个当目标"。
-    - **不按"本回合已被别人瞄过"去重**：用户选的就是补刀 = 集火。
+    - **火箭**（`_rocket_site`）：落点任选（导弹指哪打哪）⇒ 中心 20 + 溅射 10 **全场**算账，
+      取总分最高的落点 —— 落进机器人簇里、落在最肥的那台身上；
+    - **加特林 / 电磁**（`_beam_site`）：弹道武器 ⇒ 落点打在某台**机器人身上**（终点必在
+      弹道上 ⇒ 必命中；途中更近的先接住，那也是命中）。取**有效伤害**最高的，并列打近的；
+    - **`assigned` 记账**：先开火的炮把估计伤害记在机器人身上，后开的按**剩余血**算 ——
+      不挤同一个将死的目标。⚠️ 估计有偏差（加特林实际命中的是弹道上**最近**的那台，
+      可能不是终点那台），代价只是次优、不会非法；
     - 机器人 `health` 缺失（-1）时按"还活着"算：打空处只是执行失败，而"一律不打"会让整晚一炮不开。
     """
     if weapon.cooldown > 0:
         return False
-    reach = [
-        r
-        for r in turn.robots
-        if r.health != 0 and weapon.pos.dist(r.pos) <= weapon.attack_range
-    ]
-    if not reach:
-        return False
-    target = min(reach, key=lambda r: (r.health, weapon.pos.dist(r.pos)))
+    if weapon.kind == "rocket":
+        target = _rocket_site(weapon, turn.robots, turn.map.size, assigned)
+        if target is None:
+            return False
+        _book_rocket(target, turn.robots, assigned)
+    else:
+        victim = _beam_site(weapon, turn.robots, assigned)
+        if victim is None:
+            return False
+        target = victim.pos
+        shot = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
+        assigned[victim.pos] = assigned.get(victim.pos, 0) + shot
     # **key 是武器 id**，操控角色在报文的 `controllerId` 里
-    return _emit(cmds, role, actions.Attack, str(role.id), target.pos, key=str(weapon.id))
+    return _emit(cmds, role, actions.Attack, str(role.id), target, key=str(weapon.id))
+
+
+def _beam_site(
+    weapon: Weapon, robots: tuple[Robot, ...], assigned: Mapping[Pos, int]
+) -> Robot | None:
+    """加特林/电磁的目标：**有效伤害**最高的那台（并列打近的、再并列按坐标序）。
+
+    "有效伤害" = min(伤害, 剩余血)：L1 的 10 点对满血机器人（≥40 血）等额，差别只在
+    将死者 —— 别把整发浪费在已被打得差不多的人身上（`assigned` 是本回合先开火的炮
+    记的账）。够得着的目标全是将死的（有效 ≤ 0）⇒ 不打。
+    """
+    shot = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
+
+    def effective(r: Robot) -> int:
+        return min(shot, max(0, r.health - assigned.get(r.pos, 0)))
+
+    reach = [r for r in robots if r.health != 0 and weapon.pos.dist(r.pos) <= weapon.attack_range]
+    best = max(reach, key=lambda r: (effective(r), -weapon.pos.dist(r.pos), r.pos), default=None)
+    return best if best is not None and effective(best) > 0 else None
+
+
+def _rocket_site(
+    weapon: Weapon,
+    robots: tuple[Robot, ...],
+    size: tuple[int, int],
+    assigned: Mapping[Pos, int],
+) -> Pos | None:
+    """火箭的**最大伤害落点**：中心 20 + 周围 8 格溅射 10，取总分最高的格子。
+
+    候选 = 机器人占的格与其 8 邻格（别的格子一分伤害都摸不到），且**落点**须在射程内
+    —— 溅射可以够到**射程之外**的机器人（射程只管落点）。评分 = Σ min(伤害, 剩余血)
+    （`assigned` = 本回合先开火的炮记的账），并列取坐标序最小（可复现）。
+    越界格不进候选（越界落点 = 指令非法，红线不让赌）。
+    """
+    alive = [r for r in robots if r.health != 0]
+    width, height = size
+    cands = {
+        cell
+        for r in alive
+        for cell in (r.pos, *(Pos(r.pos.x + d.x, r.pos.y + d.y) for d in STEPS))
+        if 0 <= cell.x < width and 0 <= cell.y < height
+    }
+
+    def score(cell: Pos) -> int:
+        return sum(
+            min(
+                ROCKET_CENTER if cell == r.pos else ROCKET_SPLASH if cell.dist(r.pos) == 1 else 0,
+                max(0, r.health - assigned.get(r.pos, 0)),
+            )
+            for r in alive
+        )
+
+    in_range = [cell for cell in cands if weapon.pos.dist(cell) <= weapon.attack_range]
+    return min(in_range, key=lambda cell: (-score(cell), cell), default=None)
+
+
+def _book_rocket(target: Pos, robots: tuple[Robot, ...], assigned: dict[Pos, int]) -> None:
+    """把火箭这一发的**估计伤害**记到账上（同回合后开的炮按剩余血挑目标）。"""
+    for r in robots:
+        if r.health == 0:
+            continue
+        hit = ROCKET_CENTER if r.pos == target else ROCKET_SPLASH if r.pos.dist(target) == 1 else 0
+        if hit:
+            assigned[r.pos] = assigned.get(r.pos, 0) + hit
 
 
 # ── 发指令 ──────────────────────────────────────────────────────────

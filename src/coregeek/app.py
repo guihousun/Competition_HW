@@ -17,7 +17,6 @@ import logging
 from typing import Any
 
 from .game import planner
-from .game.map import LEGEND as map_legend
 from .game.world import Turn
 from .protocol import actions, model
 from .utils import _clip
@@ -28,11 +27,14 @@ LOGGER = logging.getLogger(__name__)
 #: 空指令集是**合法**的，且不计异常。任何失败路径都退到这里。
 EMPTY_BODY = b'{"roleCommandMap":{},"prompt":"","executeCmd":""}'
 
-#: 组装出来的 `prompt` 的上限 —— **比 `LOG_TEXT_MAX` 大是有理由的**：prompt 不是 payload 里的
-#: 一个字段，而是「模板（591 字，含工具清单）+ 这道题累积的会话往来」拼出来的，
-#: 光是模板就已经超过 400 —— 按 400 截，看见的永远只有开头的「Agent定位」几行。
-LOG_PROMPT_MAX = 1000
+#: 提问行的上限 —— 用户两度放宽后（1000 → 100000），这一行也**基本不截**了
+#: （与 `LOG_TEXT_MAX`=40000 同一条策略：观察优先）。截断留痕照旧（`_clip`），
+#: 真嫌大就改这一个常量。
+LOG_PROMPT_MAX = 100000
 
+
+prompt = ""
+executeCmd = ""
 
 def run(port: int) -> None:
     LOGGER.info("listening on 0.0.0.0:%d", port)
@@ -42,6 +44,8 @@ def run(port: int) -> None:
 def handle(raw: bytes) -> bytes:
     """处理一个回合。**不抛异常**，返回的字节永远是合法响应。"""
     try:
+        prompt = ""
+        executeCmd = ""
         payload = json.loads(raw.decode("utf-8")) if raw else {}
         turn = model.load(payload)
         if turn is None:
@@ -78,31 +82,28 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     判题器报错 / 有回执 / 提问三条各自只在有内容时出现（干净的白天回合本函数打 2 条）。
     ⚠️ `handle` 在它之前还多打**一条 banner**（`######第N回合######`），
     那是唯一一条**不受本函数管辖**的日志 ⇒ 一次 `handle` 的总记录数各多 1。
-    三块内容（摘要 / 图例 / 地图）**拼成一条记录**：`logging` 的时间戳前缀只加在
-    **第一条物理行**上，拆开之后地图那几十行就没有时间戳了。
+    摘要那一条以 `\n` 开头 —— 那个空行是留给 `logging` 时间戳前缀的。
 
-    ⚠️ **stdout 是会被写满的**（"行"是**物理行**，样例 `request.txt`，每格都从"没沉淀过 SOP"起算；
-    第 25 步起 prompt 里多一段「# 对话记录」标题 ⇒ 带提问的回合比第 23 步多 2~3 行）：
+    ⚠️ **第 26 步起局面 = 摘要单条**（用户手改：**图例与整张地图退出日志**），且两个上限
+    一并放宽（用户拍板"观察优先"）：`LOG_TEXT_MAX` 400 → **40000**、`LOG_PROMPT_MAX`
+    1000 → **100000** ⇒ **日志基本不截**：
 
-    | 局面 | 行 | 字节 | 写满 64KB |
-    |---|---|---|---|
-    | 干净回合（没回执、没任务） | 44 | 2555 | 约 26 回合 |
-    | 有回执（判题器报错 + 回执名单） | 46 | 2637 | 约 24 回合 |
-    | 任务在身、还没答过（**提问那一轮**） | 71 | 6189 | 约 9 回合 |
-    | 任务在身 + 顶格回复与沙盒结果（回灌那一轮） | 73 | 8628 | 约 7 回合 |
-    | **最坏：上面全部 + 一回合 SOP 调用顶格** | 75 | **8944** | 约 **7 回合** |
+    | 局面 | 行 | 字节 |
+    |---|---|---|
+    | 干净回合（没回执、没任务） | 7 | 506 |
+    | 有回执（判题器报错 + 回执名单） | 9 | 599 |
+    | 提问那一轮（题目 400 字） | 34 | 4140 |
+    | **顶格：题目/回复/沙盒各 40000 字（`LOG_TEXT_MAX`）** | 39 | **≈605000** |
 
-    Windows 管道缓冲 64KB ⇒ 判题器若**不读** stdout，最坏约 **7 回合**后这里就阻塞到响应超时。
-    **未实测**（本地没法验证判题器读不读），真出事只能把 `LOG_TEXT_MAX` / `LOG_PROMPT_MAX`
-    调小或者少打一块。**数字与 `CLAUDE.md` 硬约束 5、以及用例
-    `test_the_worst_round_stays_under_the_budget`（上限 9300）三处必须一致**。
+    ⇒ 若判题器**不读** stdout，顶格回合**一回合**就写满 64KB 管道 ⇒ 阻塞到响应超时
+    （红线第一条）—— **已知并接受**（第 26 步用户拍板；"最坏 ≤ 9300"的旧守卫随策略
+    一起撤销）。剩下的守卫是结构性的：干净回合必须仍然小（摘要有自己的上界），
+    见用例 `test_a_clean_round_stays_small`。**数字与 `CLAUDE.md` 硬约束 5 对齐，别凭记忆写。**
 
-    **截断必须留痕**：`_clip(text, limit)` 超长时打 `…（共 N 字）`，两个上限的单位都是**字**
-    不是字节。`prompt` 打全文、回执列全部实体 —— "发了什么"和"判题器认不认"都要看得见。
+    **截断留痕照旧**：`_clip(text, limit)` 超长时打 `…（共 N 字）`，单位是**字**不是字节
+    （提问行只在大到 100000 字时才碰得到）。
     """
-    LOGGER.info(
-        "%s\n%s\n%s", turn.summary(), map_legend, turn.map.render()
-    )
+    LOGGER.info("%s", turn.summary())
     LOGGER.info("【动作】：%s", actions.describe(cmds, clip=_clip))
 
     # ── 判题器的回执 ────────────────────────────────────────────────
@@ -126,9 +127,9 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
 
     # ── 任务线 ──────────────────────────────────────────────────────
     if prompt:
-        # `prompt` **打全文**：它是拼出来的（模板 + 这道题的会话往来），工具清单长什么样、
+        # `prompt` **打出来**：它是拼出来的（模板 + 这道题的会话往来），工具清单长什么样、
         # SOP 那个槽填进去没有、会话接没接上，**实盘上只有这一行能回答**。
-        # 上限单独一个 `LOG_PROMPT_MAX`（比 `LOG_TEXT_MAX` 大：光模板就 591 字）。
+        # 上限 `LOG_PROMPT_MAX`（第 26 步放宽到 100000，基本不截）。
         # 题目原文与 LLM 回复那两样由 `planner.task_channel` 自己打（见那边的说明）。
         LOGGER.info("【本轮提问】：%s", _clip(prompt, LOG_PROMPT_MAX))
 

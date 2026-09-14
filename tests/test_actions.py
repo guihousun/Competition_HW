@@ -22,6 +22,7 @@ from coregeek.agent.chat import PROMPT, answer_of, looks_like_tool, tool_of  # n
 from coregeek.agent.context import Context  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import LOG_PROMPT_MAX, _clip, handle  # noqa: E402
+from coregeek.utils import LOG_TEXT_MAX  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
     STEPS,
@@ -285,43 +286,38 @@ class HandleTest(unittest.TestCase):
         body = self._handle(b"{oops")
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
-    def test_every_round_logs_the_map_then_the_actions(self):
-        """每回合的复盘日志：**先局面、再动作、再判题器的回执**（顺序是重点）。
+    def test_every_round_logs_the_summary_then_the_actions(self):
+        """每回合的复盘日志：**先局面（摘要）、再动作、再判题器的回执**（顺序是重点）。
 
         判题器是黑盒、只给我们这一个视角，出事故时得能看见当时的局面 ——
         只看见一条 `move` 是没法回答"为什么走了这一格"的。
         `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那几条。
 
-        **局面那三块拼成一条记录**（摘要 / 图例 / 地图）：`logging` 的时间戳前缀
-        只加在第一条物理行上 —— 拆成三条的话那几十行地图就没有时间戳了，
-        而按时间翻日志时正是这些行要定位。
+        **第 26 步起局面 = 摘要单条**（用户手改：**图例与整张地图退出日志** —— 用 ~2.7KB/回合
+        的观察面换 64KB 管道风险，拍板接受）。这里顺带钉住"地图确实不在了"。
 
         ⚠️ **样例自带一条假错误与两条假未通过**（`request.txt` 的 `errors` 是
         `[{"errorCode": 2, "description": "xxx"}]`、`lastRoundRoleActionResults` 里
         10010/10030 是 false）。`CLAUDE.md` 已声明**别把样例的这两个值当真实信号读**，
         但**这里的记录条数是真实断言**：回执那两条各自"有事才吭声"，
-        所以样例这种局面是 **5** 条（**banner** + 局面 + 动作 + 报错 + 回执），
+        所以样例这种局面是 **5** 条（**banner** + 摘要 + 动作 + 报错 + 回执），
         而一个干净回合只有 3 条（下面那条用例）。
         """
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(SAMPLE.read_bytes())
-        #: 五条：**banner** + 局面 + 动作 + 报错 + 回执。banner 是 `handle` 打的、
+        #: 五条：**banner** + 摘要 + 动作 + 报错 + 回执。banner 是 `handle` 打的、
         #: 不归 `_log` 管 —— 数记录数时最容易漏的就是它。
         banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
         self.assertEqual(banner, f"{'#' * 35}第85回合{'#' * 35}")
         lines = head.splitlines()
-        #: 摘要 4 块（各占一行）+ 图例 3 行 + 地图 34 行（上下各一行标尺），
-        #: 再加摘要前面留给 `logging` 前缀的那个空行
-        self.assertEqual(len(lines), 1 + 4 + 3 + 34)
+        #: 摘要 4 块（各占一行）+ 摘要头前面留给 `logging` 前缀的那个空行
+        self.assertEqual(len(lines), 1 + 4)
         #: 回合号在最前 —— 时间戳就加在这一行上（摘要头一块前面那个空行不带时间戳）
         self.assertEqual(lines[1].split("｜")[0].rstrip(), "【回合】 85（夜里）")
         self.assertIn("【金币】 20", lines[1])
-        #: 图例在摘要与地图之间（紧挨着图，看着图例看图）
-        legend_at = next(i for i, line in enumerate(lines) if line.startswith("【图例】："))
-        self.assertEqual(legend_at, 5, "\n".join(lines[:10]))
-        #: 图紧跟在图例（3 行）与一行上标尺之后 —— 标尺宽度 = 网格宽度
-        self.assertEqual(lines[legend_at + 3], "—" * 43, lines[legend_at + 3])
-        self.assertTrue(lines[legend_at + 4].startswith("│"), lines[legend_at + 4])
+        #: 地图与图例第 26 步退出日志：图例那行、以及地图那圈 `—` 边框都不该再出现
+        self.assertNotIn("【图例】：", head)
+        self.assertNotIn("—" * 43, head, "地图的标尺行不该再出现")
         self.assertEqual(
             acts, "【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
         )
@@ -335,7 +331,7 @@ class HandleTest(unittest.TestCase):
             " | 10020=True | 10030=False | 10040=True",
         )
 
-    def test_a_clean_round_logs_only_the_map_and_the_actions(self):
+    def test_a_clean_round_logs_only_the_summary_and_the_actions(self):
         """回执那两条**有事才吭声** —— 干净回合一条都不该多打（日志字节是有预算的）。
 
         与上面那条用例合起来才钉得住"触发条件"：只测样例的话，全打也算过。
@@ -439,13 +435,13 @@ class HandleTest(unittest.TestCase):
         self.assertIn("【本轮任务】：无", task)
         self.assertIn("【上一轮模型回复】：答案", task)
 
-    def test_a_long_answer_in_the_actions_line_is_clipped(self):
-        """`submitAnswer` 的 `taskAnswer` 是**外侧（LLM）给的自由文本**，日志这一行必须有界。
+    def test_a_long_answer_in_the_actions_line_passes_through(self):
+        """`submitAnswer` 的 `taskAnswer` 是**外侧（LLM）给的自由文本**：第 26 步起
+        **基本不截**（`LOG_TEXT_MAX`=40000，用户拍板"观察优先"）—— 9000 字的答案
+        **原文全量**进日志，只有过了 40000 的上限才截、且留痕。
 
-        通用摊开之后它一定会被打出来（这正是要它），而它没有内在长度上限：
-        一串 9000 字的答案会把「动作：」那一行撑到 27KB，而这条日志**每回合都打**
-        （硬约束 5）。这条**走真链路**（`answer_of` → `submitAnswer` → `describe`）——
-        上面那条用例证明"`describe` 会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
+        这条**走真链路**（`answer_of` → `submitAnswer` → `describe`）—— 上面那条用例
+        证明"`describe` 会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -460,22 +456,27 @@ class HandleTest(unittest.TestCase):
         ]
         self.assertEqual(len(acts), 1, acts)
         self.assertIn("taskAnswer=", acts[0], "答案得打出来，不然这条用例什么也没钉住")
-        self.assertIn("（共 9000 字）", acts[0])
-        self.assertLess(len(acts[0]), 600, "截断之后这一行必须是有界的")
+        self.assertIn("答" * 9000, acts[0], "9000 字 < 40000 ⇒ 原文全量进日志")
+        self.assertNotIn("（共", acts[0])
 
-    def test_the_prompt_line_has_its_own_bigger_limit(self):
-        """`prompt` 的上限是 `LOG_PROMPT_MAX`，**比 `LOG_TEXT_MAX` 大** —— 而它大得有理由。
+        #: 过了上限才截，而且必须留痕
+        raw["llmResp"] = "<answer>" + "答" * (LOG_TEXT_MAX + 10) + "</answer>"
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        acts = [
+            r.getMessage() for r in caught.records if r.getMessage().startswith("【动作】：")
+        ]
+        self.assertIn(f"（共 {LOG_TEXT_MAX + 10} 字）", acts[0])
+        self.assertNotIn("答" * (LOG_TEXT_MAX + 1), acts[0], "截掉的是尾巴，不是头")
 
-        理由是一件可测的事实（下面第一句断言）：**光模板就长过 `LOG_TEXT_MAX`**。
-        按 400 截的话，这一行永远只看得见开头的「Agent定位」几行 ——
-        "SOP 那个槽填进去没有""工具清单长什么样""题目在不在里面"全看不见，
-        而打它的唯一目的就是这三件事。
+    def test_the_prompt_line_keeps_its_own_limit(self):
+        """提问行单独截在 `LOG_PROMPT_MAX`（1000）—— 第 26 步起它是**唯一**还截断的一行
+        （`LOG_TEXT_MAX` 已放宽到 40000）。
+
+        prompt 是拼出来的（模板 591 字 + 会话往来），会话部分在任务行里已有全文，
+        这一行只需要看得见模板头与「沉淀的 SOP」那个槽 ⇒ 就近取 1000。
+        超长必须留痕、且有界。
         """
-        AGENT.reset()
-        prompt = AGENT.chat("题")
-        self.assertGreater(len(prompt), LOG_TEXT_MAX, "模板比 LOG_TEXT_MAX 还短 ⇒ 这两个常量该合并")
-        self.assertGreater(LOG_PROMPT_MAX, LOG_TEXT_MAX)
-
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
         raw["errors"] = []
@@ -727,12 +728,14 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(len(sandbox), 1, sandbox)
         self.assertIn("hello", sandbox[0])
 
-    def test_a_long_sandbox_result_marks_the_truncation(self):
-        """沙盒输出可能到 64KB（接口文档 L33），日志这边必须截断**并留痕**。
+    def test_a_long_sandbox_result_only_clips_at_the_cap(self):
+        """沙盒输出可能到 64KB（接口文档 L33）：第 26 步起**基本不截**
+        （`LOG_TEXT_MAX`=40000，用户拍板"观察优先"）—— 9000 字原文全量进日志，
+        只有过了 40000 的上限才截，且截断必须留痕。
 
-        回灌给 LLM 的是全文，这里才是截断 —— 两个下游要的东西不同：一个要正确性、
-        一个要人眼看得下。`…（共 N 字）` 那句把"命令没输出"与"命令吐了 64KB、
-        你只看得到头"分开，后者正是最该立刻看见的事故形态。
+        `…（共 N 字）` 那句把"命令没输出"与"命令吐了 6 万字、你只看得到头"分开，
+        后者正是最该立刻看见的事故形态。回灌给 LLM 的仍是全文 —— 两个下游
+        要的东西不同：一个要正确性，一个要人眼看得下。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -747,51 +750,43 @@ class HandleTest(unittest.TestCase):
             r.getMessage() for r in caught.records if r.getMessage().startswith(SANDBOX)
         ]
         self.assertEqual(len(sandbox), 1)
-        self.assertIn(f"（共 {len(raw['lastCmdResult'])} 字）", sandbox[0])
-        self.assertLess(len(sandbox[0]), 1000, "截断之后这行必须是有界的")
+        self.assertIn("y" * 9000, sandbox[0], "9000 字 < 40000 ⇒ 原文全量进日志")
+        self.assertNotIn("（共", sandbox[0])
 
-    def test_the_worst_round_stays_under_the_budget(self):
-        """**硬约束 5 的直接守卫**：最坏的一回合，日志总量不得超预算。
+        #: 过了上限才截，而且必须留痕
+        raw["lastCmdResult"] = "y" * (LOG_TEXT_MAX + 10)
+        with self.assertLogs(level="INFO") as caught:
+            self._handle(json.dumps(raw).encode("utf-8"))
+        sandbox = [
+            r.getMessage() for r in caught.records if r.getMessage().startswith(SANDBOX)
+        ]
+        self.assertIn(f"（共 {LOG_TEXT_MAX + 10} 字）", sandbox[0])
+        self.assertNotIn("y" * (LOG_TEXT_MAX + 1), sandbox[0], "截掉的是尾巴，不是头")
 
-        原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。顶格的东西全撞在一起
-        就是最坏局面：题目、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，中文 1 字 = 3 字节）、
-        被回灌那一轮**顶到 `LOG_PROMPT_MAX` 的 prompt**、**再加**一条 SOP 更新行
-        —— **实测 8944 字节 / 75 行**（第 25 步重测：prompt 里多了「# 对话记录」标题，
-        带提问的回合 +2~3 行；第 23 步是 8861 / 71 行）。
-        **同一个局面在本用例上再跑一遍就是这些数**，改日志格式后必须重测（`app._log` 的
-        docstring 与 `CLAUDE.md` 硬约束 5 里有同一张表）。
-        上限取 9300 而不是 8944：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
-        或者又加进来一个顶格的大字段 —— 那至少是 1200 字节），不是几个标签的字节抖动
-        —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节）。
-        ⚠️ 余量只剩 **356** 字节 ⇒ 这个上限已经**不再是"抓大漏"的网**，只是"别再多打一整块"的
-        兜底；真嫌紧就调 `LOG_TEXT_MAX` / `LOG_PROMPT_MAX`。
+    def test_a_clean_round_stays_small(self):
+        """**硬约束 5 的结构性守卫**（第 26 步起）：字段基本不截（`LOG_TEXT_MAX`=40000）之后，
+        "最坏回合 ≤ 9300"随策略一起撤销 —— 顶格大字段一回合 ≈ **363KB**，用户拍板接受
+        （赌判题器读 stdout；若不读，**一回合**就写满 64KB 管道 ⇒ 阻塞到响应超时 = 红线第一条）。
+
+        还守得住的只有**结构部分**：没有大字段的回合必须仍然小 —— 摘要有自己的上界
+        （`SUMMARY_MAX_ITEMS`）、动作行一回合最多几个角色、banner 一行。实测干净回合
+        **506 字节**（`app._log` 的 docstring 与 `CLAUDE.md` 硬约束 5 里有同一张表）；
+        这个守卫抓的是"又加进来一个每回合都打的大块"—— 那类结构性膨胀一来就是几百字节
+        起步（地图就是 ~2.7KB/回合，第 26 步刚被砍掉）。
 
         ⚠️ **`assertLogs` 必须收 root（不写 logger 名）**：SOP 那条走
         `coregeek.agent.tools.sop`、任务行与沙盒行走 `coregeek.game.planner`，
-        只盯 `coregeek.app` 的话它们**绕开本守卫** —— 守卫看着在岗，实际漏掉好几块。
+        只盯 `coregeek.app` 的话它们**绕开本守卫**。
         第 18 步（SOP）与第 23 步（任务线搬家）正是这么发现的。
-
-        数字与 `app._log` 的 docstring、`CLAUDE.md` 硬约束 5 三处一致。
         """
-        AGENT.reset()  # 单实例状态：不清的话"同内容不再打日志"会让 SOP 行整条消失
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {}
-        raw["phaseTask"] = "题" * LOG_TEXT_MAX
-        #: LLM 这一格放**一次 SOP 调用**（而不是一串裸中文）：这样三个字段照样顶格，
-        #: 而 SOP 那条日志也一起被算进来 —— 它是本守卫唯一容易漏掉的一条。
-        raw["llmResp"] = (
-            "<tool><tool_name>SOP2Prompt</tool_name><tool_param>"
-            + "答" * LOG_TEXT_MAX
-            + "</tool_param></tool>"
-        )
-        raw["lastCmdResult"] = "出" * LOG_TEXT_MAX
         with self.assertLogs(level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        self.assertIn(sop.__name__, {r.name for r in caught.records}, "SOP 行没被收进来 ⇒ 守卫有盲区")
         total = sum(len(r.getMessage().encode("utf-8")) for r in caught.records)
-        self.assertLess(total, 9300, f"最坏回合 {total} 字节，超了硬约束 5 的预算")
+        self.assertLess(total, 1500, f"干净回合 {total} 字节 —— 结构部分不该这么大")
 
 
 class ParseTest(unittest.TestCase):
@@ -2360,7 +2355,8 @@ class StandingOnTheTargetTest(unittest.TestCase):
 
 
 class NightWeaponTest(unittest.TestCase):
-    """夜里：**所有角色**（含开拓者）回炮位、开火打**射程内血最少**的机器人。
+    """夜里：**所有角色**（含开拓者）回炮位、开火打**最大伤害落点**（第 27 步起，
+    用户改的方针：目标是**打死所有机器人**，不再是"补刀残血"）。
 
     `attack` **仅黑夜**可用、`build`/`collect` 仅工人（任务书 §4.4），所以夜里
     除了 `move` 就只该有 `attack`。
@@ -2405,11 +2401,12 @@ class NightWeaponTest(unittest.TestCase):
         reach: int | None = None,
         cooldown: int = 0,
         round_no: int | None = None,
+        kind: str = "gatling",
     ) -> Turn:
-        """一名工人**已经贴着**那座加特林（切比雪夫 1）—— 开火与否只看目标与冷却。"""
+        """一名工人**已经贴着**那座炮（切比雪夫 1）—— 开火与否只看目标与冷却。"""
         gun = Weapon(
             id=self.GUN,
-            kind="gatling",
+            kind=kind,
             pos=self.NEAR,
             attack_range=self.REACH if reach is None else reach,
             cooldown=cooldown,
@@ -2469,25 +2466,89 @@ class NightWeaponTest(unittest.TestCase):
         self.assertEqual(cmd["controllerId"], "1", "操控者是角色 id（字符串）")
         self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 27}])
 
-    def test_picks_the_weakest_not_the_nearest(self):
-        """用户选定：**射程内血最少的**（补刀优先）—— 不是最近的那只。"""
+    def test_beams_tie_break_to_the_nearest(self):
+        """第 27 步改方针：**不再挑血最少的**。L1 的 10 点伤害对满血机器人（≥40 血）
+        等额 ⇒ 并列时打**近**的；"补刀优先"（第 10 步的旧方针）就此作废。"""
         cmd = self._only_cmd(
             self._manned(Robot(Pos(12, 26), 900), Robot(Pos(14, 26), 40))
         )
-        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}], "该打 40 血那只，哪怕它更远")
+        self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 26}], "伤害等额 ⇒ 打近的，不看血量")
 
-    def test_distance_breaks_the_health_tie(self):
-        """血量并列时打**近**的（同血量下先打完近的，远处的下一回合再补）。"""
+    def test_a_dying_robot_is_not_worth_a_full_shot(self):
+        """**有效伤害** = min(伤害, 剩余血)：将死者吸收不完一整发 ⇒ 打吸收得完的那台
+        —— 目标是打死**所有**机器人，把整发浪费在只剩 4 血的人身上就是少打死一个。"""
+        cmd = self._only_cmd(
+            self._manned(Robot(Pos(12, 26), 4), Robot(Pos(14, 26), 900))
+        )
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}], "4 血的只值 4 点，900 血的值满 10 点")
+
+    def test_distance_breaks_the_effective_tie(self):
+        """有效伤害并列时打**近**的（同伤害下先打完近的，远处的下一回合再补）。"""
         cmd = self._only_cmd(
             self._manned(Robot(Pos(15, 25), 40), Robot(Pos(13, 26), 40))
         )
         self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 26}])
 
-    def test_ignores_the_weakest_when_it_is_out_of_range(self):
-        """**先按射程过滤、再取血最少的** —— 顺序写反就成了"拿全场最弱、但打不着的当目标"。"""
+    def test_ignores_the_best_cell_when_it_is_out_of_range(self):
+        """**先按射程过滤、再算最大伤害** —— 顺序写反就成了"拿最优落点、但够不着的当目标"。"""
         weak = Robot(Pos(12, 31), 10)  # 距 (12,25) 是 6，够不着
         cmd = self._only_cmd(self._manned(weak, Robot(Pos(13, 25), 900)))
         self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 25}], "10 血那只够不着，只能打 900 的")
+
+    def test_the_rocket_lands_for_maximum_splash(self):
+        """**火箭的最大伤害落点**（第 27 步的核心变化）：中心 20 + 周围 8 格溅射 10
+        （任务书 §4.5.4）⇒ 落进机器人**簇**里、落在最肥的那台身上 —— 而不是挑残血的。
+
+        簇：(13,25) 40 血与 (14,25) 8 血相邻。落 (13,25) = 20+8=28 分；落 (14,25) =
+        8+10=18 分 ⇒ 落在 40 血那台身上（旧方针会去打 8 血的残血）。"""
+        cmd = self._only_cmd(
+            self._manned(
+                Robot(Pos(13, 25), 40),
+                Robot(Pos(14, 25), 8),
+                kind="rocket",
+            )
+        )
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 25}], "落点该吃满中心+溅射")
+
+    def test_the_rocket_prefers_a_cluster_over_a_lone_target(self):
+        """同样的射程里，**簇**（两台相邻 = 30 分）优先于孤零零一台（20 分）——
+        机器人成群来，溅射才是火箭的本职。"""
+        cmd = self._only_cmd(
+            self._manned(
+                Robot(Pos(13, 25), 40),
+                Robot(Pos(13, 26), 40),
+                Robot(Pos(15, 25), 800),  # 孤台、血厚也一样：20 分 < 30 分
+                kind="rocket",
+            )
+        )
+        self.assertIn(
+            cmd["targetPos"][0],
+            [{"x": 13, "y": 25}, {"x": 13, "y": 26}, {"x": 14, "y": 25}],
+            "该落进簇里（中心+溅射都吃得到），不打孤台",
+        )
+
+    def test_two_guns_do_not_pile_onto_a_dying_robot(self):
+        """**同回合记账**：先开火的炮把伤害记在账上（`assigned`），后开的按**剩余血**挑
+        —— 两座炮不挤同一个将死的目标（第 27 步撤掉了"集火补刀"，方针是打死**所有**）。
+
+        两座加特林（射程 4）都能打到 (11,24) 12 血与 (9,26) 40 血；1 号炮先开（打近的
+        (11,24)，记 10 点）⇒ 2 号炮看到它只剩 2 血（有效 2 < 10）⇒ 转打 40 血那只。
+        没有记账的话两座都会去打 12 血的"残血"。"""
+        guns = self._guns(Pos(12, 25), Pos(9, 22))
+        turn = self._turn(
+            Worker(1, Pos(12, 24)),  # 贴着 1 号炮
+            Worker(2, Pos(9, 23)),  # 贴着 2 号炮
+            weapons=guns,
+            robots=(Robot(Pos(11, 24), 12), Robot(Pos(9, 26), 40)),
+        )
+        cmds = plan(turn)
+        self.assertEqual(cmds[str(self.GUN)]["targetPos"], [{"x": 11, "y": 24}], "1 号先开，打近的")
+        self.assertEqual(
+            cmds[str(self.GUN + 1)]["targetPos"],
+            [{"x": 9, "y": 26}],
+            "2 号按剩余血算：(11,24) 只剩 2 血，转打 40 血的",
+        )
 
     def test_range_boundary_is_chebyshev(self):
         """射程用**切比雪夫**（任务书 L230），边界取 `<=`：对角 4 格打得到，5 格打不到。
