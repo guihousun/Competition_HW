@@ -393,7 +393,10 @@ def state_for(payload: dict[str, Any]) -> PlannerState:
     with _LOCK:
         state = _STATES.get(key)
         if state is None:
-            state = PlannerState()
+            # A process first seeing a mid-match request has no evidence about
+            # ordinary calls already made today. Do not grant a fresh allowance.
+            first_round = type(payload.get("roundNo")) is int and payload["roundNo"] == 1
+            state = PlannerState() if first_round else PlannerState.load(None)
             _STATES[key] = state
             while len(_STATES) > MAX_TRACKED_MATCHES:
                 _STATES.pop(next(iter(_STATES)))

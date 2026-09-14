@@ -453,13 +453,13 @@ class StatelessPathTests(unittest.TestCase):
     def test_memory_survives_between_rounds(self):
         from agent import planner
         planner.reset()
-        first = observation(round_no=10)
+        first = observation(round_no=1)
         state = planner.state_for(first)
-        state.note_round(10)
-        state.note_submission("q", None, 10, in_task=False)
+        state.note_round(1)
+        state.note_submission("q", None, 1, in_task=False)
         self.assertEqual(state.judge.llm_used_today, 1)
         # The next round is a fresh payload object, as an HTTP request would be.
-        second = observation(round_no=11)
+        second = observation(round_no=2)
         self.assertIs(planner.state_for(second), state,
                       "跨回合必须复用同一条 planner 记忆")
         self.assertEqual(planner.state_for(second).judge.llm_used_today, 1)

@@ -173,6 +173,18 @@ class RouterBoundaryTests(unittest.TestCase):
             self.assertEqual(state.judge.llm_used_today, 3)
             self.assertTrue(state.degraded)
 
+    def test_process_without_midmatch_memory_does_not_grant_fresh_allowance(self):
+        payload = observation(round_no=140)
+        planner.reset(payload)
+        self.addCleanup(planner.reset, payload)
+        state = planner.state_for(payload)
+        state.note_round(140)
+        self.assertEqual(state.judge.llm_used_today, 3)
+        self.assertFalse(state.judge.llm_available(False))
+        self.assertTrue(state.judge.llm_available(True), "valid task exemption is a separate gate")
+        state.note_round(261)
+        self.assertEqual(state.judge.llm_used_today, 0)
+
     def test_original_task_whitespace_changes_generation_without_normalising_text(self):
         from agent.task_context import public_task_confirmed
         original = "  Return exactly one JSON string.\n"
