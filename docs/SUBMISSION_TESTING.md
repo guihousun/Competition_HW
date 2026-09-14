@@ -21,7 +21,7 @@ Get-Content .\CoreGeek.tar.gz.sha256
 根目录压缩包是 Codex 已构建并验证的交付物，不需要用户再去找 Release 或自行打包。
 包内源码 SHA 见 `CoreGeek.manifest.json` 的 `commit`。平台报告旧包 `failure` 后，参赛包已改用官方原版 `main3.py` 和 `pyproject.toml` 的原始字节，直接加载同级 `src/agent/server.py`；不再转入 `Demo/CoreGeek/` 子目录。
 参赛 HTTP 服务不加载网页、录制器或模拟器；根路径 GET 仅返回就绪 JSON。源码仓库的 `python main.py` 仍提供本地可视化。
-这项兼容性收敛尚需平台复测，不能据此声称已经定位或修复 `failure`。未完成的 DSH 防御优化不混入参赛包。
+这项兼容性收敛尚需平台复测，不能据此声称已经定位或修复 `failure`。当前根目录参赛包已整合通过 Codex 审核的 DSH 防御朝向/出口策略，与本地模拟器共用实现，见 [防御审核记录](../reports/issue-12-defence/CODEX_REVIEW.md)。
 运行环境按用户提供的官方截图核对为 **Python 3.11.10**，本次已在 Windows/Ubuntu 的该精确版本检查实际包入口。接口正文已重新与 Issue #7 对照一致；验证覆盖与局限见 [本次打包验证](../reports/platform-package-20260914/VALIDATION.md)。
 上传的是 `.tar.gz` 文件，不是同目录的校验/清单文件，也不是 `Demo/` 中的原始示例。
 

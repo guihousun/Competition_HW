@@ -1,5 +1,5 @@
 {
-  "commit": "00a08bd7eb0e571f01c0420b2459d42e370519cd",
+  "commit": "07f24a2cdcfef01b571b781ac308a59b78edfa95",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 77628,
+      "bytes": 85003,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "317bc93d0679d974b8f7e8f33b1ffd1c4a338a4ea71cf01a80fd89704bd6a4b3",
+      "sha256": "8bc7188bbf8cc732a5d382d24c232790dd7abe08306079e6f2c7c5bbed40518c",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -90,6 +90,12 @@
       "path": "CoreGeek/src/agent/deepseek_client.py",
       "sha256": "e90005b5fe887c2f005ad9e1a9e6bb44fe2e3573a415805290f6a3c4fe2a286e",
       "source": "Demo/CoreGeek/src/agent/deepseek_client.py"
+    },
+    {
+      "bytes": 19474,
+      "path": "CoreGeek/src/agent/defense_layout.py",
+      "sha256": "dd3f4b8ae4d9ecf68954d07826ba71849081999db866b15aa2f0b1ea72c0b412",
+      "source": "Demo/CoreGeek/src/agent/defense_layout.py"
     },
     {
       "bytes": 25907,
@@ -231,5 +237,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "24a73616cef54625411e82f23e237197f260f84f2fb4cc63145bfab7144dcf8e"
+  "source_digest": "7bc9846a265bccfee09601f630dea4e8bd185b15e70de2f11daf20373ced57ad"
 }

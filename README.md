@@ -28,6 +28,7 @@ Linux 判题入口：`bash run.sh <port>`。官方请求使用根路径 POST，�
 
 ## 文档
 
+- [防御优化、模拟器同步与参赛包审核](reports/issue-12-defence/CODEX_REVIEW.md)
 - [详细日志、策略回放与模拟器对齐](docs/TRACE_LOGGING.md)（自动采集、窗口导出、观测样本、差异核对）
 - [参赛包下载、启动与内网测试使用说明](docs/SUBMISSION_TESTING.md)（直接上传、版本校验、反馈闭环）
 - [Issue #10 上传失败诊断与证据边界](docs/ISSUE_10_DIAGNOSIS.md)

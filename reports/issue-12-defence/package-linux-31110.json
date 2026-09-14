@@ -1,0 +1,59 @@
+{
+  "scope": "Local Ubuntu / Python 3.11.10; not official platform validation",
+  "archive_sha256": "74580c13fc5fe78b8a50d82bcfd8ed2f09093a1e6117a8fcbec9cc58bfab04ba",
+  "package_source_commit": "07f24a2cdcfef01b571b781ac308a59b78edfa95",
+  "results": [
+    {
+      "case": "official_bash_entry",
+      "entry": "run.sh",
+      "get_status": 200,
+      "startup_ms": 980.83,
+      "post_status": 200,
+      "response_ms": 19.9,
+      "command_count": 3,
+      "result": "PASS",
+      "trace_unavailable": false,
+      "identity_present": true,
+      "diagnostics_present": true
+    },
+    {
+      "case": "sample_main3_entry",
+      "entry": "main3.py",
+      "get_status": 200,
+      "startup_ms": 861.59,
+      "post_status": 200,
+      "response_ms": 14.57,
+      "command_count": 3,
+      "result": "PASS",
+      "trace_unavailable": false,
+      "identity_present": true,
+      "diagnostics_present": true
+    },
+    {
+      "case": "unwritable_trace_directory",
+      "entry": "run.sh",
+      "get_status": 200,
+      "startup_ms": 860.08,
+      "post_status": 200,
+      "response_ms": 14.92,
+      "command_count": 3,
+      "result": "PASS",
+      "trace_unavailable": true,
+      "identity_present": true,
+      "diagnostics_present": true
+    },
+    {
+      "case": "trace_disabled",
+      "entry": "run.sh",
+      "get_status": 200,
+      "startup_ms": 910.57,
+      "post_status": 200,
+      "response_ms": 13.92,
+      "command_count": 3,
+      "result": "PASS",
+      "trace_unavailable": false,
+      "identity_present": true,
+      "diagnostics_present": true
+    }
+  ]
+}
