@@ -137,6 +137,9 @@ class Turn(NamedTuple):
         """白天吗？`build` / `remove` **仅白天**可用。
 
         `within <= 70` 为白天。`round_no` 缺失 ⇒ 129 ⇒ 判成夜晚 ⇒ 不建造。
+        ⚠️ `remove` 那半边是**项目口径**、不是任务书原文：§4.4 给 `remove` 那一格
+        **没写昼夜**（`build` 写了"仅白天"）。取保守方向（夜里不发）—— 少拆一次不碰红线，
+        反过来若实际禁夜就是指令非法。见 `planner._dig` 的闸门。
         """
         return self.within <= DAY_ROUNDS
 

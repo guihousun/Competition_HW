@@ -45,6 +45,9 @@ from coregeek.game.map import (  # noqa: E402
     _char,
 )
 from coregeek.game.planner import (  # noqa: E402
+    HOLE_MIN_LEFT,
+    HOLE_MIN_SAVING,
+    HOLE_PATCH_LEFT,
     TIME_MARGIN,
     WALL,
     WEAPONS_BY_SITE,
@@ -52,7 +55,14 @@ from coregeek.game.planner import (  # noqa: E402
     task_channel,
 )
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import DAY_ROUNDS, Error, Robot, Turn, Weapon  # noqa: E402
+from coregeek.game.world import (  # noqa: E402
+    DAY_ROUNDS,
+    ROUNDS_PER_DAY,
+    Error,
+    Robot,
+    Turn,
+    Weapon,
+)
 from coregeek.protocol import actions, model  # noqa: E402
 from coregeek.utils import LOG_TEXT_MAX  # noqa: E402
 
@@ -102,6 +112,20 @@ def _blocks(summary: str) -> list[str]:
     return [line for line in summary.splitlines() if line]
 
 
+def _day2(within: int) -> int:
+    """第 2 天白天第 `within` 回合的**回合号**（第 1 步就是 131，白天共 70 回合）。"""
+    return ROUNDS_PER_DAY + within
+
+
+def _left(round_no: int) -> int:
+    """`round_no` 那一回合**白天还剩**几个回合（夜里会算出负数，本文件的用例只在白天用它）。
+
+    与 `Turn.day_rounds_left` 同一个式子，独立写一遍：用例要卡"还剩正好 N 回合"的边界时，
+    自己推一遍回合号极易差一（第一版就把 31 写成了 30），索性由它来定位。
+    """
+    return DAY_ROUNDS - ((round_no - 1) % ROUNDS_PER_DAY + 1) + 1
+
+
 class MoveWireTest(unittest.TestCase):
     def test_wire_shape_is_the_flat_record(self):
         self.assertEqual(
@@ -124,6 +148,17 @@ class MoveWireTest(unittest.TestCase):
             actions.Build("worker", "gatling", Pos(9, 23)).to_wire(),
             {"action": "build", "name": "gatling", "targetPos": [{"x": 9, "y": 23}]},
         )
+
+    def test_remove_wire_shape(self):
+        """逐字对照 `docs/response.txt` 里那条实证报文 —— **里面没有 `name`**。
+
+        全项目只有三个动作有实证报文（`move` / `build` / `remove`），而这三个里
+        `remove` 与 `build` 长得最像（都是"拆/砌一座建筑"、都要指定 `targetPos`）⇒
+        照 `build` 抄一份、多打一个 `name`，就是赌一次"指令非法"。所以专门钉住"没有它"。
+        """
+        wire = actions.Remove("worker", Pos(29, 7)).to_wire()
+        self.assertEqual(wire, {"action": "remove", "targetPos": [{"x": 29, "y": 7}]})
+        self.assertNotIn("name", wire, "`build` 才有 `name`；多一个字段就是指令非法")
 
     def test_collect_wire_shape(self):
         """`collect` 的 `targetPos` 是**矿的坐标**，形状与 `move` 同（只有 action + targetPos）。
@@ -246,6 +281,16 @@ class GateTest(unittest.TestCase):
         """
         with self.assertRaises(PermissionError):
             actions.Collect("pioneer", Pos(4, 24))
+
+    def test_pioneer_cannot_remove(self):
+        """`remove` 同样只在工人那一行（任务书 §4.4 最右列）。
+
+        与 `build` / `collect` 同一类"本地全绿"bug：报文格式挑不出毛病，只有判题器会说"不"。
+        拆墙**会**由工人发，所以这条不是假想 —— 一旦闸门写成"全部角色"，开拓者某天顺手
+        拆一格就是一次异常，而红线只有 5 次。
+        """
+        with self.assertRaises(PermissionError):
+            actions.Remove("pioneer", Pos(13, 23))
 
     def test_typo_role_type_is_rejected(self):
         """角色类型拼错 → 造不出动作，而不是发一条判题器认不出的指令。"""
@@ -452,7 +497,7 @@ class HandleTest(unittest.TestCase):
         messages = json.loads(ask[len(ASK):])  # 短题 ⇒ 没到上限，整串都在这行里
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
         self.assertEqual(messages[1]["content"], "短题目")
-        for piece in ("# Agent定位", "# 可使用的工具", "## SOP2Prompt", "# 沉淀的 SOP"):
+        for piece in ("# Agent定位", "# 可使用的工具", "## ToolName: SOP2Prompt", "# 沉淀的 SOP"):
             self.assertIn(piece, messages[0]["content"])
 
         #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**（省 LLM 额度）
@@ -2168,6 +2213,493 @@ class DayEndGateTest(unittest.TestCase):
         self.assertEqual(cmds["1"]["action"], "build", f"环没砌完 ⇒ 继续砌：{cmds}")
         self.assertEqual(
             plan(self._turn(round_no=late, at=at))["1"]["action"], "move", "环砌满 ⇒ 同一格是往回赶"
+        )
+
+
+class DigTest(unittest.TestCase):
+    """**绕路 ≥5 就拆墙**（第 34 步的触发 (b)，用户口径"开洞能省下的步数 ≥5"）。
+
+    `_dig` 钩在 `_step` 里 —— 那是所有差事（采矿 / 卖矿 / 顺路卖 / 升级 / 砌墙 / 回炮位）
+    走路的**公共出口**，所以一处就覆盖了全部调用点，调用点一个字没改。本类的夹具一律走
+    **真差事**（环砌满 ⇒ 只剩盒子外那唯一一座矿可去），不直接调私有函数。
+
+    ⚠️ **夹具必须给价目表**：砌满环之后工人靠 `_mine_spare_ore` 才动得起来，而它按**收购价**
+    挑矿 —— 价目为空 ⇒ 挑不出来 ⇒ 工人原地待命 ⇒ 压根走不到 `_step`。第一版夹具就是这么写的，
+    `plan` 返回空指令，用例成了空转（怎么改都不会挂）。
+    ⚠️ **每一种"不命中"都要有独立的一条**：这道门有六重（第 1 天 / 夜里 / 环没砌满 / 没石头 /
+    窗口关了 / 不贴墙），其中任何一重写漏了，症状都是"墙被反复拆、石头白花"，
+    而单帧断言看不出来 —— 长期串跑的那条在 `HoleLifecycleTest`。
+    """
+
+    BASE = Pos(10, 24)
+    SIZE = (41, 32)
+    #: 三座炮先摆好，否则金币会先把工人抽去建武器（那是 `BuildWeaponTest` 的事）
+    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
+    #: 价目表（见类 docstring：没有它工人不动）
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+
+    def _turn(
+        self,
+        *,
+        round_no: int = ROUNDS_PER_DAY + 1,
+        at: Pos = Pos(12, 24),
+        mine: Pos | None = Pos(18, 24),
+        stone: int = 1,
+        missing: tuple[Pos, ...] = (),
+    ) -> Turn:
+        """默认：**第 2 天白天第一回合**、环砌满、工人贴着东面那 3 格墙、手里 1 块石头。
+
+        `round_no = ROUNDS_PER_DAY + 1` ⇒ 当天第 1 回合 ⇒ 白天还剩 70 回合（窗口全开）。
+        """
+        layers = [
+            {c: WALL for c in wall_cells(self.BASE, 41) if c not in missing},
+            {self.BASE: "station"},
+            {at: "worker"},
+        ]
+        if mine is not None:
+            layers.append({mine: "stone"})
+        worker = Worker(1, at, {"stone": stone} if stone else {})
+        return Turn(
+            round_no=round_no,
+            map=Map(self.SIZE, _terrain(self.WEAPONS, *layers)),
+            roles=(worker,),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=self.PRICES,
+        )
+
+    @staticmethod
+    def _hole(turn: Turn) -> Pos | None:
+        """这一回合拆的那一格；**别的动作一律算"没拆"**（`None`）。"""
+        cmd = plan(turn).get("1") or {}
+        if cmd.get("action") != "remove":
+            return None
+        point = cmd["targetPos"][0]
+        return Pos(point["x"], point["y"])
+
+    def test_walking_all_the_way_around_is_worth_a_hole(self):
+        """贴着墙、去盒子外那唯一一座矿：**绕 16 步 vs 开洞后 5 步** ⇒ 拆。
+
+        省下 11 步，远超门槛 `HOLE_MIN_SAVING`。墙砌满之后盒子只有背面那 2 格门，
+        要往东就得先往西绕出去 —— 这正是"多绕 5 格以上"的典型场面。
+        """
+        at, goal, hole = Pos(12, 24), Pos(18, 24), Pos(13, 23)
+        turn = self._turn()
+        blocked = turn.map.blocked
+        now = steps_between(at, goal, blocked, self.SIZE)
+        after = steps_between(at, goal, blocked - {hole}, self.SIZE)
+        self.assertEqual((now, after), (16, 5), "先钉住两边的真实步数（不是切比雪夫那 6 步）")
+        self.assertGreaterEqual(now - after, HOLE_MIN_SAVING, "省的步数必须过门槛")
+        self.assertEqual(self._hole(turn), hole)
+
+    def test_the_hole_is_the_cell_that_leaves_the_fewest_steps(self):
+        """逐格试算 ⇒ 挑**开洞后步数最少**的那一格（用户口径），并列时取坐标序（可复现）。
+
+        夹具特意挑成三个候选**收益各不相同**（6 / 7 / 8 步）的样子 —— 三格一样的话，
+        这条用例就分不出"挑最省的"与"挑第一个"。
+        """
+        at, mine = Pos(11, 25), Pos(18, 26)
+        turn = self._turn(at=at, mine=mine)
+        blocked = turn.map.blocked
+        table = {
+            c: steps_between(at, mine, blocked - {c}, self.SIZE)
+            for c in wall_cells(self.BASE, 41)
+            if at.dist(c) <= 1
+        }
+        self.assertEqual(sorted(table.values()), [6, 7, 8], "夹具必须让候选格彼此不同")
+        self.assertEqual(self._hole(turn), min(table, key=lambda c: (table[c], c)))
+        self.assertEqual(self._hole(turn), Pos(12, 26))
+
+    def test_a_short_detour_is_not_worth_a_hole(self):
+        """绕路不到 5 步 ⇒ 不拆。
+
+        矿在西边 `(4,24)`：背面那道门本来就在西侧，走它一点也不绕（7 步 vs 7 步）。
+        拆一格是**净支出**（1 回合 + 1 块不回收的石头，任务书 L209），不值得。
+        """
+        at, goal = Pos(12, 24), Pos(4, 24)
+        blocked = self._turn(mine=goal).map.blocked
+        savings = [
+            steps_between(at, goal, blocked, self.SIZE)
+            - steps_between(at, goal, blocked - {c}, self.SIZE)
+            for c in wall_cells(self.BASE, 41)
+            if at.dist(c) <= 1
+        ]
+        self.assertLess(max(savings), HOLE_MIN_SAVING, "夹具前提：每个候选省的步数都不过门槛")
+        self.assertIsNone(self._hole(self._turn(mine=goal)))
+
+    def test_the_first_day_never_digs(self):
+        """**第 1 天不拆** —— 整套机制成立的前提。
+
+        环上"孤零零一个缺口"这一个状态，**既是"刚挖的洞"也是"还差一格没砌"**，地图上
+        逐字节同形，任何无状态判据都分不开。区分只能靠时间：第 1 天环在建、缺口是真的没砌；
+        第 2 天起环在开局时必然是满的，于是环上一切缺口只可能来自我们自己的 `remove`。
+        这一条写漏的后果很具体：第 1 天砌到只剩中段某一格时，那一格会被当成"洞"，
+        白天再也不补（`test_a_worker_on_the_last_cell_still_finishes_the_ring` 会跟着挂）。
+        """
+        turn = self._turn(round_no=1)
+        self.assertEqual(turn.round_no, 1, "第 1 天白天第一回合")
+        self.assertIsNone(self._hole(turn))
+
+    def test_the_night_never_digs(self):
+        """夜里不拆（仅白天）—— 与 `build` 同一条：**闸门不管昼夜**，由 `planner` 把关。
+
+        任务书 `remove` 那一格**没写**昼夜（`build` 写了"仅白天"），项目按保守口径执行：
+        夜里不发最多少拆一次；反过来若实际禁夜，发出去就是一次指令非法 —— 红线优先。
+        """
+        self.assertIsNone(self._hole(self._turn(round_no=85)))
+
+    def test_a_worker_without_a_spare_stone_never_digs(self):
+        """没石头不拆：拆掉的那块**不回收**，手里没石头就补不回来 —— 墙上留着洞过夜。
+
+        对照是同一天同一站位、手里有石头那一条（拆）。
+        """
+        self.assertIsNone(self._hole(self._turn(stone=0)))
+        self.assertIsNotNone(self._hole(self._turn(stone=1)), "对照：有石头就拆")
+
+    def test_an_unfinished_ring_is_never_dug(self):
+        """环没砌满 ⇒ 不拆（缺口本来就能当通道用，而"没砌到"与"挖出来的"分不开）。
+
+        夹具把缺口放在**西侧** `(8,25)`：它帮不了东边那趟路的忙，所以"省不到 5 步"那道门
+        拦不住这一条 —— 拦住的只能是 `_ring`。对照：同一局面环砌满就拆。
+        """
+        self.assertIsNone(self._hole(self._turn(missing=(Pos(8, 25),))))
+        self.assertEqual(self._hole(self._turn()), Pos(13, 23), "对照：环砌满就拆")
+
+    def test_the_window_closes_thirty_rounds_before_night(self):
+        """白天剩 ≤ `HOLE_MIN_LEFT`(30) 回合就不再开洞（洞要开得够久才回本）。
+
+        ⚠️ 这个窗口与补墙窗口（剩 ≤ `HOLE_PATCH_LEFT`=15）**不相交 ⇒ 一天最多拆一次**。
+        防"拆了补、补了拆"净亏的真正机制是这个，不是门槛 5（门槛只管单趟划不划算）。
+        夹具用**近矿** `(14,24)`：远矿在这个时点早就被"回得来"滤掉了（`_mine_spare_ore`），
+        那样就分不出到底是哪道门拦的。
+        """
+        mine = Pos(14, 24)
+        # 白天 70 回合 ⇒ 一定有"还剩正好 HOLE_MIN_LEFT 回合"的那一回合，由 `_left` 定位
+        boundary = next(r for r in range(_day2(1), _day2(DAY_ROUNDS) + 1) if _left(r) == HOLE_MIN_LEFT)
+        self.assertEqual(_left(boundary - 1), HOLE_MIN_LEFT + 1, "夹具前提：差一回合就是边界")
+        self.assertEqual(
+            self._hole(self._turn(round_no=boundary - 1, mine=mine)),
+            Pos(13, 23),
+            "多剩一回合还能拆",
+        )
+        self.assertIsNone(self._hole(self._turn(round_no=boundary, mine=mine)), "正好卡在门槛上就不拆")
+
+    def test_a_worker_away_from_the_wall_never_digs(self):
+        """候选只取**当前已经贴着**的墙格 —— 人不在墙边就没得拆。
+
+        `remove` 要求"指定与自身距离一格内的围墙"（§4.4），与 `build` 同一条站位契约，
+        所以"走到最优的那一格再拆"是被刻意排除的（那会引入"在路上"的中间态，目标每回合
+        重算 ⇒ 来回抖，而且省下的步数没扣掉走过去的回合 ⇒ 系统性高估收益）。
+        ⚠️ 这一条只能用**盒外**的站位测：环是 6×6 的边框，而距离是切比雪夫（含斜角）
+        ⇒ 盒子里每一个能站人的格子都贴着墙。
+        """
+        at = Pos(16, 24)
+        self.assertEqual(
+            [c for c in wall_cells(self.BASE, 41) if at.dist(c) <= 1], [], "夹具前提：不在墙边"
+        )
+        self.assertIsNone(self._hole(self._turn(at=at, mine=Pos(4, 24))))
+
+    def test_a_digging_round_never_fires(self):
+        """**红线守门员**：拆墙只发生在白天，那一回合一条 `attack` 都不许有。
+
+        `attack` 仅黑夜可用（§4.4），白天发一条就是一次异常 —— 5 次整场不再被调度。
+        `_step` 是"走路"的公共出口，夜里回炮位也走它 ⇒ 拆墙的门必须自己把昼夜判死。
+        """
+        for round_no in (1, 85, ROUNDS_PER_DAY + 1, ROUNDS_PER_DAY + 40, ROUNDS_PER_DAY + 41, 200):
+            with self.subTest(round_no=round_no):
+                cmds = plan(self._turn(round_no=round_no, mine=Pos(14, 24)))
+                self.assertNotIn(
+                    "attack", {c["action"] for c in cmds.values()}, f"第 {round_no} 回合：{cmds}"
+                )
+
+
+class DoorTest(unittest.TestCase):
+    """环上那个缺口 = **白天的临时门**（第 34 步）：白天中段不补、天黑前补回去。
+
+    这与封口格 `(13,24)` 是同一个语义（"白天开着通行、天黑前砌上封死"），只是第 2 天起
+    开口不再靠**建造顺序**（封口格排在 `wall_cells` 最后）表达，而靠**时间窗**表达：
+    `_door_open` 一开，`_build_walls` 把 `free` 清空 ⇒ 工人自然掉进"卖 → 升级 → 采闲矿"
+    那一支 —— 于是**不需要单加一个"别补墙"的分支**。
+    """
+
+    BASE = Pos(10, 24)
+    SIZE = (41, 32)
+    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    #: 白天开口的位置 = **封口格**（`wall_cells` 的最后一格，正面列正中）
+    SEAL = wall_cells(Pos(10, 24), 41)[-1]
+
+    def _turn(
+        self,
+        *,
+        round_no: int = ROUNDS_PER_DAY + 1,
+        stone: int = 1,
+        at: Pos = Pos(12, 24),
+        missing: tuple[Pos, ...] = (SEAL,),
+    ) -> Turn:
+        layers = [
+            {c: WALL for c in wall_cells(self.BASE, 41) if c not in missing},
+            {self.BASE: "station"},
+            {at: "worker"},
+            {Pos(4, 24): "stone"},  # 环外西侧那座矿：环满了也够得着，用来证明"工人去干别的了"
+        ]
+        worker = Worker(1, at, {"stone": stone} if stone else {})
+        return Turn(
+            round_no=round_no,
+            map=Map(self.SIZE, _terrain(self.WEAPONS, *layers)),
+            roles=(worker,),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=self.PRICES,
+        )
+
+    def test_the_hole_stays_open_through_the_day(self):
+        """白天中段（还剩 70 / 17 回合）⇒ **不补**，工人掉头去采那座矿。
+
+        最后那一回合仍在补墙窗口之外（剩 17 > `HOLE_PATCH_LEFT`）—— 差一回合的对照在
+        `test_the_last_fifteen_rounds_patch_it_back` 里。
+        """
+        for round_no in (_day2(1), _day2(DAY_ROUNDS - HOLE_PATCH_LEFT - 1)):
+            with self.subTest(round_no=round_no):
+                self.assertGreater(_left(round_no), HOLE_PATCH_LEFT, "夹具前提：在窗外")
+                cmds = plan(self._turn(round_no=round_no))
+                acts = {c["action"] for c in cmds.values()}
+                self.assertNotIn("build", acts, f"白天中段不许补墙：{cmds}")
+                self.assertIn("move", acts, f"该去干别的（采矿）：{cmds}")
+
+    def test_the_last_fifteen_rounds_patch_it_back(self):
+        """白天剩 ≤ `HOLE_PATCH_LEFT`(15) 回合 ⇒ **补回去**，落点正好是那格洞。
+
+        "白天开着通行、天黑前封死"就靠这两个窗口表达；这一条守着后半句 ——
+        补不回去的话，墙上就是一个整夜的洞（机器人从正面长驱直入）。
+        """
+        first_patch = next(r for r in range(_day2(1), _day2(DAY_ROUNDS) + 1) if _left(r) <= HOLE_PATCH_LEFT)
+        for round_no in (first_patch, _day2(DAY_ROUNDS)):
+            with self.subTest(round_no=round_no):
+                cmd = plan(self._turn(round_no=round_no))["1"]
+                self.assertEqual(cmd["action"], "build")
+                self.assertEqual(cmd["name"], WALL)
+                self.assertEqual(
+                    Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.SEAL
+                )
+
+    def test_a_stone_short_worker_cannot_patch(self):
+        """补墙同样要 1 块石头 —— 没石头时那格只能空着过夜（空指令合法，不是崩）。
+
+        这也是 `_dig` 为什么要求手里先有一块石头（见 `DigTest`）：**补不回来就别开洞**。
+        """
+        self.assertEqual(plan(self._turn(round_no=ROUNDS_PER_DAY + DAY_ROUNDS, stone=0)), {})
+
+    def test_the_first_day_has_no_door_to_keep_open(self):
+        """第 1 天没有"洞"这回事 —— 那格只是**还没砌到**（封口格排在建墙顺序最后）⇒ 照砌。
+
+        首日豁免是整套机制的前提（见 `DigTest.test_the_first_day_never_digs`）。
+        """
+        cmd = plan(self._turn(round_no=1))["1"]
+        self.assertEqual(cmd["action"], "build")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.SEAL)
+
+
+class RescueTest(unittest.TestCase):
+    """有人被关在盒子里 ⇒ **工人去拆一格放人**（第 34 步的触发 (a)）。
+
+    与 `plan` 里的防关人闸门是**预防 vs 补救**的关系：闸门管"还没砌完时别把谁关进去"，
+    这一支管"已经被关住了怎么办" —— 背面那 2 格门被机器人堵死，是闸门拦不住的。
+
+    只有"被关住的不是工人"才走得到这里：工人自己出不来时，朝差事目标的步数是 -1，
+    `_dig` 那一支已经在它的 `_step` 里接住了；**被任务钉死的开拓者**更是必须靠别人救
+    —— 它走 `plan` 里最早那一支 `continue`，永远到不了这一段（`TaskHoldTest` 守着那条）。
+    """
+
+    BASE = Pos(10, 24)
+    SIZE = (41, 32)
+    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    #: 背面那 2 格门（唯一进出口）
+    DOOR = door_cells(Pos(10, 24), 41)
+
+    def _turn(
+        self,
+        *,
+        round_no: int = ROUNDS_PER_DAY + 1,
+        rescuer: Pos = Pos(7, 24),
+        boxed: Pos = Pos(12, 24),
+        stone: int = 1,
+        robots: bool = True,
+        colleagues: tuple[Pos, ...] = (),
+        phase_task: str = "把石头运回基地",
+    ) -> Turn:
+        """默认：门被两台机器人堵死、开拓者被关在盒子里、工人站在门外 `(7,24)`。"""
+        roles: list[BaseRole] = [Worker(1, rescuer, {"stone": stone} if stone else {}), Pioneer(2, boxed, {})]
+        obstacles: dict[Pos, str] = {}
+        if robots:
+            obstacles[self.DOOR[0]] = "robot:small"
+            obstacles[self.DOOR[1]] = "robot:small"
+        for i, colleague in enumerate(colleagues):
+            obstacles[colleague] = "worker"
+            roles.append(Worker(3 + i, colleague, {}))
+        return Turn(
+            round_no=round_no,
+            map=Map(
+                self.SIZE,
+                _terrain(
+                    self.WEAPONS,
+                    {c: WALL for c in wall_cells(self.BASE, 41)},
+                    {self.BASE: "station"},
+                    {rescuer: "worker"},
+                    {boxed: "pioneer"},
+                    obstacles,
+                ),
+            ),
+            roles=tuple(roles),
+            gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices=self.PRICES,
+            phase_task=phase_task,
+            llm_resp="<answer>42</answer>",
+        )
+
+    @staticmethod
+    def _holes(cmds: dict[str, dict]) -> dict[str, Pos]:
+        return {
+            rid: Pos(c["targetPos"][0]["x"], c["targetPos"][0]["y"])
+            for rid, c in cmds.items()
+            if c["action"] == "remove"
+        }
+
+    def test_a_worker_opens_the_wall_to_free_a_boxed_pioneer(self):
+        """门被机器人堵死 + 开拓者在盒内 ⇒ **工人拆一格放人**，这一格是 `(8,25)`。
+
+        `(8,25)` 是门外那位工人**唯一贴着的墙格**（`remove` 的站位契约）：拆了它，
+        盒内的人就能从 `(7,25)` 一带迈出去。开拓者这一回合照旧只有 `submitAnswer`
+        —— 它被钉在任务上，谁也挪不动它。
+        """
+        cmds = plan(self._turn())
+        self.assertEqual(self._holes(cmds), {"1": Pos(8, 25)})
+        self.assertEqual(cmds["2"]["action"], "submitAnswer", "开拓者只交答案，不动")
+        self.assertNotIn("attack", {c["action"] for c in cmds.values()})
+
+    def test_the_rescuer_walks_to_the_wall_first(self):
+        """隔着几格 ⇒ 这一回合只挪一格，贴近了下一回合才拆（拆墙要贴着）。
+
+        与 `_dig` 里"不做走到最优格再拆"是同一条取舍：候选只认**当前已经贴着**的墙格。
+        """
+        start = Pos(5, 24)
+        cmds = plan(self._turn(rescuer=start))
+        self.assertEqual(cmds["1"]["action"], "move", f"还没贴近 ⇒ 只能挪一格：{cmds}")
+        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertEqual(start.dist(cell), 1, "一步一格")
+        self.assertLess(cell.dist(Pos(8, 25)), start.dist(Pos(8, 25)), "这一格必须真的更近")
+
+    def test_colleagues_in_the_doorway_are_not_walls(self):
+        """**同事**把两格门都堵上 ⇒ 照旧**不拆**（他们只是路过，下一回合就走）。
+
+        判据里"自己人一律不算障碍"（把全部角色从障碍里摘掉，起点除外）：把同事算成墙
+        就会**白拆一次** —— 1 回合 + 1 块不回收的石头，换来一个下一回合就自动失效的洞。
+        这正是第 33 步改 `_walled` 口径要治的那个活锁的同一条道理。
+        ⚠️ **夹具必须堵满两格门**：只堵一格时盒内的人本来就走得出去，这条用例会变成空转
+        （反向验证实测：把"自己人算障碍"退回去，它照样过）。
+        """
+        cmds = plan(self._turn(robots=False, colleagues=self.DOOR))
+        self.assertEqual(self._holes(cmds), {}, f"同事堵门不算被关：{cmds}")
+
+    def test_the_first_day_never_rescues(self):
+        """第 1 天不救 —— 与 `_dig` 同源：那天环还在建，缺口本来就能走人。"""
+        cmds = plan(self._turn(round_no=1))
+        self.assertEqual(self._holes(cmds), {}, f"第 1 天不拆：{cmds}")
+
+    def test_a_stone_short_worker_cannot_rescue(self):
+        """没石头救不了：拆一块少一块，补不回来就是整夜的洞。"""
+        cmds = plan(self._turn(stone=0))
+        self.assertEqual(self._holes(cmds), {}, f"手里没石头不许拆：{cmds}")
+
+    def test_a_boxed_worker_frees_itself(self):
+        """被关住的是**工人**（盒内、没有差事）⇒ 它自己去拆一格：`(13,23)`。
+
+        这条走的是 `_rescue`：`_stuck_inside` 把"眼下真出不去"的人捞出来，
+        而工人是唯一能发 `remove` 的角色 ⇒ 自己就是救援者。
+        （有差事的工人走另一条：朝目标的步数是 -1，`_dig` 的 `now < 0` 那一支接住。）
+        """
+        turn = self._turn(boxed=Pos(7, 24), rescuer=Pos(12, 24))
+        self.assertEqual(self._holes(plan(turn)), {"1": Pos(13, 23)})
+
+
+class HoleLifecycleTest(unittest.TestCase):
+    """第 2 天**整白天串跑**：拆一次 → 当门用一天 → 天黑前补回去。
+
+    单帧看不出"一天拆了几次、收工时墙上有没有洞、同一格会不会拆两回" —— 必须真的过一遍
+    时间（与 `BuildWallTest.test_day_one_mines_then_walls_the_whole_ring_in_order` 同一个套路）。
+
+    ⚠️ **一天最多拆一次**靠的不是门槛 5，而是两个窗口**不相交**（`HOLE_MIN_LEFT` 30 >
+    `HOLE_PATCH_LEFT` 15）：拆只发生在"还剩 ≥31 回合"、补只发生在"还剩 ≤15 回合"。
+    这条用例就是它的守门员 —— 两个数一旦被改成相交，这里会看到第二个洞，
+    而墙上会一直开着口过夜。
+    """
+
+    BASE = Pos(10, 24)
+    SIZE = (41, 32)
+    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    #: 盒子外面、东侧那座石矿 —— 环砌满之后唯一值得跑的一趟（绕出背面那道门 → 再往东）
+    MINE = Pos(18, 24)
+
+    def test_one_hole_a_day_and_it_is_patched_before_night(self):
+        """第 2 天跑满 70 回合：**恰好拆 1 次**、下一回合就从洞里穿过去、收工时环 18/18。"""
+        entries = dict(
+            _terrain(
+                self.WEAPONS,
+                {c: WALL for c in wall_cells(self.BASE, 41)},
+                {self.BASE: "station"},
+                {self.MINE: "stone"},
+            )
+        )
+        stone, pos = 1, Pos(12, 24)
+        log: list[tuple[int, str, Pos]] = []
+        for round_no in range(ROUNDS_PER_DAY + 1, ROUNDS_PER_DAY + DAY_ROUNDS + 1):
+            worker = Worker(1, pos, {"stone": stone} if stone else {})
+            cmds = plan(
+                Turn(
+                    round_no=round_no,
+                    map=Map(self.SIZE, entries),
+                    roles=(worker,),
+                    gold=0,
+                    weapons=self.WEAPONS,
+                    vendor_prices=self.PRICES,
+                )
+            )
+            self.assertNotIn(
+                "attack", {c["action"] for c in cmds.values()}, f"第 {round_no} 回合是白天，不许开火"
+            )
+            cmd = cmds.get("1")
+            if cmd is None:
+                continue
+            cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+            log.append((round_no, cmd["action"], cell))
+            if cmd["action"] == "move":
+                pos = cell
+            elif cmd["action"] == "collect":
+                stone += 1
+            elif cmd["action"] == "build":
+                stone -= 1
+                entries[cell] = WALL
+            elif cmd["action"] == "remove":
+                del entries[cell]
+
+        holes = [(r, c) for r, a, c in log if a == "remove"]
+        self.assertEqual(len(holes), 1, f"一天最多拆一次（两个窗口不相交）：{holes}")
+        hole_round, hole = holes[0]
+        self.assertEqual(hole, Pos(13, 23))
+        # 洞是**通道**，不只是一个缺口：紧接着那一回合就从它身上穿过去
+        index = [i for i, (_, a, _) in enumerate(log) if a == "remove"][0]
+        self.assertEqual(log[index + 1][1:], ("move", hole), "下一回合要真的用它")
+        # 天黑前补回去（补墙窗口 = 白天最后 HOLE_PATCH_LEFT 回合）
+        patch = [r for r, a, c in log if a == "build" and c == hole]
+        self.assertTrue(patch, f"收工前必须补回那一格：{log}")
+        self.assertLessEqual(_left(patch[0]), HOLE_PATCH_LEFT, "补墙必须落在夜里之前的窗口里")
+        self.assertGreater(_left(hole_round), HOLE_MIN_LEFT, "拆墙必须落在白天足够早的窗口里")
+        # 收工时环是满的（拆了不补就是整夜的洞，机器人从正面长驱直入）
+        self.assertEqual(
+            [c for c in wall_cells(self.BASE, 41) if c not in entries], [], "收工时 18/18"
         )
 
 
@@ -4027,7 +4559,7 @@ class AgentToolCallTest(unittest.TestCase):
         desc = self.agent.tool_desc()
         for name, (impl, _, params) in self.agent._tools.items():
             with self.subTest(name=name):
-                self.assertIn(f"## {name}", desc)
+                self.assertIn(f"## ToolName: {name}", desc)
                 self.assertTrue(callable(impl))
                 if params:
                     self.assertIn(f"    - {params[0][0]}: ", desc)
@@ -4040,7 +4572,9 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("Params:\n    - cmd: 命令原文", desc)
         self.assertIn("Params:\n    - sop: SOP 全文", desc)
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
-        self.assertIn("## 查询状态\nDescription: 测试用\nParams: （无参数）", self.agent.tool_desc())
+        self.assertIn(
+            "## ToolName: 查询状态\nDescription: 测试用\nParams: （无参数）", self.agent.tool_desc()
+        )
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """**加一个工具只改一处**（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。

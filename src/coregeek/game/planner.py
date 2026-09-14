@@ -45,7 +45,7 @@ from .grid import (
 )
 from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
-from .world import Robot, Turn, Weapon
+from .world import ROUNDS_PER_DAY, Robot, Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -103,6 +103,18 @@ VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
 #: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
 DETOUR_MAX = 2
 
+#: 拆墙（第 34 步）—— **开洞能省下这么多步以上才值得拆**（用户拍的口径）。
+#: ⚠️ 它只算**这一趟**的收益，而拆 + 补的账是：拆 1 回合 + 补 1 回合 + 再采一块补回去的石头
+#: ≈ 2 回合（拆掉的那块石头不回收）⇒ **单向 4 回合上下**。所以 5 是"单趟回本点"：
+#: 工人一天出/回各过一趟就赚，只出不回则打平。**5 是拍的，且是这一步唯一的调参旋钮。**
+HOLE_MIN_SAVING = 5
+
+#: 白天还剩这么多回合以上才允许拆（门要开得够久才回本）；剩这么多回合以内**必须补上**。
+#: ⚠️ `HOLE_MIN_LEFT > HOLE_PATCH_LEFT` ⇒ **两个窗口不相交 ⇒ 一天最多拆一次** ——
+#: 这才是防"拆了补、补了拆"净亏的真正机制（不是上面那个门槛）。两个数都是拍的。
+HOLE_MIN_LEFT = 30
+HOLE_PATCH_LEFT = 15
+
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     cmds: dict[str, dict[str, Any]] = {}
@@ -135,6 +147,13 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             if step is not None and _emit(cmds, role, actions.Move, step):
                 claimed.add(step)
                 continue
+
+        # **有人被关在盒子里 ⇒ 工人去拆一格放人**（第 34 步，用户要求）。
+        # 与上面那道闸门是**预防 vs 补救**的关系：闸门管"还没砌完时别把谁关进去"，
+        # 这一支管"已经被关住了怎么办"（门让机器人堵死是闸门拦不住的）。放在收工闸门**之前**：
+        # 放人比回炮位要紧，而且它自己带`day_rounds_left > HOLE_MIN_LEFT`这道时间门。
+        if turn.is_day and _rescue(role, turn, cmds, claimed, box):
+            continue
 
         if not turn.is_day:
             _defend(role, turn, cmds, claimed, taken, assigned)  # 夜里还没被钉住的角色回炮位
@@ -345,6 +364,12 @@ def _build_walls(
     前者墙还没砌完，跑去采矿就是跑到地图另一头、几十回合回不来。所以闸门挡住的这一支原地待命。
     """
     free = [c for c in _ring(turn) if c not in sites]
+    if free and _door_open(turn):
+        # **白天中段：环上那个缺口当"临时门"用，先别补**（第 34 步）。
+        # 这正是封口格 `(13,24)` 的同一个语义（"白天开着通行、天黑前封死"），
+        # 只是第 2 天起开口不是靠建造顺序、而是靠时间窗表达 —— 于是 `free` 空掉之后
+        # 自然落进下面那一支（卖 → 升级 → 采闲矿），**不需要单独一个"别补墙"的分支**。
+        free = []
     if not free:
         # 墙砌满了 ⇒ **先卖矿、买得起就去升级、最后才去采**（第 29 步的顺序：升级优先于
         # 采矿是用户拍板；卖在最前是因为卖来的钱正好补上券的差价）。
@@ -390,7 +415,11 @@ def _build_walls(
 def _walled(turn: Turn) -> frozenset[Pos]:
     """"**假设墙砌满**"时的障碍集：现已挡路的照原样 + 全部 18 格墙。
 
-    闸门问的是**将来** —— 现在走得出去不代表砌完还走得出去，而 `remove`（拆墙）没实现。
+    闸门问的是**将来** —— 现在走得出去不代表砌完还走得出去。
+
+    ⚠️ **第 34 步起补救的通道有了**（`remove` + `_rescue`），但那**不构成撤销这道闸门的理由**：
+    闸门是**预防**（零成本、砌墙的那一刻就避开），`_rescue` 是**补救**（1 回合 + 1 块不退的石头
+    + 一整天的洞）。两者并存，各管各的 —— 别因为"反正能救"就把闸门拆了。
 
     ⚠️ **自己人算不算障碍，只看门那 2 格**（与 `_ring` 的"自己人一律算路过"故意相反，
     但也不是一律算障碍）：那 18 格墙里没有任何建筑 ⇒ **能堵门的只有单位**，
@@ -454,6 +483,165 @@ def _ring(turn: Turn) -> tuple[Pos, ...]:
     return tuple(
         c for c in wall_cells(station, turn.map.size[0]) if c not in turn.map.blocked or c in mine
     )
+
+
+# ── 拆墙（第 34 步）：临时门 ─────────────────────────────────────────
+def _after_first_day(turn: Turn) -> bool:
+    """是不是**第 2 天及以后** —— 整套"临时门"机制成立的前提。
+
+    ⚠️ **为什么必须有这一条**：环上"孤零零一个缺口"这一个状态，**既是"刚挖的洞"、
+    也是"还差一格没砌"** —— 地图上逐字节同形，任何无状态判据都分不开。
+    区分只能靠**时间**：第 1 天环在建，缺口是真的没砌（`_ring` / `_build_walls` 现在就是对的，
+    一个字都别改）；**第 2 天起环在开局时必然是满的，于是环上一切缺口只可能来自我们自己的
+    `remove`**。没有这一条，第 1 天砌到只剩中段某一格时那一格会被当成"洞"推迟到当天末尾，
+    白天再也不补（合成局面上会直接挂掉 `test_a_worker_on_the_last_cell_still_finishes_the_ring`）。
+
+    代价（记在 `code-task.md` 的不确定性里）：第 1 天没砌完的残局，次日起会被误读成"门"、
+    推迟到当天末尾才补 —— 而末尾一定会补（见 `HOLE_PATCH_LEFT`）。
+    """
+    return turn.round_no > ROUNDS_PER_DAY
+
+
+def _door_open(turn: Turn) -> bool:
+    """白天中段：环上的缺口当**临时门**用，先别补（第 2 天起、离天黑还早）。
+
+    补墙的时刻由它和 `HOLE_PATCH_LEFT` 一对窗口决定 —— "白天开着通行、天黑前封死"，
+    与封口格 `(13,24)` 是同一个语义，只是从"排在建墙顺序最后"换成了"排到时间窗最后"。
+    """
+    return _after_first_day(turn) and turn.day_rounds_left > HOLE_PATCH_LEFT
+
+
+def _dig(
+    role: BaseRole,
+    goal: Pos,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    walk: Set[Pos],
+) -> bool:
+    """工人**贴着一格墙**、而拆了它能少走 `HOLE_MIN_SAVING` 步以上 ⇒ 这一回合拆它。
+
+    钩在 `_step` 里而不是各个差事里：`_step` 是所有"走路"的公共出口（采矿 / 卖矿 / 顺路卖 /
+    升级 / 砌墙 / 回炮位），一处就能覆盖全部差事，调用点一个字不用改。
+
+    **"出不来"不用第二套逻辑**：出不去 ⇒ 到差事目标的步数是 **-1**，而这里对 `now < 0`
+    的处理本来就是"拆了能到就更该拆"，两个触发条件在这一个函数里合流。
+
+    ⚠️ **但实测过：`now < 0` 这一支今天是进不去的**（各差事 `_step` 之前都已经把
+    "走不到的目标"滤掉了 —— `_mine_spare_ore` / `_sell_ore` / `_detour_sell` / `_upgrade_line`
+    四处都有 `-1 ⇒ 这趟不去`），而且"人在盒里出不来"那种局面会先被 `plan` 里的 `_rescue`
+    接管。它**仍然保留**，理由是 `_step` 的 `walk` 比各差事自己算的那份多了 `claimed` / `avoid`
+    两样 ⇒ 差事算得通、走到 `_step` 时却不通是可能的。删掉它的代价是"工人安静地不动"
+    （正是本步要治的那类症状），留着的代价只是一次条件判断。**别当它是死代码顺手删。**
+    唯一不用它的是**被任务钉死的开拓者**（走 ① 支路，压根到不了这里）与非工人 —— 那由 `_rescue` 管。
+
+    ⚠️ **候选只取当前已经贴着的墙格**（`Pos.dist <= 1`，`remove` 的站位要求就是这么定的）。
+    刻意**不做**"走到最优的那一格再拆"：那会引入"在路上"的中间态（目标每回合重算 ⇒ 来回抖），
+    而且省下的步数没有扣掉走过去的回合 ⇒ 系统性高估收益。沿墙走的过程里这种机会很多，不必提前跑。
+    """
+    if not turn.is_day or not isinstance(role, Worker):
+        return False
+    station = turn.map.station
+    if station is None or not _after_first_day(turn):
+        return False
+    wall = wall_cells(station, turn.map.size[0])
+    #: 环已砌满（⇒ 同时最多一个洞）；`claimed` 里出现墙格 ⇒ 本回合已经有人拆过了
+    if _ring(turn) or claimed & set(wall):
+        return False
+    if role.stone < WALL_COST or turn.day_rounds_left <= HOLE_MIN_LEFT:
+        return False
+
+    size = turn.map.size
+    now = steps_between(role.pos, goal, walk, size)
+    best: tuple[int, Pos] | None = None
+    for cell in wall:
+        if role.pos.dist(cell) > 1:
+            continue  # 直接排除：拆墙要贴着，走不到的那一格这一回合根本没得拆
+        after = steps_between(role.pos, goal, walk - {cell}, size)
+        if after < 0:
+            continue  # 开了这个洞也还是到不了 ⇒ 白拆
+        # `now < 0` = 现在压根走不到（出不去）⇒ 拆了能到就该拆，省下的步数没有意义
+        if now >= 0 and now - after < HOLE_MIN_SAVING:
+            continue
+        if best is None or (after, cell) < best:
+            best = (after, cell)
+    if best is None:
+        return False
+    #: 登记被拆的那一格（它本来就在 `blocked` 里 ⇒ 对别人的寻路是空操作，但能挡住同回合的第二个工人）
+    claimed.add(best[1])
+    return _emit(cmds, role, actions.Remove, best[1])
+
+
+def _stuck_inside(turn: Turn, box: frozenset[Pos]) -> tuple[BaseRole, ...]:
+    """**现在真的走不出盒子**的人；没有就空元组。
+
+    与 `_trapped` 的区别是**用"现在"的障碍**而不是"假设砌满"：闸门问的是将来（预防），
+    这里问的是眼下（补救）。两者并存，各管各的。
+
+    ⚠️ **自己人一律不算障碍**（除起点外把全部角色从障碍里摘掉）：同事站在门格上只是路过，
+    下一回合就走 —— 把他算成障碍会**白拆一次**（1 回合 + 1 块不退的石头）。
+    这正是第 33 步改 `_walled` 口径要治的那个活锁的同一条道理。
+    """
+    if not box:
+        return ()
+    walk = turn.map.blocked - {r.pos for r in turn.roles}
+    size = turn.map.size
+    return tuple(
+        r for r in turn.roles if r.pos in box and step_outside(r.pos, box, walk, size) is None
+    )
+
+
+def _rescue(
+    role: BaseRole,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    box: frozenset[Pos],
+) -> bool:
+    """有人被关在盒子里 ⇒ **工人**去拆一格放人（第 34 步）。
+
+    与 `_dig` 的分工：`_dig` 治"**自己**要去的地方到不了"，这里治"**别人**（或**自己**）出不来"。
+    ⚠️ **工人被关住时也走这里，而且先走这里**（第 34 步真服务实测：门被两台机器人堵死、
+    工人在盒内 ⇒ 它自己 `remove (13,23)`，压根没轮到差事）—— `_rescue` 在 `plan` 里排在
+    白天所有差事之前。`_dig` 的 `now < 0` 那一支因此是**第二道**（留给"差事目标不通、
+    但人还出得去"这种局面），不是唯一一道。**被任务钉死的开拓者**才非靠别人救不可
+    —— 它走 ① 支路 `continue`，永远到不了这一段（用户拍板：开拓者被挡 ⇒ 工人去救）。
+
+    开哪一格：**开了之后真能让某个被困的人迈出去、且离救援者最近的那一格**
+    （并列取坐标序，可复现）。判据用"不开洞 + 本回合已认领的落脚格"，与 `_dig` 同一套账。
+    ⚠️ 门被**机器人**堵死时 `walk` 不动那一格 ⇒ 命中；被**同事**堵住时 `_stuck_inside`
+    先一步就把人放出来了（自己人不算障碍）⇒ 这里不命中 —— 那正是"不白拆一次"的意思。
+    """
+    if not turn.is_day or not isinstance(role, Worker) or not box:
+        return False
+    station = turn.map.station
+    if station is None or not _after_first_day(turn):
+        return False
+    wall = wall_cells(station, turn.map.size[0])
+    if _ring(turn) or claimed & set(wall):
+        return False
+    if role.stone < WALL_COST or turn.day_rounds_left <= HOLE_MIN_LEFT:
+        return False
+    stuck = _stuck_inside(turn, box)
+    if not stuck:
+        return False
+
+    walk, size = turn.map.blocked | claimed, turn.map.size
+    free = [
+        (role.pos.dist(c), c)
+        for c in wall
+        if any(step_outside(v.pos, box, walk - {c}, size) is not None for v in stuck)
+    ]
+    if not free:
+        return False
+    site = min(free)[1]
+    if role.pos.dist(site) <= 1:
+        #: 登记被拆的那一格：挡住同回合的第二个工人（对寻路是空操作，它本来就在 `blocked` 里）
+        claimed.add(site)
+        return _emit(cmds, role, actions.Remove, site)
+    #: 走 `_step` 会再进一次 `_dig`（同一个目标，多半不命中：省不到 5 步）—— 两条路都只是
+    #: "朝那一格挪一格"，贴近了下一回合自然就拆。
+    return _step(role, site, turn, cmds, claimed)
 
 
 def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, free: int) -> int:
@@ -913,8 +1101,15 @@ def _step(
 
     `avoid` = 额外要避开的格：工人传**建造格**（免得径直走到建造格**上**去，
     那样建完自己站在墙里），开拓者用默认的空集。
+
+    ⚠️ **拆墙（第 34 步）钩在这里**：`_step` 是所有差事（采矿 / 卖矿 / 顺路卖 / 升级 / 砌墙 /
+    回炮位）走路的**公共出口** ⇒ 一处覆盖全部调用点，调用点一个字不用改。
+    代价是它也覆盖了开拓者与夜里的回炮位 —— 那两边由 `_dig` 自己的闸门（`is_day` + `Worker` +
+    环满 + 窗口）挡住，**不在这里加分支**。
     """
     walk = turn.map.blocked | claimed | avoid
+    if _dig(role, goal, turn, cmds, claimed, walk):
+        return True  # 与其绕远，不如把这格的墙拆了（省 ≥ `HOLE_MIN_SAVING` 步）
     step = step_toward(role.pos, goal, walk, turn.map.size)
     if step is None or not _emit(cmds, role, actions.Move, step):
         return False
