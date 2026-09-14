@@ -1,0 +1,518 @@
+{
+  "commit": "0bb66723a1bf72309e1ae95d52ac355b54bcc142",
+  "entry": "CoreGeek/main3.py",
+  "entry_compat": [
+    "CoreGeek/main.py",
+    "CoreGeek/run.sh",
+    "CoreGeek/main3.py"
+  ],
+  "files": [
+    {
+      "bytes": 1301,
+      "path": "CoreGeek/Demo/CoreGeek/main3.py",
+      "sha256": "eb15fb7626174c09f8c4f4d94583a514af36b0ab9e1a585930f2b236c914dfe9",
+      "source": "Demo/CoreGeek/main3.py"
+    },
+    {
+      "bytes": 0,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "Demo/CoreGeek/src/agent/__init__.py"
+    },
+    {
+      "bytes": 12712,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/actions.py",
+      "sha256": "618be20f5de35d42c13b188c921fbafc1ae2569a9223fdeb53d127d60eea8a22",
+      "source": "Demo/CoreGeek/src/agent/actions.py"
+    },
+    {
+      "bytes": 10796,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/ballistics.py",
+      "sha256": "b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f",
+      "source": "Demo/CoreGeek/src/agent/ballistics.py"
+    },
+    {
+      "bytes": 77628,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/brain.py",
+      "sha256": "317bc93d0679d974b8f7e8f33b1ffd1c4a338a4ea71cf01a80fd89704bd6a4b3",
+      "source": "Demo/CoreGeek/src/agent/brain.py"
+    },
+    {
+      "bytes": 5533,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/coordination.py",
+      "sha256": "735a4f3e1f3e687dd31ac09b0770f8a24794c5049a12ab3b993d635d9131d758",
+      "source": "Demo/CoreGeek/src/agent/coordination.py"
+    },
+    {
+      "bytes": 20462,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/debug.py",
+      "sha256": "adcfa3d2eac48ab4807bace09bb85a9eaa19493b7f35bc7f0dd86a6405c7e92e",
+      "source": "Demo/CoreGeek/src/agent/debug.py"
+    },
+    {
+      "bytes": 3801,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/deepseek_client.py",
+      "sha256": "e90005b5fe887c2f005ad9e1a9e6bb44fe2e3573a415805290f6a3c4fe2a286e",
+      "source": "Demo/CoreGeek/src/agent/deepseek_client.py"
+    },
+    {
+      "bytes": 25907,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/diagnostics.py",
+      "sha256": "26d9d04815c96fcb19d69f464c57e655962ed0829f3f31e00e239737c531b178",
+      "source": "Demo/CoreGeek/src/agent/diagnostics.py"
+    },
+    {
+      "bytes": 5803,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/grid.py",
+      "sha256": "9f84afadce6808bbe456d8eb10759e341e03d71d16fed9bf268d508925e7aa67",
+      "source": "Demo/CoreGeek/src/agent/grid.py"
+    },
+    {
+      "bytes": 4176,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/local_llm.py",
+      "sha256": "0535447a89f304fb884de387e391573ce92fbdc6f6ff42f2b1a96fc07e485c76",
+      "source": "Demo/CoreGeek/src/agent/local_llm.py"
+    },
+    {
+      "bytes": 8950,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/market.py",
+      "sha256": "8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9",
+      "source": "Demo/CoreGeek/src/agent/market.py"
+    },
+    {
+      "bytes": 12187,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/match.py",
+      "sha256": "4e7b47c3d5738a3700170c16d1269500ecd7ff012dbe8d74e6ae37aa2bc7a9f7",
+      "source": "Demo/CoreGeek/src/agent/match.py"
+    },
+    {
+      "bytes": 5892,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/nightwork.py",
+      "sha256": "b14ee0e4798dcad4501d8a5afd9a51c433f634f6cfac6c3d3a4137d240a3ed67",
+      "source": "Demo/CoreGeek/src/agent/nightwork.py"
+    },
+    {
+      "bytes": 11631,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/planner.py",
+      "sha256": "fab280b858f4e12cf951b39f38f790c3f09fcd2a3cc54fb523b26572010a3a9e",
+      "source": "Demo/CoreGeek/src/agent/planner.py"
+    },
+    {
+      "bytes": 11563,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/protocol.py",
+      "sha256": "ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9",
+      "source": "Demo/CoreGeek/src/agent/protocol.py"
+    },
+    {
+      "bytes": 3555,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/recordings.py",
+      "sha256": "03364f3b3e6ecd7cfe36c6885f93ed7eec464f0e4556de0fef811c116671270a",
+      "source": "Demo/CoreGeek/src/agent/recordings.py"
+    },
+    {
+      "bytes": 6722,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/sandbox.py",
+      "sha256": "4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321",
+      "source": "Demo/CoreGeek/src/agent/sandbox.py"
+    },
+    {
+      "bytes": 8954,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/scenarios.py",
+      "sha256": "d1dad9e1c948fb5bbe617eb50400d9378943844d9b849f205362c212ce481285",
+      "source": "Demo/CoreGeek/src/agent/scenarios.py"
+    },
+    {
+      "bytes": 11912,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/server.py",
+      "sha256": "4ae835e76b1fa4e917e115a025e57fa15961626a57893a12ce61ce80802ea6af",
+      "source": "Demo/CoreGeek/src/agent/server.py"
+    },
+    {
+      "bytes": 43009,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/simulator.py",
+      "sha256": "b7d2a5063782d072c57418c7728eb3e583101ba2e40c30f36613f518c924d0c3",
+      "source": "Demo/CoreGeek/src/agent/simulator.py"
+    },
+    {
+      "bytes": 32211,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/tasks.py",
+      "sha256": "0704db957d4846270036f69f62fca846b2a32f40773ba223ac04a7dbbcb74359",
+      "source": "Demo/CoreGeek/src/agent/tasks.py"
+    },
+    {
+      "bytes": 14844,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/taskworld.py",
+      "sha256": "f5b3f066b45847d8644e642dada545fc9502727272b150da0560d5d0eb7e8e07",
+      "source": "Demo/CoreGeek/src/agent/taskworld.py"
+    },
+    {
+      "bytes": 18376,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/telemetry.py",
+      "sha256": "d23dbe0faffc26e80c927aa213a030d2a1b320fdece8ec4f8e079e9b62e62e98",
+      "source": "Demo/CoreGeek/src/agent/telemetry.py"
+    },
+    {
+      "bytes": 11909,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/treasure.py",
+      "sha256": "6d243da4ecef18d39307476ec698190b682b034799bbe5055d96119d54d0a93c",
+      "source": "Demo/CoreGeek/src/agent/treasure.py"
+    },
+    {
+      "bytes": 16518,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/turnactions.py",
+      "sha256": "85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22",
+      "source": "Demo/CoreGeek/src/agent/turnactions.py"
+    },
+    {
+      "bytes": 4505,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/twomatch.py",
+      "sha256": "31655696219e73bc6e280764affdde0f61a78051a67c23561a7b447061e78fe3",
+      "source": "Demo/CoreGeek/src/agent/twomatch.py"
+    },
+    {
+      "bytes": 6609,
+      "path": "CoreGeek/Demo/CoreGeek/src/agent/vision.py",
+      "sha256": "a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4",
+      "source": "Demo/CoreGeek/src/agent/vision.py"
+    },
+    {
+      "bytes": 6434,
+      "path": "CoreGeek/docs/TRACE_LOGGING.md",
+      "sha256": "6201cc16a41c3ff4d6cbd9c7651c89fc03d123b745eaa817e99335538957894f",
+      "source": "docs/TRACE_LOGGING.md"
+    },
+    {
+      "bytes": 11568,
+      "path": "CoreGeek/docs/request.txt",
+      "sha256": "5fc36943ce3d7bbca678b6342cd4a6c092d91ae8032e3107e8e840ba8cc88d82",
+      "source": "docs/request.txt"
+    },
+    {
+      "bytes": 2388,
+      "path": "CoreGeek/docs/response.txt",
+      "sha256": "5daf8278d7f097417b50082165a28dc4ce03163323730dc160ee4f7a534ed8d0",
+      "source": "docs/response.txt"
+    },
+    {
+      "bytes": 28118,
+      "path": "CoreGeek/docs/任务书.md",
+      "sha256": "c548e2c66b85a71d52c60f23929b5af38caae1fc9908f8f2e5ddd0c457893d3e",
+      "source": "docs/任务书.md"
+    },
+    {
+      "bytes": 11800,
+      "path": "CoreGeek/docs/接口文档.md",
+      "sha256": "931a65d09f881b30644225ca8d6b1bfbc7b2bea7b4f6ce50d1f70cf858cb144d",
+      "source": "docs/接口文档.md"
+    },
+    {
+      "bytes": 249,
+      "path": "CoreGeek/main.py",
+      "sha256": "0c425284742d2008513067db7ccd1d968ee397f992e5be8906b9cee51c231a89",
+      "source": "main.py"
+    },
+    {
+      "bytes": 249,
+      "generated": true,
+      "path": "CoreGeek/main3.py",
+      "sha256": "0c425284742d2008513067db7ccd1d968ee397f992e5be8906b9cee51c231a89",
+      "source": "main.py"
+    },
+    {
+      "bytes": 274,
+      "generated": true,
+      "path": "CoreGeek/pyproject.toml",
+      "sha256": "04f53cf80d452ec7ef3eee4484e8f951de789bd99533229e8823fd1173fe0718",
+      "source": "Demo/CoreGeek/pyproject.toml"
+    },
+    {
+      "bytes": 114,
+      "path": "CoreGeek/run.sh",
+      "sha256": "7c5a9cad9a39ca76b7861145c0e53d3d1e8596c722029be92563f74a7ae95811",
+      "source": "run.sh"
+    },
+    {
+      "bytes": 0,
+      "generated": true,
+      "path": "CoreGeek/src/agent/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "Demo/CoreGeek/src/agent/__init__.py"
+    },
+    {
+      "bytes": 12712,
+      "generated": true,
+      "path": "CoreGeek/src/agent/actions.py",
+      "sha256": "618be20f5de35d42c13b188c921fbafc1ae2569a9223fdeb53d127d60eea8a22",
+      "source": "Demo/CoreGeek/src/agent/actions.py"
+    },
+    {
+      "bytes": 10796,
+      "generated": true,
+      "path": "CoreGeek/src/agent/ballistics.py",
+      "sha256": "b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f",
+      "source": "Demo/CoreGeek/src/agent/ballistics.py"
+    },
+    {
+      "bytes": 77628,
+      "generated": true,
+      "path": "CoreGeek/src/agent/brain.py",
+      "sha256": "317bc93d0679d974b8f7e8f33b1ffd1c4a338a4ea71cf01a80fd89704bd6a4b3",
+      "source": "Demo/CoreGeek/src/agent/brain.py"
+    },
+    {
+      "bytes": 5533,
+      "generated": true,
+      "path": "CoreGeek/src/agent/coordination.py",
+      "sha256": "735a4f3e1f3e687dd31ac09b0770f8a24794c5049a12ab3b993d635d9131d758",
+      "source": "Demo/CoreGeek/src/agent/coordination.py"
+    },
+    {
+      "bytes": 20462,
+      "generated": true,
+      "path": "CoreGeek/src/agent/debug.py",
+      "sha256": "adcfa3d2eac48ab4807bace09bb85a9eaa19493b7f35bc7f0dd86a6405c7e92e",
+      "source": "Demo/CoreGeek/src/agent/debug.py"
+    },
+    {
+      "bytes": 3801,
+      "generated": true,
+      "path": "CoreGeek/src/agent/deepseek_client.py",
+      "sha256": "e90005b5fe887c2f005ad9e1a9e6bb44fe2e3573a415805290f6a3c4fe2a286e",
+      "source": "Demo/CoreGeek/src/agent/deepseek_client.py"
+    },
+    {
+      "bytes": 25907,
+      "generated": true,
+      "path": "CoreGeek/src/agent/diagnostics.py",
+      "sha256": "26d9d04815c96fcb19d69f464c57e655962ed0829f3f31e00e239737c531b178",
+      "source": "Demo/CoreGeek/src/agent/diagnostics.py"
+    },
+    {
+      "bytes": 5803,
+      "generated": true,
+      "path": "CoreGeek/src/agent/grid.py",
+      "sha256": "9f84afadce6808bbe456d8eb10759e341e03d71d16fed9bf268d508925e7aa67",
+      "source": "Demo/CoreGeek/src/agent/grid.py"
+    },
+    {
+      "bytes": 4176,
+      "generated": true,
+      "path": "CoreGeek/src/agent/local_llm.py",
+      "sha256": "0535447a89f304fb884de387e391573ce92fbdc6f6ff42f2b1a96fc07e485c76",
+      "source": "Demo/CoreGeek/src/agent/local_llm.py"
+    },
+    {
+      "bytes": 8950,
+      "generated": true,
+      "path": "CoreGeek/src/agent/market.py",
+      "sha256": "8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9",
+      "source": "Demo/CoreGeek/src/agent/market.py"
+    },
+    {
+      "bytes": 12187,
+      "generated": true,
+      "path": "CoreGeek/src/agent/match.py",
+      "sha256": "4e7b47c3d5738a3700170c16d1269500ecd7ff012dbe8d74e6ae37aa2bc7a9f7",
+      "source": "Demo/CoreGeek/src/agent/match.py"
+    },
+    {
+      "bytes": 5892,
+      "generated": true,
+      "path": "CoreGeek/src/agent/nightwork.py",
+      "sha256": "b14ee0e4798dcad4501d8a5afd9a51c433f634f6cfac6c3d3a4137d240a3ed67",
+      "source": "Demo/CoreGeek/src/agent/nightwork.py"
+    },
+    {
+      "bytes": 11631,
+      "generated": true,
+      "path": "CoreGeek/src/agent/planner.py",
+      "sha256": "fab280b858f4e12cf951b39f38f790c3f09fcd2a3cc54fb523b26572010a3a9e",
+      "source": "Demo/CoreGeek/src/agent/planner.py"
+    },
+    {
+      "bytes": 11563,
+      "generated": true,
+      "path": "CoreGeek/src/agent/protocol.py",
+      "sha256": "ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9",
+      "source": "Demo/CoreGeek/src/agent/protocol.py"
+    },
+    {
+      "bytes": 3555,
+      "generated": true,
+      "path": "CoreGeek/src/agent/recordings.py",
+      "sha256": "03364f3b3e6ecd7cfe36c6885f93ed7eec464f0e4556de0fef811c116671270a",
+      "source": "Demo/CoreGeek/src/agent/recordings.py"
+    },
+    {
+      "bytes": 6722,
+      "generated": true,
+      "path": "CoreGeek/src/agent/sandbox.py",
+      "sha256": "4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321",
+      "source": "Demo/CoreGeek/src/agent/sandbox.py"
+    },
+    {
+      "bytes": 8954,
+      "generated": true,
+      "path": "CoreGeek/src/agent/scenarios.py",
+      "sha256": "d1dad9e1c948fb5bbe617eb50400d9378943844d9b849f205362c212ce481285",
+      "source": "Demo/CoreGeek/src/agent/scenarios.py"
+    },
+    {
+      "bytes": 11912,
+      "generated": true,
+      "path": "CoreGeek/src/agent/server.py",
+      "sha256": "4ae835e76b1fa4e917e115a025e57fa15961626a57893a12ce61ce80802ea6af",
+      "source": "Demo/CoreGeek/src/agent/server.py"
+    },
+    {
+      "bytes": 43009,
+      "generated": true,
+      "path": "CoreGeek/src/agent/simulator.py",
+      "sha256": "b7d2a5063782d072c57418c7728eb3e583101ba2e40c30f36613f518c924d0c3",
+      "source": "Demo/CoreGeek/src/agent/simulator.py"
+    },
+    {
+      "bytes": 32211,
+      "generated": true,
+      "path": "CoreGeek/src/agent/tasks.py",
+      "sha256": "0704db957d4846270036f69f62fca846b2a32f40773ba223ac04a7dbbcb74359",
+      "source": "Demo/CoreGeek/src/agent/tasks.py"
+    },
+    {
+      "bytes": 14844,
+      "generated": true,
+      "path": "CoreGeek/src/agent/taskworld.py",
+      "sha256": "f5b3f066b45847d8644e642dada545fc9502727272b150da0560d5d0eb7e8e07",
+      "source": "Demo/CoreGeek/src/agent/taskworld.py"
+    },
+    {
+      "bytes": 18376,
+      "generated": true,
+      "path": "CoreGeek/src/agent/telemetry.py",
+      "sha256": "d23dbe0faffc26e80c927aa213a030d2a1b320fdece8ec4f8e079e9b62e62e98",
+      "source": "Demo/CoreGeek/src/agent/telemetry.py"
+    },
+    {
+      "bytes": 11909,
+      "generated": true,
+      "path": "CoreGeek/src/agent/treasure.py",
+      "sha256": "6d243da4ecef18d39307476ec698190b682b034799bbe5055d96119d54d0a93c",
+      "source": "Demo/CoreGeek/src/agent/treasure.py"
+    },
+    {
+      "bytes": 16518,
+      "generated": true,
+      "path": "CoreGeek/src/agent/turnactions.py",
+      "sha256": "85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22",
+      "source": "Demo/CoreGeek/src/agent/turnactions.py"
+    },
+    {
+      "bytes": 4505,
+      "generated": true,
+      "path": "CoreGeek/src/agent/twomatch.py",
+      "sha256": "31655696219e73bc6e280764affdde0f61a78051a67c23561a7b447061e78fe3",
+      "source": "Demo/CoreGeek/src/agent/twomatch.py"
+    },
+    {
+      "bytes": 6609,
+      "generated": true,
+      "path": "CoreGeek/src/agent/vision.py",
+      "sha256": "a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4",
+      "source": "Demo/CoreGeek/src/agent/vision.py"
+    },
+    {
+      "bytes": 15113,
+      "path": "CoreGeek/tools/trace_tool.py",
+      "sha256": "b5de02daf2b507f8c564f224c15d495a8072818decd26e24491cfbdd56089a4c",
+      "source": "tools/trace_tool.py"
+    },
+    {
+      "bytes": 15558,
+      "path": "CoreGeek/web/css/app.css",
+      "sha256": "d7873d368a7be93fd68e0e7e1875a09a11080583bb67ff6415d8ecd90954611c",
+      "source": "web/css/app.css"
+    },
+    {
+      "bytes": 11699,
+      "path": "CoreGeek/web/css/experience.css",
+      "sha256": "9634e47dc8cf134f41d7efddfcd6a1c92aa31fc91fc0d4027f85f8ed31d0f04d",
+      "source": "web/css/experience.css"
+    },
+    {
+      "bytes": 22399,
+      "path": "CoreGeek/web/index.html",
+      "sha256": "c6f11103cdb072202e7176e6f995227881c4f818e6f2a783160a721d02f9d9c3",
+      "source": "web/index.html"
+    },
+    {
+      "bytes": 60738,
+      "path": "CoreGeek/web/js/app.js",
+      "sha256": "81fef0bdd98f175f7c74b3e39abbd2d8edbd7aac7d0adca8c23b53501b2e2a58",
+      "source": "web/js/app.js"
+    },
+    {
+      "bytes": 10504,
+      "path": "CoreGeek/web/js/constants.js",
+      "sha256": "3105d296c70a889328ca04ff8f5158f05a8e932ce7ee4bf72688054b95f0fd77",
+      "source": "web/js/constants.js"
+    },
+    {
+      "bytes": 15753,
+      "path": "CoreGeek/web/js/effects.js",
+      "sha256": "17f8ddb586bbc2e188aefbeec0704314e5a7018d9e8b0f47cc75f4f0d605a82b",
+      "source": "web/js/effects.js"
+    },
+    {
+      "bytes": 10184,
+      "path": "CoreGeek/web/js/experience.js",
+      "sha256": "f9ec9d99dabfa7abb00363c01eca8de08c46162d660092cf260f57b0af4b0221",
+      "source": "web/js/experience.js"
+    },
+    {
+      "bytes": 3374,
+      "path": "CoreGeek/web/js/guide.js",
+      "sha256": "d4408aef9f818c004b33b25fd98ccb68a5e6b853cca9b0bd3ee52d4ff66843fa",
+      "source": "web/js/guide.js"
+    },
+    {
+      "bytes": 30208,
+      "path": "CoreGeek/web/js/panel.js",
+      "sha256": "fd77aa95598e6ccdad2c5f572480aedfd2cde1ebb4e6e177320b325d669955cd",
+      "source": "web/js/panel.js"
+    },
+    {
+      "bytes": 39135,
+      "path": "CoreGeek/web/js/renderer.js",
+      "sha256": "e3dde757cc5a904c4333cab248ae81bb9b5d5416e8a0aeffd204a0b41796a2ef",
+      "source": "web/js/renderer.js"
+    },
+    {
+      "bytes": 5553,
+      "path": "CoreGeek/web/js/replay.js",
+      "sha256": "c651075addc202d69379a8a0efb04289552d338a0f565d0c57f1edf82e6e24b3",
+      "source": "web/js/replay.js"
+    },
+    {
+      "bytes": 21905,
+      "path": "CoreGeek/web/js/sprites.js",
+      "sha256": "dcc8368c23c6dcd34f2dc4d65b2fef78630715147e5cdbd209f2ccaa86218a35",
+      "source": "web/js/sprites.js"
+    },
+    {
+      "bytes": 24245,
+      "path": "CoreGeek/web/js/viewmodel.js",
+      "sha256": "cf433992788c8179b795ccf8a70dc1c656cf553f2726df052ad9069d9d485d4f",
+      "source": "web/js/viewmodel.js"
+    }
+  ],
+  "generated_at": "1980-01-01T00:00:00Z",
+  "generated_by": "tools/build_submission.py",
+  "rules_baseline": {
+    "date": "2026-09-09",
+    "note": "official rule documents are referenced, not copied",
+    "sha256": "see docs/接口文档.md and docs/任务书.md entries",
+    "version": "v1.0"
+  },
+  "schema": "competition-hw-submission/1",
+  "source_digest": "639be8d41a456e44522161d5dd5db1c3e85e9c315bdcb08dc62e5f99e0188a27"
+}

@@ -9,6 +9,23 @@
 
 ## 1. 固定使用 codex/sgh 获取测试版本
 
+**最简单的上传方法：更新仓库，上传项目根目录 `CoreGeek.tar.gz`。**
+
+```powershell
+git switch codex/sgh
+git pull --ff-only origin codex/sgh
+Get-FileHash .\CoreGeek.tar.gz -Algorithm SHA256
+Get-Content .\CoreGeek.tar.gz.sha256
+```
+
+根目录压缩包是 Codex 已构建并验证的交付物，不需要用户再去找 Release 或自行打包。
+本次包内源码 SHA 为 `0bb66723a1bf72309e1ae95d52ac355b54bcc142`，包含详细日志，尚不含未完成的 DSH 防御优化。
+上传的是 `.tar.gz` 文件，不是同目录的校验/清单文件，也不是 `Demo/` 中的原始示例。
+
+包先由确定的源码 SHA 构建，再由后续交付提交加入仓库；因此包内 SHA 可以与包含二进制的仓库 HEAD 不同。
+反馈优先记录 `CoreGeek.manifest.json` 中的 `commit` 和包 SHA256，同时可附仓库 HEAD。这避免把打包产物包含自身造成版本循环。
+后续 Codex 每次交付更新根目录压缩包、旁车和清单，不让用户切换下载入口。
+
 `codex/sgh` 是公司电脑固定拉取的测试集成分支。Codex 审核并完成相关本地检查后，将可测试变更合入此分支；内部工作分支和 PR 由 Codex 管理，不要求参赛者反复切换。
 分支上的新版本仍可能等待内网验证，合入不等于官方 PASS。每次测试只需记录实际 SHA。
 
@@ -43,7 +60,7 @@ git status --short
 
 `git status --short` 应无输出；若公司电脑有自己的修改，先保留它们，不要用强制重置覆盖。
 把 `git rev-parse HEAD` 的实际结果附到 Issue。只有复现特定旧版本时才另行检出指定 SHA。
-源码 SHA 与 Release 包清单 SHA 需要分别核对：旧下载包不会随 `git pull` 自动更新。
+源码 SHA 与包清单 SHA 需要分别核对：根目录受 Git 管理的包会随 `git pull` 更新，另行下载到其他文件夹的旧包不会。
 
 ## 2. 本地先自检（Windows / PowerShell）
 

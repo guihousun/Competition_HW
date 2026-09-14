@@ -1,10 +1,14 @@
 # Competition_HW
 
+**比赛上传：`git pull` 后直接上传项目根目录的 [CoreGeek.tar.gz](CoreGeek.tar.gz)。**
+不用去 Release 找附件，也不要上传 `Demo/CoreGeek.tar.gz`（官方原始示例）。
+根目录的 `CoreGeek.tar.gz.sha256` 用于校验，`CoreGeek.manifest.json` 记录包内源码版本。
+
 《未来战争》参赛策略与本地端到端调试平台，Python 3.11+，无第三方依赖。
 基于 `Demo/CoreGeek.tar.gz` 示例扩展，当前策略覆盖防御生存子集。
 
 公司电脑固定使用 `codex/sgh`：`git switch codex/sgh` 后运行 `git pull --ff-only origin codex/sgh`。
-每次记录 `git rev-parse HEAD`；内部工作分支由 Codex 管理。构建后的上传包位于 `dist/<SHA>/CoreGeek.tar.gz`，详见下方参赛说明。
+每次记录 `git rev-parse HEAD`；内部工作分支由 Codex 管理。Codex 会把审核过的参赛包提交到根目录，详见下方参赛说明。
 
 ## 启动
 
