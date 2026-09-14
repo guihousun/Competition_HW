@@ -11,12 +11,13 @@ page. They are optional; removing them does not affect the judge path.
 """
 import json
 import logging
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from . import debug, twomatch, recordings
+from . import debug, diagnostics, twomatch, recordings
 from .brain import decide, respond
 from .scenarios import observation
 
@@ -142,25 +143,48 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 # Official contract: answer a usable (empty) command map, never an error.
                 self._json(200, {"roleCommandMap": {}})
+                self._diagnose(None, {"roleCommandMap": {}}, 0.0, invalid_input=True)
             return
         if not isinstance(payload, dict):
             if local:
                 self._json(400, {"error": "请求体必须是 JSON 对象"})
             else:
                 self._json(200, {"roleCommandMap": {}})
+                self._diagnose(None, {"roleCommandMap": {}}, 0.0, invalid_input=True)
             return
         if path.startswith("/debug/"):
             self._debug_post(path, payload)
             return
         # Competition path: never surface an error page or a hang to a judge.
+        started = time.perf_counter()
+        decision_error: str | None = None
         try:
             response = respond(observation(payload))
         except Exception:
             LOGGER.exception("decision failed")
             response = {"roleCommandMap": {}}
+            decision_error = "internal_error"
+        # Planning duration covers only this request handling region: startup time
+        # is never reported as a request timeout.
+        plan_ms = (time.perf_counter() - started) * 1000.0
         LOGGER.info("round %s -> %d commands", payload.get("roundNo"),
                     len(response["roleCommandMap"]))
         self._json(200, response)
+        self._diagnose(payload, response, plan_ms, decision_exception=decision_error)
+
+    def _diagnose(self, payload, response, plan_ms: float, *, invalid_input: bool = False,
+                  decision_exception: str | None = None) -> None:
+        """Local engineering metadata only; never alters the judge response.
+
+        Called after the response bytes are written, and fully fail-open: a
+        diagnostics error can never change the answer or the gameplay.
+        """
+        try:
+            diagnostics.response_summary(payload, response, plan_ms=plan_ms,
+                                         invalid_input=invalid_input,
+                                         decision_exception=decision_exception)
+        except Exception:  # pragma: no cover - defence in depth
+            LOGGER.debug("diagnostics summary skipped")
 
     def _debug_post(self, path: str, payload: dict[str, Any]) -> None:
         try:

@@ -4,7 +4,7 @@
   "trusted_request_authors": [
     "guihousun"
   ],
-  "monitor_interval_minutes": 30,
+  "monitor_interval_minutes": 2,
   "executor": {
     "launcher": "dsh",
     "profile": "sdk",
@@ -33,5 +33,19 @@
     "qa-tooling"
   ],
   "context_management": "DSH native only; no manual history, compression or reconstruction",
-  "dispatch_policy": "Codex handles difficult or ambiguous issues directly; delegate bounded and independently verifiable tasks; escalate after two failed attempts"
+  "dispatch_policy": "Codex chooses direct implementation where appropriate; reuse DSH for bounded independently verifiable tasks; preserve active execution and avoid concurrent edits",
+  "incomplete_evidence_policy": {
+    "missing_sha_blocks": [
+      "definitive_test_version_attribution",
+      "behavior_merge_without_same_sha_intranet_pass"
+    ],
+    "continue_without_sha": [
+      "read_only_diagnosis",
+      "independently_reproducible_fixes",
+      "runtime_identity_and_diagnostics",
+      "reviewable_candidate_packaging"
+    ],
+    "evidence_gaps_may_coexist_with_active_stage": true,
+    "no_speculative_rule_changes": true
+  }
 }

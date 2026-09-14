@@ -21,6 +21,8 @@ Linux 判题入口：`bash run.sh <port>`。官方请求使用根路径 POST，�
 
 ## 文档
 
+- [参赛包下载、启动与内网测试使用说明](docs/SUBMISSION_TESTING.md)（直接上传、版本校验、反馈闭环）
+- [Issue #10 上传失败诊断与证据边界](docs/ISSUE_10_DIAGNOSIS.md)
 - [全局规则与官方核验台账](project_contract.yaml)（25 项核验条目、P0/P1/P2 优先级；当前不作为运行时配置加载）
 - [官方平台核对指南与 Issue 反馈模板](docs/OFFICIAL_VERIFICATION_GUIDE.md)
 

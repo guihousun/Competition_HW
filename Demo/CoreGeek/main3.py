@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""Competition entry point (original sample name/layout, plus diagnostics).
+
+``root`` is exactly ``Path(__file__).resolve().parent`` — the same assumption the
+original sample makes — so ``src/`` and the nested runtime resolve unchanged. No
+upward asset scan: the bundle keeps ``web/`` and ``docs/`` at the archive root,
+which the existing ``parents[4]`` calculations already reach.
+"""
 import logging
 import os
 import sys
@@ -18,6 +25,11 @@ def main() -> None:
         level=logging.INFO,
         format="%(asctime)s | %(message)s",
     )
+
+    from agent import diagnostics
+
+    diagnostics.utf8_stdout()
+    diagnostics.emit_startup_identity(entry=sys.argv[0] or "main3.py", root=root)
 
     from agent.server import serve
 

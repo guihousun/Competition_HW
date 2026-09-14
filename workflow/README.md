@@ -38,7 +38,9 @@ RESULT: <结果与脱敏最小证据>
 
 `new → needs-info / specified → implementing → review → awaiting-intranet / merge-ready → merged → verified`
 
-- `needs-info`：缺少被测SHA、现象或规则依据时，Codex一次性集中提问，不猜测修复。
+- `needs-info`：缺失证据只阻断依赖该证据的步骤。Codex集中询问必要信息，同时继续只读诊断、
+  独立可复现修复、版本标识、诊断工具和候选打包；不得猜测官方规则或把未定位败因写成已修复。
+  `evidence_gaps` 可与 `implementing` / `awaiting-intranet` 并存，用户无需先完成定位。
 - `specified`：Codex写 Spec，绑定输入 digest、base SHA、允许文件、验收测试。
 - `implementing`：同一时刻只运行一个 dsh 任务；任务本身不设执行期限，等待器超时只结束观察，不结束会话。
 - `review`：退出0只说明执行结束。Codex检查完整diff（含未跟踪文件）、保护文件、独立测试和Spec验收。
@@ -53,7 +55,9 @@ RESULT: <结果与脱敏最小证据>
 
 ## 监测与去重
 
-Codex本任务每30分钟由 heartbeat 唤醒，使用已连接的GitHub工具读取用户 `guihousun` 的Issue与评论。
+2026-09-14 当前本机已部署后台轮询，每2分钟检查用户 `guihousun` 的Issue与评论，
+有变化时推送到本任务；原30分钟 heartbeat 已暂停，避免重复派单。
+这是当前本机的运行配置，克隆本候选分支本身不会启动后台监测。
 当前CLI `gh` 登录曾返回401，不把它作为必要依赖，也不把凭据写入仓库。
 
 首次读取所有相关Issue。后续按更新时间增量读取并重叠上次窗口，同时检查所有未完成Issue。
@@ -80,7 +84,8 @@ Issue关闭后停止新任务；正在运行的执行先核实再中止，不重
 
 1. 读取Git状态。当前开发目录可能包含其他Agent未提交工作，不在这里让dsh直接改代码。
 2. 根据Issue的被测SHA与目标分支核对版本。未发布的当前代码不得假装存在于main；
-   缺少必要基线时等待发布/明确移植方案，不从旧main盲目修复。
+   被测版本未知时明确选择已核对的开发基线并登记差异，继续不依赖缺失证据的工作，
+   不从旧main盲目修复，也不把开发基线冒充实际被测版本。
 3. 为专员维护固定的独立worktree，在其中使用候选分支 `codex/issue-<n>-v<revision>`；切换分支前必须处理完前项改动。
 4. 按 `SPEC_TEMPLATE.md` 写文件。与CodeGraph定位结果核对后，生成manifest：
 
@@ -120,11 +125,12 @@ worker失败/停止后不得再用 `send` 顶替：该命令会明确拒绝。�
 不能承诺关机后的实时监听；恢复后重扫未完成Issue和上次窗口，补处理遗漏变化。
 官方说明：[Scheduled tasks](https://learn.chatgpt.com/docs/automations?surface=app)。
 
-停止方式：暂停名为 `Competition_HW Issue 协作` 的自动化。
-策略配置在 `policy.json`；只更改配置文件不会自动更新已保存的调度提示词，需同步更新自动化。
+当前后台监测由本机轮询进程控制；暂停旧自动化不会停止该进程。
+策略配置在 `policy.json`；更改文件不会自动重配正在运行的轮询器或自动化，需核对当前部署。
 
 ## 已验证与仍待发生
 
 已验证GitHub读取、dsh调用；模型/强度握手与最小任务见本地probe结果。
-还没有真实内网反馈Issue，因此真实修复→公司回测→合并闭环尚未发生。
+已收到真实内网反馈；Issue #10 的日志已确认来自官方示例，我方包另报 `cant get package`。
+候选修复→公司复测→合并的验证结论须逐项登记，不从日志或本地测试推断内网PASS。
 测试模板与工作流文件合入默认分支后，GitHub新建Issue页面才会显示模板。
