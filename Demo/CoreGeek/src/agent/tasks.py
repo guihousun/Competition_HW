@@ -142,10 +142,18 @@ Solver = Callable[[SolverContext], Plan]
 
 
 class SolverRegistry:
-    """Atomic registry of task solvers, tried in priority order."""
+    """Atomic registry of task solvers, tried in priority order.
+
+    Each entry keeps its **own** priority, so ordering is a stored property of the
+    registration rather than a snapshot of the last ``register`` call. Ascending
+    numeric order wins; equal priorities keep stable insertion order (Python's
+    ``sort`` is stable), and ``replace=True`` removes and re-appends the entry, so
+    a replaced solver takes a new registration-order position among its peers.
+    """
 
     def __init__(self) -> None:
-        self._solvers: list[tuple[str, Solver]] = []
+        # (name, solver, priority) — priority is stored per entry.
+        self._solvers: list[tuple[str, Solver, int]] = []
         self._lock = threading.RLock()
 
     def register(self, name: str, solver: Solver, *, priority: int = 100,
@@ -155,26 +163,28 @@ class SolverRegistry:
         if not name:
             raise TaskError("solver needs a name")
         with self._lock:
-            if any(existing == name for existing, _ in self._solvers) and not replace:
+            if any(existing == name for existing, *_ in self._solvers) and not replace:
                 raise TaskError(f"solver {name!r} already registered")
-            self._solvers = [(n, s) for n, s in self._solvers if n != name]
-            self._solvers.append((name, solver))
-            self._solvers.sort(key=lambda item: priority)
+            self._solvers = [(n, s, p) for n, s, p in self._solvers if n != name]
+            self._solvers.append((name, solver, priority))
+            # Stable sort by the stored priority: equal priorities keep the order
+            # in which they were (re)registered.
+            self._solvers.sort(key=lambda item: item[2])
         return solver
 
     def unregister(self, name: str) -> None:
         with self._lock:
-            self._solvers = [(n, s) for n, s in self._solvers if n != name]
+            self._solvers = [(n, s, p) for n, s, p in self._solvers if n != name]
 
     def names(self) -> tuple[str, ...]:
         with self._lock:
-            return tuple(name for name, _ in self._solvers)
+            return tuple(name for name, *_ in self._solvers)
 
     def solve(self, context: SolverContext) -> tuple[str, Plan] | None:
         """First solver that returns a plan wins; ``None`` means "no idea yet"."""
         with self._lock:
             solvers = list(self._solvers)
-        for name, solver in solvers:
+        for name, solver, _priority in solvers:
             plan = solver(context)
             if plan is not None:
                 return name, plan

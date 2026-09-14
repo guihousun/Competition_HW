@@ -1,0 +1,18 @@
+Full suite on the frozen P0a change set.
+
+Command: python -m unittest discover -s tests -v
+Python:  3.11.10 (C:/Users/27334/AppData/Roaming/uv/python/cpython-3.11.10-windows-x86_64-none/python.exe)
+Scope:   worktree ds-recovery, base 1fcf7ba9cf93add6c2b6684ca4bc62a2acdef850
+Files:   Demo/CoreGeek/src/agent/tasks.py (SolverRegistry only),
+         tests/test_solver_registry.py (new), tests/test_llm_budget_contract.py (new),
+         reports/llm-tasks-p0a/ (this report)
+
+Result:
+----------------------------------------------------------------------
+Ran 513 tests in 254.141s
+
+OK
+
+No FAIL/ERROR lines. The verbose 72 KB log was not copied into the repository;
+this summary is the aggregate record. Existing diagnostics/telemetry/package
+tests stay green; only the registry implementation and new tests changed.

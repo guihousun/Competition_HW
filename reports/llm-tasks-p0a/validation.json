@@ -1,0 +1,100 @@
+{
+  "baseline_commit": "1fcf7ba9cf93add6c2b6684ca4bc62a2acdef850",
+  "baseline_source_sha256": "8136e6c895988ee35280bd20b3c61088494ff11ba527538b50c60ff967f5fcf5",
+  "candidate_source_sha256": "6972c8e9ccfd19119d2ac30f57f04b728753dcfaa0e858be9c8578ff26803132",
+  "cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 130,
+      "base_hp": 1500,
+      "score_local": 124,
+      "actions": {
+        "move": 130,
+        "build": 15,
+        "collect": 20,
+        "acceptTask": 1,
+        "submitAnswer": 2,
+        "buy": 2,
+        "attack": 6
+      },
+      "execution_failures": 0,
+      "audit_errors": {}
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "rounds": 130,
+      "base_hp": 1500,
+      "score_local": 124,
+      "actions": {
+        "move": 140,
+        "build": 14,
+        "collect": 31,
+        "acceptTask": 1,
+        "submitAnswer": 2,
+        "buy": 2,
+        "attack": 4
+      },
+      "execution_failures": 0,
+      "audit_errors": {}
+    },
+    {
+      "seed": 90317,
+      "side": "challenger",
+      "rounds": 130,
+      "base_hp": 1500,
+      "score_local": 124,
+      "actions": {
+        "move": 146,
+        "build": 18,
+        "collect": 20,
+        "acceptTask": 1,
+        "submitAnswer": 2,
+        "buy": 2,
+        "attack": 4
+      },
+      "execution_failures": 0,
+      "audit_errors": {}
+    },
+    {
+      "seed": 90317,
+      "side": "defender",
+      "rounds": 130,
+      "base_hp": 1500,
+      "score_local": 124,
+      "actions": {
+        "move": 149,
+        "build": 18,
+        "collect": 21,
+        "acceptTask": 1,
+        "submitAnswer": 2,
+        "buy": 2,
+        "attack": 4
+      },
+      "execution_failures": 0,
+      "audit_errors": {}
+    }
+  ],
+  "default_behavior_equal": true,
+  "full_response_parity": {
+    "cases": 11,
+    "equal": true,
+    "prompt_cases": 2,
+    "execute_cases": 2,
+    "submit_cases": 2
+  },
+  "python": "3.11.10",
+  "full_suite": {
+    "executor": "DSH original native turn13",
+    "tests": 513,
+    "result": "PASS",
+    "seconds": 254.141
+  },
+  "codex_focused": {
+    "registry": 14,
+    "budget_and_memory": 12,
+    "result": "PASS"
+  },
+  "scope": "Local deterministic tests and single-team simulator fixtures; no real LLM or official platform validation."
+}
