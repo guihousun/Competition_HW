@@ -805,31 +805,58 @@ def _camp_command(turn: Turn, pioneer: Unit, state: dict[str, Any]) -> dict[str,
     return move_command(step)
 
 
-def _treasure_claims_pioneer(turn: Turn, state: dict[str, Any], pioneer: Unit) -> bool:
-    """True when the treasure trip is worth interrupting the task loop for.
+def _treasure_route(turn, state, pioneer, notes, commands=None):
+    """Public, bounded feasibility estimate for a complete known treasure trip.
 
-    Deliberately narrow: only when the pioneer can already pay for the rite (so the
-    trip is just travel and a summon), or when the window is open and the altar is
-    reachable before it shuts. A wider condition starved the task loop.
+    Each buy consumes a round; arrival next to the altar is not itself a summon.
+    Costs use reachable standing cells instead of straight-line travel estimates.
     """
-    if not turn.is_day or pioneer is None:
+    if (state.get("phaseTask") or not notes.get("known")
+            or notes.get("taken") or not notes.get("site")):
+        return None
+    required = Counter(notes.get("items") or [])
+    if not required:
+        return None
+    missing = list((required - Counter(pioneer.backpack)).elements())
+    if missing and (pioneer.capacity is None or len(pioneer.backpack) + len(missing) > pioneer.capacity):
+        return None
+    prices = shop_prices(state)
+    available = available_gold(turn, state, commands or {}, replacing=pioneer.unit_id)
+    if any(item not in prices for item in missing) or sum(prices[item] for item in missing) > available:
+        return None
+    site = Pos.load(notes["site"])
+    closes = int(notes.get("closesAt") or 0)
+    # Cheap lower bound avoids path searches once even an unobstructed trip fails.
+    if turn.round_no + max(0, distance(pioneer.pos, site) - 1) + len(missing) > closes:
+        return None
+    routes = _RouteCost(turn, pioneer)
+    start, elapsed = pioneer.pos, 0
+    if missing:
+        shop = _shop_cell(turn)
+        if shop.x < 0:
+            return None
+        if not _adjacent_zone(state, pioneer.pos, "weaponShop"):
+            approach = _mine_approach(turn, pioneer, shop, routes)
+            if approach is None:
+                return None
+            start, elapsed = approach
+        elapsed += len(missing)
+    if distance(start, site) <= 1:
+        altar_cost = 0
+    else:
+        altar_cost = min((routes(start, cell) for cell in _stand_cells(turn, pioneer, site, set())), default=10 ** 9)
+    earliest = max(turn.round_no + elapsed + altar_cost, int(notes.get("opensAt") or 0))
+    if altar_cost >= 10 ** 6 or earliest > closes:
+        return None
+    return {"missing": missing, "site": site, "summon_round": earliest}
+
+
+def _treasure_claims_pioneer(turn: Turn, state: dict[str, Any], pioneer: Unit) -> bool:
+    """Only an open, feasible trip may displace an unstarted task walk."""
+    if pioneer is None or not turn.is_day:
         return False
     notes = _treasure_notes(state, turn)
-    if not notes.get("known") or notes.get("taken") or not notes.get("site"):
-        return False
-    site = Pos(int(notes["site"].get("x", -1)), int(notes["site"].get("y", -1)))
-    bag = [str(item) for item in pioneer.backpack]
-    required = [str(item) for item in notes.get("items") or ()]
-    missing = [item for item in required if bag.count(item) < required.count(item)]
-    closes_at = int(notes.get("closesAt") or 0)
-    if not missing:
-        return turn.round_no + distance(pioneer.pos, site) <= closes_at
-    prices = shop_prices(state)
-    affordable = any(prices.get(item, 10 ** 9) <= turn.gold for item in missing)
-    if not affordable:
-        return False
-    travel = _distance_to_shop(turn, state) + distance(_shop_cell(turn), site)
-    return turn.round_no + travel <= closes_at
+    return bool(notes.get("open") and _treasure_route(turn, state, pioneer, notes))
 
 
 def _treasure_step(turn: Turn, payload: dict[str, Any], pioneer: Unit) -> dict[str, Any] | None:
@@ -842,7 +869,7 @@ def _treasure_step(turn: Turn, payload: dict[str, Any], pioneer: Unit) -> dict[s
     backpack — otherwise the trip is a wasted day.
     """
     notes = _treasure_notes(payload, turn)
-    if not notes.get("known") or not notes.get("open") or notes.get("taken"):
+    if not notes.get("open") or _treasure_route(turn, payload, pioneer, notes) is None:
         return None
     bag = [str(item) for item in pioneer.backpack]
     required = [str(item) for item in notes.get("items") or ()]
@@ -886,38 +913,16 @@ def _treasure_errand(turn: Turn, pioneer: Unit, commands: dict[int, dict[str, An
         if errands is not None:
             errands.pop(key, None)
         return False
-    site = Pos(int(notes["site"].get("x", -1)), int(notes["site"].get("y", -1)))
+    route = _treasure_route(turn, state, pioneer, notes, commands)
+    if route is None:
+        return False
+    site = route["site"]
     required = [str(item) for item in notes.get("items") or ()]
-    bag = [str(item) for item in pioneer.backpack]
-    missing = [item for item in required if bag.count(item) < required.count(item)]
-    prices = shop_prices(state)
-    gold = available_gold(turn, state, commands, replacing=pioneer.unit_id)
-    wanted = [item for item in missing if prices.get(item, 10 ** 9) <= gold]
-
+    missing = route["missing"]
     if missing:
-        # Nothing affordable right now: raise the gold instead of loitering at the
-        # shop, and try again when the miner's takings allow it.
-        if not wanted:
-            return False
-        at_shop = _adjacent_zone(state, pioneer.pos, "weaponShop")
-        if not at_shop:
-            shop_cell = _shop_cell(turn)
-            travel = distance(pioneer.pos, shop_cell) + distance(shop_cell, site)
-            closes_at = int(notes["closesAt"])
-            # Two ways the trip pays off, and both must be considered together:
-            # arriving before the window opens (then waiting at the altar), or
-            # arriving during the window. Requiring the first alone blocked every
-            # errand whose window was closer than the walk — seed 1's window opens
-            # only ~4 rounds after the pioneer first has the gold.
-            if turn.round_no + travel > closes_at:
-                return False      # cannot finish even if it left now
-            if not notes.get("open") and turn.round_no + travel > int(notes["opensAt"]):
-                # It will arrive after the window opens: fine, as long as it still
-                # gets there before the window shuts, which the check above proved.
-                pass
+        if not _adjacent_zone(state, pioneer.pos, "weaponShop"):
             return _walk_to_zone(turn, pioneer, "weaponShop", commands)
-        # At the shop: buy what the rite needs and the gold covers.
-        commands[pioneer.unit_id] = {"action": "buy", "name": wanted[0]}
+        commands[pioneer.unit_id] = {"action": "buy", "name": missing[0]}
         return True
 
     if not notes.get("open"):

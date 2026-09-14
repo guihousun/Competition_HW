@@ -1,0 +1,6 @@
+{
+  "status": "harness_failed_before_first_model_request",
+  "reason": "teamAgent is null immediately after task acceptance; benchmark dereferenced it",
+  "verification": "First debug step reproduced with unconfigured client and zero call budget",
+  "superseded_by": "real-long-2; original directory preserved"
+}
