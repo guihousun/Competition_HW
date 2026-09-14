@@ -1,0 +1,33 @@
+{
+  "scope": "Real OpenRouter model + TaskAgent + virtual sandbox components. NOT integrated game/router/HTTP validation or intranet PASS.",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "effort": "max",
+  "api_effort": "xhigh",
+  "python": "3.11.14",
+  "call_budget": 8,
+  "calls": 5,
+  "stable_sources": true,
+  "files": {
+    "task_agent.py": "2dbfe559bef9650d918d1383084dbda207e5d39c6a475ebff7a69e154d5f24c1",
+    "deepseek_client.py": "5dedec0c2042b33dc1824331ee7b32ff61991e6bb39a105fe4bd33bebe2af0ee",
+    "local_task_cases.py": "e902b40784d21cb3dccb0dce61c11959b7552b68c6b7390c8cd272d845727ca9",
+    "local_task_sandbox.py": "b14de2ca8132b02a583d62f412b46b239a950116e2573758bc696f27d1d6178e"
+  },
+  "results": [
+    {
+      "case": "weather-doc-v1-beijing",
+      "repetition": 1,
+      "status": "PASS",
+      "answer_correct": true,
+      "document_read": true,
+      "data_query": true,
+      "reason": "local_fixture_answer_accepted",
+      "model_calls": 5,
+      "model_tokens": 7706,
+      "commands": 4,
+      "submissions": 1,
+      "rounds": 11,
+      "elapsed_seconds": 36.015999999974156
+    }
+  ]
+}

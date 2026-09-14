@@ -1,0 +1,12 @@
+{
+  "status": "stopped_for_verified_fixture_defect",
+  "known_completed_trials": 1,
+  "known_completed_calls": 7,
+  "known_completed_tokens": 12949,
+  "active_trial_at_stop": "weather-doc-v1-beijing repetition 2",
+  "active_trial_calls_and_billing": "unknown; process interrupted, may include an in-flight provider request",
+  "process": 33036,
+  "reason": "cat /brief incorrectly reported no such file although /brief is a directory. Preserve original failed trial; correct virtual filesystem semantics before a new experiment.",
+  "DSH_job": "unchanged; native turn14 PID71304 still active",
+  "viewer": "unchanged; PID34724"
+}

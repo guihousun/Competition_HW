@@ -6,24 +6,29 @@ import subprocess
 import urllib.error
 import urllib.request
 
-ENDPOINT = 'https://api.deepseek.com/chat/completions'
-MODEL = 'deepseek-flash'
+ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions'
+PROVIDER = 'OpenRouter'
+MODEL = 'deepseek/deepseek-v4.1-flash'
 EFFORT = 'max'
+API_EFFORT = 'xhigh'  # user-approved local max mapping, same as the DSH worker
 
 
 def credential():
-    key = os.environ.get('DEEPSEEK_API_KEY', '').strip()
+    key = os.environ.get('OPENROUTER_API_KEY', '').strip()
     if key:
         return key
-    path = Path(os.environ.get('LOCALAPPDATA', '')) / 'CompetitionHW/deepseek-key.dpapi'
+    path = Path(os.environ.get('LOCALAPPDATA', '')) / 'CompetitionHW/openrouter-key.dpapi'
     if os.name != 'nt' or not path.is_file():
         return ''
     # Windows DPAPI is tied to this OS user. Never print the result or shell errors.
-    script = "$s=(Get-Content -Raw -LiteralPath (Join-Path $env:LOCALAPPDATA 'CompetitionHW/deepseek-key.dpapi')).Trim() | ConvertTo-SecureString; $p=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try {[Runtime.InteropServices.Marshal]::PtrToStringBSTR($p)} finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($p)}"
-    result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
-                            capture_output=True, text=True, timeout=10,
-                            env={k: v for k, v in os.environ.items() if k.lower() != 'psmodulepath'},
-                            creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    script = "$s=(Get-Content -Raw -LiteralPath (Join-Path $env:LOCALAPPDATA 'CompetitionHW/openrouter-key.dpapi')).Trim() | ConvertTo-SecureString; $p=[Runtime.InteropServices.Marshal]::SecureStringToBSTR($s); try {[Runtime.InteropServices.Marshal]::PtrToStringBSTR($p)} finally {[Runtime.InteropServices.Marshal]::ZeroFreeBSTR($p)}"
+    try:
+        result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command', script],
+                                capture_output=True, text=True, timeout=10,
+                                env={k: v for k, v in os.environ.items() if k.lower() != 'psmodulepath'},
+                                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+    except (OSError, subprocess.SubprocessError):
+        return ''
     return result.stdout.strip() if result.returncode == 0 else ''
 
 
@@ -48,7 +53,7 @@ class DeepSeekClient:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 16000:
             raise ValueError('invalid_prompt_length')
         payload = {'model': MODEL, 'messages': [{'role': 'user', 'content': prompt}],
-                   'thinking': {'type': 'enabled'}, 'reasoning_effort': EFFORT,
+                   'reasoning': {'effort': API_EFFORT, 'exclude': True},
                    'max_tokens': 4096, 'stream': False}
         request = urllib.request.Request(ENDPOINT, json.dumps(payload).encode('utf-8'),
                     {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + self._key})
@@ -67,7 +72,9 @@ class DeepSeekClient:
             # Only counters and final content; never return reasoning_content/raw headers.
             usage = {k: v for k, v in (data.get('usage') or {}).items()
                      if k in ('prompt_tokens', 'completion_tokens', 'total_tokens') and isinstance(v, int)}
-            return {'answer': answer, 'usage': usage}
+            reported_model = data.get('model')
+            return {'answer': answer, 'usage': usage,
+                    'reported_model': reported_model if isinstance(reported_model, str) else None}
         except urllib.error.HTTPError as error:
             raise RuntimeError('provider_http_' + str(error.code)) from None
         except (TimeoutError, urllib.error.URLError):

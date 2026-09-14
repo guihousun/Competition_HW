@@ -167,7 +167,7 @@
         const payload = await this.postJson('/debug/llm/scenario', {seed: Number(document.getElementById('seed').value), side: document.getElementById('side').value});
         this.world = HW.World.fromScenario(payload);
         this.panel.empty(false); this.afterWorldChange(); this.renderer.fit(this.world);
-        this.panel.toast('已启用真实 DeepSeek API：演示任务会调用模型，等待时暂停推进。');
+        this.panel.toast('已启用真实模型 API：演示任务会调用模型，等待时暂停推进。');
         ready = true;
       } catch (error) { this.panel.toast('LLM 演示启动失败：' + error.message, 'error'); }
       finally { this.busy = false; this.panel.setBusy(false); }
@@ -378,7 +378,7 @@
 
     /* ------------------------------------------------------------ clock */
     statusInfo() {
-      if (this.waitingLLM) return {label: '等待 DeepSeek', detail: '模型返回前不推进游戏回合'};
+      if (this.waitingLLM) return {label: '等待模型', detail: '模型返回前不推进游戏回合'};
       if (!this.world) return { label: '待机', detail: '尚未创建对局' };
       if (this.playing) return { label: '播放中', detail: `每 ${this.frameMs} ms 一帧` };
       if (this.stepping) return { label: '正在结算', detail: '等待本地 /debug/step' };

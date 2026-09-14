@@ -1,0 +1,17 @@
+{
+  "requested_model": "deepseek/deepseek-v4.1-flash",
+  "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+  "effort": "max",
+  "api_effort": "xhigh",
+  "calls": 1,
+  "scope": "real API connection and authored arithmetic/JSON fixture only; not full Agent or official platform validation",
+  "answer": "{\"request_id\":\"smoke-20260915\",\"plan\":{\"kind\":\"answer\",\"answer\":\"42\",\"evidence_ids\":[\"fixture\"],\"reason\":\"17 加 25 等于 42。\"}}",
+  "usage": {
+    "prompt_tokens": 81,
+    "completion_tokens": 112,
+    "total_tokens": 193
+  },
+  "reported_model": "deepseek/deepseek-v4.1-flash",
+  "status": "PASS",
+  "elapsed_seconds": 8.547000000020489
+}

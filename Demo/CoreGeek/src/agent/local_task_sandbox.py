@@ -57,6 +57,16 @@ Unsupported shell constructs return nonzero without partially executing them.
         cwd = _path(str(fixture.get('cwd') or '/workspace'), '/')
         files = {_path(str(k), cwd): str(v) for k, v in (fixture.get('files') or {}).items()}
         programs = {_path(str(k), cwd): v for k, v in (fixture.get('programs') or {}).items()}
+        # Virtual directories exist independently of readable files. Reporting
+        # EISDIR as ENOENT misled a real model into repeatedly searching for a
+        # directory already present in ls output.
+        directories = {'/', cwd}
+        directories.update(_path(str(p), cwd) for p in fixture.get('directories') or [])
+        for name in files.keys() | programs.keys() | set(directories):
+            parent = posixpath.dirname(name)
+            while parent and parent not in directories:
+                directories.add(parent)
+                parent = posixpath.dirname(parent)
         if argv == ['pwd']:
             return _reply(cwd)
         if argv[0] == 'cat':
@@ -66,6 +76,10 @@ Unsupported shell constructs return nonzero without partially executing them.
             if len(args) != 1:
                 return _reply('Usage: cat [--] path', 2)
             name = _path(args[0], cwd)
+            if name in directories:
+                return _reply('cat: ' + name + ': Is a directory', 1)
+            if name in programs:
+                return _reply('Virtual executable source is not exposed; use its documented interface', 1)
             if name not in files:
                 return _reply('No such virtual file: ' + name, 1)
             return _reply(files[name])
@@ -79,9 +93,9 @@ Unsupported shell constructs return nonzero without partially executing them.
             if name in files or name in programs:
                 return _reply(posixpath.basename(name))
             prefix = name.rstrip('/') + '/'
-            children = sorted({p[len(prefix):].split('/')[0] for p in files.keys() | programs.keys()
-                               if p.startswith(prefix)})
-            return _reply('\n'.join(children)) if children else _reply('No such virtual directory', 1)
+            children = sorted({p[len(prefix):].split('/')[0] for p in files.keys() | programs.keys() | directories
+                               if p != name and p.startswith(prefix)})
+            return _reply('\n'.join(children)) if name in directories else _reply('No such virtual directory', 1)
         if argv[0] in ('python3', 'python') and len(argv) >= 2:
             program = programs.get(_path(argv[1], cwd))
             if program is None:

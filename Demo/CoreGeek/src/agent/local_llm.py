@@ -4,7 +4,7 @@ import hashlib
 import threading
 import time
 import uuid
-from .deepseek_client import DeepSeekClient, MODEL, EFFORT
+from .deepseek_client import DeepSeekClient, MODEL, EFFORT, PROVIDER
 
 
 class LocalLLM:
@@ -22,7 +22,7 @@ class LocalLLM:
 
     def status(self):
         with self.lock:
-            return {'provider': 'DeepSeek', 'model': MODEL, 'effort': EFFORT,
+            return {'provider': PROVIDER, 'model': MODEL, 'effort': EFFORT,
                     'configured': self._client().configured, 'calls': self.calls,
                     'maxCalls': self.max_calls, 'note': '仅显式启用的本地场景调用，额度是本地费用保护，不是官方规则'}
 

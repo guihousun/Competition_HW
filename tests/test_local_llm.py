@@ -6,7 +6,7 @@ from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 from urllib.request import Request, urlopen
 from test_baseline import fixture
-from agent.deepseek_client import DeepSeekClient, NoRedirect
+from agent.deepseek_client import DeepSeekClient, NoRedirect, credential
 from agent.local_llm import LocalLLM
 from agent import local_llm, debug
 from agent.planner import PlannerState
@@ -114,11 +114,20 @@ class LocalLLMTests(unittest.TestCase):
         client = DeepSeekClient(key='fake-unit-test-key', opener=opener)
         result = client.complete('math')
         body = json.loads(opener.request.data)
-        self.assertEqual('deepseek-flash', body['model'])
-        self.assertEqual('max', body['reasoning_effort'])
+        self.assertEqual('deepseek/deepseek-v4.1-flash', body['model'])
+        self.assertEqual({'effort': 'xhigh', 'exclude': True}, body['reasoning'])
+        self.assertEqual('https://openrouter.ai/api/v1/chat/completions', opener.request.full_url)
+        self.assertNotIn('thinking', body)
+        self.assertNotIn('reasoning_effort', body)
         self.assertNotIn('fake-unit-test-key', json.dumps(result))
         self.assertNotIn('private-reasoning', json.dumps(result))
         self.assertIsNone(NoRedirect().redirect_request(None,None,302,'',{},'https://other.invalid'))
+
+    def test_openrouter_credentials_do_not_fall_back_to_another_provider_key(self):
+        with patch.dict('os.environ', {'OPENROUTER_API_KEY': 'openrouter-test', 'DEEPSEEK_API_KEY': 'other-provider'}, clear=True):
+            self.assertEqual(credential(), 'openrouter-test')
+        with patch.dict('os.environ', {'DEEPSEEK_API_KEY': 'other-provider'}, clear=True), patch('pathlib.Path.is_file', return_value=False):
+            self.assertEqual(credential(), '')
 
     def test_official_http_keeps_optional_channels_without_calling_api(self):
         server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)

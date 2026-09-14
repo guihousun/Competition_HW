@@ -47,6 +47,24 @@ class VirtualSandboxTests(unittest.TestCase):
         self.assertFalse(self.run_cmd('python3 /api/weather.py --city Shanghai', env).ok)
         self.assertTrue(self.run_cmd('python3 /v2/query.py --city Shanghai', env).ok)
 
+    def test_directory_read_is_not_reported_as_a_missing_file(self):
+        result = self.run_cmd('cat /api')
+        self.assertFalse(result.ok)
+        self.assertIn('Is a directory', result.output)
+        self.assertNotIn('No such', result.output)
+        self.assertIn('weather.py', self.run_cmd('ls /api').output)
+        result = self.run_cmd('cat /api/weather.py')
+        self.assertFalse(result.ok)
+        self.assertIn('documented interface', result.output)
+
+    def test_empty_declared_directory_and_cwd_exist(self):
+        env = {'cwd': '/workspace', 'files': {'/brief/README': 'instructions'}, 'directories': ['/empty']}
+        for path in ('/workspace', '/empty'):
+            result = self.run_cmd('ls ' + path, env)
+            self.assertTrue(result.ok)
+            self.assertEqual(result.output, '')
+        self.assertFalse(self.run_cmd('ls /missing', env).ok)
+
     def test_no_host_commands_file_reads_or_partial_shell_execution(self):
         with patch('subprocess.run', side_effect=AssertionError('host execution')), \
              patch('builtins.open', side_effect=AssertionError('host file read')):

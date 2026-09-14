@@ -145,7 +145,7 @@
     const llmStatus = llm.llm_status || {};
     const labels = {running: '正在请求，游戏回合暂停等待', done: '回答已返回', failed: '调用失败', disabled: '未启用真实 API'};
     setText($('llm-channel-status'), llm.llm_enabled
-      ? 'DeepSeek · deepseek-flash / max · ' + (labels[llmStatus.status] || '已启用，等待任务请求') + (llmStatus.error ? '（' + llmStatus.error + '）' : '')
+      ? 'LLM · ' + (llmStatus.model || '模型信息待返回') + ' · ' + (labels[llmStatus.status] || '已启用，等待任务请求') + (llmStatus.error ? '（' + llmStatus.error + '）' : '')
       : '普通场景不调用真实 API。可在对局设置中体验 LLM 任务。');
     setFlag($('llm-demo'), 'disabled', busy);
     if (HW.guide) HW.guide.update(app, world);
