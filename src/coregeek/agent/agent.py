@@ -48,6 +48,7 @@ class Agent:
                 self.SOP2Prompt,
                 "把你总结出的解题方法整段替换进后续每一份 prompt 的「沉淀的 SOP」段。"
                 "它不产出命令、当回合也没有回执，但从此每道题都会看到它。"
+                "产出的sop应该是任务无关的，而是对方法的总结，且要尽量简短。"
                 "所以调用它的那一回合必须把答案一起写上。",
                 (("sop", "SOP 全文"),),
             ),
@@ -132,7 +133,7 @@ class Agent:
 
         第 32 步起每个工具是一个**块**（用户指定的格式）：
 
-            ## 工具名
+            ## ToolName: {name}
             Description: 一句话说清它干什么
             Params:
                 - 参数名: 用途
@@ -145,7 +146,7 @@ class Agent:
         """
         blocks: list[str] = []
         for name, (_, desc, params) in self._tools.items():
-            lines = [f"## {name}", f"Description: {desc}"]
+            lines = [f"## ToolName: {name}", f"Description: {desc}"]
             if params:
                 lines.append("Params:")
                 lines += [f"    - {pname}: {pdesc}" for pname, pdesc in params]
