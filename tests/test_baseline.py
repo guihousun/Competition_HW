@@ -12,6 +12,7 @@ import socket
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Demo/CoreGeek/src"))
 from agent.brain import decide
+from agent import brain
 from agent.grid import next_step
 from agent.protocol import Pos, Turn
 
@@ -30,10 +31,25 @@ class BaselineTests(unittest.TestCase):
         workers = [r for r in p["teamOur"]["roles"] if r["roleType"] == "worker"]
         workers[0]["pos"] = {"x": 8, "y": 21}
         workers[1]["pos"] = {"x": 8, "y": 23}
+        turn = Turn.load(p)
         commands = decide(p)
+        # 25 gold buys at most one tower, and only an official tower kind.
         builds = [c for c in commands.values() if c["action"] == "build"]
-        self.assertEqual(len(builds), 1)
-        self.assertIn(builds[0]["name"], ("gatling", "railgun", "rocket"))
+        self.assertLessEqual(len(builds), 1)
+        for build in builds:
+            self.assertIn(build["name"], ("gatling", "railgun", "rocket"))
+        # Issue 12: the planned slots face the expected approach (east here), so
+        # the worker may walk to the site before building; either way the target
+        # must be a front-side weapon-ring cell.
+        sites = brain._tower_sites(turn)
+        self.assertTrue(sites, "a missing tower must still be planned")
+        station_x = turn.station().pos.x
+        for site in sites:
+            self.assertGreater(site.x, station_x + 1,
+                               "tower slots must face the approach (issue 12)")
+        if not builds:
+            self.assertTrue(any(c["action"] == "move" for c in commands.values()),
+                            "with a tower planned but not yet adjacent, a worker moves")
         p = fixture()
         p["roundNo"] = 1
         self.assertFalse(any(c["action"] == "build" and c["name"] != "wall"

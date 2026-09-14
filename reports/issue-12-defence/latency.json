@@ -1,0 +1,9 @@
+{
+  "cached": true,
+  "official_sample_cold_ms": 13.66,
+  "official_sample_warm_ms": 13.26,
+  "local_scenario_cold_ms": 24.15,
+  "local_scenario_warm_ms": 3.93,
+  "local_scenario_cleared_cache_single_ms": 24.83,
+  "note": "min of 5 warm calls; cold means the defence memo and the tower-site memo are empty; decide() is the judge entry, not HTTP"
+}

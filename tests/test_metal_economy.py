@@ -26,7 +26,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "Demo/CoreGeek/src"))
 
 from agent import brain  # noqa: E402
-from agent.protocol import Pos, Turn, collect_command, move_command  # noqa: E402
+from agent.protocol import (Pos, Turn, collect_command, distance,  # noqa: E402
+                            move_command)
 from agent.simulator import step  # noqa: E402
 
 
@@ -298,32 +299,23 @@ class MetalCollectionTests(unittest.TestCase):
             self.assertLess(moves, 40, "the walk must terminate at the vendor")
 
     def test_both_sides_get_the_same_metal_decision(self):
-        # R02/R08: the same situation mirrored for the defender must behave alike.
+        # R02/R08: the same legal situation for either team must behave alike.
+        #
+        # The fixture is the file's own outer placement (worker and mine outside
+        # the ring, 任务书 §4.4 adjacency). An earlier version of this test put the
+        # worker *on the base footprint* and relied on the accidental hole issue 12
+        # fixes to let it reach the vendor; that is no longer a legal expectation.
         for side in ("challenger", "defender"):
             with self.subTest(side=side):
                 state = board()
                 state["teamOur"]["type"] = side
-                mirrored = deepcopy(state)
-                mirrored["mapInfo"]["zones"] = [
-                    z for z in mirrored["mapInfo"]["zones"]
-                    if z["neutralType"] not in ("copper", "terrain")]
-                mirrored["teamOur"]["roles"] = [
-                    u for u in mirrored["teamOur"]["roles"]
-                    if u["roleType"] not in ("wall", "rocket")]
-                base = Turn.load(mirrored).station()
-                worker_pos = Pos(base.pos.x + 1, base.pos.y - 1)
-                mine = Pos(base.pos.x + 2, base.pos.y - 1)
-                next(u for u in mirrored["teamOur"]["roles"]
-                     if u["roleType"] == "worker")["pos"] = worker_pos.dump()
-                mirrored["mapInfo"]["zones"].append(
-                    {"pos": mine.dump(), "neutralType": "copper"})
-                for i, pos in enumerate(brain._wall_order(Turn.load(mirrored))):
-                    mirrored["teamOur"]["roles"].append(
-                        unit(40000 + i, "wall", pos.x, pos.y, 1000))
-                for i, pos in enumerate(brain._tower_sites(Turn.load(mirrored))[:3]):
-                    mirrored["teamOur"]["roles"].append(
-                        unit(10040 + i, "rocket", pos.x, pos.y, 1000))
-                self.assertEqual(metal_command(mirrored), collect_command(mine))
+                turn = Turn.load(state)
+                worker = next(u for u in turn.workers() if u.unit_id == 10010)
+                self.assertEqual(worker.pos, Pos(*WORKER))
+                self.assertEqual(distance(worker.pos, Pos(*MINE)), 1)
+                self.assertFalse(worker.pos in turn.occupied_cells() - {worker.pos})
+                self.assertIsNotNone(brain._vendor_route(turn, worker))
+                self.assertEqual(metal_command(state), collect_command(Pos(*MINE)))
 
 
 class RealBoardChainTests(unittest.TestCase):

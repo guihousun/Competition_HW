@@ -3,7 +3,8 @@ from copy import deepcopy
 from test_baseline import ROOT
 from agent.scenarios import scenario, observation, prepare_round
 from agent.simulator import step
-from agent.brain import decide, _gate_cells, _ring_is_sealed, _wall_order
+from agent.brain import decide, _exit_cells, _ring_is_sealed, _wall_order
+from agent import defense_layout
 from agent.protocol import Pos, Turn, station_footprint
 
 
@@ -68,22 +69,32 @@ class ScenarioTests(unittest.TestCase):
 
         Regression: with a one-cell entrance, a robot standing in it trapped the
         pioneer for the whole match (measured: 0 tasks on several seeds).
+
+        The opening is no longer a fixed bottom-right pair: it is placed away from
+        the expected approach (issue 12), so this checks the *policy* — a non-empty
+        opening that is disjoint from the wall list, a ring with no other hole, and
+        an opening that really leads outside once the ring is built.
         """
         for seed in (1, 3, 7, 19, 23):
             for side in ('challenger', 'defender'):
                 p = scenario(seed, side)
                 turn = Turn.load(p)
                 station = turn.station()
-                footprint = station_footprint(station.pos)
-                xs = [pos.x for pos in footprint]
-                ys = [pos.y for pos in footprint]
-                gate = _gate_cells(min(xs), max(xs), min(ys), max(ys))
+                opening = set(_exit_cells(turn))
                 order = set(_wall_order(turn))
-                for cell in gate:
-                    self.assertNotIn(cell, order,
-                                     f'seed {seed}/{side}: 大门格 {cell} 不应在围墙清单中')
+                self.assertTrue(opening, f'seed {seed}/{side}: 必须留出出口')
+                self.assertEqual(opening & order, set(),
+                                 f'seed {seed}/{side}: 出口格不应在围墙清单中')
                 self.assertGreaterEqual(len(order), 12,
                                         '围墙环带仍应围住基地（本地球形假设）')
+                # No accidental hole: perimeter (on land) == walls + opening.
+                plan = defense_layout.layout(station.pos, turn.width, turn.height,
+                                             land=turn.land)
+                self.assertEqual(set(plan.wall_order) | set(plan.exit_cells),
+                                 set(plan.ring),
+                                 f'seed {seed}/{side}: 环带不应有额外缺口')
+                self.assertTrue(plan.exit_usable,
+                                f'seed {seed}/{side}: 出口必须真的通向环外')
 
     def test_pioneer_is_never_sealed_in_during_a_full_match(self):
         p = scenario(19, 'challenger')

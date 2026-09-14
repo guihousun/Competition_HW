@@ -1,8 +1,8 @@
 from typing import Any
 from collections import Counter
-from itertools import permutations
+from itertools import combinations, permutations
 
-from . import ballistics, planner, sandbox, tasks, treasure, nightwork
+from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork
 from .grid import _cost_to_goal, next_step
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -71,6 +71,19 @@ RETURN_SAFE_INDEX = 50
 CAMP_MAX_COOLDOWN = 34
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
+
+# Defence geometry is recomputed for every wall/tower question asked about one
+# snapshot (the layout alone is needed by the tower choice, the wall order, the
+# stone count and the exit check). The layout and the interior graph depend only
+# on the map size, the base position, the terrain near the base and the walls
+# that already stand — never on towers or roles — so the answer is memoised. The
+# key carries every one of those inputs, so an entry can never be stale; the
+# cache is deliberately small and cleared wholesale on overflow rather than
+# trying to evict cleverly. Sizes are per-snapshot work, not a global store.
+_DEFENCE_CACHE: dict[tuple, tuple[defense_layout.Layout, defense_layout.InteriorGraph]] = {}
+_DEFENCE_CACHE_LIMIT = 24
+_TOWER_SITES_CACHE: dict[tuple, tuple[Pos, ...]] = {}
+_TOWER_SITES_CACHE_LIMIT = 24
 _NEIGHBOUR_STEPS = (
     (-1, -1), (-1, 0), (-1, 1),
     (0, -1), (0, 1),
@@ -1634,65 +1647,210 @@ def _stand_cells(
     return cells
 
 
-def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
+def _terrain_key(turn: Turn, base_pos: Pos) -> tuple:
+    """A hashable fingerprint of the terrain that can affect this base.
+
+    Only the base's neighbourhood matters to the layout (the ring at radius two,
+    the interior at radius one, and the exit flood out to ``WALL_RADIUS + 2``), so
+    special zones further away are not part of the key. ``turn.zones`` lists only
+    non-default cells in this payload, and the default is land, so the key stays
+    tiny. Bounds are part of the key because an opening must stay on the map.
+    """
+    xmin, xmax, ymin, ymax = defense_layout.footprint_bounds(base_pos)
+    horizon = defense_layout.WALL_RADIUS + 2
+    special = tuple(sorted(
+        ((pos.x, pos.y, kind) for pos, kind in turn.zones.items()
+         if kind != "land"
+         and max(max(xmin - pos.x, 0, pos.x - xmax),
+                 max(ymin - pos.y, 0, pos.y - ymax)) <= horizon),
+        key=lambda item: (item[0], item[1], item[2])))
+    return (turn.width, turn.height, base_pos.x, base_pos.y, special)
+
+
+def _defence_geometry(
+        turn: Turn) -> tuple[tuple, defense_layout.Layout, defense_layout.InteriorGraph] | None:
+    """(cache key, layout, interior graph) for this snapshot, memoised.
+
+    The interior graph is built here rather than inside the tower search so the
+    per-combination connectivity check is a walk over at most twelve cells
+    instead of a fresh flood of the neighbourhood for every candidate.
+    """
     station = turn.station()
     if station is None:
-        return ()
-    footprint = station_footprint(station.pos)
-    cells = [
-        pos for pos in _cells_at_distance(station.pos, 1) if turn.land(pos)
-    ]
-    # Stable geometry relative to the base, retaining existing towers and
-    # separating sites so controllers have room to stand.
-    chosen = [u.pos for u in turn.weapons()]
-    permanent = {p for u in turn.ours + turn.enemies
-                 if u.health > 0 and u.kind not in ('worker', 'pioneer')
-                 for p in turn.footprint(u)}
-    cells = [p for p in cells if p not in permanent]
-    while cells and len(chosen) < 3:
-        best = max(cells, key=lambda p: (min((distance(p,q) for q in chosen), default=0), -p.x, -p.y))
-        chosen.append(best)
-        cells.remove(best)
-    return tuple(chosen[:3])
+        return None
+    standing = frozenset(u.pos for u in turn.walls())
+    key = (_terrain_key(turn, station.pos), standing)
+    hit = _DEFENCE_CACHE.get(key)
+    if hit is not None:
+        return key, hit[0], hit[1]
+    plan = defense_layout.layout(station.pos, turn.width, turn.height, land=turn.land,
+                                 standing_walls=standing)
+    graph = defense_layout.interior_graph(station.pos, plan.exit_cells, turn.land)
+    if len(_DEFENCE_CACHE) >= _DEFENCE_CACHE_LIMIT:
+        _DEFENCE_CACHE.clear()
+    _DEFENCE_CACHE[key] = (plan, graph)
+    return key, plan, graph
 
 
-def _wall_order(turn: Turn) -> tuple[Pos, ...]:
-    """Cells of the local wall ring, with a gate the pioneer can always leave by.
+def _defence_layout(turn: Turn) -> defense_layout.Layout | None:
+    """The ring/approach/exit plan for this snapshot, or None without a base.
 
-    The geometry is a local assumption (D01: the request carries no build-zone
-    field). What is *not* optional is the gate: a closed ring seals our own roles
-    in, and a robot standing in a one-cell gap is enough to trap the pioneer for
-    the whole match. The ring is therefore built around a two-cell opening.
+    Standing walls are passed in so the opening is not chosen where an earlier
+    layout already built: the exit must stay reachable, not merely be intended.
+    """
+    geometry = _defence_geometry(turn)
+    return geometry[1] if geometry is not None else None
+
+
+def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
+    """Weapon slots, preferring the side the enemy is expected from.
+
+    Existing towers are retained in stable order and never rebuilt for placement:
+    this only decides where *new* towers go. Sites come from the assumed weapon
+    ring (radius 1, D01); the choice is a **combination search** over the free
+    cells rather than a greedy pick, because two things can go wrong at once:
+
+    * a weapon no role can stand next to is close to useless, so every tower
+      needs its own reachable controller cell — a contiguous row shares one;
+    * our own towers can cut the interior into pockets, trapping the crew inside
+      a ring that is otherwise open. So a combination is only accepted when every
+      inner cell still reaches the outside through the exit.
+
+    When no triple satisfies both, a pair, then a single tower, is used instead of
+    building a wall of towers that fences us in. Combinations are ranked by, in
+    order: feasible first; then more towers; then fewer trapped inner cells; then
+    more operated towers; then fewer sites on the exit guard; then the defence
+    layout's side priority (approach-facing first, flanks next, rear last, and
+    pure-side before corner); then separation and coordinates. The side priority
+    deliberately outranks separation, so three towers face the approach instead of
+    merely spreading out. The pool is at most twelve cells, so the search is a
+    constant-size loop.
     """
     station = turn.station()
     if station is None:
         return ()
-    footprint = station_footprint(station.pos)
-    xs = [pos.x for pos in footprint]
-    ys = [pos.y for pos in footprint]
-    xmin, xmax = min(xs), max(xs)
-    ymin, ymax = min(ys), max(ys)
-    gate = _gate_cells(xmin, xmax, ymin, ymax)
-    order = [
-        # Bottom edge stops two cells short of the right corner: that opening is
-        # the gate, so it is never walled even when the ring is finished.
-        *(Pos(x, ymin - 2) for x in range(xmax - 1, xmin - 3, -1)),
-        *(Pos(xmin - 2, y) for y in range(ymin - 1, ymax + 2)),
-        *(Pos(x, ymax + 2) for x in range(xmin - 2, xmax + 3)),
-        *(Pos(xmax + 2, y) for y in range(ymax + 1, ymin - 2, -1)),
-    ]
-    return tuple(pos for pos in order if pos not in gate and turn.land(pos))
+    geometry = _defence_geometry(turn)
+    if geometry is None:
+        return ()
+    geo_key, plan, graph = geometry
+    permanent = {p for u in turn.ours + turn.enemies
+                 if u.health > 0 and u.kind not in ('worker', 'pioneer')
+                 for p in turn.footprint(u)}
+    fixed = tuple(u.pos for u in turn.weapons())
+    sites_key = (geo_key, frozenset(permanent), fixed)
+    hit = _TOWER_SITES_CACHE.get(sites_key)
+    if hit is not None:
+        return hit
+    guard = defense_layout.exit_guard_cells(station.pos, plan.exit_cells)
+    # geo_key is (terrain fingerprint, standing walls); the walls are already in
+    # the layout, so the same set is reused as the obstacle set here.
+    standing = set(geo_key[1])
+    ring = [pos for pos in defense_layout.weapon_cells(station.pos, land=turn.land)
+            if pos not in permanent and pos not in fixed]
+    need = max(0, 3 - len(fixed))
+    stands = _controller_cells(turn, station.pos, permanent)
+    best_key: tuple | None = None
+    best_sites: list[Pos] = list(fixed)
+    for size in range(need, -1, -1):
+        for combo in combinations(ring, size):
+            sites = list(fixed) + list(combo)
+            if len(set(sites)) != len(sites):
+                continue
+            matched = _matched_controller_cells(sites, stands)
+            connected, trapped = defense_layout.interior_reachability(
+                graph, obstacles=set(sites) | standing)
+            ranks: list[int] = []
+            corners: list[int] = []
+            for pos in combo:
+                best_side, corner = defense_layout.side_rank(pos, station.pos,
+                                                             plan.side_order)
+                ranks.append(best_side)
+                corners.append(corner)
+            side_key = (tuple(sorted(ranks)), tuple(sorted(corners)))
+            spread = min((distance(a, b) for a, b in combinations(sites, 2)), default=0)
+            order = tuple((pos.x, pos.y) for pos in combo)
+            feasible = matched == len(sites) and connected
+            key = (0 if feasible else 1,
+                   -size if feasible else 0,
+                   trapped,
+                   -matched,
+                   sum(1 for pos in combo if pos in guard),
+                   side_key,
+                   -spread,
+                   order)
+            if best_key is None or key < best_key:
+                best_key, best_sites = key, sites
+    result = tuple(best_sites[:3])
+    if len(_TOWER_SITES_CACHE) >= _TOWER_SITES_CACHE_LIMIT:
+        _TOWER_SITES_CACHE.clear()
+    _TOWER_SITES_CACHE[sites_key] = result
+    return result
 
 
-def _gate_cells(xmin: int, xmax: int, ymin: int, ymax: int) -> frozenset[Pos]:
-    """The two bottom-right ring cells deliberately left open as a gate."""
-    return frozenset({Pos(xmax + 2, ymin - 2), Pos(xmax + 1, ymin - 2)})
+def _controller_cells(turn: Turn, station_pos: Pos, terrain: set[Pos]) -> set[Pos]:
+    """Cells inside the wall ring where a role could stand to control a weapon.
+
+    Only the interior counts: the ring itself is going to be walled, so a
+    controller standing there would be outside the finished defence. Buildings
+    (including the base) are excluded; towers are removed by the matcher.
+    """
+    interior = {pos for pos in _cells_at_distance(station_pos, 1) if turn.land(pos)}
+    return interior - terrain
+
+
+def _matched_controller_cells(towers: list[Pos], stands: set[Pos]) -> int:
+    """How many towers can get their own distinct standing cell.
+
+    Kuhn's augmenting-path matching over at most three towers and a dozen cells:
+    two towers that share a single reachable stand cannot both be operated, and
+    counting the maximum matching is what keeps the third tower from silently
+    becoming unusable.
+    """
+    available = stands - set(towers)
+    if not available:
+        return 0
+    adjacency = {tower: [cell for cell in _neighbours(tower) if cell in available]
+                 for tower in towers}
+    matched: dict[Pos, Pos] = {}
+
+    def augment(tower: Pos, seen: set[Pos]) -> bool:
+        for cell in adjacency[tower]:
+            if cell in seen:
+                continue
+            seen.add(cell)
+            holder = matched.get(cell)
+            if holder is None or augment(holder, seen):
+                matched[cell] = tower
+                return True
+        return False
+
+    return sum(1 for tower in towers if augment(tower, set()))
+
+
+def _wall_order(turn: Turn) -> tuple[Pos, ...]:
+    """Wall cells in build priority order: approach front, flanks, rear.
+
+    The geometry is a local assumption (D01: the request carries no build-zone
+    field). The set is derived from the radius-2 perimeter itself and only the
+    deliberate two-cell exit is removed, so no accidental hole can appear at a
+    corner or an edge boundary. Priority follows the expected approach: for an
+    east-facing defence the order is right, top, bottom, left, and the exit sits
+    on the rear so the crew is not sealed in.
+    """
+    plan = _defence_layout(turn)
+    return plan.wall_order if plan is not None else ()
+
+
+def _exit_cells(turn: Turn) -> tuple[Pos, ...]:
+    """The two-cell opening deliberately left in the wall ring."""
+    plan = _defence_layout(turn)
+    return plan.exit_cells if plan is not None else ()
 
 
 def _ring_is_sealed(turn: Turn) -> bool:
     """True when the ring around the base has no reachable way out.
 
-    Only used by tests and diagnostics: the strategy now always leaves a gate, so
+    Only used by tests and diagnostics: the strategy always leaves an exit, so
     this should never fire for a completed ring.
     """
     from collections import deque
@@ -1701,11 +1859,8 @@ def _ring_is_sealed(turn: Turn) -> bool:
     pioneer = turn.pioneer()
     if station is None or pioneer is None:
         return False
-    gate = _gate_cells(min(p.x for p in station_footprint(station.pos)),
-                       max(p.x for p in station_footprint(station.pos)),
-                       min(p.y for p in station_footprint(station.pos)),
-                       max(p.y for p in station_footprint(station.pos)))
-    if not gate <= {pos for pos in turn.zones if turn.zones[pos] == "land"}:
+    gate = set(_exit_cells(turn))
+    if not gate or not gate <= {pos for pos in turn.zones if turn.zones[pos] == "land"}:
         return False
     blocked = turn.blocked(pioneer)
     seen = {pioneer.pos}
