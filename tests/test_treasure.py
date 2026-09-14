@@ -6,9 +6,9 @@ rewarded if both satisfy the conditions in the same round. The site, items and
 timing are inferred from rumours and are **not** published, so they come from the
 local fixture — and the tests say so rather than implying official behaviour.
 
-The property that matters most here is atomicity: a summon either consumes the
-items *and* credits the reward *and* marks the treasure taken, or it changes
-nothing at all.
+Interface 2.2 distinguishes invalid actions from unsuccessful legal attempts.
+Only invalid actions keep items. Legal attempts always consume the offered
+multiset; success/empty/wrong-items/closed results are checked independently.
 """
 import sys
 import unittest
@@ -110,7 +110,7 @@ class AtomicityTests(unittest.TestCase):
         state = state_with_pioneer(["AncientScroll", "IronWhistle", "stone"])
         open_rite(state)
         record = treasure.summon(state, side="challenger", pioneer_id=10011,
-                                 site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
+                                 site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
                                  round_no=10)
         bag = state["teamOur"]["roles"][0]["backpack"]
         self.assertEqual(bag, ["stone"], '献祭物品必须被消耗，其他物品保留')
@@ -125,31 +125,31 @@ class AtomicityTests(unittest.TestCase):
                   state["teamOur"]["totalScore"], state["teamOur"]["goldNum"])
         with self.assertRaises(treasure.Refusal):
             treasure.summon(state, side="challenger", pioneer_id=10011,
-                            site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
+                            site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
                             round_no=10)
         self.assertEqual((list(state["teamOur"]["roles"][0]["backpack"]),
                           state["teamOur"]["totalScore"], state["teamOur"]["goldNum"]),
                          before, '失败必须什么都不改')
         self.assertFalse(treasure.rite_of(state).opened)
 
-    def test_out_of_window_changes_nothing(self):
+    def test_out_of_window_legal_attempt_spends_items(self):
         state = state_with_pioneer(["AncientScroll", "IronWhistle"])
         open_rite(state, opens_at=100, closes_at=140)
-        with self.assertRaises(treasure.Refusal):
-            treasure.summon(state, side="challenger", pioneer_id=10011,
-                            site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
-                            round_no=10)
-        self.assertEqual(len(state["teamOur"]["roles"][0]["backpack"]), 2)
+        result = treasure.summon(state, side="challenger", pioneer_id=10011,
+                                 site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
+                                 round_no=10)
+        self.assertEqual(result['result'], 2)
+        self.assertEqual(len(state["teamOur"]["roles"][0]["backpack"]), 0)
         self.assertEqual(state["teamOur"]["totalScore"], 0)
 
-    def test_wrong_site_changes_nothing(self):
+    def test_wrong_site_legal_attempt_spends_items(self):
         state = state_with_pioneer(["AncientScroll", "IronWhistle"])
         open_rite(state, site=(30, 20))
-        with self.assertRaises(treasure.Refusal):
-            treasure.summon(state, side="challenger", pioneer_id=10011,
-                            site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
-                            round_no=10)
-        self.assertEqual(len(state["teamOur"]["roles"][0]["backpack"]), 2)
+        result = treasure.summon(state, side="challenger", pioneer_id=10011,
+                                 site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
+                                 round_no=10)
+        self.assertEqual(result['result'], 2)
+        self.assertEqual(len(state["teamOur"]["roles"][0]["backpack"]), 0)
 
     def test_non_pioneer_is_refused(self):
         state = state_with_pioneer(["AncientScroll", "IronWhistle"])
@@ -157,45 +157,48 @@ class AtomicityTests(unittest.TestCase):
         open_rite(state)
         with self.assertRaises(treasure.Refusal):
             treasure.summon(state, side="challenger", pioneer_id=10011,
-                            site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
+                            site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
                             round_no=10)
 
     def test_second_opening_by_the_same_team_earns_nothing(self):
         state = state_with_pioneer(["AncientScroll", "IronWhistle"] * 2)
         open_rite(state)
         first = treasure.summon(state, side="challenger", pioneer_id=10011,
-                                site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
+                                site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
                                 round_no=10)
-        with self.assertRaises(treasure.Refusal):
-            treasure.summon(state, side="challenger", pioneer_id=10011,
-                            site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
-                            round_no=11)
+        result = treasure.summon(state, side="challenger", pioneer_id=10011,
+                                 site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
+                                 round_no=11)
+        self.assertEqual(result['result'], 4)
         self.assertEqual(state["teamOur"]["totalScore"], first["score"],
                          '重复开启不应再加分')
-        self.assertEqual(len(state["teamOur"]["roles"][0]["backpack"]), 2,
-                         '被拒绝的献祭不应消耗物品')
+        self.assertEqual(len(state["teamOur"]["roles"][0]["backpack"]), 0,
+                         '宝藏已空的合法献祭仍消耗物品')
 
     def test_both_teams_may_be_rewarded_in_the_same_round(self):
-        """任务书 §5.2: both sides get the reward if both satisfy it in one round.
-
-        The same round therefore stays open to the other side, while any *later*
-        round earns nothing — that is the "one treasure per map" rule.
-        """
         state = state_with_pioneer(["AncientScroll", "IronWhistle"])
         open_rite(state)
         first = treasure.summon(state, side="challenger", pioneer_id=10011,
-                                site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
+                                site=Pos(5, 6), items=["AncientScroll", "IronWhistle"],
                                 round_no=10)
         self.assertEqual(first["openedBy"], ["challenger"])
-        self.assertFalse(treasure.treasure_notes(state, "challenger", 10)["taken"],
-                         '开启方在当回合仍然保有奖励')
-        self.assertTrue(treasure.treasure_notes(state, "defender", 11)["taken"],
-                        '之后的回合对任何人都没有奖励')
-        # A later round is refused outright.
-        with self.assertRaises(treasure.Refusal):
-            treasure.summon(state, side="defender", pioneer_id=20011,
-                            site=Pos(5, 5), items=["AncientScroll", "IronWhistle"],
-                            round_no=11)
+        self.assertTrue(treasure.treasure_notes(state, "challenger", 10)["taken"])
+        self.assertFalse(treasure.treasure_notes(state, "defender", 10)["taken"],
+                         '另一队的私有结果不能传入当前队伍推理')
+        first_team = state['teamOur']
+        state['teamOur'] = {'type': 'defender', 'goldNum': 75, 'totalScore': 0,
+            'roles': [{'id': 20011, 'roleType': 'pioneer', 'health': 200,
+                       'pos': {'x': 5, 'y': 5}, 'backpack': ['AncientScroll', 'IronWhistle'] * 2}]}
+        state['teamEnemy'] = first_team
+        second = treasure.summon(state, side='defender', pioneer_id=20011,
+                                 site=Pos(5, 6), items=['IronWhistle', 'AncientScroll'], round_no=10)
+        self.assertEqual(second['result'], 1)
+        self.assertEqual(second['openedBy'], ['challenger', 'defender'])
+        self.assertEqual(first_team['totalScore'], state['teamOur']['totalScore'])
+        late = treasure.summon(state, side='defender', pioneer_id=20011,
+                               site=Pos(5, 6), items=['AncientScroll', 'IronWhistle'], round_no=11)
+        self.assertEqual(late['result'], 4)
+        self.assertEqual(state['teamOur']['roles'][0]['backpack'], [])
 
 
 class SimulatorIntegrationTests(unittest.TestCase):

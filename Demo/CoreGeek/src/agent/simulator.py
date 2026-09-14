@@ -328,6 +328,7 @@ def step(payload, commands=None):
     # Errors describe the preceding operation, not every future observation.
     # The planner has consumed them above; this step publishes fresh feedback.
     state['errors'] = []
+    state['lastSummonTreasureResult'] = 0
     plan_commands = planning.commands
     planner_state.note_submission(planning.prompt, planning.execute, turn.round_no,
                                   bool(planner_state.tasks.get('cycle')))
@@ -483,17 +484,16 @@ def step(payload, commands=None):
                                 'to': pos.dump()})
                 events.append(f"{uid} 提交任务答案（{len(answer)} 字符）")
         elif action == 'summonTreasure' and unit['roleType'] == 'pioneer':
-            # Atomic: either the sacrifice, the reward and the "taken" mark all
-            # happen, or nothing does and the round reports why. The rite itself is
-            # a local fixture (see agent/treasure.py) because the official site,
-            # conditions and timing are inferred from rumours and are not published.
+            # Interface 2.2: a legal failed sacrifice still spends the items.
             offered = command.get('item') or []
             if isinstance(offered, str):
                 offered = [offered]
             try:
+                if target is None or len(command.get('targetPos') or []) != 1:
+                    raise treasure.Refusal('召唤宝藏需要一个目标位置')
                 record = treasure.summon(
                     state, side=state['teamOur'].get('type', ''), pioneer_id=unit['id'],
-                    site=pos, items=offered, round_no=turn.round_no)
+                    site=target, items=offered, round_no=turn.round_no)
             except treasure.Refusal as refusal:
                 events.append(f'{uid} 召唤宝藏未执行：{refusal}')
             else:
@@ -501,9 +501,10 @@ def step(payload, commands=None):
                 actions.append({'a': 'summonTreasure', 'id': unit['id'],
                                 'from': pos.dump(), 'to': dict(record['site']),
                                 'items': record['items'], 'score': record['score'],
-                                'gold': record['gold']})
+                                'gold': record['gold'], 'result': record['result']})
+                outcome_label = '开启宝藏' if record['result'] == 1 else f"未获宝藏，结果码 {record['result']}"
                 events.append(
-                    f"{uid} 献祭 {'、'.join(record['items'])}，开启宝藏 "
+                    f"{uid} 献祭 {'、'.join(record['items'])}，{outcome_label} "
                     f"（积分 +{record['score']}，金币 +{record['gold']}）")
         elif action == 'attack' and not turn.is_day and unit['roleType'] in TOWER_TYPES:
             controller = by_id.get(str(command.get('controllerId')))

@@ -15,7 +15,7 @@ Because the conditions are deliberately not published, this module implements th
 deterministic site, item set and time window per match, published into the state
 the same way the task fixture publishes `phaseTask`. That keeps three things true:
 
-* the action is atomic — a failed invocation consumes nothing and changes nothing;
+* invalid actions spend nothing; legal failed attempts spend the offered items;
 * a successful one consumes the items, credits score and gold, and marks the
   treasure taken, so a second attempt earns nothing;
 * nothing here is claimed to be the official treasure procedure, and the local
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import random
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence
 
@@ -192,86 +193,64 @@ def _backpack_of(role: dict[str, Any]) -> list[str]:
 
 def summon(state: dict[str, Any], *, side: str, pioneer_id: Any, site: Pos,
            items: Iterable[str], round_no: int) -> dict[str, Any]:
-    """Resolve one ``summonTreasure`` atomically.
+    """Legal sacrifices always spend offered items (interface 2.2).
 
-    Either the whole thing happens — items consumed, reward credited, treasure
-    marked taken — or nothing does and a :class:`Refusal` explains why. There is no
-    partial state to clean up, which is what "atomic" has to mean for an action
-    that both spends inventory and grants score.
+    site is the action target. Invalid actions raise Refusal and set result0;
+    legal attempts return result1-4. Simultaneous-fault precedence is a local
+    assumption: location/time, already empty, then offered item mismatch.
     """
-    rite = rite_of(state)
-    if rite is None:
-        raise Refusal("本地夹具没有生成宝藏")
-    # One treasure per map: a side that already took it gets nothing, and any
-    # attempt after the round it was taken earns nothing. The taking round itself
-    # stays open, which is what lets both teams be rewarded together.
-    if rite.opened:
-        already = side in rite.opened_by
-        same_round = rite.taken_round is not None and int(round_no) == rite.taken_round
-        if already or not same_round:
-            raise Refusal("宝藏已被开启，后续开启没有奖励")
-    target = Pos(int(rite.site.get("x", -1)), int(rite.site.get("y", -1)))
-    if distance(site, target) > 1:
-        raise Refusal("必须在宝藏周围一格内献祭")
-    if not rite.window_open(int(round_no)):
-        raise Refusal(f"不在有效回合内（{rite.opens_at}-{rite.closes_at}）")
-
-    roles = (state.get("teamOur") or {}).get("roles") or []
-    pioneer = next((r for r in roles if str(r.get("id")) == str(pioneer_id)), None)
-    if pioneer is None:
-        raise Refusal("找不到开拓者")
-    if pioneer.get("roleType") != "pioneer":
-        raise Refusal("只有开拓者可以召唤宝藏")
-
+    state['lastSummonTreasureResult'] = 0
+    roles = (state.get('teamOur') or {}).get('roles') or []
+    pioneer = next((r for r in roles if str(r.get('id')) == str(pioneer_id)), None)
+    if pioneer is None or pioneer.get('roleType') != 'pioneer' or int(pioneer.get('health') or 0) <= 0:
+        raise Refusal('只有存活开拓者可以召唤宝藏')
+    if side != (state.get('teamOur') or {}).get('type'):
+        raise Refusal('角色不属于当前队伍')
+    if distance(Pos.load(pioneer['pos']), site) > 1:
+        raise Refusal('献祭目标不在开拓者周围一格内')
+    board = state.get('mapInfo') or {}
+    if not (0 <= site.x < int(board.get('width') or 41) and 0 <= site.y < int(board.get('height') or 32)):
+        raise Refusal('献祭目标在地图之外')
     bag = _backpack_of(pioneer)
     offered = [str(item) for item in items]
-    missing = [item for item in rite.items if offered.count(item) < rite.items.count(item)
-               or bag.count(item) < rite.items.count(item)]
-    if missing:
-        raise Refusal(f"献祭物品不足：{ '、'.join(sorted(set(missing))) }")
-
-    # Commit: consume exactly the required items, then credit the reward.
-    for item in rite.items:
+    # 任务书 §4.6.3 explicitly allows different task items on different maps.
+    # Do not reject inventory names merely because absent from the sample list.
+    if any(not item for item in offered) or Counter(offered) - Counter(bag):
+        raise Refusal('献祭的任务用品不存在于背包内')
+    for item in offered:
         bag.remove(item)
-    pioneer["backpack"] = bag
-    team = state.setdefault("teamOur", {})
-    team["totalScore"] = int(team.get("totalScore") or 0) + rite.score
-    team["goldNum"] = int(team.get("goldNum") or 0) + rite.gold
+    pioneer['backpack'] = bag
+    rite = rite_of(state)
+    code = 1
+    if rite is None or site != Pos.load(rite.site) or not rite.window_open(int(round_no)):
+        code = 2
+    elif rite.opened and (side in rite.opened_by or rite.taken_round != int(round_no)):
+        code = 4
+    elif Counter(offered) != Counter(rite.items):
+        code = 3
+    state['lastSummonTreasureResult'] = code
+    record = {'a': 'treasure', 'side': side, 'pioneer': pioneer_id,
+              'site': site.dump(), 'items': offered, 'score': 0, 'gold': 0, 'result': code}
+    if code != 1:
+        return record
+    team = state.setdefault('teamOur', {})
+    team['totalScore'] = int(team.get('totalScore') or 0) + rite.score
+    team['goldNum'] = int(team.get('goldNum') or 0) + rite.gold
     rite.opened = True
     rite.opened_by = tuple(sorted(set(rite.opened_by) | {side}))
     if rite.taken_round is None:
         rite.taken_round = int(round_no)
-    attach(state, rite)
-    return {"a": "treasure", "side": side, "pioneer": pioneer_id,
-            "site": rite.site, "items": list(rite.items),
-            "score": rite.score, "gold": rite.gold,
-            "openedBy": list(rite.opened_by)}
+    # Do not republish the private rite as a new clue during settlement.
+    state.setdefault('_demo', {})['treasure'] = rite.dump()
+    record.update(score=rite.score, gold=rite.gold, openedBy=list(rite.opened_by))
+    return record
 
 
 def treasure_notes(state: dict[str, Any], side: str, round_no: int) -> dict[str, Any]:
-    """What the strategy is allowed to reason about.
-
-    The published rumour is the primary source, because that is the channel the
-    rules use (任务书 §4.8). The simulator's own rite is consulted only when the
-    state still carries it (a local round), for the "already taken" flag the news
-    does not publish.
-    """
+    """Read public clues and public feedback only, never the hidden rite."""
     notes = notes_from_news(state, round_no)
-    rite = rite_of(state)
-    if rite is None:
-        return notes
-    notes["taken"] = rite.opened and side not in rite.opened_by
-    notes["takenRound"] = rite.taken_round
-    if not notes.get("known"):
-        notes.update({
-            "known": True,
-            "site": dict(rite.site),
-            "items": list(rite.items),
-            "opensAt": rite.opens_at,
-            "closesAt": rite.closes_at,
-            "open": rite.window_open(int(round_no)),
-            "rumour": rite.rumour,
-        })
+    notes['taken'] = bool(side == (state.get('teamOur') or {}).get('type')
+                          and state.get('lastSummonTreasureResult') in (1, 4))
     return notes
 
 
