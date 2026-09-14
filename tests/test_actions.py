@@ -18,11 +18,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import AGENT, Agent  # noqa: E402
-from coregeek.agent.chat import PROMPT, answer_of, chat, looks_like_tool, tool_of  # noqa: E402
+from coregeek.agent.chat import PROMPT, answer_of, looks_like_tool, tool_of  # noqa: E402
+from coregeek.agent.context import Context  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import LOG_PROMPT_MAX, _clip, handle  # noqa: E402
 from coregeek.game.grid import (  # noqa: E402
     Pos,
+    STEPS,
     base_cells,
     box_cells,
     step_outside,
@@ -415,9 +417,9 @@ class HandleTest(unittest.TestCase):
         self.assertIn("【上一轮模型回复】：无", task)
         #: `prompt` **打全文**（第 20 步）：模板头、工具清单、「沉淀的 SOP」那个槽、
         #: 题目原文全在这一行里 —— 这四样**实盘上只有这里看得见**（本地 e2e 的"LLM"
-        #: 是我们自己写的，只证明解析自洽）。
+        #: 是我们自己写的，只证明解析自洽）。第 25 步起题目在「# 对话记录」的首条里。
         self.assertIn("【本轮提问】：# Agent定位", ask)
-        for piece in ("# 可使用的工具", "- SOP2Prompt：", "# 沉淀的 SOP", "题目：\n短题目"):
+        for piece in ("# 可使用的工具", "- SOP2Prompt：", "# 沉淀的 SOP", "# 对话记录", "【题目】\n短题目"):
             self.assertIn(piece, ask)
 
         #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**（省 LLM 额度）
@@ -470,7 +472,7 @@ class HandleTest(unittest.TestCase):
         而打它的唯一目的就是这三件事。
         """
         AGENT.reset()
-        prompt = chat("题", sop=AGENT.sop, tool_desc=AGENT.tool_desc())
+        prompt = AGENT.chat("题")
         self.assertGreater(len(prompt), LOG_TEXT_MAX, "模板比 LOG_TEXT_MAX 还短 ⇒ 这两个常量该合并")
         self.assertGreater(LOG_PROMPT_MAX, LOG_TEXT_MAX)
 
@@ -480,12 +482,16 @@ class HandleTest(unittest.TestCase):
         raw["lastRoundRoleActionResults"] = {}
         raw["llmResp"] = ""  # 没答过 ⇒ 这一回合提问
         raw["phaseTask"] = "题" * LOG_PROMPT_MAX
+        AGENT.reset()
+        #: `planner` 组装出来的那一份（同一道题的**首问**）。算完再清一次，
+        #: 让 `_handle` 里那次 chat 也是这道题的首问 —— 上下文是累积的（第 25 步），
+        #: 不清的话它会多出一句「请继续。」，全长就对不上了。
+        full = AGENT.chat(raw["phaseTask"])
+        AGENT.reset()
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         line = caught.records[-1].getMessage()
 
-        #: `planner` 组装出来的那一份（同一个 `AGENT`，同一份题目），长度应当是它自己的
-        full = chat(raw["phaseTask"], sop=AGENT.sop, tool_desc=AGENT.tool_desc())
         self.assertTrue(line.startswith(ASK), line[:20])
         asked = line[len(ASK):]  # 去掉行首标记（`】：` 里那个括号挡着，不能用 `split("提问：")`）
         self.assertEqual(
@@ -643,10 +649,12 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body["executeCmd"], 'python -c "print(1+1)"')
         self.assertEqual(body["prompt"], "")
 
-        # ③ 沙盒交作业 ⇒ 结果**全文**回灌，这一轮绝不重复发命令
+        # ③ 沙盒交作业 ⇒ 结果**全文**回灌，这一轮绝不重复发命令；它自己上一轮要的那条
+        #    命令也在会话里（第 25 步：发命令那轮记下的回复，在这里第一次看得见）
         raw["lastCmdResult"] = "[exitCode:0]\n2"
         body = ask()
         self.assertIn("[exitCode:0]\n2", body["prompt"])
+        self.assertIn("【你的回复】\n<tool><tool_name>executeCmd</tool_name>", body["prompt"])
         self.assertEqual(body["executeCmd"], "")
 
         # ④ LLM 给出答案 ⇒ **只交 `<answer>` 里的内容**（不是整段回复）
@@ -662,14 +670,16 @@ class HandleTest(unittest.TestCase):
 
         # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，**同时照旧提交**
         #    （两条通道独立：提问在推进，而按接口文档 L140 取"通过率最高"、重交零成本）
-        #    ⚠️ 纠错段里带的必须是**交上去的那一份**（`晴 26 度`），不是 `<answer>…</answer>` 原文
+        #    ⚠️ 第 25 步起 prompt 里有两份"它说过的话"，各归各的：**会话记录**收整段原文
+        #    （`【你的回复】<answer>晴 26 度</answer>` —— 它真说过的话），**纠错块**收的
+        #    必须是**交上去的那一份**（`answer_of` 解包后的 `晴 26 度`）—— 后者带标签的话
+        #    LLM 会以为自己交了一堆标签，去改一个并不存在的问题。
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
-        self.assertIn("晴 26 度", body["prompt"])
-        self.assertIn("被判定为不正确", body["prompt"])
-        #: ⚠️ 判据是**整段带标记的回复**，不是 `<answer>` 这个字面量 ——
-        #: 模板自己的「输出格式」段里就有一个 `<answer>答案本身</answer>` 当示例。
-        self.assertNotIn("<answer>晴 26 度</answer>", body["prompt"])
+        self.assertIn("【你的回复】\n<answer>晴 26 度</answer>", body["prompt"])
+        self.assertIn(
+            "【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。", body["prompt"]
+        )
         self.assertEqual(body["executeCmd"], "")
         self.assertEqual(
             body["roleCommandMap"]["10011"]["action"], "submitAnswer", "提交不该被提问挤掉"
@@ -746,13 +756,14 @@ class HandleTest(unittest.TestCase):
         原来只数行数，行数**测不出字节**——而管道缓冲 64KB 是字节。顶格的东西全撞在一起
         就是最坏局面：题目、LLM 回复、沙盒输出（各 `LOG_TEXT_MAX` 个中文，中文 1 字 = 3 字节）、
         被回灌那一轮**顶到 `LOG_PROMPT_MAX` 的 prompt**、**再加**一条 SOP 更新行
-        —— **实测 8861 字节 / 71 行**（第 23 步；上一版 8723 / 71 行，再上一版 8574 / 66 行）。
+        —— **实测 8944 字节 / 75 行**（第 25 步重测：prompt 里多了「# 对话记录」标题，
+        带提问的回合 +2~3 行；第 23 步是 8861 / 71 行）。
         **同一个局面在本用例上再跑一遍就是这些数**，改日志格式后必须重测（`app._log` 的
         docstring 与 `CLAUDE.md` 硬约束 5 里有同一张表）。
-        上限取 9300 而不是 8861：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
+        上限取 9300 而不是 8944：它要抓的是**结构性的膨胀**（少了一个 `_clip`、
         或者又加进来一个顶格的大字段 —— 那至少是 1200 字节），不是几个标签的字节抖动
         —— 沙盒输出现实里基本是 ASCII（1 字 = 1 字节）。
-        ⚠️ 余量只剩 **439** 字节 ⇒ 这个上限已经**不再是"抓大漏"的网**，只是"别再多打一整块"的
+        ⚠️ 余量只剩 **356** 字节 ⇒ 这个上限已经**不再是"抓大漏"的网**，只是"别再多打一整块"的
         兜底；真嫌紧就调 `LOG_TEXT_MAX` / `LOG_PROMPT_MAX`。
 
         ⚠️ **`assertLogs` 必须收 root（不写 logger 名）**：SOP 那条走
@@ -1247,17 +1258,36 @@ class BuildGeometryTest(unittest.TestCase):
         self.assertEqual([c.x for c in right], [32, 29, 29])
         self.assertEqual(len(left), len(right), "两侧都该是整整齐齐三个落点")
 
-    def test_the_three_sites_are_the_back_cell_and_the_two_front_corners(self):
-        """后列**贴基地下沿**那一格 + 前排两角，顺序即建造顺序。"""
+    def test_the_three_sites_are_the_rear_top_corner_and_the_two_front_corners(self):
+        """后列**上角**那一格 + 前排两角，顺序即建造顺序（第 24 步：后列从贴基地下沿挪到上角）。"""
         self.assertEqual(
             weapon_sites(Pos(10, 24), 41),
-            (Pos(9, 23), Pos(12, 22), Pos(12, 25)),
+            (Pos(9, 25), Pos(12, 22), Pos(12, 25)),
         )
         #: 换边后整套落点自动跟着翻 —— 按**基地坐标**判而不用 `teamOur.type`
         self.assertEqual(
             weapon_sites(Pos(30, 10), 41),
-            (Pos(32, 9), Pos(29, 8), Pos(29, 11)),
+            (Pos(32, 11), Pos(29, 8), Pos(29, 11)),
         )
+
+    def test_the_rear_sites_operator_stays_off_the_bottom_route(self):
+        """后列落点的**环内站位全在顶线一侧** ⇒ 后列操作者堵不死前排（第 24 步改阵的动机）。
+
+        底行路线（门 → (9,22) → (10,22) → (11,22)）是从门走到前下角、不绕顶线的通道。
+        旧阵后列在 (9,23)：环内站位含 (9,22)/(10,22)（正在这条路上），加上前上角操作者
+        站 (12,24)，前下角的两个站位 (11,22)/(12,23) 就成了孤岛 —— **操作者堵死操作者**。
+        后列挪到上角 (9,25) 之后环内站位只剩 (9,24)/(10,25)（顶线一侧），底行路线谁也压不着。
+        """
+        rear = weapon_sites(self.BASE, 41)[0]
+        neighbors = {Pos(rear.x + d.x, rear.y + d.y) for d in STEPS}
+        #: 只看**环内**站位：门柱那三个在走廊外面，本来就压不着人
+        inside = neighbors & set(weapon_cells(self.BASE))
+        bottom_row = {Pos(x, self.BASE.y - 2) for x in range(self.BASE.x - 1, self.BASE.x + 3)}
+        self.assertTrue(inside, "后列武器总得有环内站位，这条用例才钉得住东西")
+        self.assertFalse(inside & bottom_row, f"后列站位压住了底行路线：{inside & bottom_row}")
+        #: 门柱上也能操它（从外面回来的操作者 BFS 停在门柱、不进走廊）——"堵不着人"的另一半
+        door = {Pos(self.BASE.x - 2, y) for y in range(self.BASE.y - 3, self.BASE.y + 3)}
+        self.assertTrue(neighbors & door, "后列武器该贴着门柱：外面就能操，不必进走廊")
 
     def test_every_site_touches_the_base(self):
         """**这才是这个阵形的理由**：三个落点各自都与基地的一格切比雪夫距离 1。
@@ -1349,7 +1379,7 @@ class BuildWeaponTest(unittest.TestCase):
     结算照判题器的口径来 —— 一回合一步，建起来的武器下一回合就挡路、也占掉那个格子。
     """
 
-    #: 三个落点 = (9,23) 后列 + (12,22)/(12,25) 前排两角（见 `weapon_sites`）
+    #: 三个落点 = (9,25) 后列上角 + (12,22)/(12,25) 前排两角（见 `weapon_sites`）
     BASE = Pos(10, 24)
     MINE = Pos(4, 24)
 
@@ -1365,7 +1395,7 @@ class BuildWeaponTest(unittest.TestCase):
         self.roles: dict[int, BaseRole] = {
             1: Pioneer(1, Pos(20, 20)),
             # 两个工人都**贴着**后方那一列（各差一格），第 1 回合就能动手
-            2: Worker(2, Pos(8, 23)),
+            2: Worker(2, Pos(8, 25)),
             3: Worker(3, Pos(8, 24)),
         }
         self.builds: list[tuple[str, Pos]] = []
@@ -1457,7 +1487,7 @@ class BuildWeaponTest(unittest.TestCase):
         炮落在自己落点上时由 `have` 那道滤网挡住（同种类不会重建）；这里挡住它的是**墙**，
         所以走的是 `blocked` 那一道 —— 顺带守住"覆盖会把原武器打成 level1"（§4.5.1 补充说明）。
         """
-        self.walls[Pos(9, 23)] = WALL
+        self.walls[Pos(9, 25)] = WALL
         self._settle(want=2)
         self.assertEqual(
             {(name, cell) for name, cell in self.builds},
@@ -3022,6 +3052,25 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, "")
         self.assertIn(output, prompt)
 
+    def test_the_reply_is_remembered_even_on_command_rounds(self):
+        """**发命令那一轮也记回复**（第 25 步 `AGENT.hear` 的存在理由）：③ 那轮没有
+        prompt，但它的工具调用必须进会话 —— 否则回灌那一轮 LLM 看见的是
+        "题目 → 莫名其妙的结果"，它自己要的命令凭空消失了。粘住的 `llmResp`
+        顺带被去重（与最后一条 assistant 相同 ⇒ 不进表第二遍）。
+        """
+        call = "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>"
+        task_channel(self._turn(self.TASK))  # ⑥ 首问（会话从这道题开始）
+        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令（无提问）
+        self.assertEqual(execute, "ls")
+        self.assertEqual(prompt, "")
+        prompt, execute = task_channel(
+            self._turn(self.TASK, call, cmd_result="[exitCode:0]\n2")  # ② 回灌（llmResp 粘住）
+        )
+        self.assertEqual(execute, "")
+        self.assertIn("【你的回复】\n" + call, prompt)
+        self.assertEqual(prompt.count("【你的回复】"), 1, "粘住的回复不进表第二遍")
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\n2", prompt)
+
     def test_a_result_already_in_hand_blocks_the_next_command(self):
         """⚠️ **沙盒刚交作业这一轮，绝不能再发命令** —— 判据 2 必须压在判据 3 前面。
 
@@ -3132,11 +3181,16 @@ class TaskChannelTest(unittest.TestCase):
                 else:
                     self.assertEqual(submitted, {}, "空/工具的回复不该被交上去")
                 if expected:
+                    AGENT.reset()  # 会话是跨回合状态（第 25 步）：不清的话上一条 subTest 的回复会进这条的 prompt
                     prompt = task_channel(
                         self._turn(self.TASK, llm_resp=reply, errors=(Error(2, "答案不正确"),))
                     )[0]
-                    self.assertIn(expected, prompt)
-                    self.assertNotIn(f"<answer>{expected}</answer>", prompt, "骂的必须是交的那一份，不是带标签的原文")
+                    #: 钉**纠错块整块原文**：会话记录里可以有带标签的回复（那是它真说过的话），
+                    #: 但骂的必须是**交上去的那一份**（`answer_of` 解包后的）。
+                    self.assertIn(
+                        f"【你上一次提交的答案被判定为不正确】\n{expected}\n请重新作答。",
+                        prompt,
+                    )
 
     def test_only_the_answer_error_triggers_the_retry(self):
         """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。"""
@@ -3476,7 +3530,7 @@ class SopStateTest(unittest.TestCase):
 
 
 class ChatPromptTest(unittest.TestCase):
-    """prompt 的组装 —— 四段模板 + 两段回灌 + 题目。
+    """prompt 的组装 —— 四段模板（system）+ **累积的**会话记录（第 25 步起）。
 
     断言**逐字**钉住四个小节标题与两个形状的示例：它们是"LLM 照不照抄"的唯一杠杆，
     而 `str.format` 漏填一个占位符会让整段变成 `{tool_desc}` 这种字面量出现在 prompt 里
@@ -3490,18 +3544,9 @@ class ChatPromptTest(unittest.TestCase):
         prompt = self.agent.chat("题目")
         for header in ("# Agent定位", "# 可使用的工具", "# 输出格式", "# 沉淀的 SOP"):
             self.assertIn(header, prompt)
-        for leftover in ("{tool_desc}", "{sop}", "{result}", "{retry}", "{task}"):
+        #: 会话记录是**拼接**出来的（不走 `str.format`），会漏的只有模板自己那两个槽
+        for leftover in ("{tool_desc}", "{sop}"):
             self.assertNotIn(leftover, prompt)
-
-    def test_the_assembly_needs_sop_and_tool_desc(self):
-        """`chat()` 的 `sop` / `tool_desc` **没有默认值**（第 19 步从模块级取值改成参数）。
-
-        这条钉的是那个取舍本身："忘了传"必须在**调用点**炸（`TypeError`），
-        而不是静默发一份空槽的 prompt 出去 —— 后者在实盘上表现为"LLM 完全不知道有什么工具"，
-        本地一片安静。
-        """
-        with self.assertRaises(TypeError):
-            chat("题目")
 
     def test_every_tool_appears_in_the_prompt(self):
         """prompt 里的工具清单由**实例的工具表**生成 ⇒ 每个注册的工具都得在。"""
@@ -3544,6 +3589,49 @@ class ChatPromptTest(unittest.TestCase):
         self.agent.SOP2Prompt("先看目录再动手")
         self.assertIn("先看目录再动手", self.agent.chat("另一道题"))
 
+    def test_the_same_task_accumulates_its_conversation(self):
+        """**同一个 task = 同一个上下文**（第 25 步的立身之本）：第二次提问里看得见
+        题目、它自己的回复与回灌；第一次提问里则什么回复都还没有。"""
+        first = self.agent.chat("题")
+        self.agent.hear("<tool>ls</tool>")
+        second = self.agent.chat("题", result="[exitCode:0]\nok")
+        self.assertNotIn("【你的回复】", first)
+        self.assertIn("【你的回复】\n<tool>ls</tool>", second)
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", second)
+
+    def test_a_different_task_starts_a_fresh_conversation(self):
+        """换题 ⇒ 新会话：旧题的往来一个字都不带过来（身份判据 = **题目原文**）。"""
+        self.agent.chat("甲题")
+        self.agent.hear("甲题的回复")
+        prompt = self.agent.chat("乙题")
+        self.assertIn("乙题", prompt)
+        self.assertNotIn("甲题", prompt)
+
+    def test_a_reask_round_appends_the_standing_line(self):
+        """没有新内容的重问轮（畸形回复 / `SOP2Prompt` 之后）⇒ 追加「请继续。」：
+        判题器的 LLM 是黑盒，会话停在它自己的输出上是个含糊指令。首问则不需要。"""
+        first = self.agent.chat("题")
+        self.assertNotIn("请继续。", first)
+        self.agent.hear("<tool ls")
+        self.assertIn("请继续。", self.agent.chat("题"))
+
+    def test_reset_clears_the_conversation_too(self):
+        """`reset` 是用例隔离的唯一手段（单实例换不掉）⇒ 会话必须一起清，
+        否则上一用例的往来会灌进这一用例的 prompt。"""
+        self.agent.chat("题")
+        self.agent.hear("上一场的回复")
+        self.agent.reset()
+        self.assertNotIn("【你的回复】", self.agent.chat("题"))
+
+    def test_the_system_is_refreshed_every_round(self):
+        """system（四段 header）**每轮现刷**：同一道题进行中沉淀的 SOP，下一轮就看得见
+        —— 这是 ③′（`SOP2Prompt` 不产出命令）"调用成功"的回执，冻在构造时就没了。"""
+        first = self.agent.chat("题")
+        self.agent.SOP2Prompt("先 ls")
+        second = self.agent.chat("题")
+        self.assertNotIn("先 ls", first)
+        self.assertIn("先 ls", second)
+
     def test_braces_in_the_values_are_not_scanned_again(self):
         """`str.format` **只做一次** —— 替换值里的 `{}` 不能被当成占位符。
 
@@ -3556,6 +3644,78 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("题目 {task} {0} {}", prompt)
         self.assertIn("{'a': 1}", prompt)
         self.assertIn("SOP 里有 {sop} 和 {0}", prompt)
+
+
+class ContextTest(unittest.TestCase):
+    """`Context` —— 任务内全量会话上下文（第 25 步）。
+
+    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串，"会话"的落地形态就是
+    **每回合把整个会话渲染进 prompt**。这里钉 Context 本身：构造即问、进表规则、
+    粘住去重、全量保真。跨回合接线在 `ChatPromptTest`，判据链接线在 `TaskChannelTest`，
+    端到端在 `HandleTest.test_the_task_loop_through_handle`。
+    """
+
+    def setUp(self) -> None:
+        self.ctx = Context("请查询北京天气")
+        #: system 由 Agent 每次发送前刷新（四段 header），这里只给个占位证明它被拼进去
+        self.ctx.system = "# Agent定位\n（占位 header）"
+
+    def test_a_fresh_context_opens_with_the_task(self):
+        """**构造即问**：首条 user 消息 = 【题目】+ 题目原文；`task` 即身份。"""
+        prompt = self.ctx.render()
+        self.assertEqual(self.ctx.task, "请查询北京天气")
+        self.assertIn("# Agent定位\n（占位 header）\n\n# 对话记录\n\n【题目】\n请查询北京天气", prompt)
+        self.assertNotIn("【你的回复】", prompt)
+
+    def test_hear_records_the_reply_verbatim(self):
+        """回复**原文**进表 —— 会话记的是它真说过的话（纠错块才收解包后的那份）。"""
+        self.ctx.hear("<tool>ls</tool>")
+        self.assertIn("【你的回复】\n<tool>ls</tool>", self.ctx.render())
+
+    def test_a_sticky_reply_is_heard_only_once(self):
+        """`llmResp` 可能粘住（接口文档对它一个字没写、对 `lastCmdResult` 却写明不粘）
+        ⇒ 与**最后一条消息**相同的回复不进表第二遍。"""
+        self.ctx.hear("同一条回复")
+        self.ctx.hear("同一条回复")
+        self.assertEqual(self.ctx.render().count("【你的回复】"), 1)
+
+    def test_a_repeat_after_another_message_is_heard_again(self):
+        """中间隔了别的消息之后又来同文 ⇒ **记**：那不是粘住，是真的又说了。"""
+        self.ctx.hear("同一句话")
+        self.ctx.nudge()
+        self.ctx.hear("同一句话")
+        self.assertEqual(self.ctx.render().count("【你的回复】"), 2)
+
+    def test_feed_adds_the_two_titled_blocks(self):
+        """回灌轮的 user 消息：两个标题逐字沿用旧模板（`{}` 一个都不动）。"""
+        self.ctx.feed("[exitCode:0]\n2", "晴 26 度")
+        prompt = self.ctx.render()
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\n2", prompt)
+        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。", prompt)
+
+    def test_nudge_appends_the_standing_line(self):
+        """无新内容的重问轮 ⇒ 一句固定收尾（会话不能停在它自己的输出上）。"""
+        self.ctx.hear("<tool ls")
+        self.ctx.nudge()
+        self.assertIn("请继续。", self.ctx.render())
+
+    def test_every_message_survives_verbatim_and_in_order(self):
+        """**全量、不截断、逐字**（用户拍板"先不压缩"）：题目/回复/结果里的 `{}`、
+        换行、标签一个都不许动，顺序就是进表的顺序 —— 渲染是**拼接**，不走 `str.format`。"""
+        self.ctx.hear("回复 {'a': 1}")
+        self.ctx.feed("结果 {task} {0}", "")
+        self.ctx.hear("<answer>答案</answer>")
+        prompt = self.ctx.render()
+        for piece in (
+            "【题目】\n请查询北京天气",
+            "【你的回复】\n回复 {'a': 1}",
+            "【上一条命令的执行结果（原文）】\n结果 {task} {0}",
+            "【你的回复】\n<answer>答案</answer>",
+        ):
+            self.assertIn(piece, prompt)
+        self.assertLess(prompt.index("请查询北京天气"), prompt.index("回复 {'a': 1}"))
+        self.assertLess(prompt.index("回复 {'a': 1}"), prompt.index("结果 {task} {0}"))
+        self.assertLess(prompt.index("结果 {task} {0}"), prompt.index("<answer>答案</answer>"))
 
 
 class ToolReplyParseTest(unittest.TestCase):

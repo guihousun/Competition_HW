@@ -1,19 +1,22 @@
 """`Agent` —— 单实例的解题智能体：一个进程一个，跨回合活着；开拓者每次来用的都是它。
 
-**它是全项目唯一一处跨回合状态**（`self._sop`，PromptSOP 的沉淀）。三条代价与缓解：
+跨回合状态有**两处**，都在实例上：`_sop`（**整场**存活的沉淀）与 `_context`
+（**任务内**的会话，第 25 步）。两条共同的账：
 
-- **它坏了会怎样**：SOP 读出来是空串 ⇒ prompt 里那一段是空的 ⇒ **不碰红线**，
-  SOP 只影响"答得好不好"，不影响"报文字节合不合法"。
+- **它坏了会怎样**：都只影响 prompt 的**内容**（答得好不好），**不碰红线** ——
+  会话丢了 ⇒ 退化成单轮提问（第 25 步之前的行为）；SOP 空着 ⇒ 那一段是空的。
 - **不加锁**：判题器是**逐回合同步请求**；即便真有并发，GIL 下 `str` 的赋值与读取不撕裂。
 - **SOP 不按任务分区**：任务 A 沉淀的会灌进任务 B（用户拍板的取舍，记录、不修）。
+  会话**按任务分区**（身份 = 题目原文），但**无上界增长**（先不压缩，同样记录、不修）。
 
 `planner.task_channel` 每次都用包根那个 `AGENT`，而不是每次新建一个 —— 单实例是
-"SOP 能跨回合长出来"的前提。
+"SOP 能跨回合长出来、会话能跨回合接上"的共同前提。
 """
 
 from collections.abc import Callable
 
-from .chat import chat
+from .chat import PROMPT
+from .context import Context
 from .tools.cmd import executeCmd
 from .tools.sop import store
 
@@ -22,8 +25,11 @@ class Agent:
     """会用工具解题的智能体。**建一个就够**（`coregeek.agent.AGENT`）。"""
 
     def __init__(self) -> None:
-        #: 「沉淀的 SOP」—— **全项目唯一一处跨回合状态**。整场存活、重启清空。
+        #: 「沉淀的 SOP」—— 整场存活的跨回合状态之一。重启清空。
         self._sop = ""
+        #: **任务内**的会话上下文 —— 跨回合状态之二（第 25 步）。题目变了即换新；
+        #: 任务结束不清（死会话，下场换题时自然被替）。
+        self._context: Context | None = None
         #: 工具名 → (实现, 给 LLM 看的描述)。**描述是 prompt 的一部分**，措辞直接决定调用
         #: 正确率（要写清楚"参数是什么"与"结果怎么回来"）。顺序即 prompt 里的顺序。
         #: ⚠️ **表必须由实例构造**：`SOP2Prompt` 写的是 `self._sop` ⇒ 只能是绑定方法。
@@ -41,12 +47,35 @@ class Agent:
         }
 
     def chat(self, request: str, *, result: str = "", retry: str = "") -> str:
-        """组装一份上下文发给判题器的 LLM。`request` = 题目原文。
+        """组装（**累积的**）会话发给判题器的 LLM。`request` = 题目原文。
 
-        `sop` 与 `tool_desc` 是本实例自己的（状态 + 它注册的工具表），所以 `chat.py` 那边
-        一个包内 import 都不需要 —— 它是纯函数模块。
+        同一道题 ⇒ 续上之前的全部往来（`self._context`）；换题 ⇒ 新会话。每轮往里放什么：
+        首问 = 题目（构造即问）；回灌轮 = 结果/纠错（`feed`）；无新内容的重问轮 =
+        一句「请继续。」（`nudge`）—— 判题器的 LLM 只看到这一段字符串，会话停在它自己
+        的输出上是个含糊指令。
+
+        system（四段模板）**每次现刷**：SOP 是活的，任务进行中沉淀的下一轮就得看得见
+        —— 那是 `SOP2Prompt` "调用成功"的回执（它不产出命令）。
         """
-        return chat(request, sop=self._sop, tool_desc=self.tool_desc(), result=result, retry=retry)
+        fresh = self._context is None or self._context.task != request
+        if fresh:
+            # 换题 ⇒ 新会话。粘住的回执也照样 feed：与旧的单轮行为一致（照样回灌）。
+            self._context = Context(request)
+        if result or retry:
+            self._context.feed(result, retry)
+        elif not fresh:
+            self._context.nudge()
+        self._context.system = PROMPT.format(tool_desc=self.tool_desc(), sop=self._sop)
+        return self._context.render()
+
+    def hear(self, reply: str) -> None:
+        """记下判题器 LLM 这回合的回复（`planner.task_channel` 每回合都调 —— 发命令/
+        交答案那两轮没有 prompt，回复照样得进会话，否则回灌时它自己的命令凭空消失）。
+
+        还没开过会话（这道题一次都没问过）⇒ 忽略。粘住的重复由 `Context.hear` 去重。
+        """
+        if self._context is not None:
+            self._context.hear(reply)
 
     def tool_call(self, tool_name: str, tool_param: str) -> str:
         """**顶层调度入口**：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。
@@ -87,8 +116,10 @@ class Agent:
         return self._sop
 
     def reset(self) -> None:
-        """清空。**只给用例用** —— 单实例是模块级的，同一个测试进程里会跨用例串味。
+        """清空（SOP 与会话**两处**）。**只给用例用** —— 单实例是模块级的，
+        同一个测试进程里会跨用例串味。
 
         不复用 `SOP2Prompt("")`：那个会打日志，而用例的 `assertLogs` 正盯着日志。
         """
         self._sop = ""
+        self._context = None

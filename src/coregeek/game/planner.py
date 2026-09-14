@@ -11,7 +11,8 @@
 
 任务线不在这个返回值里：`task_channel(turn)` 单独产出 `(prompt, executeCmd)`。
 "跟 LLM 说什么、怎么解析回复"在 `coregeek/agent/`；用的是包根那个单实例
-`AGENT`（它带着全项目唯一一处跨回合状态：「沉淀的 SOP」）。
+`AGENT`（它身上带着两处跨回合状态：「沉淀的 SOP」整场存活；「任务内会话」`Context`
+题目变了即换新 —— 第 25 步）。
 """
 
 import logging
@@ -122,7 +123,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 
     合成一个函数是因为这条链唯一的不变量是"**两者互斥**"：拆开会把同一条链写两遍，
     任何一次单边修改都会造成"同一轮既提问又发命令"（LLM 拿过期结果作答 ⇒ 活锁）。
-    本函数自己无状态（跨回合状态只有 `AGENT` 实例上那一处）。
+    本函数自己无状态（跨回合状态在 `AGENT` 实例上：SOP 与任务内会话两处）。
 
     判据**从上往下，先命中先返回**：
 
@@ -143,8 +144,11 @@ def task_channel(turn: Turn) -> tuple[str, str]:
        它不会活锁 —— 任务期间 prompt 不限量不计数，出口有"LLM 改口给答案""纠错段""它自己写进去的 SOP 段"。
 
     工具调度只有 `AGENT.tool_call` 一个入口，副作用（SOP 沉淀）只发生在那一行，且写在判据之前
-    ⇒ 走"回灌结果"那一轮 SOP 照样生效。⚠️ **骂的那一份必须与交的那一份出自同一个谓词**
-    （`answer_of`）：交上去的是解包后的答案，骂的却是原文的话，LLM 会以为我们交了一堆标签。
+    ⇒ 走"回灌结果"那一轮 SOP 照样生效。`AGENT.hear`（把回复记进会话）也在这条链的开头：
+    发命令/交答案那两轮没有 prompt，回复照样得进会话，否则回灌那一轮 LLM 看见的是
+    "题目 → 莫名其妙的结果"，它自己要的命令凭空消失。⚠️ **骂的那一份必须与交的那一份
+    出自同一个谓词**（`answer_of`）：交上去的是解包后的答案，骂的却是原文的话，
+    LLM 会以为我们交了一堆标签。
 
     **本函数还负责打"本轮任务 / 上一轮模型回复 / CMD 执行结果"三样**（它们只存在于本回合的
     payload 里，黑盒下没有第二个观察窗）。⚠️ 这几行是**本项目第二条不在 `app` 名下的日志**
@@ -173,6 +177,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         return "", ""
 
     reply = turn.llm_resp.strip()
+    AGENT.hear(reply)  # 它自己说过的话得在会话里（发命令/交答案那轮没有 prompt，也得记）
     answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
     call = tool_of(reply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
