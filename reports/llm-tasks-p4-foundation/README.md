@@ -22,3 +22,11 @@
 这是P4动作与观测底座。跨日线索记忆、成功后的长期行动记忆、模型推理、缺项/冲突处理、预算购买与完整Agent综合验收仍未完成；当前回执在下一回合清零，后续Agent须记住自己已观察到的成功，不能依赖重复回执或私有状态。
 
 冻结源码回归通过：Python3.11.10、536 tests、281.543秒（外层进程282.25秒），执行前后源码/测试哈希相同。完整指纹见validation.json，结果摘要见full-suite-summary.txt。本次建立在2ff95bd与记录的候选文件哈希上，包含此前P1模拟器基础修复，尚未叠加DSH P0b。不声明内网/官方 PASS。旧报告只证明旧模拟器行为，不能被沿用来证明本次官方耗材语义。
+
+## 参赛包候选
+
+包内源码 SHA：ed6e646dc05dfd339383c75aac2c16d47d7f3c61。
+CoreGeek.tar.gz：157701字节；SHA256：fc2d57bb81742184c7f59e5ec695a14cdd086d386c4b97c44ceb7cb174ecfee3。
+从该确定源码提交构建，保留原始main3/main入口。Windows和Ubuntu各5项实际包探测全部PASS（每项25次POST），包含bash入口、main3、日志不可写、关闭trace和全量控制台模式。结果见同目录package-probe-nt.json及package-probe-posix.json。交付提交包含该包和清单，包源码SHA不要求与交付提交自引用一致。
+
+公司电脑仍固定拉取codex/sgh并上传根目录CoreGeek.tar.gz。本包仅包含已审核基础修复，不包含正在开发的P0b共享路由及完整三类LLM Agent；不能用本地PASS替代官方平台验证。
