@@ -47,3 +47,7 @@ python tools/verify_agent_http.py --source . --archive CoreGeek.tar.gz --output 
 全部是本地验证，不是官方或内网PASS。固定刷新坐标、官方真实沙盒/题目、双队胜负等差异仍按DEVELOPMENT_RULES.md登记。
 已测全功能策略的得分具有地图相关取舍，不宣称全面优于仅任务模式；备料消费者消融和未采纳策略均保留报告。
 三类任务与Agent集成已可运行；追加重复验证和整个goal的最终审计另行完成，不用交付候选冒充全部研究结束。
+
+追加验证更新：后续新闻/长文档重复实验遇网络中断，各追加两次未通过；
+失败原因、恢复探针和整场模型不可用的降级验证见[网络中断记录](../llm-tasks-provider-interruption/README.md)。
+包的二进制及源码SHA未因该报告更新而改变。

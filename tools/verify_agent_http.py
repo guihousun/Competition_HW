@@ -23,6 +23,8 @@ parser.add_argument('--output', required=True)
 parser.add_argument('--seed', type=int, required=True)
 parser.add_argument('--side', choices=['challenger', 'defender'], required=True)
 parser.add_argument('--rounds', type=int, default=1300)
+parser.add_argument('--model-mode', choices=['scripted', 'unavailable'], default='scripted',
+                    help='Unavailable returns no model answers to verify full-game fallback, with no API calls')
 parser.add_argument('--enable-agents', action='store_true', help='Record explicit runtime override; omission tests package defaults')
 args = parser.parse_args()
 source, archive, out = Path(args.source).resolve(), Path(args.archive).resolve(), Path(args.output).resolve()
@@ -102,7 +104,8 @@ with tempfile.TemporaryDirectory(prefix='competition-http-game-') as temp:
                     prompt = decision['prompt']
                     category = ('news_prompts' if '"events":' in prompt else 'treasure_prompts') if '\n公开来源：' in prompt else 'task_prompts'
                     counts[category] += 1
-                    state['llmResp'] = local_scripted_model.complete(decision['prompt'])['answer']
+                    state['llmResp'] = (local_scripted_model.complete(decision['prompt'])['answer']
+                                        if args.model_mode == 'scripted' else '')
                 if decision.get('executeCmd'):
                     counts['commands'] += 1
                     fixture = local_task_sandbox.active_task_fixture(state)
@@ -130,16 +133,18 @@ ordered = sorted(times)
 def percentile(q):
     return ordered[min(len(ordered)-1, int((len(ordered)-1)*q))] if ordered else None
 base = next(r for r in state['teamOur']['roles'] if r['roleType'] == 'station')
-report = {'scope': 'Actual packaged main3.py HTTP agent; external-only simulator settlement, scripted cognition and virtual sandbox. Not real-model full game or intranet PASS.',
+report = {'scope': 'Actual packaged main3.py HTTP agent; external-only simulator settlement, configured synthetic model responses and virtual sandbox. Not real-model full game or intranet PASS.',
           'python': sys.version.split()[0], 'platform': os.name, 'archive_sha256': expected_hash,
           'package_source_commit': manifest['commit'], 'explicit_agent_override': args.enable_agents,
-          'seed': args.seed, 'side': args.side, 'rounds': len(rows), 'requested_rounds': args.rounds,
+          'seed': args.seed, 'side': args.side, 'model_mode': args.model_mode,
+          'rounds': len(rows), 'requested_rounds': args.rounds,
           'counts': counts, 'score': state['teamOur']['totalScore'], 'base_hp': base['health'],
           'http_p95_ms': percentile(.95), 'http_p99_ms': percentile(.99), 'http_max_ms': max(times) if times else None,
           'failure': failure, 'stable_environment_sources': hashes() == before, 'environment_files': before,
           'elapsed_seconds': time.monotonic()-started,
           'passed': failure is None and len(rows) == args.rounds and counts['channel_conflicts'] == 0
-              and counts['prompts'] > 0 and counts['commands'] > 0 and counts['task_completions'] > 0
+              and counts['prompts'] > 0 and base['health'] > 0 and counts['attacks'] > 0
+              and (args.model_mode == 'unavailable' or (counts['commands'] > 0 and counts['task_completions'] > 0))
               and all(counts[k] > 0 for k in ('news_prompts', 'treasure_prompts', 'task_prompts'))
               and bool(times) and max(times) < 5000 and hashes() == before}
 save('requests.json', rows)

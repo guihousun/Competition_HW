@@ -1,0 +1,10 @@
+{
+  "returned": true,
+  "answer_valid": true,
+  "usage": {
+    "prompt_tokens": 44,
+    "completion_tokens": 27,
+    "total_tokens": 71
+  },
+  "seconds": 1.9070000000065193
+}
