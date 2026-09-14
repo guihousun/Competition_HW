@@ -75,20 +75,38 @@ CAMP_MAX_COOLDOWN = 34
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
 _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
+_WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
 ROUTER_ENV = "COMPETITION_HW_LLM_ROUTER"
 TASK_AGENT_ENV = "COMPETITION_HW_TASK_AGENT"
+WORLD_AGENT_ENV = "COMPETITION_HW_WORLD_AGENT"
 ROUTER_ANSWER_INSTRUCTION = ("请按题目要求作答，只输出答案本身；多个字段用 '字段=值' 并以 '; ' 分隔。")
 
 
 def llm_router_enabled() -> bool:
     """True only when the operator explicitly enables the shared router."""
-    return task_agent_enabled() or os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+    return world_agent_enabled() or os.environ.get(ROUTER_ENV, "").strip().lower() in ("1", "on", "true", "yes")
 
 
 def task_agent_enabled() -> bool:
     return os.environ.get(TASK_AGENT_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+
+
+def world_agent_enabled() -> bool:
+    return task_agent_enabled() or os.environ.get(WORLD_AGENT_ENV, "").strip().lower() in ("1", "on", "true", "yes")
+
+
+def _treasure_notes(payload, turn):
+    view = _WORLD_VIEW.get()
+    if view is not None and view[0] is turn:
+        return view[1]["treasure"]
+    return treasure.treasure_notes(payload, (payload.get("teamOur") or {}).get("type", ""), turn.round_no)
+
+
+def _mine_available(turn, material):
+    view = _WORLD_VIEW.get()
+    return view is None or view[0] is not turn or material not in view[1]["unavailable"]
 
 
 def decision_report():
@@ -175,6 +193,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             planner_state = planner.PlannerState.load(planner_state.dump())
         planner_state.note_results(payload, turn.round_no, routed=True)
         payload = planner_state.routed_observation(payload)
+    _WORLD_VIEW.set(None)
+    if world_agent_enabled():
+        world = planner_state.ensure_team_agent(payload).world
+        world.observe(payload, planner_state.ensure_llm_router())
+        _WORLD_VIEW.set((turn, world.policy_view(turn.round_no)))
     commands: dict[int, dict[str, Any]] = {}
     pioneer = turn.pioneer()
     tower_pairs = _tower_pairs(turn)
@@ -184,7 +207,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     committed_work = bool(cycle and cycle.description and not cycle.ended_round)
     if pioneer is not None:
         # Only public rumours and actually held items establish a commitment.
-        notes = treasure.notes_from_news(payload, turn.round_no)
+        notes = _treasure_notes(payload, turn)
         site = notes.get('site')
         required = notes.get('items') or []
         committed_work = committed_work or bool(notes.get('known') and not notes.get('taken')
@@ -292,7 +315,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if plan is not None and plan.kind in ("prompt", "cmd"):
             _route_task_channel(payload, planner_state, plan, response, turn=turn)
         _emit_router_channel(payload, planner_state, response, turn=turn)
-        if task_agent_enabled() and planner_state.team_agent is not None:
+        if world_agent_enabled() and planner_state.team_agent is not None:
             planner_state.team_agent.acknowledge(payload, planner_state, response)
     elif plan is not None:
         if plan.kind == "prompt":
@@ -787,8 +810,7 @@ def _treasure_claims_pioneer(turn: Turn, state: dict[str, Any], pioneer: Unit) -
     """
     if not turn.is_day or pioneer is None:
         return False
-    notes = treasure.treasure_notes(state, (state.get("teamOur") or {}).get("type", ""),
-                                    turn.round_no)
+    notes = _treasure_notes(state, turn)
     if not notes.get("known") or notes.get("taken") or not notes.get("site"):
         return False
     site = Pos(int(notes["site"].get("x", -1)), int(notes["site"].get("y", -1)))
@@ -815,8 +837,7 @@ def _treasure_step(turn: Turn, payload: dict[str, Any], pioneer: Unit) -> dict[s
     is open, the treasure is untaken, and the required 任务用品 are already in its
     backpack — otherwise the trip is a wasted day.
     """
-    notes = treasure.treasure_notes(payload, (payload.get("teamOur") or {}).get("type", ""),
-                                    turn.round_no)
+    notes = _treasure_notes(payload, turn)
     if not notes.get("known") or not notes.get("open") or notes.get("taken"):
         return None
     bag = [str(item) for item in pioneer.backpack]
@@ -854,8 +875,7 @@ def _treasure_errand(turn: Turn, pioneer: Unit, commands: dict[int, dict[str, An
         mission = errands.get(key)
         if mission is not None and mission.get("goal") not in ("shop", "altar"):
             return False
-    notes = treasure.treasure_notes(state, (state.get("teamOur") or {}).get("type", ""),
-                                    turn.round_no)
+    notes = _treasure_notes(state, turn)
     if not notes.get("known") or notes.get("taken") or not notes.get("site"):
         if errands is not None:
             errands.pop(key, None)
@@ -1262,6 +1282,8 @@ def _metal_target(turn: Turn, role: Unit, state: dict[str, Any],
     cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
     prices = _sellable_metals(state)
     for material in sorted(prices, key=lambda kind: (-prices[kind], kind)):
+        if not _mine_available(turn, material):
+            continue
         if role.backpack.count(material) >= METAL_BATCH:
             continue  # This ore already fills a run: sell it before mining more.
         mines = sorted(
@@ -1547,6 +1569,8 @@ def _role_state(state: dict[str, Any], unit_id: int) -> dict[str, Any] | None:
 
 
 def _adjacent_mine(turn: Turn, role: Unit) -> Pos | None:
+    if not _mine_available(turn, "stone"):
+        return None
     mines = sorted(
         (
             mine for mine in turn.stone_mines()
@@ -1739,7 +1763,7 @@ def _mine(
     claimed: set[Pos],
     commands: dict[int, dict[str, Any]],
 ) -> bool:
-    if role.backpack_full:
+    if role.backpack_full or not _mine_available(turn, "stone"):
         return False
     mines = sorted(
         (pos for pos in turn.stone_mines() if pos not in claimed),

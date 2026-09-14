@@ -14,8 +14,9 @@ from .task_skills import SkillLibrary
 from .task_context import public_task_confirmed, build_context
 from .sandbox import parse_command_result
 from .tasks import Plan
+from .world_agent import WorldAgent
 
-SCHEMA = "competition-team-agent/1"
+SCHEMA = "competition-team-agent/2"
 EVIDENCE_LIMIT = 8
 TEXT_LIMIT = 6000
 
@@ -32,9 +33,13 @@ class TeamAgent:
         self.evidence = []
         self.link = None
         self.degraded = False
+        self.world = WorldAgent()
 
     def consume(self, request, receipt, raw):
         """Called once by planner ingestion, including when defence pauses work."""
+        if request is not None and request.owner in ("news", "treasure"):
+            self.world.consume(request, receipt, raw)
+            return
         link = self.link
         if (not link or request is None or request.owner != "task"
                 or request.request_id != link["request_id"]
@@ -143,6 +148,7 @@ class TeamAgent:
     def acknowledge(self, payload, state, response):
         """Only the final arbiter's actual response counts as an operation."""
         round_no = int(payload.get("roundNo") or 0)
+        self.world.acknowledge(payload, state.ensure_llm_router(), response)
         confirmation = public_task_confirmed(payload, state.tasks.get("cycle"))
         if not confirmation.confirmed:
             if self.task.generation:
@@ -169,14 +175,14 @@ class TeamAgent:
     def dump(self):
         return {"schema": SCHEMA, "owner": self.owner, "task": self.task.dump(),
                 "skills": self.skills.dump(), "evidence": deepcopy(self.evidence),
-                "link": deepcopy(self.link), "degraded": self.degraded}
+                "link": deepcopy(self.link), "degraded": self.degraded, "world": self.world.dump()}
 
     def summary(self):
         return {"stage": self.task.stage, "generation": self.task.generation,
                 "prompts": self.task.prompts, "commands": self.task.commands,
                 "answers": self.task.answers, "evidenceCount": len(self.evidence),
                 "methodCount": len(self.skills.entries), "stopReason": self.task.stop_reason,
-                "degraded": self.degraded}
+                "degraded": self.degraded, "world": deepcopy(self.world.status)}
 
     @classmethod
     def load(cls, raw, owner):
@@ -185,7 +191,7 @@ class TeamAgent:
             if (not isinstance(raw, dict) or set(raw) != set(result.dump())
                     or raw["schema"] != SCHEMA or raw["owner"] != owner
                     or type(raw["degraded"]) is not bool
-                    or len(json.dumps(raw, ensure_ascii=False)) > 220000):
+                    or len(json.dumps(raw, ensure_ascii=False)) > 400000):
                 raise ValueError("invalid coordinator state")
             task = TaskAgent.load(raw["task"])
             skills = SkillLibrary.load(raw["skills"], owner=owner)
@@ -221,6 +227,9 @@ class TeamAgent:
             result.task, result.skills = task, skills
             result.evidence, result.link = deepcopy(evidence), deepcopy(link)
             result.degraded = raw["degraded"]
+            result.world = WorldAgent.load(raw["world"])
+            if result.world.degraded:
+                raise ValueError("invalid public world memory")
         except (ValueError, TypeError, KeyError, RecursionError):
             result.degraded = True
             result.task.finish("state_restore_rejected", stopped=True)

@@ -128,7 +128,8 @@ class TeamAgentIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(solver_keyword_fill(ctx))
         response = self.run_round(description=text)
         self.assertNotIn("prompt", response)
-        self.assertIsNone(self.state.team_agent)
+        self.assertEqual(self.state.team_agent.task.prompts, 0)
+        self.assertEqual(self.state.team_agent.task.stage, "idle")
 
     def test_foreign_or_tampered_memory_cannot_provide_evidence(self):
         self.run_round()
