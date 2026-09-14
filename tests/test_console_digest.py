@@ -468,3 +468,18 @@ class IntegratedWindowTests(unittest.TestCase):
         line=next(line for line in lines if 'rollup' in line)
         for value in ('gold=123','score=456','weapons=rocket.L2:3','controllers=10011:1'):
             self.assertIn(value,line)
+
+
+class LateCompletionTests(unittest.TestCase):
+    def test_late_http_summary_does_not_fake_restart_or_hp_drop(self):
+        from agent.console_digest import ConsoleDigest
+        digest=ConsoleDigest(rollup_rounds=10)
+        lines=[]
+        for n,hp in ((1,1500),(3,1400),(2,1500),(4,1300)):
+            lines+=digest.observe({'round':n,'event':f'run:{n}','base_hp':hp,
+                                  'judge_errors_total':1,'action_counts':{'acceptTask':1}})
+        lines+=digest.flush()
+        self.assertFalse(any('restart' in line for line in lines))
+        rollup=next(line for line in lines if 'rollup' in line)
+        for field in ('turns=4','late=1','dmg=200','errors=4','accept=4'):
+            self.assertIn(field,rollup)

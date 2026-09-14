@@ -174,6 +174,8 @@ def _fingerprint(summary: dict[str, Any]) -> str | None:
 
 def _new_window() -> dict[str, Any]:
     return {
+        "ticket_highwater": None,
+        "late_turns": 0,
         "seq": 0,
         "window_turns": 0,
         "first_round": None,
@@ -185,6 +187,7 @@ def _new_window() -> dict[str, Any]:
         "thresholds": set(),
         "since_rollup": 0,
         "rollup_start": None,
+        "rollup_last": None,
         "actions": Counter(),
         "empty": Counter(),
         "errors": 0,
@@ -325,9 +328,22 @@ class ConsoleDigest:
             return False
         return fingerprint == window.get("last_fingerprint")
 
+    @staticmethod
+    def _ticket(summary):
+        event = summary.get('event')
+        if isinstance(event, str):
+            run, separator, index = event.rpartition(':')
+            if separator and run and index.isdigit():
+                return run, int(index)
+        return None
+
+    def _late(self, summary, window):
+        ticket, previous = self._ticket(summary), window.get('ticket_highwater')
+        return bool(ticket and previous and ticket[0] == previous[0] and ticket[1] < previous[1])
+
     def _is_restart(self, summary: dict[str, Any], window: dict[str, Any]) -> bool:
         round_no, last = _as_int(summary.get("round")), window.get("last_round")
-        return round_no is not None and last is not None and round_no < last
+        return not self._late(summary, window) and round_no is not None and last is not None and round_no < last
 
     def _start_line(self, key: str, summary: dict[str, Any]) -> str:
         return _tokens([
@@ -352,11 +368,21 @@ class ConsoleDigest:
     def _absorb(self, key: str, window: dict[str, Any], summary: dict[str, Any]) -> list[str]:
         lines: list[str] = []
         round_no = _as_int(summary.get("round"))
+        late = self._late(summary, window)
+        ticket = self._ticket(summary)
+        if ticket and not late:
+            window['ticket_highwater'] = ticket
+        if late:
+            window['late_turns'] += 1
         if window["first_round"] is None:
             window["first_round"] = round_no
         if window["window_turns"] == 0:
-            window["rollup_start"] = round_no
-        window["last_round"] = round_no
+            window["rollup_start"] = window["rollup_last"] = round_no
+        elif round_no is not None:
+            window['rollup_start'] = min(round_no, window['rollup_start']) if window['rollup_start'] is not None else round_no
+            window['rollup_last'] = max(round_no, window['rollup_last']) if window['rollup_last'] is not None else round_no
+        if not late:
+            window["last_round"] = round_no
         window["seq"] += 1
         window["window_turns"] += 1
         window["since_rollup"] += 1
@@ -377,16 +403,19 @@ class ConsoleDigest:
         if false_results:
             window["false_results"] += false_results
         for name in ('gold', 'score'):
-            window[name] = _as_int(summary.get(name))
+            if not late:
+                window[name] = _as_int(summary.get(name))
         levels = summary.get('weapon_levels')
-        window['weapon_levels'] = _counter_text(Counter(levels), 6) if isinstance(levels, dict) else None
+        if not late:
+            window['weapon_levels'] = _counter_text(Counter(levels), 6) if isinstance(levels, dict) else None
         assignments = (summary.get('controllers') or {}).get('issued_attacks') or []
         for assignment in assignments:
             uid = _as_int(assignment.get('controller')) if isinstance(assignment, dict) else None
             if uid is not None:
                 window['controllers'][str(uid)] += 1
         self._absorb_errors(window, summary)
-        self._absorb_base(window, summary)
+        if not late:
+            self._absorb_base(window, summary)
         _note_bounds(window, "walls", summary.get("walls_live"))
         _note_bounds(window, "robots", summary.get("robots_visible"))
         _note_bounds(window, "ready", summary.get("weapons_ready"))
@@ -409,7 +438,7 @@ class ConsoleDigest:
             window["cooling"] += 1
 
         phase = _text(summary.get("phase"))
-        if phase is not None:
+        if phase is not None and not late:
             if window["phase"] is None:
                 window["phase"] = phase
             elif phase != window["phase"]:
@@ -418,7 +447,8 @@ class ConsoleDigest:
                                       ("now", phase),
                                       ("base", _as_int(summary.get("base_hp"))),
                                       ("robots", _as_int(summary.get("robots_visible")))]))
-        lines.extend(self._absorb_decision(key, window, summary))
+        if not late:
+            lines.extend(self._absorb_decision(key, window, summary))
         lines.extend(self._absorb_anomalies(key, window, summary, round_no))
         if window["since_rollup"] >= self.rollup_rounds:
             lines.append(self._rollup(key, window, final=False))
@@ -428,7 +458,7 @@ class ConsoleDigest:
     def _reset_counters(self, window: dict[str, Any]) -> None:
         """Start a fresh aggregation window; phase/anomaly memory is retained."""
         for key, value in (("window_turns", 0), ("since_rollup", 0), ("errors", 0),
-                           ("false_results", 0), ("damage", 0), ("cooling", 0), ("cmds", 0)):
+                           ("late_turns", 0), ("false_results", 0), ("damage", 0), ("cooling", 0), ("cmds", 0)):
             window[key] = value
         for key in ("actions", "empty", "error_codes", "controllers"):
             window[key] = Counter()
@@ -580,12 +610,12 @@ class ConsoleDigest:
 
     def _rollup(self, key: str, window: dict[str, Any], *, final: bool) -> str:
         start = _as_int(window.get("rollup_start"))
-        end = _as_int(window.get("last_round"))
+        end = _as_int(window.get("rollup_last"))
         span = None
         if start is not None and end is not None:
             span = f"{start}..{end}" if start != end else str(end)
         pairs: list[tuple[str, Any]] = [("digest", "rollup"), ("s", _label(key)), ("r", span),
-                                        ("turns", window["window_turns"])]
+                                        ("turns", window["window_turns"]), ("late", window["late_turns"] or None)]
         if final:
             pairs.append(("final", "1"))
         pairs += [

@@ -77,3 +77,5 @@ python tools/analyze_console.py reduce <rows.json|rows.jsonl> --dump .\evidence\
 工具把日志当作**数据**：拼接拆分日志、按 event/指纹去重、通过同一 digest 重放，并报告相对旧控制台的行数/字节缩减与 `accept`/`submit`/`errors` 守恒。第 14–17 号外部 362 行的聚合结果见 `reports/issue-14-17-logging/`。
 
 控制台是本地工程观测，不代表内网或官方 PASS。
+
+HTTP响应后的后台摘要可能乱序到达。已知较早事件号记为 `late` 并保留动作/错误计数，不冒充对局重启、不回退最新HP或策略状态；回放以完整trace事件索引对齐。
