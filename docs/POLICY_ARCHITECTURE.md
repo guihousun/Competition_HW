@@ -13,6 +13,8 @@
 | robots_visible 峰值70/45/58 | 记录全局可见数量，另分我方目标数量 | 这些就是我方每夜刷怪数量 |
 | 旧 protocol_errors 有6次非零 | 修正错误分类并记录实际 errorCode | 达到6次接口违规或被平台停调度 |
 
+后续实施以 [三类LLM任务路线图](../specs/LLM_TASKS_ROADMAP.md) 为准；首批确定性工作见 [P0a子Spec](../specs/LLM_TASKS_P0A.md)。路线图中的能力均需逐阶段验收，不代表当前已全部实现。
+
 ## 阵营与敌我
 
 我方可以是红方或蓝方；以每次请求的 `teamOur` 为己方、`teamEnemy` 为敌方，阵营身份读取 `teamOur.type`。任务点按该身份匹配，机器人 `targetTeam` 与该身份比较，基地和角色使用请求中的实际坐标/ID。颜色、左上/右下位置、100xx/200xx前缀均不作为敌我判断依据。
