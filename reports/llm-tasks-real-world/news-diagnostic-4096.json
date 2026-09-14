@@ -1,0 +1,19 @@
+{
+  "scope": "One replay of already-public synthetic news, provider diagnostic only",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "calls": 1,
+  "prompt_sha256": "564e1ad02b040523954022e08aaf566bf1ebbadc622f60bb3711a3a9e92bcc4b",
+  "python": "3.11.10",
+  "status": "failed",
+  "error": "invalid_provider_response",
+  "diagnostics": {
+    "reason": "incomplete_answer",
+    "finish_reason": "length",
+    "usage": {
+      "prompt_tokens": 386,
+      "completion_tokens": 4096,
+      "total_tokens": 4482
+    }
+  },
+  "elapsed_seconds": 130.71799999999348
+}

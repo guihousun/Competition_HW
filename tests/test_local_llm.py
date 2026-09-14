@@ -6,7 +6,7 @@ from unittest.mock import patch
 from http.server import ThreadingHTTPServer
 from urllib.request import Request, urlopen
 from test_baseline import fixture
-from agent.deepseek_client import DeepSeekClient, NoRedirect, credential
+from agent.deepseek_client import DeepSeekClient, NoRedirect, credential, ProviderResponseError
 from agent.local_llm import LocalLLM
 from agent import local_llm, debug
 from agent.planner import PlannerState
@@ -24,6 +24,35 @@ class FakeClient:
 
 
 class LocalLLMTests(unittest.TestCase):
+    def test_truncated_provider_response_is_diagnosed_without_exposing_partial_answer(self):
+        class Response:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def read(self, limit):
+                return json.dumps({'choices': [{'finish_reason': 'length', 'message': {
+                    'content': 'sensitive-partial-answer', 'reasoning_content': 'sensitive-reasoning'}}],
+                    'usage': {'total_tokens': 4196, 'completion_tokens': 4096,
+                              'prompt_tokens': 100, 'raw': 'sensitive-provider-data'}}).encode()
+        class Opener:
+            def open(self, request, timeout): return Response()
+        client = DeepSeekClient(key='fake-key', opener=Opener())
+        with self.assertRaises(ProviderResponseError) as caught:
+            client.complete('question')
+        self.assertEqual('length', caught.exception.diagnostics['finish_reason'])
+        service = LocalLLM(client)
+        job = {'started': time.monotonic()}
+        service._run(job, 'question')
+        self.assertEqual('failed', job['status'])
+        self.assertEqual(4096, job['diagnostics']['usage']['completion_tokens'])
+        self.assertEqual('incomplete_answer', job['diagnostics']['reason'])
+        self.assertNotIn('answer', job)
+        self.assertNotIn('sensitive', json.dumps(job))
+
+    def test_provider_diagnostics_only_keep_known_enums_and_nonnegative_counters(self):
+        error = ProviderResponseError('secret', 'secret',
+            {'prompt_tokens': True, 'completion_tokens': -1, 'total_tokens': 'secret'})
+        self.assertEqual({'reason': 'invalid_shape', 'finish_reason': 'unknown', 'usage': {}}, error.diagnostics)
+
     def test_full_task_chain_uses_model_answer_and_no_private_answer_key(self):
         client = FakeClient()
         service = LocalLLM(client)

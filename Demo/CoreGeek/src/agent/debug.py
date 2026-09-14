@@ -173,19 +173,44 @@ def step_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def llm_scenario_payload(seed=1, side='challenger'):
+def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='openrouter', max_calls=None):
     """One explicit local LLM fixture; never used by ordinary benchmarks."""
     import uuid
+    from copy import deepcopy
+    if kind not in ('arithmetic', 'tasks', 'long', 'world', 'mixed') or backend not in ('scripted', 'openrouter'):
+        raise ValueError('unknown Agent demo or backend')
     from .protocol import Pos, distance
     state = scenario(seed, side, 1)
     meta = state['_demo']
-    meta.update(llm_enabled=True, llm_run_id=uuid.uuid4().hex)
-    meta['task_world']['llm_demo_once'] = True
+    meta.update(llm_enabled=backend == 'openrouter', llm_mode=backend,
+                llm_demo_kind=kind, llm_run_id=uuid.uuid4().hex)
+    from .local_llm import SERVICE
+    if backend == 'openrouter' and max_calls is not None:
+        SERVICE.set_limit(max_calls)
+    meta['llm_cost'] = {'used': SERVICE.calls, 'limit': SERVICE.max_calls}
+    if kind == 'arithmetic':
+        meta['task_world']['llm_demo_once'] = True
+    elif kind in ('tasks', 'mixed', 'long'):
+        from .local_task_cases import install, CASES
+        install(state)
+        if kind == 'long':
+            case = deepcopy(CASES[0])
+            case['id'] = 'long-document'
+            case['description'] = '阅读 /brief 中的长文档，利用记忆检索定位“接口入口”，查询北京天气。只返回包含city字符串和temperature整数的JSON对象。'
+            case['sandbox_fixture']['files']['/brief/README.txt'] = (
+                '背景说明。' * 1500 + '\n接口入口：python3 /svc/weather.py --city 城市。\n' + '附录资料。' * 1400)
+            meta['task_world']['agent_cases'] = [case]
+    if kind in ('world', 'mixed'):
+        from .local_world_news import install
+        install(state)
+    else:
+        state['worldNews'] = {'officialNews': '', 'folkLegends': ''}
     point = next(z for z in state['mapInfo']['zones'] if z['neutralType'] == side + 'TaskPoint1')
     from .scenarios import free_cells
     pioneer = next(u for u in state['teamOur']['roles'] if u['roleType'] == 'pioneer')
     spot = min(free_cells(state), key=lambda p: distance(p, Pos.load(point['pos'])))
-    pioneer['pos'] = spot.dump()
+    if kind in ('arithmetic', 'tasks', 'long'):
+        pioneer['pos'] = spot.dump()
     return {'state': _viewer_state(state), 'view': frame_view(state), 'metadata': recording_metadata()}
 
 

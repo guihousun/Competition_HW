@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1420'/%3E%3Cpath d='M8 22 L16 8 L24 22 Z' fill='%234fe0b4'/%3E%3Ccircle cx='16' cy='19' r='3' fill='%23ffb347'/%3E%3C/svg%3E">
 <title>未来战争 · 策略调试台（本地演示与研发平台）</title>
-<link rel="stylesheet" href="/css/app.css?v=20260913a">
-<link rel="stylesheet" href="/css/experience.css?v=20260913a">
+<link rel="stylesheet" href="/css/app.css?v=20260915-agent">
+<link rel="stylesheet" href="/css/experience.css?v=20260915-agent">
 </head>
 <body>
 <!-- Two columns: the console (left, scrolls on its own) and the match (right).
@@ -44,8 +44,27 @@
         </label>
 
         <button id="preset" type="button" title="换一个可复现的演示场景">换演示场景</button>
-        <button id="llm-demo" type="button">体验 LLM 任务（真实 API）</button>
-        <p class="setup-help">使用服务端密钥，可能产生费用；普通对局默认不调用 API。</p>
+        <div class="agent-controls">
+          <label>Agent 演示
+            <select id="agent-demo-kind">
+              <option value="mixed">三类任务综合</option>
+              <option value="tasks">自进化：文档与查询</option>
+              <option value="long">长文档：原文检索</option>
+              <option value="world">新闻与多日宝藏</option>
+            </select>
+          </label>
+          <label>模型来源
+            <select id="agent-demo-backend">
+              <option value="scripted">脚本模型 · 验证流程</option>
+              <option value="openrouter">OpenRouter · 真实模型</option>
+            </select>
+          </label>
+          <label>真实 API 服务累计上限
+            <input id="agent-api-limit" type="number" min="1" max="100" value="20">
+          </label>
+          <button id="llm-demo" type="button">启动 Agent 演示</button>
+        </div>
+        <p class="setup-help">脚本模型不产生 API 费用，也不代表真实模型能力。真实模式使用服务端凭据；上限调整不会清零已用次数。</p>
       </div>
       </details>
       <button id="newmatch" class="primary" type="button">开始新对局</button>
@@ -100,6 +119,18 @@
 
     <aside class="battle-brief" aria-label="战况概览">
       <div class="brief-section"><h3>LLM 通道</h3><p id="llm-channel-status">普通场景不调用真实 API。可在对局设置中体验 LLM 任务。</p></div>
+      <div class="brief-section agent-inspector" aria-label="Agent 状态与证据">
+        <h3>Agent <b id="agent-stage">尚未启动</b></h3>
+        <p id="agent-budget">普通额度按游戏日共享，任务内调用单独标明。</p>
+        <p id="agent-operation">工人行动由策略控制，模型负责认知任务。</p>
+        <p id="agent-world">新闻与宝藏暂无解释。</p>
+        <details><summary>查看题目与已收到的原文</summary>
+          <label for="agent-source-select">来源</label>
+          <select id="agent-source-select" aria-label="选择题目或工具原文"></select>
+          <p id="agent-source-note">只包含 Agent 实际收到的资料。</p>
+          <textarea id="agent-source-text" readonly rows="8" aria-label="原文内容" placeholder="任务开始后可查看原文"></textarea>
+        </details>
+      </div>
       <div class="brief-section"><span class="eyebrow">战况概览</span><h2 id="brief-title">准备出发</h2><p id="brief-text">开始后，这里会解释昼夜阶段和当前战况。</p><div class="phase-meter"><i id="phase-meter-fill"></i></div><small id="brief-countdown">一场对局最多 10 天</small></div>
       <div class="brief-section"><h3>我方行动单位 <small>点击定位</small></h3><div id="crew-list" class="crew-list"><p class="muted">1 名开拓者 · 2 名工人</p></div></div>
       <div class="brief-section task-status"><h3 id="task-status-title">尚未领取任务</h3><p id="task-status-description">等待任务信息</p><b id="task-status-time">暂无进行中的任务</b><progress id="task-status-meter" max="1" value="0" hidden aria-label="任务剩余时间"></progress><p id="task-status-hint">开拓者负责接取与提交任务。</p></div>
@@ -223,7 +254,7 @@
     <footer class="foot">
       <span>本地实验环境 · 结果用于调试，不代表官方成绩</span>
       <span id="foot-stats" class="muted">空格：暂停 / 继续 · ← →：单轮回看 · F：全图</span>
-      <span id="foot-ver" title="前端资源版本；若与 /js 资源后缀不一致，说明浏览器仍在用旧页面">前端 20260913a</span>
+      <span id="foot-ver" title="Agent演示与原文检索界面">前端 20260915-agent</span>
     </footer>
   </aside>
 
@@ -308,15 +339,15 @@
   <div class="guide-signals"><p><b>观战</b> 开始后自动推进；空格暂停 / 继续，← → 后退 / 前进一轮。</p><p><b>地图</b> 拖动平移、滚轮缩放；点击角色卡放大定位，F 或「全图」恢复全景。</p><p><b>复盘</b> 「回到开头」保留历史；「开始新对局」重新生成。「录像与复盘」可生成、打开和保存整场录像。</p><p><b>坐标</b> 左下角为原点，x 向右、y 向上。图例只解释显示，不改变比赛规则。</p></div>
 </dialog>
 
-<script src="/js/constants.js?v=20260913a"></script>
-<script src="/js/viewmodel.js?v=20260913a"></script>
-<script src="/js/replay.js?v=20260913a"></script>
-<script src="/js/sprites.js?v=20260913a"></script>
-<script src="/js/effects.js?v=20260913a"></script>
-<script src="/js/renderer.js?v=20260913a"></script>
-<script src="/js/panel.js?v=20260913a"></script>
-<script src="/js/experience.js?v=20260913a"></script>
-<script src="/js/guide.js?v=20260913a"></script>
-<script src="/js/app.js?v=20260913a"></script>
+<script src="/js/constants.js?v=20260915-agent"></script>
+<script src="/js/viewmodel.js?v=20260915-agent"></script>
+<script src="/js/replay.js?v=20260915-agent"></script>
+<script src="/js/sprites.js?v=20260915-agent"></script>
+<script src="/js/effects.js?v=20260915-agent"></script>
+<script src="/js/renderer.js?v=20260915-agent"></script>
+<script src="/js/panel.js?v=20260915-agent"></script>
+<script src="/js/experience.js?v=20260915-agent"></script>
+<script src="/js/guide.js?v=20260915-agent"></script>
+<script src="/js/app.js?v=20260915-agent"></script>
 </body>
 </html>

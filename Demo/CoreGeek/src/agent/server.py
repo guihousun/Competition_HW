@@ -11,6 +11,7 @@ page. They are optional; removing them does not affect the judge path.
 """
 import json
 import logging
+import os
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,7 +20,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from . import debug, diagnostics, telemetry, twomatch, recordings
-from .brain import decide, respond
+from .brain import decide, respond, decision_report
 from .scenarios import observation
 
 LOGGER = logging.getLogger(__name__)
@@ -227,7 +228,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(403, {'error': '真实 LLM 调用仅允许本机访问'})
                 return
             if path == '/debug/llm/scenario':
-                self._json(200, debug.llm_scenario_payload(payload.get('seed', 1), payload.get('side', 'challenger')))
+                self._json(200, debug.llm_scenario_payload(payload.get('seed', 1), payload.get('side', 'challenger'),
+                    payload.get('kind', 'arithmetic'), payload.get('backend', 'openrouter'), payload.get('max_calls')))
                 return
             if path == '/debug/recording/start':
                 try:
@@ -268,4 +270,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def serve(port: int) -> None:
+    os.environ.setdefault('COMPETITION_HW_TASK_AGENT', 'on')
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()

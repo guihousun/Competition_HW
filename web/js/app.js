@@ -164,10 +164,18 @@
       this.stop(); this.busy = true; this.panel.setBusy(true);
       let ready = false;
       try {
-        const payload = await this.postJson('/debug/llm/scenario', {seed: Number(document.getElementById('seed').value), side: document.getElementById('side').value});
+        const backend = document.getElementById('agent-demo-backend').value || 'scripted';
+        if (backend === 'openrouter') {
+          const status = await this.getJson('/debug/llm/status');
+          if (!status.configured) throw new Error('尚未配置 OpenRouter 凭据，请先运行 tools/configure_openrouter.ps1');
+        }
+        const payload = await this.postJson('/debug/llm/scenario', {
+          seed: Number(document.getElementById('seed').value), side: document.getElementById('side').value,
+          kind: document.getElementById('agent-demo-kind').value || 'mixed', backend,
+          max_calls: Number(document.getElementById('agent-api-limit').value || 20)});
         this.world = HW.World.fromScenario(payload);
         this.panel.empty(false); this.afterWorldChange(); this.renderer.fit(this.world);
-        this.panel.toast('已启用真实模型 API：演示任务会调用模型，等待时暂停推进。');
+        this.panel.toast(backend === 'scripted' ? '脚本模型演示：验证完整流程，不代表真实模型能力。' : '真实模型模式：等待回答时暂停推进游戏回合。');
         ready = true;
       } catch (error) { this.panel.toast('LLM 演示启动失败：' + error.message, 'error'); }
       finally { this.busy = false; this.panel.setBusy(false); }
@@ -696,6 +704,7 @@
       on('newmatch', 'click', () => this.startNewMatch());
       on('empty-new', 'click', () => this.startNewMatch());
       on('llm-demo', 'click', () => this.startLLMDemo());
+      on('agent-source-select', 'change', () => HW.experience.updateAgent(this.world));
       on('debug-toggle', 'click', () => {
         if (document.getElementById('dev').classList.contains('collapsed')) this.openDebug();
         else this.panel.collapse(true);

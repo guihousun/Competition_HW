@@ -37,6 +37,27 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def safe_usage(value):
+    if not isinstance(value, dict):
+        return {}
+    return {k: v for k, v in value.items()
+            if k in ('prompt_tokens', 'completion_tokens', 'total_tokens')
+            and type(v) is int and 0 <= v <= 1000000000}
+
+
+class ProviderResponseError(RuntimeError):
+    """Bounded diagnostics only; no response body, reasoning or provider messages."""
+    def __init__(self, reason, finish_reason=None, usage=None):
+        super().__init__('invalid_provider_response')
+        self.diagnostics = {
+            'reason': reason if reason in ('incomplete_answer', 'empty_answer',
+                                           'answer_too_large', 'response_too_large') else 'invalid_shape',
+            'finish_reason': finish_reason if finish_reason in
+                ('stop', 'length', 'content_filter', 'tool_calls', 'error') else 'unknown',
+            'usage': safe_usage(usage),
+        }
+
+
 class DeepSeekClient:
     def __init__(self, key=None, opener=None, timeout=60):
         self._key = credential() if key is None else key
@@ -61,17 +82,18 @@ class DeepSeekClient:
             with self._opener.open(request, timeout=self.timeout) as response:
                 raw = response.read(524289)
             if len(raw) > 524288:
-                raise ValueError('response_too_large')
+                raise ProviderResponseError('response_too_large')
             data = json.loads(raw)
             choice = data['choices'][0]
             answer = choice['message']['content']
-            if choice.get('finish_reason') != 'stop' or not isinstance(answer, str) or not answer.strip():
-                raise ValueError('incomplete_answer')
+            if choice.get('finish_reason') != 'stop':
+                raise ProviderResponseError('incomplete_answer', choice.get('finish_reason'), data.get('usage'))
+            if not isinstance(answer, str) or not answer.strip():
+                raise ProviderResponseError('empty_answer', choice.get('finish_reason'), data.get('usage'))
             if len(answer.encode('utf-8')) > 65536:
-                raise ValueError('answer_too_large')
+                raise ProviderResponseError('answer_too_large', choice.get('finish_reason'), data.get('usage'))
             # Only counters and final content; never return reasoning_content/raw headers.
-            usage = {k: v for k, v in (data.get('usage') or {}).items()
-                     if k in ('prompt_tokens', 'completion_tokens', 'total_tokens') and isinstance(v, int)}
+            usage = safe_usage(data.get('usage'))
             reported_model = data.get('model')
             return {'answer': answer, 'usage': usage,
                     'reported_model': reported_model if isinstance(reported_model, str) else None}
@@ -79,5 +101,7 @@ class DeepSeekClient:
             raise RuntimeError('provider_http_' + str(error.code)) from None
         except (TimeoutError, urllib.error.URLError):
             raise RuntimeError('provider_timeout_or_network') from None
+        except ProviderResponseError:
+            raise
         except Exception:
             raise RuntimeError('invalid_provider_response') from None

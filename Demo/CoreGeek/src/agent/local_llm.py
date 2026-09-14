@@ -4,7 +4,7 @@ import hashlib
 import threading
 import time
 import uuid
-from .deepseek_client import DeepSeekClient, MODEL, EFFORT, PROVIDER
+from .deepseek_client import DeepSeekClient, MODEL, EFFORT, PROVIDER, ProviderResponseError
 
 
 class LocalLLM:
@@ -25,6 +25,12 @@ class LocalLLM:
             return {'provider': PROVIDER, 'model': MODEL, 'effort': EFFORT,
                     'configured': self._client().configured, 'calls': self.calls,
                     'maxCalls': self.max_calls, 'note': '仅显式启用的本地场景调用，额度是本地费用保护，不是官方规则'}
+
+    def set_limit(self, limit):
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise ValueError('本地服务累计调用上限必须为1..100')
+        with self.lock:
+            self.max_calls = limit  # never reset calls or request deduplication
 
     def submit(self, run_id, round_no, prompt):
         identity = hashlib.sha256((run_id + '\0' + str(round_no) + '\0' + prompt).encode()).hexdigest()
@@ -57,6 +63,11 @@ class LocalLLM:
                 if not allowed and reason not in ('missing_credential', 'provider_timeout_or_network', 'invalid_provider_response'):
                     reason = 'provider_failed'
                 job.update(status='failed', error=reason)
+                if type(error) is ProviderResponseError:
+                    # Revalidate even this typed error: never forward arbitrary provider fields.
+                    detail = error.diagnostics
+                    job['diagnostics'] = ProviderResponseError(
+                        detail.get('reason'), detail.get('finish_reason'), detail.get('usage')).diagnostics
         finally:
             with self.lock:
                 job['elapsed'] = round(time.monotonic() - job['started'], 2)
@@ -91,6 +102,7 @@ def after_step(result):
     state = result['state']
     meta = state.get('_demo') or {}
     request = result.get('judgeRequest') or {}
+    meta['llm_cost'] = {'used': SERVICE.calls, 'limit': SERVICE.max_calls}
     if request.get('executeCmd'):
         from .local_task_sandbox import active_task_fixture, execute
         fixture = active_task_fixture(state)
@@ -99,6 +111,12 @@ def after_step(result):
                                   '[JUDGER_ERROR]\n本地沙盒执行器未接入：此场景没有虚拟沙盒 fixture')
     if not request.get('prompt'):
         return result
+    if meta.get('llm_mode') == 'scripted':
+        from .local_scripted_model import complete, MODEL as SCRIPTED_MODEL
+        reply = complete(request['prompt'])
+        state['llmResp'] = reply['answer']
+        meta['llm_status'] = {'status': 'done', 'model': SCRIPTED_MODEL, 'scripted': True}
+        return result
     if not meta.get('llm_enabled'):
         meta['llm_status'] = {'status': 'disabled', 'model': MODEL}
         return result
@@ -106,4 +124,5 @@ def after_step(result):
     identity = SERVICE.submit(run_id, result['frame']['round'], request['prompt'])
     meta['llm_pending'] = identity
     meta['llm_status'] = {'status': 'running', 'model': MODEL}
+    meta['llm_cost'] = {'used': SERVICE.calls, 'limit': SERVICE.max_calls}
     return result

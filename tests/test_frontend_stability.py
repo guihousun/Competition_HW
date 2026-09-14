@@ -708,6 +708,37 @@ function stubPost() {
     assert(box.children[0] === marker, 'unchanged markers are not rebuilt per frame');
   });
 
+  await check('Agent original-text inspector preserves source selection and scroll', async () => {
+    resetApp();
+    const world = liveWorld(8);
+    world.state._demo = {planner: {judge: {llmUsedToday: 2}, teamAgent: {
+      task: {stage: 'waiting_model', prompts: 3, commands: 2, inspections: 1},
+      world: {status: {news: 'interpreted', treasure: 'waiting_model'}},
+      memory: {records: [
+        {id: 'question', label: '当前任务原文', received_chars: 8, text: 'question'},
+        {id: 'document', label: 'cat /manual', received_chars: 24, text: '<script>literal</script>'}
+      ]}}}};
+    HW.experience.updateAgent(world);
+    const select = document.getElementById('agent-source-select');
+    const first = select.children[0];
+    select.value = 'document';
+    HW.experience.updateAgent(world);
+    const area = document.getElementById('agent-source-text');
+    area.scrollTop = 77;
+    HW.experience.updateAgent(world);
+    assert(select.value === 'document' && select.children[0] === first, 'source DOM and selection stay stable');
+    assert(area.value === '<script>literal</script>' && area.scrollTop === 77, 'raw text is literal and scroll is preserved');
+    assert(document.getElementById('agent-stage').textContent === '等待模型', 'stage is readable');
+    assert(document.getElementById('agent-budget').textContent.includes('2/3'), 'shared quota is visible');
+    world.state.phaseTask = '';
+    world.state._demo.task_report = {ended: 'completed', rewards: {rate: 1}};
+    HW.experience.updateAgent(world);
+    assert(document.getElementById('agent-stage').textContent.includes('任务已结束'), 'settlement supersedes stale planner stage');
+    world.state.phaseTask = 'A new task';
+    HW.experience.updateAgent(world);
+    assert(document.getElementById('agent-stage').textContent === '等待模型', 'old settlement does not override an active task');
+  });
+
   process.stdout.write(JSON.stringify(checks));
 })().catch((error) => {
   process.stdout.write(JSON.stringify([{ name: 'harness', ok: false, error: String((error && error.stack) || error) }]));

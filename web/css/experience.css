@@ -184,3 +184,13 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
   .guide-catalog { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto !important; transition:none !important; } }
+.agent-controls { display:grid; gap:8px; width:100%; }
+.agent-controls label { display:grid; gap:4px; }
+.agent-controls select, .agent-controls input, .agent-inspector select { width:100%; min-width:0; }
+.agent-inspector h3 { display:flex; justify-content:space-between; gap:8px; }
+.agent-inspector h3 b { color:var(--accent, #72d8c7); font-size:14px; }
+.agent-inspector p { font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.agent-inspector summary { cursor:pointer; padding:8px 0; font-size:13px; }
+.agent-inspector textarea { width:100%; box-sizing:border-box; resize:vertical; min-height:150px; max-height:420px;
+  padding:10px; color:inherit; background:rgba(0,0,0,.2); border:1px solid var(--line); border-radius:8px;
+  font:13px/1.55 ui-monospace,Consolas,monospace; white-space:pre-wrap; }

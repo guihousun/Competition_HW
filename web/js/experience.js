@@ -137,6 +137,53 @@
     });
   }
 
+  let sourceKey = '';
+  function updateAgent(world) {
+    const state = world && world.state || {};
+    const meta = state._demo || {};
+    const planner = meta.planner && typeof meta.planner === 'object' ? meta.planner : {};
+    const coordinator = planner.teamAgent || {};
+    const task = coordinator.task || {};
+    const judge = planner.judge || {};
+    const stages = {idle: '待命', ready: '准备分析', waiting_model: '等待模型', waiting_tool: '等待工具',
+      awaiting_judgement: '等待判题反馈', stopped: '本次求解已停止', ended: '任务已结束'};
+    const active = Boolean(state.phaseTask);
+    const report = meta.task_report || {};
+    const ended = !active && Boolean(report.ended || report.rewards);
+    setText($('agent-stage'), ended ? '任务已结束 · 可回看证据' : stages[task.stage] || '尚未启动');
+    const used = Number(judge.llmUsedToday || 0);
+    setText($('agent-budget'), `第 ${Math.floor((Number(state.roundNo || 1) - 1) / 130) + 1} 天普通额度 ${used}/3 · ${active ? '当前自进化任务调用不计日限' : '新闻与宝藏共享日限'}`);
+    const counts = `${ended ? '最近一题' : '本题'} ${task.prompts || 0} 次模型 · ${task.commands || 0} 次沙盒 · ${task.inspections || 0} 次原文检索`;
+    setText($('agent-operation'), counts + (task.stop_reason ? ` · ${task.stop_reason}` : ''));
+    const worldState = coordinator.world || {};
+    const status = worldState.status || {};
+    const labels = {idle: '暂无资料', queued: '等待通道', waiting_model: '等待模型', interpreted: '已解释',
+      retry_limit: '重试已停止', invalid_reply: '回复未通过检查', expired: '等待超时', rejected: '请求被拒绝'};
+    const h = worldState.hypothesis;
+    const complete = h && h.site && h.items && h.opensAt != null && h.closesAt != null && !h.uncertain;
+    setText($('agent-world'), `新闻：${labels[status.news] || '暂无资料'} · 宝藏：${worldState.taken ? '已取走' : complete ? '条件已汇总' : labels[status.treasure] || '暂无资料'}`);
+    const records = coordinator.memory && Array.isArray(coordinator.memory.records)
+      ? coordinator.memory.records.filter(r => r && typeof r.id === 'string') : [];
+    const select = $('agent-source-select');
+    if (!select) return;
+    const key = records.map(r => r.id + ':' + r.label).join('|');
+    if (key !== sourceKey) {
+      const previous = select.value;
+      select.replaceChildren();
+      records.forEach(r => { const option = document.createElement('option'); option.value = r.id;
+        option.textContent = `${r.label || r.id}（${r.received_chars} 字符）`; select.appendChild(option); });
+      select.value = records.some(r => r.id === previous) ? previous : (records[0] && records[0].id || '');
+      sourceKey = key;
+    }
+    const chosen = records.find(r => r.id === select.value);
+    const text = chosen && typeof chosen.text === 'string' ? chosen.text : '';
+    setFlag($('agent-source-text'), 'value', text);
+    const note = !chosen ? '任务开始后可查看实际收到的原文。' : chosen.text == null ? '该原文已因内存预算淘汰，不能假装可读取。'
+      : chosen.upstream_truncated ? '上游只返回了部分输出；需缩小查询才能补齐。'
+      : text.length < chosen.received_chars ? '仅保留了部分原文，超出部分不可检索。' : '完整保留本次收到的原文；来源不包含模拟器标准答案。';
+    setText($('agent-source-note'), note);
+  }
+
   function update(world) {
     const app = HW.app;
     const ready = Boolean(app && app.world);
@@ -144,9 +191,12 @@
     const llm = ready && world.state && world.state._demo || {};
     const llmStatus = llm.llm_status || {};
     const labels = {running: '正在请求，游戏回合暂停等待', done: '回答已返回', failed: '调用失败', disabled: '未启用真实 API'};
-    setText($('llm-channel-status'), llm.llm_enabled
+    const cost = llm.llm_cost || {};
+    setText($('llm-channel-status'), llm.llm_mode === 'scripted' ? '本地脚本模型 · 仅验证流程 · 无真实 API 费用' : llm.llm_enabled
       ? 'LLM · ' + (llmStatus.model || '模型信息待返回') + ' · ' + (labels[llmStatus.status] || '已启用，等待任务请求') + (llmStatus.error ? '（' + llmStatus.error + '）' : '')
+        + (cost.limit != null ? ` · 服务累计 ${cost.used || 0}/${cost.limit} 次` : '')
       : '普通场景不调用真实 API。可在对局设置中体验 LLM 任务。');
+    updateAgent(ready ? world : null);
     setFlag($('llm-demo'), 'disabled', busy);
     if (HW.guide) HW.guide.update(app, world);
     const root = $('app');
@@ -185,5 +235,5 @@
       ready && world.index ? '这一轮没有记录到行动。' : '还没有已执行的行动。');
     selection(ready ? app.selected : null);
   }
-  HW.experience = {brief, update, selection};
+  HW.experience = {brief, update, selection, updateAgent};
 }(window));

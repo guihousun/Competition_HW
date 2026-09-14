@@ -1,0 +1,156 @@
+{
+  "scope": "Real OpenRouter interpretations through brain/router on dated public snapshots; not full simulated games or intranet PASS.",
+  "python": "3.11.10",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "effort": "max",
+  "budget": 12,
+  "calls": 9,
+  "returned_usage_tokens": 5372,
+  "days": [
+    {
+      "day": 1,
+      "checks": {
+        "news_today": true,
+        "site": true,
+        "no_premature_summon": true
+      },
+      "ordinary_used": 3,
+      "status": {
+        "news": "retry_limit",
+        "treasure": "interpreted"
+      },
+      "view": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 34,
+            "y": 5
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "day": 2,
+      "checks": {
+        "news_today": false,
+        "site": true,
+        "no_premature_summon": true,
+        "items": true
+      },
+      "ordinary_used": 3,
+      "status": {
+        "news": "retry_limit",
+        "treasure": "interpreted"
+      },
+      "view": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 34,
+            "y": 5
+          },
+          "items": [
+            "FlameBreath",
+            "StarSand"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "day": 3,
+      "checks": {
+        "news_today": false,
+        "site": true,
+        "no_premature_summon": true,
+        "items": true,
+        "window": true,
+        "complete": true
+      },
+      "ordinary_used": 3,
+      "status": {
+        "news": "retry_limit",
+        "treasure": "interpreted"
+      },
+      "view": {
+        "unavailable": [],
+        "treasure": {
+          "known": true,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 34,
+            "y": 5
+          },
+          "items": [
+            "FlameBreath",
+            "StarSand"
+          ],
+          "opensAt": 261,
+          "closesAt": 290,
+          "open": true
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    }
+  ],
+  "passed": false,
+  "elapsed_seconds": 2896.4060000000172,
+  "stable_sources": true,
+  "files": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "actions.py": "de79664cdf173f777a77beed6845513a0e2c50fbb0f40dc5332c3b16db8cde6e",
+    "ballistics.py": "b8593587c4eec6f8518bf945591a16ff051fbecd26a7d8a582bdd97987c6bc62",
+    "brain.py": "49e7bb7411e7cdbdecc411d65000da6516287f67b4b20b6a4cb87a2dcdbc22c2",
+    "console_digest.py": "f5024f3fab15049be2393cd3d155d39e74a296ded01f2e1b68cd9280eca65d83",
+    "coordination.py": "48abac2a5f7a22cbaa4e9079a0ba4fd1f0b35e1faa37e236dd67d00a7f06d92e",
+    "debug.py": "12918c9b0ea7cbb5b4384ea944880d1861b1f1a61fbb3a79a808dc51b9b6b91b",
+    "deepseek_client.py": "5dedec0c2042b33dc1824331ee7b32ff61991e6bb39a105fe4bd33bebe2af0ee",
+    "defense_layout.py": "2153f79d78064f7173db3ce850ebd04cc4d1c64d935c21a14d7542d2db5031a2",
+    "diagnostics.py": "a6e5de7c9868fa0f3196be05a9f9ca7536c6a2d354aed40ef3f7d6b364e806db",
+    "grid.py": "734cf83c1eed05677f9600d26b5b923c46cdbbe0726afcd545412cab5e9bab67",
+    "llm_router.py": "82da401637b6d0c60f5926e0034d916c0b788c033bf5714f715ca02fb3f6249f",
+    "local_llm.py": "8054cf1b981664762518b0ac8ba7ad31b0943228370820303187e054df825b5b",
+    "local_task_cases.py": "e902b40784d21cb3dccb0dce61c11959b7552b68c6b7390c8cd272d845727ca9",
+    "local_task_sandbox.py": "b14de2ca8132b02a583d62f412b46b239a950116e2573758bc696f27d1d6178e",
+    "local_world_news.py": "143ba7a65f92ef4081cb3f3e0931f02e2a7952e484d2670bde9da63cce5f7f0e",
+    "market.py": "6a2b8b5aca57dbb21a0407c118deb9b472d8dfa272d25747a2fd8d3cfd550e39",
+    "match.py": "248e943857d5c86e17e4b4f0aefd408f1c4dd07d3311c28923c15bf0d9d5b201",
+    "nightwork.py": "d21459e5bcecd4dcf30df1e9c1a77cafbdc9badc1f3fd2d132e5781aec235bf2",
+    "planner.py": "7dbb9db14be293621c16892175b74a76e62eda19201a982c3f38de06322993c9",
+    "policy_supervisor.py": "7280e55a03b0c99ec44869be453e27828be2a75b65c167291d54e8d667833463",
+    "protocol.py": "9d2ad1a53416b0a78b3267562edf1599fb214117ccfb7738aba6c0adbb804417",
+    "recordings.py": "25b3f9d585c0e576a3eefeb68b815897ed97f6f5e35888af688e4695b90fa9bd",
+    "sandbox.py": "78f9a2c240795f59e390041ecd05b3e7a59811e608a2da8921e5e06a762d248b",
+    "scenarios.py": "7970bec5a59d66bda875e40d9db67e5792a455bb52aa96479d531c0200ede783",
+    "server.py": "20c40a4352c5a5b8bc234a74dd25dc24fbe3ed069195e42e82d9e07623a39cb6",
+    "simulator.py": "29fa156b9cfc754c494156d57b655ef1ac7c44cf0b718f6b716e774b79ca968a",
+    "task_agent.py": "6002807f7a07035541786bff254d16c47cdcbe95cdbf00dc37cf854722f4ba21",
+    "task_context.py": "d8d3a4cf0c1615a63d5569927db582f0376b20ed83840dae4d888ce7cbaefae6",
+    "task_lifecycle.py": "fc2c79ee3239f952c453f4469b09261d87cf239c0b1a32bfe0532d9d6a009c7d",
+    "task_skills.py": "3c786ee1c10d936d163c3f5c928053eeb5639a798254fbc832ef462749c465df",
+    "tasks.py": "204d78f6700ef3e8cd4ffd5c4aa744d251a83d48c16a726c542078a9da157a13",
+    "taskworld.py": "aa6eb386a7dd9320ee93d09820fb598f21ad482171753eed532e73222583936a",
+    "team_agent.py": "5d028fe3f58879bc72f19b724b3f2b79de7c0d5fa408edecf7a90a8886beef67",
+    "telemetry.py": "5b512c0122214181a73803d70419a50b96a326992702b78c295461250f450d70",
+    "treasure.py": "00eba56988b9b7efbf6cb4bd5f589d1f2f39eb263fc3fdd3913f8c162a834f89",
+    "turnactions.py": "00b2a86fce4ac015480d67241664e363edf95be4e33ee262990998e92272bc78",
+    "twomatch.py": "5c25fedd63b4ebf0e38f0427aa1f7fcb10c5c5096956a7b8c6d4445ff1ea2a89",
+    "vision.py": "0bbc60474257caaabf8c50eab82bd9621b3cd7668870ba303ed4f86640102491",
+    "world_agent.py": "f8e0134a76fb71ee8abc673db10bd3cebb0e3e2ed42071acad5fd6a322b4733c"
+  }
+}

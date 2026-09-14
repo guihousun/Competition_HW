@@ -1,0 +1,19 @@
+{
+  "scope": "One replay of already-public synthetic news, provider diagnostic only",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "calls": 1,
+  "prompt_sha256": "564e1ad02b040523954022e08aaf566bf1ebbadc622f60bb3711a3a9e92bcc4b",
+  "python": "3.11.10",
+  "max_tokens": 16384,
+  "status": "returned",
+  "result": {
+    "answer": "{\"request_id\":\"dac5e2cf3464fce75fad3987\",\"events\":[{\"resource\":\"iron\",\"availability\":\"available\",\"startDay\":1,\"endDay\":1,\"priceDirection\":\"unknown\",\"evidence\":[{\"sourceId\":\"e45a3fd1ecfda7d39507c7794bf5a879ef91c9012763e5480b82846911bd7697\",\"quote\":\"今天铁矿仍可开采\"}]},{\"resource\":\"iron\",\"availability\":\"unavailable\",\"startDay\":2,\"endDay\":3,\"priceDirection\":\"up\",\"evidence\":[{\"sourceId\":\"e45a3fd1ecfda7d39507c7794bf5a879ef91c9012763e5480b82846911bd7697\",\"quote\":\"明天开始全面停工两天，停工期间小贩收购铁的价格上涨\"}]},{\"resource\":\"iron\",\"availability\":\"available\",\"startDay\":4,\"endDay\":10,\"priceDirection\":\"down\",\"evidence\":[{\"sourceId\":\"e45a3fd1ecfda7d39507c7794bf5a879ef91c9012763e5480b82846911bd7697\",\"quote\":\"修复结束后恢复开采和原收购价\"}]}]}",
+    "usage": {
+      "prompt_tokens": 386,
+      "completion_tokens": 5199,
+      "total_tokens": 5585
+    },
+    "reported_model": "deepseek/deepseek-v4.1-flash"
+  },
+  "elapsed_seconds": 141.56200000000536
+}
