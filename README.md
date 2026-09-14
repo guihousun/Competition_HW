@@ -6,6 +6,8 @@
 
 本轮反馈迭代：[策略架构](docs/POLICY_ARCHITECTURE.md) · [精简日志](docs/CONSOLE_LOGGING.md) · [验证报告](reports/issue-14-17-architecture/REVIEW.md)。
 
+LLM能力建设：[总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md) · [P0a首批验收](reports/llm-tasks-p0a/REVIEW.md) · [P0b下一阶段设计](specs/LLM_TASKS_P0B.md)。
+
 《未来战争》参赛策略与本地端到端调试平台，Python 3.11+，无第三方依赖。
 基于 `Demo/CoreGeek.tar.gz` 示例扩展，当前策略覆盖防御生存子集。
 
