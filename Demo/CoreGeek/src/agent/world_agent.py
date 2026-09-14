@@ -269,6 +269,7 @@ class WorldAgent:
             complete = not h["uncertain"] and all(h.get(k) is not None for k in ("site", "items", "opensAt", "closesAt"))
             notes.update({k: deepcopy(h[k]) for k in ("site", "items", "opensAt", "closesAt")})
             notes["known"] = complete
+            notes["preparable"] = bool(h["site"] and h["items"] and h["opensAt"] is None and h["closesAt"] is None)
         notes["taken"] = self.taken
         notes["open"] = bool(notes["known"] and notes["opensAt"] <= round_no <= notes["closesAt"])
         return {"unavailable": sorted(unavailable) if not self.degraded else [],

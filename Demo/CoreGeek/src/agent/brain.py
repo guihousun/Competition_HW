@@ -72,6 +72,7 @@ RETURN_SAFE_INDEX = 50
 # Stand by a cooling task point instead of walking home when the refresh is
 # shorter than the round trip (local scheduling choice, official 30-round refresh).
 CAMP_MAX_COOLDOWN = 34
+TREASURE_PREP_RESERVE = 25  # strategy reserve, not an official price/limit
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
 _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
@@ -497,6 +498,8 @@ def _task_step(turn: Turn, commands: dict[int, dict[str, Any]],
     # while the task walk is repeatable — and letting the pipeline claim the pioneer
     # here replaced the purchase with a walk, so the errand never completed.
     existing = commands.get(pioneer.unit_id) or {}
+    if turn.is_day and payload.get("_treasureRound") == turn.round_no:
+        return None  # includes a publicly justified preparation walk to the shop
     if existing.get("action") in ("buy", "summonTreasure"):
         return None
     # The task loop must also stand aside when the treasure trip is affordable and
@@ -876,6 +879,8 @@ def _treasure_errand(turn: Turn, pioneer: Unit, commands: dict[int, dict[str, An
         if mission is not None and mission.get("goal") not in ("shop", "altar"):
             return False
     notes = _treasure_notes(state, turn)
+    if notes.get("preparable") and not notes.get("taken"):
+        return _prepare_treasure(turn, pioneer, commands, state, notes)
     if not notes.get("known") or notes.get("taken") or not notes.get("site"):
         if errands is not None:
             errands.pop(key, None)
@@ -929,6 +934,46 @@ def _treasure_errand(turn: Turn, pioneer: Unit, commands: dict[int, dict[str, An
     if errands is not None:
         errands[key] = {"goal": "altar", "site": dict(notes["site"])}
     return True
+
+
+def _prepare_treasure(turn, pioneer, commands, state, notes):
+    """Buy supported requirements before the opening day is known; never summon.
+
+    Keep three guns, a healthy base, a cash buffer, the current task, and enough
+    real path budget to return before dusk. These are strategy choices.
+    """
+    base = turn.station()
+    if (not turn.is_day or base is None or base.health < 1000 or len(turn.weapons()) < 3
+            or state.get("phaseTask")):
+        return False
+    required = Counter(notes.get("items") or [])
+    held = Counter(pioneer.backpack)
+    missing = list((required - held).elements())
+    if not missing or pioneer.capacity is None or len(pioneer.backpack) + len(missing) > pioneer.capacity:
+        return False
+    prices = shop_prices(state)
+    if any(item not in prices for item in missing):
+        return False
+    available = available_gold(turn, state, commands, replacing=pioneer.unit_id)
+    if sum(prices[item] for item in missing) + TREASURE_PREP_RESERVE > available:
+        return False
+    shop = _shop_cell(turn)
+    if shop.x < 0:
+        return False
+    cost = _RouteCost(turn, pioneer)
+    approach = _mine_approach(turn, pioneer, shop, cost)
+    if approach is None:
+        return False
+    stand, outbound = approach
+    homes = _stand_cells(turn, pioneer, base.pos, set())
+    homeward = min((cost(stand, cell) for cell in homes), default=10 ** 9)
+    remaining = RETURN_BEFORE_NIGHT - (turn.round_no - 1) % 130
+    if outbound + len(missing) + homeward + 2 > remaining:
+        return False
+    if _adjacent_zone(state, pioneer.pos, "weaponShop"):
+        commands[pioneer.unit_id] = {"action": "buy", "name": missing[0]}
+        return True
+    return _walk_to_zone(turn, pioneer, "weaponShop", commands)
 
 
 def _shop_cell(turn: Turn) -> Pos:

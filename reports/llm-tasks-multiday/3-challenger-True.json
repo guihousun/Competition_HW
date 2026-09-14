@@ -1,0 +1,1064 @@
+{
+  "summary": {
+    "seed": 3,
+    "side": "challenger",
+    "world_agent": true,
+    "rounds": 420,
+    "score": 1491,
+    "base_hp": 1500,
+    "treasure_opened": true,
+    "calls": {
+      "news": 4,
+      "treasure": 3,
+      "other": 0
+    },
+    "elapsed_seconds": 62.65600000001723
+  },
+  "history": [
+    {
+      "round": 1,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 25
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 27
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 24
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 2,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 26
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 23
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 3,
+      "request": [],
+      "actions": {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 25
+            }
+          ],
+          "name": "rocket"
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 13,
+              "y": 22
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 4,
+      "request": [],
+      "actions": {
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 24
+            }
+          ],
+          "name": "rocket"
+        },
+        "10012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 27
+            }
+          ],
+          "name": "rocket"
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 14,
+              "y": 21
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 31,
+      "request": [],
+      "actions": {
+        "10010": {
+          "action": "buy",
+          "name": "WallUpgradeVoucher1",
+          "num": 1
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 27
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 38,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 36,
+      "request": [],
+      "actions": {
+        "10010": {
+          "action": "buy",
+          "name": "WallUpgradeVoucher1",
+          "num": 1
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 27
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 38,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 37,
+      "request": [],
+      "actions": {
+        "10010": {
+          "action": "buy",
+          "name": "WallUpgradeVoucher1",
+          "num": 1
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 26
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 130,
+      "request": [],
+      "actions": {},
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": null,
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": false,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 131,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 23
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 27
+            }
+          ]
+        },
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 39,
+              "y": 27
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 132,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 38,
+              "y": 26
+            }
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 24
+            }
+          ]
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": true,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 133,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 37,
+              "y": 25
+            }
+          ]
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 23
+            }
+          ],
+          "name": "wall"
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": true,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 134,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 24
+            }
+          ]
+        },
+        "10010": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 23
+            }
+          ],
+          "name": "wall"
+        },
+        "10012": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": true,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 162,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "buy",
+          "name": "FlameBreath"
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": true,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 163,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "buy",
+          "name": "IronWhistle"
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": true,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 260,
+      "request": [],
+      "actions": {},
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": null,
+          "closesAt": null,
+          "preparable": true,
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 261,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 15
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": false,
+          "taken": false,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 262,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 24,
+              "y": 14
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": true,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": 261,
+          "closesAt": 290,
+          "preparable": false,
+          "open": true
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 263,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 23,
+              "y": 13
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": true,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": 261,
+          "closesAt": 290,
+          "preparable": false,
+          "open": true
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 264,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 22,
+              "y": 12
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": true,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": 261,
+          "closesAt": 290,
+          "preparable": false,
+          "open": true
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 274,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "summonTreasure",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 8
+            }
+          ],
+          "item": [
+            "FlameBreath",
+            "IronWhistle"
+          ]
+        },
+        "10010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 24
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 1,
+      "world": {
+        "unavailable": [
+          "iron"
+        ],
+        "treasure": {
+          "known": true,
+          "taken": false,
+          "source": "public_world_agent",
+          "site": {
+            "x": 12,
+            "y": 8
+          },
+          "items": [
+            "FlameBreath",
+            "IronWhistle"
+          ],
+          "opensAt": 261,
+          "closesAt": 290,
+          "preparable": false,
+          "open": true
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 390,
+      "request": [],
+      "actions": {},
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": true,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 391,
+      "request": [
+        "prompt"
+      ],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 21
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": true,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 392,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 10,
+              "y": 20
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": true,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 393,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 19
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": true,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    },
+    {
+      "round": 394,
+      "request": [],
+      "actions": {
+        "10011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 18
+            }
+          ]
+        }
+      },
+      "errors": [],
+      "treasureResult": 0,
+      "world": {
+        "unavailable": [],
+        "treasure": {
+          "known": false,
+          "taken": true,
+          "source": "public_world_agent",
+          "open": false
+        },
+        "interpretation": "model_inference_with_public_evidence"
+      }
+    }
+  ]
+}
