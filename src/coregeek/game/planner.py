@@ -266,7 +266,17 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
     call = tool_of(reply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
-    retry = answer if any(e.code == 2 for e in turn.errors) else ""
+    #: 判题器**本轮**报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件。
+    rejected = any(e.code == 2 for e in turn.errors)
+    #: 它自己的原话：黑盒里**唯一**能回答"错在哪一项"的东西。第 35 步起跟答案一起回灌，
+    #: 在那之前它只进日志（`_clip(turn.errors)` 那行 INFO）。
+    why = "；".join(e.description for e in turn.errors if e.code == 2 and e.description)
+    #: ⚠️ **没答案就不纠错**（判据 ④ 的定义）：骂的那一份必须与交的那一份同源。
+    #: 判题器没给描述（`why` 空）⇒ 退回第 34 步的行为：只骂答案本身，
+    #: 不为"少了一句话"把整段纠错吞掉（那是判题器侧的信息缺失，不是我们该丢的信心）。
+    retry = ""
+    if rejected and answer:
+        retry = f"{answer}\n【判题器反馈】：{why}" if why else answer
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（**必须压在 ③ 前**）
         return AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""

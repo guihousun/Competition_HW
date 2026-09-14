@@ -1,4 +1,4 @@
-"""Agent 的"说什么 / 怎么读回复"：prompt 的四段模板（system 消息的内容）+ 三个谓词。
+"""Agent 的"说什么 / 怎么读回复"：prompt 的五段模板（system 消息的内容）+ 三个谓词。
 
 **这个包不认识游戏**：收字符串、吐字符串，只依赖标准库。切分判据是"什么时候跟 LLM 说话"
 属策略（在 `planner.task_channel`），"说什么、怎么解析回复"与战场规则无关。
@@ -14,13 +14,15 @@
 ⇒ `# 输出格式` 那段必须把两个形状逐字给全，并保留旧形状兼容与"原文即答案"的兜底。
 """
 
-#: 发给判题器 LLM 的 **system 消息内容**。四段（**定位** → **工具** → **输出格式** →
-#: **沉淀的 SOP**），由 `Context.render` 装进 `[{"role": "system", "content": …}]`
+#: 发给判题器 LLM 的 **system 消息内容**。五段（**定位** → **工具** → **输出格式** →
+#: **沉淀的 SOP** → **工作流**），由 `Context.render` 装进 `[{"role": "system", "content": …}]`
 #: 的头一条、后面跟这道题的全部往来（第 28 步起整份 prompt 是标准 messages JSON）。
 #:
 #: ⚠️ **「沉淀的 SOP」那一段的头永远都在**，哪怕还没沉淀过任何东西：那个槽是 LLM 自己写的
 #: 目标，看不见槽就不会去用它。两个占位符由 `Agent.chat` 填，`str.format` **只做一次**
 #: —— 替换值里若含 `{}`（python 片段里太常见了）不会被二次扫描成占位符。
+#: ⚠️ **模板自身的正文里也不许出现裸 `{}`**（第 35 步加「工作流」时定的规矩）：`format` 会把
+#: 它当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成空指令。命令范式用 `$(...)`，安全。
 PROMPT = """
 # Agent定位
 你是一个自主任务执行Agent，能根据用户的任务基于现有的工具了解任务并理解任务，理解任务后严格按照任务要求完成任务；当认为解题流程值得沉淀时，用 SOP2Prompt 沉淀下来，并与最终答案写在同一条回复里。
@@ -51,17 +53,19 @@ PROMPT = """
 
 <answer>答案本身</answer>
 
-**沉淀 SOP 是唯一的例外**：它不产出命令，所以要把工具调用与答案写在**同一条回复**里，否则那一回合就白花了：
+**沉淀 SOP 是唯一的例外**：它不产出命令，所以那一回合必须把答案**当成它的参数**一起给出（参数名就叫 `answer`；漏了答案，这次调用整个作废，SOP 也存不下来）：
 
-<tool><tool_name>SOP2Prompt</tool_name><tool_param>沉淀的方法</tool_param></tool><answer>答案本身</answer>
+<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">沉淀的方法</tool_param><tool_param name="answer">答案本身</tool_param></tool>
 
 # 沉淀的 SOP
 {sop}
 
-# 注意事项
-1. 严格按照任务描述执行任务，不允许跳过任务书的描述。
-2. 任务信息给出的只是一个文件名，而不是完整路径时，需要从根目录下找到文件的绝对位置再进行操作
-3. 能用一条shell命令完成的任务不要用多条，减少交互次数，例如读取任务书和找寻任务书位置可以合并成一条命令
+# 工作流
+1. 任务信息里给的往往只是一个**文件名**、不是完整路径。先用**一条**命令把它找出来并读完 ——
+   每条命令要花一个回合，不要拆成两回合。例如把「找文件在哪」和「读文件内容」合成一条：
+   f=$(find / -maxdepth 4 -name '*任务书*' -print -quit 2>/dev/null); echo "FILE=$f"; cat "$f"
+2. 读完任务书后，**先把它要求的「要交什么、什么格式」抄进回复里**，再动手去做；规格没看清楚就不要猜。
+3. 提交答案前，逐条对照任务书核对一遍，不允许跳过任务书里的任何一条要求。
 """
 
 #: 工具调用的**开标签前缀**。用前缀（而不是整段 `<tool>`）是有意的：`looks_like_tool`
@@ -70,6 +74,11 @@ _TOOL_OPEN = "<tool"
 _TOOL_CLOSE = "</tool>"
 _PARAM_OPEN = "<tool_param"
 _PARAM_CLOSE = "</tool_param>"
+
+#: 答案走工具参数通道时用的**参数名**（第 35 步）。⚠️ 必须与注册表里 `SOP2Prompt` 声明的
+#: 那个参数名一致（`agent.py` 的 `_tools`）—— 这是本模块唯一一处知道具体名字的地方：
+#: 它认的是"参数里有个叫 `answer` 的"，**不是**"哪个工具"（本模块不认识工具，见模块 docstring）。
+_ANSWER_PARAM = "answer"
 
 
 def tool_of(reply: str) -> tuple[str, list[tuple[str | None, str]]] | None:
@@ -168,23 +177,45 @@ def answer_of(reply: str) -> str:
     上一回合真正交上去的那一份；两处各判一次就会出现"拿着 `<answer>晴</answer>` 去骂
     '你上次答的 `晴` 不对'"。
 
-    三级判据：**出现 `<answer` 标记 ⇒ 只认成对块的内容**（配对不上或为空 ⇒ `""`，不回落成原文）；
-    **否则像是工具调用 ⇒ `""`**；**否则原文即答案**（判题器的 LLM 是黑盒，这是唯一的退路）。
+    四级判据：
+
+    1. **完整的工具调用、且它的参数里有一个 `name="answer"` 且非空 ⇒ 返回它**（第 35 步）。
+       ⚠️ **这一级必须压在 `<answer>` 块扫描之前**：`SOP2Prompt` 沉淀的 SOP 正文里几乎必然
+       出现字面量 `<answer>…</answer>`（它讲的就是"答案要用 `<answer>` 包"），先扫块就会把
+       **SOP 里那一段**当成答案交上去。参数在工具块内部、只认参数名 ⇒ 这类污染够不着这里。
+    2. 否则把**第一个工具块整段挖掉**再扫：出现 `<answer` 标记 ⇒ 只认成对块的内容
+       （配对不上或为空 ⇒ `""`，不回落成原文）。挖掉是为了让第 1 条没接住时也扫不到工具块的正文。
+    3. **否则像是工具调用 ⇒ `""`**（⚠️ 用**原文**判，不能用挖过的 —— 挖完就不像了，会误放行
+       `<tool>ls</tool>` 后面跟着的那句话）。
+    4. **否则原文即答案**（判题器的 LLM 是黑盒，这是唯一的退路）。
+
+    没有工具块的回复 ⇒ 第 2~4 条与第 34 步之前的实现**逐字一致**。
     """
-    if "<answer" in reply:
-        block = _block(reply, "<answer", "</answer>")
+    span = _span(reply, _TOOL_OPEN, _TOOL_CLOSE)
+    rest = reply
+    if span is not None:
+        for name, value in _params(reply[span[0] : span[1]]):
+            if name == _ANSWER_PARAM:
+                answer = value.strip()
+                if answer:
+                    return answer
+        head = reply.find(_TOOL_OPEN)
+        rest = reply[:head] + reply[span[1] + len(_TOOL_CLOSE) :]
+    if "<answer" in rest:
+        block = _block(rest, "<answer", "</answer>")
         return block.strip() if block is not None else ""
     if looks_like_tool(reply):
         return ""
-    return reply.strip()
+    return rest.strip()
 
 
-def _block(text: str, open_tag: str, close_tag: str) -> str | None:
-    """取**第一对**标签之间的正文；不成对 ⇒ `None`。
+def _span(text: str, open_tag: str, close_tag: str) -> tuple[int, int] | None:
+    """**第一对**标签之间的**正文**在 `text` 里的下标区间 `(起, 止)`；不成对 ⇒ `None`。
 
     开标签按 **`>` 的位置**定位而不是逐字匹配整段标签，所以 `<tool >` 也认（LLM 多敲个空格
     不该让整条回复作废）。**"成对"是所有标签判据的共同要求**，所以四个调用点共用这一份：
     有开无闭的那半截绝不能当内容用（要么被当答案交上去，要么被当命令发进沙盒）。
+    `answer_of` 额外要这个区间 —— 它得把工具块**整段挖掉**再去找答案（见那里）。
     """
     start = text.find(open_tag)
     if start < 0:
@@ -195,4 +226,10 @@ def _block(text: str, open_tag: str, close_tag: str) -> str | None:
     end = text.find(close_tag, head_end)
     if end < 0:
         return None
-    return text[head_end + 1 : end]
+    return head_end + 1, end
+
+
+def _block(text: str, open_tag: str, close_tag: str) -> str | None:
+    """取**第一对**标签之间的正文；不成对 ⇒ `None`。判据全在 `_span` 里。"""
+    span = _span(text, open_tag, close_tag)
+    return text[span[0] : span[1]] if span is not None else None

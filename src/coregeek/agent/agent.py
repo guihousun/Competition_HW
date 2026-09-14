@@ -40,8 +40,7 @@ class Agent:
         ] = {
             "executeCmd": (
                 executeCmd,
-                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。"
-                "当命令涉及到文件 path 时，若无法判定文件的位置，先找到文件的位置。",
+                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。",
                 (("cmd", "命令原文"),),
             ),
             "SOP2Prompt": (
@@ -50,7 +49,7 @@ class Agent:
                 "它不产出命令、当回合也没有回执，但从此每道题都会看到它。"
                 "产出的sop应该是任务无关的，而是对方法的总结，且要尽量简短。"
                 "所以调用它的那一回合必须把答案一起写上。",
-                (("sop", "SOP 全文"),),
+                (("sop", "SOP 全文"), ("answer", "答案本身")),
             ),
         }
 
@@ -63,7 +62,7 @@ class Agent:
         是个含糊指令。返回值是**标准 messages JSON**（第 28 步：`[{role, content}]`，
         自造文本版式实测效果非常差、已弃）。
 
-        system（四段模板）**每次现刷**：SOP 是活的，任务进行中沉淀的下一轮就得看得见
+        system（五段模板）**每次现刷**：SOP 是活的，任务进行中沉淀的下一轮就得看得见
         —— 那是 `SOP2Prompt` "调用成功"的回执（它不产出命令）。
         """
         fresh = self._context is None or self._context.task != request
@@ -155,11 +154,17 @@ class Agent:
             blocks.append("\n".join(lines))
         return "\n\n".join(blocks)
 
-    def SOP2Prompt(self, sop: str) -> str:
+    def SOP2Prompt(self, sop: str, answer: str) -> str:
         """把 `sop` **整段替换**进「沉淀的 SOP」段。返回 `""` —— **它不产出命令**。
 
         存储规则（上限、截断留痕、内容没变就静默）在 `tools/sop.py`，这里只管
         **把新值记在自己身上**。方法名同时是注册表里的工具名。
+
+        ⚠️ **`answer` 不进 `_sop`、这里一个字节都不用**（第 35 步）：它**不是**本方法的数据，
+        而是"同轮作答"那条通道的载体 —— 读者是 `chat.answer_of`，它从**回复原文**的参数里
+        直接读 `<tool_param name="answer">`。写成必需参数是为了让"沉淀必须同轮作答"成为
+        **协议层的事实**（`tool_call` 的"声明参数一个不少且非空"照旧兜住），而不是靠 prompt
+        里的一句请求。代价：LLM 只沉淀不写答案 ⇒ 整次调用作废（SOP 也不落库），那一回合重问。
         """
         self._sop = store(self._sop, sop)
         return ""
