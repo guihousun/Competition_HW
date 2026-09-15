@@ -166,6 +166,26 @@ class WorldAgentMemoryTests(unittest.TestCase):
         self.assertFalse(self.world.memories['treasure'].reviewed(sid))
         self.assertIsNone(self.world.hypothesis)
 
+    def test_recorded_model_correction_is_not_blocked_by_quote_punctuation(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/world_memory_real6.json').read_text(encoding='utf-8-sig'))
+        self.turn(1, fixture['text'])
+        # The first three actual answers read the source and reach the correct
+        # final result. The old implementation rejected that final answer and
+        # needed a fourth (also rejected) call the next day.
+        for n, raw in enumerate(fixture['replies'][:3], 2):
+            data = json.loads(raw)
+            self.assertEqual(data.pop('request_id'), self.world.links['treasure']['token'])
+            self.turn(n, fixture['text'], data)
+        notes = self.world.policy_view(261)['treasure']
+        self.assertTrue(notes['known'])
+        self.assertEqual(notes['items'], ['AcientTablet', 'AcientTablet'])
+        self.assertEqual((notes['opensAt'], notes['closesAt']), (261, 290))
+        self.assertEqual(self.world.failures['treasure'], 0)
+        self.assertEqual(self.state.judge.llm_used_today, 3)
+        old = [c for c in self.world.hypothesis['candidates'] if c['field'] == 'items' and c['value'] == ['IronWhistle']]
+        self.assertEqual(len(old), 1)
+        self.assertEqual(old[0]['resolution']['kind'], 'cancelled')
+
     def test_news_alias_does_not_allow_cross_topic_drafts(self):
         text = '游戏第1天，明天铁矿停工。' + '背景资料。' * 600
         self.turn(1, text, owner='news')

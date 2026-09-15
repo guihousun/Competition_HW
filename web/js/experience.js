@@ -219,7 +219,9 @@
       inspected: '准备发送检索片段', needs_reading: '原文未读完', context_budget_exceeded: '资料超出本次上下文容量'};
     const h = worldState.hypothesis;
     const complete = status.treasure === 'interpreted' && h && h.site && h.items && h.opensAt != null && h.closesAt != null && !h.uncertain && !(h.unknowns || []).length;
-    setText($('agent-world'), `新闻：${labels[status.news] || '暂无资料'} · 宝藏：${worldState.taken ? '已取走' : complete ? '条件已汇总' : labels[status.treasure] || '暂无资料'}`);
+    const preparation = ((planner.tasks || {}).supervisor || {}).treasure_preparation;
+    const preparing = preparation && {waiting_guards:'等待两名守备者就位，必要时疏通通道', moving:'在炮台附近提前准备', holding:'已就位，等待公开开启时间'}[preparation.phase];
+    setText($('agent-world'), `新闻：${labels[status.news] || '暂无资料'} · 宝藏：${worldState.taken ? '已取走' : complete ? '条件已汇总' : labels[status.treasure] || '暂无资料'}${preparing ? ` · ${preparing}` : ''}`);
     const records = coordinator.memory && Array.isArray(coordinator.memory.records)
       ? coordinator.memory.records.filter(r => r && typeof r.id === 'string').map(r => ({...r, uiId:r.id})) : [];
     for (const [owner, title] of [['news', '新闻'], ['treasure', '传闻']]) {

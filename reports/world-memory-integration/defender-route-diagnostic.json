@@ -1,0 +1,776 @@
+[
+  {
+    "round": 10,
+    "pos": {
+      "x": 36,
+      "y": 18
+    },
+    "bag": [],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 36,
+          "y": 18
+        }
+      ]
+    },
+    "task": false,
+    "gold": 0,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 20,
+    "pos": {
+      "x": 35,
+      "y": 23
+    },
+    "bag": [],
+    "action": {
+      "action": "submitAnswer",
+      "taskAnswer": "机房=B7; 温度=11; 湿度=55"
+    },
+    "task": true,
+    "gold": 30,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 25,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 30,
+    "pos": {
+      "x": 36,
+      "y": 20
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 60,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 40,
+    "pos": {
+      "x": 36,
+      "y": 20
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 60,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 50,
+    "pos": {
+      "x": 35,
+      "y": 23
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 90,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 25,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 60,
+    "pos": {
+      "x": 36,
+      "y": 20
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 70,
+    "pos": {
+      "x": 36,
+      "y": 20
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 2,
+    "pioneer_shots": []
+  },
+  {
+    "round": 80,
+    "pos": {
+      "x": 34,
+      "y": 10
+    },
+    "bag": [],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 34,
+          "y": 10
+        }
+      ]
+    },
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 1,
+    "pioneer_shots": []
+  },
+  {
+    "round": 90,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 29,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 100,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 29,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 110,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 29,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 120,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 29,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 130,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [],
+    "action": {},
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 29,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 140,
+    "pos": {
+      "x": 29,
+      "y": 12
+    },
+    "bag": [],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 29,
+          "y": 12
+        }
+      ]
+    },
+    "task": false,
+    "gold": 120,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 19,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 145,
+    "pos": {
+      "x": 25,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet"
+    ],
+    "action": {
+      "action": "buy",
+      "name": "AcientTablet"
+    },
+    "task": false,
+    "gold": 105,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 16,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 146,
+    "pos": {
+      "x": 25,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "buy",
+      "name": "FrostPotion"
+    },
+    "task": false,
+    "gold": 90,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 16,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 150,
+    "pos": {
+      "x": 29,
+      "y": 12
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 29,
+          "y": 12
+        }
+      ]
+    },
+    "task": false,
+    "gold": 90,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 19,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 160,
+    "pos": {
+      "x": 36,
+      "y": 18
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "submitAnswer",
+      "taskAnswer": "服务=B7; 端口=63; 协议=37"
+    },
+    "task": false,
+    "gold": 135,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 170,
+    "pos": {
+      "x": 35,
+      "y": 21
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 35,
+          "y": 21
+        }
+      ]
+    },
+    "task": false,
+    "gold": 180,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 25,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 180,
+    "pos": {
+      "x": 36,
+      "y": 20
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 180,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 190,
+    "pos": {
+      "x": 36,
+      "y": 20
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 180,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 200,
+    "pos": {
+      "x": 35,
+      "y": 23
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "submitAnswer",
+      "taskAnswer": "服务=C1; 端口=76; 协议=17"
+    },
+    "task": true,
+    "gold": 210,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 25,
+    "live_robots": 3,
+    "pioneer_shots": []
+  },
+  {
+    "round": 210,
+    "pos": {
+      "x": 32,
+      "y": 14
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 32,
+          "y": 14
+        }
+      ]
+    },
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 22,
+    "live_robots": 1,
+    "pioneer_shots": []
+  },
+  {
+    "round": 220,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 30,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 230,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 30,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 240,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 30,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 250,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 30,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 259,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 30,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 260,
+    "pos": {
+      "x": 31,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {},
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": true,
+    "route": null,
+    "shortest_steps_from_next_round": 30,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 261,
+    "pos": {
+      "x": 32,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 32,
+          "y": 10
+        }
+      ]
+    },
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": false,
+    "preparable": null,
+    "route": null,
+    "shortest_steps_from_next_round": 29,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 262,
+    "pos": {
+      "x": 33,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 33,
+          "y": 10
+        }
+      ]
+    },
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": true,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 28,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 263,
+    "pos": {
+      "x": 34,
+      "y": 9
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 34,
+          "y": 9
+        }
+      ]
+    },
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": true,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 27,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 264,
+    "pos": {
+      "x": 35,
+      "y": 10
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 35,
+          "y": 10
+        }
+      ]
+    },
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": true,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 26,
+    "live_robots": 0,
+    "pioneer_shots": []
+  },
+  {
+    "round": 265,
+    "pos": {
+      "x": 35,
+      "y": 11
+    },
+    "bag": [
+      "AcientTablet",
+      "FrostPotion"
+    ],
+    "action": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 35,
+          "y": 11
+        }
+      ]
+    },
+    "task": false,
+    "gold": 240,
+    "hp": 1500,
+    "known": true,
+    "preparable": false,
+    "route": null,
+    "shortest_steps_from_next_round": 25,
+    "live_robots": 0,
+    "pioneer_shots": []
+  }
+]

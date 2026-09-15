@@ -107,11 +107,13 @@ def _pick_first_step(turn: Turn, start: Pos, goal: Pos, best_cost: int,
     return min(optimal, key=lambda step: (distance(step, goal), step.x, step.y))
 
 
-def _cost_to_goal(turn: Turn, start: Pos, goal: Pos, limit: int) -> int:
+def _cost_to_goal(turn: Turn, start: Pos, goal: Pos, limit: int, moving: Unit | None = None) -> int:
     """Shortest step count from `start` to `goal`, or a large number if none."""
     if start == goal:
         return 0
-    blocked = turn.blocked(_Probe(start))
+    # Multi-leg route estimates start at a hypothetical future position. The
+    # mover will have vacated its old cell; other units remain obstacles.
+    blocked = turn.blocked(moving if moving is not None else _Probe(start))
     order = count()
     frontier = [(distance(start, goal), 0, next(order), start)]
     best = {start: 0}

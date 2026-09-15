@@ -206,7 +206,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     pioneer_tower = next((tower for role,tower in tower_pairs
                           if pioneer is not None and role.unit_id == pioneer.unit_id),None)
     cycle = planner_state.tasks.get('cycle')
-    committed_work = bool(cycle and cycle.description and not cycle.ended_round)
+    committed_work = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
     if pioneer is not None:
         # Only public rumours and actually held items establish a commitment.
         notes = _treasure_notes(payload, turn)
@@ -219,10 +219,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                           committed_work=committed_work,dusk_index=RETURN_BEFORE_NIGHT)
     if commit:
         planner_state.tasks['supervisor'] = directive.summary()
+    night_staging = None
     if turn.is_day:
         _day(turn, commands, payload, planner_state)
     else:
-        _night(turn, commands, payload, planner_state)
+        night_staging = _night(turn, commands, payload, planner_state)
 
     if directive.reserve_pioneer and turn.is_day and pioneer is not None:
         # Workers keep their day plan. Only the needed pioneer returns early.
@@ -230,7 +231,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if pioneer_tower is not None and distance(pioneer.pos,pioneer_tower.pos)>1:
             target=_step_toward(turn,pioneer,pioneer_tower.pos,set())
             if target is not None:commands[pioneer.unit_id]=move_command(target)
-    if directive.reserve_pioneer:
+    if directive.reserve_pioneer or night_staging is not None:
         # Pending judge results were already ingested by respond(). Keep task
         # memory, but do not let a hold, task walk, or treasure claim steal a post.
         job = None
@@ -276,7 +277,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     pioneer_role = turn.pioneer()
     issued = (commands.get(pioneer_role.unit_id) if pioneer_role is not None else None) or {}
     already_acting = issued.get("action") in ("buy", "summonTreasure")
-    if not directive.reserve_pioneer and not (job and job.get("claimed")) and not already_acting:
+    if not directive.reserve_pioneer and night_staging is None and not (job and job.get("claimed")) and not already_acting:
         pioneer = turn.pioneer()
         if pioneer is not None:
             altar = _treasure_step(turn, payload, pioneer)
@@ -295,7 +296,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         and commands.get(pioneer_role.unit_id)
         and (commands[pioneer_role.unit_id].get("action") in ("buy", "summonTreasure")
              or payload.get("_treasureRound") == turn.round_no))
-    if not directive.reserve_pioneer and not (job and job.get("claimed")) and not already_acting and not treasure_claimed:
+    if not directive.reserve_pioneer and night_staging is None and not (job and job.get("claimed")) and not already_acting and not treasure_claimed:
         pioneer = turn.pioneer()
         if pioneer is not None:
             has_work, task_move = _task_walk(turn, pioneer, payload)
@@ -347,6 +348,13 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
         if getattr(planner_state, "team_agent", None) is not None:
             _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
+        if night_staging is not None:
+            preparation = {
+                'phase': 'waiting_guards' if not night_staging['hold'] else
+                         'moving' if night_staging['command'] else 'holding',
+                'reason': 'public_items_ready_waiting_for_time', 'radius': nightwork.WORK_RADIUS}
+            _DECISION_REPORT.get()['treasure_preparation'] = preparation
+            planner_state.tasks['supervisor']['treasure_preparation'] = deepcopy(preparation)
     return response
 
 
@@ -1237,7 +1245,7 @@ def _free_cell(turn: Turn, role: Unit, pos: Pos) -> bool:
     return turn.land(pos) and pos not in turn.blocked(role)
 
 
-def _route_cost(turn: Turn, start: Pos, goal: Pos) -> int:
+def _route_cost(turn: Turn, start: Pos, goal: Pos, moving: Unit | None = None) -> int:
     """Verified shortest step count between two cells; `big` when unreachable.
 
     Uses the same bounded search as ``next_step``, so it never claims a route
@@ -1248,7 +1256,7 @@ def _route_cost(turn: Turn, start: Pos, goal: Pos) -> int:
     """
     if start == goal:
         return 0
-    cost = _cost_to_goal(turn, start, goal, turn.width * turn.height * 2)
+    cost = _cost_to_goal(turn, start, goal, turn.width * turn.height * 2, moving)
     return cost if cost < 10 ** 9 else 10 ** 6
 
 
@@ -1285,7 +1293,7 @@ class _RouteCost:
         key = (role.unit_id, start, goal)
         cached = self._cache.get(key)
         if cached is None:
-            cached = _route_cost(self._turn, start, goal)
+            cached = _route_cost(self._turn, start, goal, role)
             self._cache[key] = cached
         return cached
 
@@ -1633,18 +1641,31 @@ def _adjacent_mine(turn: Turn, role: Unit) -> Pos | None:
 
 
 def _night(turn: Turn, commands: dict[int, dict[str, Any]],
-           state: dict[str, Any] | None = None, planner_state: Any = None) -> None:
+           state: dict[str, Any] | None = None, planner_state: Any = None) -> dict | None:
     claimed: set[Pos] = set()
     pairs = _tower_pairs(turn)
+    cycle = getattr(planner_state, 'tasks', {}).get('cycle') if planner_state is not None else None
+    committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
+    staging = _treasure_night_staging(turn, state, pairs) if state is not None and not committed_task else None
     if state is not None:
-        for uid, command in nightwork.plan(turn, state, pairs).items():
-            commands.setdefault(uid, command)
+        if staging is None:
+            for uid, command in nightwork.plan(turn, state, pairs).items():
+                commands.setdefault(uid, command)
+        elif staging['command'] is not None:
+            commands.setdefault(staging['owner'], staging['command'])
+        if staging is not None and not staging['hold']:
+            repair = _guard_access_repair(turn, pairs)
+            if repair is not None:
+                uid, command = repair
+                commands.setdefault(uid, command)
     # Battlefield reagents first: a bomb or a dizzy on a clustered wave is worth
     # more than one extra shot, and items resolve before robot movement (R06).
     if state is not None and _try_battle_items(turn, commands, state):
         pass
     for role, tower in pairs:
         if role.unit_id in commands:
+            continue
+        if staging is not None and staging['hold'] and role.unit_id == staging['owner']:
             continue
         if distance(role.pos, tower.pos) <= 1:
             if turn.is_day or tower.cooldown > 0:
@@ -1656,6 +1677,90 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
         step = _step_toward(turn, role, tower.pos, claimed)
         if step is not None:
             commands[role.unit_id] = move_command(step)
+    return staging
+
+
+def _treasure_night_staging(turn, payload, pairs):
+    """Prepare a bounded public trip while two other controllers keep their guns.
+
+    No predicted window or wave is consulted. Return None to restore ordinary
+    defence immediately; a hold flag is internal arbitration, never an action.
+    """
+    robots = payload.get('robot')
+    pioneer, base = turn.pioneer(), turn.station()
+    if (turn.is_day or (turn.round_no - 1) % 130 == 70 or payload.get('phaseTask')
+            or pioneer is None or base is None or base.health < 1000
+            or not isinstance(robots, dict) or not isinstance(robots.get('roles'), list)
+            or any(robot.health > 0 for robot in turn.robots)
+            or any(enemy.health > 0 and enemy.kind in ('worker', 'pioneer')
+                   and any(distance(enemy.pos, role.pos) <= 8 for role in turn.controllable())
+                   for enemy in turn.enemies)):
+        return None
+    notes = _treasure_notes(payload, turn)
+    if (not notes.get('preparable') or notes.get('taken') or not notes.get('site')
+            or not notes.get('items') or Counter(notes['items']) - Counter(pioneer.backpack)):
+        return None
+    post = next((tower for role, tower in pairs if role.unit_id == pioneer.unit_id), None)
+    guards = [(role, tower) for role, tower in pairs if role.unit_id != pioneer.unit_id]
+    radius = nightwork.WORK_RADIUS
+    if post is None or len(guards) < 2 or distance(pioneer.pos, post.pos) > radius:
+        return None
+    routes = _RouteCost(turn, pioneer)
+    stands = tuple(_stand_cells(turn, pioneer, post.pos, set()))
+    return_cost = lambda start: min((routes(start, stand) for stand in stands), default=10 ** 6)
+    if return_cost(pioneer.pos) > radius:
+        return None
+    site = Pos.load(notes['site'])
+    goal = min(((routes(pioneer.pos, cell), cell.x, cell.y, cell)
+                for cell in _stand_cells(turn, pioneer, site, set())), default=None)
+    if goal is None or goal[0] >= 10 ** 6:
+        return None
+    # Suppressing ordinary nightwork brings both workers back before the
+    # pioneer departs, and prevents a worker scout leaving during the hold.
+    ready = all(distance(role.pos, tower.pos) <= 1 for role, tower in guards)
+    result = {'owner': pioneer.unit_id, 'hold': ready, 'command': None}
+    if not ready or goal[0] == 0:
+        return result
+    step = next_step(turn, pioneer, goal[3])
+    if (step is not None and distance(step, post.pos) <= radius
+            and return_cost(step) <= radius and routes(step, goal[3]) < goal[0]):
+        result['command'] = move_command(step)
+    return result
+
+
+def _guard_access_repair(turn, pairs):
+    """Open one own-wall access cell for a guard who cannot reach its gun.
+
+    Called only during verified quiet preparation while the other two roles
+    already guard their posts. Existing reachable routes never trigger removal.
+    """
+    ready = [(role, post) for role, post in pairs if distance(role.pos, post.pos) <= 1]
+    if len(ready) < 2:
+        return None
+    for role, post in pairs:
+        if role.kind != 'worker' or distance(role.pos, post.pos) <= 1:
+            continue
+        routes = _RouteCost(turn, role)
+        if any(routes(role.pos, stand) < 10 ** 6 for stand in _stand_cells(turn, role, post.pos, set())):
+            continue
+        choices = []
+        for wall in turn.ours:
+            if wall.kind != WALL or wall.health <= 0 or distance(wall.pos, post.pos) != 1:
+                continue
+            for stand in _stand_cells(turn, role, wall.pos, set()):
+                cost = routes(role.pos, stand)
+                if cost < 10 ** 6:
+                    choices.append((cost, wall.pos.x, wall.pos.y, stand.x, stand.y, wall.pos, stand))
+        if not choices:
+            continue
+        chosen = min(choices)
+        wall, stand = chosen[-2:]
+        if distance(role.pos, wall) == 1:
+            return role.unit_id, {'action': 'remove', 'targetPos': [wall.dump()]}
+        step = next_step(turn, role, stand)
+        if step is not None:
+            return role.unit_id, move_command(step)
+    return None
 
 
 def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],

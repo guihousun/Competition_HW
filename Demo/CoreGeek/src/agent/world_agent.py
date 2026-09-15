@@ -349,8 +349,16 @@ class WorldAgent:
 
     @staticmethod
     def _candidate_key(candidate):
-        return json.dumps({k: candidate.get(k, 'assert') for k in ('field', 'value', 'evidence', 'polarity')},
-                          ensure_ascii=False, sort_keys=True)
+        value = candidate['value']
+        if candidate['field'] == 'items':
+            value = sorted(value)
+        # A shorter quote (or omitted trailing punctuation) is not a second
+        # assertion when field, value and originating publication are identical.
+        # Distinct publications remain separate and retain independent evidence.
+        return json.dumps({'field': candidate['field'], 'value': value,
+            'polarity': candidate.get('polarity', 'assert'),
+            'sources': sorted({item['sourceId'] for item in candidate['evidence']})},
+            ensure_ascii=False, sort_keys=True)
 
     def _validated_draft(self, owner, value, link):
         # The model supplies typed facts, not a free-form compression. Merge the
@@ -364,13 +372,19 @@ class WorldAgent:
                 if item is not None and (field != 'window' or value['opensAt'] is not None):
                     candidates.append({'field': field, 'value': item, 'evidence': value['evidence'][field]})
             previous = self.drafts['treasure'] or self.hypothesis or {}
-            keys = {self._candidate_key(c) for c in candidates}
-            candidates.extend(deepcopy(c) for c in previous.get('candidates', []) if self._candidate_key(c) not in keys)
+            candidates.extend(deepcopy(previous.get('candidates', [])))
             # Explicitly supplied resolutions take precedence over auto-added
             # duplicate assertions, while both old and correcting quotes remain.
             unique = {}
             for candidate in candidates:
-                unique.setdefault(self._candidate_key(candidate), candidate)
+                key = self._candidate_key(candidate)
+                if key not in unique:
+                    unique[key] = candidate
+                    continue
+                retained = unique[key]
+                retained['evidence'] += [e for e in candidate['evidence'] if e not in retained['evidence']]
+                if 'resolution' in candidate:
+                    retained.setdefault('resolution', candidate['resolution'])
             value['candidates'] = list(unique.values())
             value = self._validate_value(owner, value, link)
         if len(json.dumps(value, ensure_ascii=False)) > DRAFT_LIMIT:

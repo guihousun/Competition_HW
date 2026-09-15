@@ -140,8 +140,13 @@ class PlannerState:
                     "task_type": str(getattr(cycle, "task_type", "") or ""),
                     "description": str(getattr(cycle, "description", "") or ""),
                     "timeout_rounds": int(getattr(cycle, "timeout_rounds", 0) or 0),
+                    "score_reward": int(getattr(cycle, "score_reward", 0) or 0),
+                    "gold_reward": int(getattr(cycle, "gold_reward", 0) or 0),
                     "phase": str(getattr(cycle, "phase", "") or ""),
                     "last_answer": getattr(cycle, "last_answer", None),
+                    "answer_source": str(getattr(cycle, "answer_source", "") or ""),
+                    "end_reason": str(getattr(cycle, "end_reason", "") or ""),
+                    "ended_round": int(getattr(cycle, "ended_round", 0) or 0),
                     "best_rate": float(getattr(cycle, "best_rate", 0.0) or 0.0),
                     "submissions": [asdict(item) for item in cycle.submissions],
                 }),
@@ -214,15 +219,23 @@ class PlannerState:
         raw_cycle = tasks.get("cycle")
         cycle = None
         if isinstance(raw_cycle, dict):
+            for field in ('score_reward', 'gold_reward', 'ended_round'):
+                if type(raw_cycle.get(field, 0)) is not int or raw_cycle.get(field, 0) < 0:
+                    raise ValueError('invalid task lifecycle counter')
             cycle = TaskCycle(
                 point=dict(raw_cycle.get("point") or {}),
                 accepted_round=int(raw_cycle.get("accepted_round") or 0),
                 task_type=str(raw_cycle.get("task_type") or ""),
                 description=str(raw_cycle.get("description") or ""),
                 timeout_rounds=int(raw_cycle.get("timeout_rounds") or 0),
+                score_reward=raw_cycle.get('score_reward', 0),
+                gold_reward=raw_cycle.get('gold_reward', 0),
             )
             cycle.phase = str(raw_cycle.get("phase") or "")
             cycle.last_answer = raw_cycle.get("last_answer")
+            cycle.answer_source = str(raw_cycle.get('answer_source') or '')
+            cycle.end_reason = str(raw_cycle.get('end_reason') or '')
+            cycle.ended_round = raw_cycle.get('ended_round', 0)
             cycle.best_rate = float(raw_cycle.get("best_rate") or 0.0)
             for item in raw_cycle.get('submissions') or []:
                 if isinstance(item,dict) and isinstance(item.get('round_no'),int) and isinstance(item.get('answer'),str):
