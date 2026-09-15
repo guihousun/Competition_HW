@@ -1,0 +1,14 @@
+test_check_timeout_is_bounded_and_not_a_pass (test_task_tools.TaskToolsTests.test_check_timeout_is_bounded_and_not_a_pass) ... ok
+test_crlf_check_preserves_source_and_exit_status (test_task_tools.TaskToolsTests.test_crlf_check_preserves_source_and_exit_status) ... ok
+test_error_driven_auth_and_parameter_recovery_encodes_unicode (test_task_tools.TaskToolsTests.test_error_driven_auth_and_parameter_recovery_encodes_unicode) ... ok
+test_existing_query_unicode_is_encoded_and_profile_has_no_query (test_task_tools.TaskToolsTests.test_existing_query_unicode_is_encoded_and_profile_has_no_query) ... ok
+test_invalid_arguments_and_unrecognized_command_rejected (test_task_tools.TaskToolsTests.test_invalid_arguments_and_unrecognized_command_rejected) ... ok
+test_list_and_empty_data_are_preserved_without_guessing_answer (test_task_tools.TaskToolsTests.test_list_and_empty_data_are_preserved_without_guessing_answer) ... ok
+test_no_auth_hint_no_guess_and_multiple_business_params_no_rename (test_task_tools.TaskToolsTests.test_no_auth_hint_no_guess_and_multiple_business_params_no_rename) ... ok
+test_redirect_does_not_leak_headers_and_truncation_prevents_profile (test_task_tools.TaskToolsTests.test_redirect_does_not_leak_headers_and_truncation_prevents_profile) ... ok
+test_rendered_shell_http_command_keeps_unicode_parameters (test_task_tools.TaskToolsTests.test_rendered_shell_http_command_keeps_unicode_parameters) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 15.912s
+
+OK

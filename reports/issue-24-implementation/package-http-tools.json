@@ -1,0 +1,199 @@
+{
+  "scope": "Actual tar.gz main3 HTTP; scripted model/virtual tools, not intranet PASS",
+  "source_commit": "9f1a2c82ed09126db35abb4799cd74e3ce9e2e3c",
+  "archive_sha256": "4d35c693893100a328b0f641380d9a7898c8f73e519f8f6ea84e0fbfd810066e",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 106.01749998750165,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 2,
+          "ms": 16.783400031272322,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 3,
+          "ms": 12.410600029397756,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 4,
+          "ms": 10.220399999525398,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 5,
+          "ms": 9.29860002361238,
+          "prompt": false,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            },
+            "10011": {
+              "action": "submitAnswer",
+              "taskAnswer": "{\"value\": 17}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "side": "defender",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 36.932799965143204,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 2,
+          "ms": 8.681100036483258,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 3,
+          "ms": 19.228799967095256,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 4,
+          "ms": 9.35909996042028,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 5,
+          "ms": 7.425600022543222,
+          "prompt": false,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            },
+            "10011": {
+              "action": "submitAnswer",
+              "taskAnswer": "{\"value\": 18}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "structured_http": true
+}
