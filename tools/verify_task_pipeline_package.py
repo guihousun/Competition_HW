@@ -53,6 +53,9 @@ with tempfile.TemporaryDirectory() as tmp:
                 for n in range(1,7 if a.check_task else 6):
                     payload=observation(round_no=n,team=side,role_pos=(6,5),
                         phase_task='请阅读task_sample.md，获取任务信息',llm_resp=llm,cmd_result=cmd,timeout_rounds=15)
+                    if a.check_task:
+                        payload['teamOur'].setdefault('gold',25)
+                        payload['teamOur'].setdefault('totalScore',0)
                     if n==6:
                         payload['phaseTask']=''
                         payload['teamOur']['gold']+=80
@@ -111,6 +114,7 @@ with tempfile.TemporaryDirectory() as tmp:
                     assert outcome['counts']['checks_passed']==1 and outcome['counts']['submissions']==1
                     assert outcome['last_submission']['matches_last_check_token']
                     assert outcome['submission_feedback']['action_legal'] is True
+                    assert outcome['submission_feedback']['stats_delta']=={'gold':80,'totalScore':80}
                     row['outcome_summary']=outcome
         finally:
             process.terminate()

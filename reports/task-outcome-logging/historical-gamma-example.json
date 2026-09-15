@@ -1,0 +1,149 @@
+{
+  "scope": "Partial reconstruction of existing task_event lines, not full HTTP replay or official grading. Skipped truncated text; no maps or gold/score observations available.",
+  "source_file": "logs\\attack_map\\match_598595_20260915_2028\\teamA.log",
+  "source_sha256": "627b15a3498f1e23bab4998145871477ad140b027c42a61679f78cd49a0f2cda",
+  "historical_runtime": "66a4d9a6c704aa0425d995cff29ab812ba6cc98e",
+  "observed_rounds": [
+    150,
+    151,
+    152,
+    153,
+    154,
+    155,
+    156,
+    157,
+    158,
+    159
+  ],
+  "skipped_truncated": [
+    {
+      "round": 150,
+      "kind": "issued_executeCmd"
+    },
+    {
+      "round": 151,
+      "kind": "issued_prompt"
+    },
+    {
+      "round": 153,
+      "kind": "issued_prompt"
+    },
+    {
+      "round": 155,
+      "kind": "issued_prompt"
+    },
+    {
+      "round": 157,
+      "kind": "issued_prompt"
+    }
+  ],
+  "events": [
+    {
+      "round": 155,
+      "kind": "task_check_result",
+      "data": {
+        "all_checks_passed": false,
+        "association": "adjacent_observation",
+        "command_round": 154,
+        "exit_code": 126,
+        "round": 155,
+        "status": "failed",
+        "token_seen": false,
+        "token_sha256": null
+      }
+    },
+    {
+      "round": 157,
+      "kind": "task_check_result",
+      "data": {
+        "all_checks_passed": true,
+        "association": "adjacent_observation",
+        "command_round": 156,
+        "exit_code": 0,
+        "round": 157,
+        "status": "passed",
+        "token_seen": true,
+        "token_sha256": "7e8bb1b74d3ba481d507d1a00653d5982398f45251c1b29deeeab3ebbd947d7e"
+      }
+    },
+    {
+      "round": 159,
+      "kind": "task_submission_feedback",
+      "data": {
+        "action_legal": true,
+        "answer_error_kind": null,
+        "answer_error_observed": false,
+        "association": "adjacent_observation",
+        "observed_error_codes": [],
+        "observed_round": 159,
+        "official_success_confirmed": false,
+        "reward_attribution": "unknown_other_actions_may_contribute",
+        "role": "10011",
+        "stats_delta": {
+          "gold": null,
+          "totalScore": null
+        },
+        "submission_round": 158
+      }
+    },
+    {
+      "round": 159,
+      "kind": "task_outcome_summary",
+      "data": {
+        "counts": {
+          "answer_errors": 0,
+          "checks": 2,
+          "checks_passed": 1,
+          "commands": 3,
+          "prompts": 0,
+          "submissions": 1
+        },
+        "end_reason": "task_text_ended",
+        "end_round": 159,
+        "episode_stats_delta": {
+          "gold": null,
+          "totalScore": null
+        },
+        "last_check": {
+          "all_checks_passed": true,
+          "association": "adjacent_observation",
+          "command_round": 156,
+          "exit_code": 0,
+          "round": 157,
+          "status": "passed",
+          "token_seen": true,
+          "token_sha256": "7e8bb1b74d3ba481d507d1a00653d5982398f45251c1b29deeeab3ebbd947d7e"
+        },
+        "last_submission": {
+          "answer_sha256": "d4278cf9733c9fbc6d86ea57568569f1b1fba487131194c153d62495f47e4e91",
+          "format": "token_object",
+          "matches_last_check_token": true,
+          "role": "10011",
+          "round": 158
+        },
+        "meaning": "已提交，官方判题结果未确认",
+        "observation_gap": false,
+        "official_success_confirmed": false,
+        "reward_attribution": "unknown_other_actions_may_contribute",
+        "start_round": 150,
+        "status": "submitted_unconfirmed",
+        "submission_feedback": {
+          "action_legal": true,
+          "answer_error_kind": null,
+          "answer_error_observed": false,
+          "association": "adjacent_observation",
+          "observed_error_codes": [],
+          "observed_round": 159,
+          "official_success_confirmed": false,
+          "reward_attribution": "unknown_other_actions_may_contribute",
+          "role": "10011",
+          "stats_delta": {
+            "gold": null,
+            "totalScore": null
+          },
+          "submission_round": 158
+        }
+      }
+    }
+  ]
+}
