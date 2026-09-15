@@ -8,6 +8,39 @@ from agent.world_agent import WorldAgent
 
 
 class NewsLedgerReviewTests(LedgerHarness):
+    def test_price_only_clause_does_not_cancel_a_known_outage(self):
+        # Real-provider trial split one source into availability and price facts.
+        text = '游戏第1天，铁矿第2天至第3天停止开采，第4天恢复；维修期间铁价上涨，幅度未公布。'
+        for reverse in (False, True):
+            agent, sid = self.agent_with(text, round_no=1)
+            facts = [self.news_event(sid, text, startDay=2, endDay=3, resumeDay=4),
+                     self.news_event(sid, text, availability='unknown', startDay=2, endDay=3,
+                                     priceDirection='up', priceAmount=None, priceBasis='unknown')]
+            self.submit(agent, list(reversed(facts)) if reverse else facts)
+            for current in (agent, WorldAgent.load(json.loads(json.dumps(agent.dump())))):
+                self.assertFalse(current.degraded)
+                self.assertEqual(current.policy_view(131)['unavailable'], ['iron'])
+                self.assertEqual(current.policy_view(261)['unavailable'], ['iron'])
+                self.assertEqual(current.policy_view(391)['unavailable'], [])
+
+    def test_price_only_clause_cannot_create_an_outage(self):
+        text = '游戏第1天，第2天至第3天铁价上涨，幅度未公布。'
+        agent, sid = self.agent_with(text, round_no=1)
+        self.submit(agent, [self.news_event(sid, text, availability='unknown', startDay=2,
+                         endDay=3, priceDirection='up', priceAmount=None, priceBasis='unknown')])
+        self.assertEqual(agent.policy_view(131)['unavailable'], [])
+
+    def test_price_only_clause_cannot_hide_a_real_availability_conflict(self):
+        text = '游戏第1天，甲称第2天铁矿停产，乙称第2天铁矿照常；当天铁价上涨，幅度未公布。'
+        agent, sid = self.agent_with(text, round_no=1)
+        self.submit(agent, [self.news_event(sid, text, startDay=2, endDay=2),
+            self.news_event(sid, text, availability='available', startDay=2, endDay=2),
+            self.news_event(sid, text, availability='unknown', startDay=2, endDay=2,
+                            priceDirection='up', priceAmount=None, priceBasis='unknown')])
+        view = agent.policy_view(131)
+        self.assertEqual(view['unavailable'], [])
+        self.assertTrue(any('availability' in c['dimensions'] for c in view['conflicts']))
+
     def test_price_requires_exact_amount_not_relative_tolerance(self):
         self.assertFalse(news_ledger.verify_price(['铁价上涨到1000000金币'], 1000001, 'absolute'))
         self.assertTrue(news_ledger.verify_price(['铁价上涨到6.10金币'], 6.1, 'absolute'))

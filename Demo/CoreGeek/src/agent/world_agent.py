@@ -355,7 +355,12 @@ class WorldAgent:
                       '已知site填写{"x":整数,"y":整数}，items是精确物品名数组（保留重数），'
                       'opensAt/closesAt是含首尾的绝对回合。每个已知部分的证据是'
                       '[{"sourceId":"来源id","quote":"原文"}]，缺失部分保留null。'
-                      'unknowns列出site/items/window/conflict/publication_time/unread/prerequisites。只有唯一缺项window才允许提前备料。'
+                      'unknowns只列当前尚未解决的项，从site/items/window/conflict/publication_time/unread/prerequisites中选择；'
+                      '每次获得新原文后重新检查并移除已解决项，不机械沿用草稿标记。只有唯一缺项window才允许提前备料。'
+                      'publication_time仅用于相对日期缺少基准；原文给出绝对游戏日或回合时，不因文章发布日期未知而添加它。'
+                      'prerequisites仅用于原文实际提出且尚未核验的开启前置条件，须保留其原文候选；不要假设未提及的隐藏仪式或前置任务。'
+                      '尚未采购材料、尚未抵达地点由执行层检查，不属于线索缺项。禁止的物品保留exclude；'
+                      '候选材料不含该物品时，该禁令本身不产生未核验的prerequisites。'
                       'candidates保留不同候选：[{"field":"site|items|window|prerequisite","value":值,"evidence":引用数组}]。'
                       '候选可加polarity:"assert"或"exclude"（否定）；明确更正/撤回旧候选时，在旧候选上加'
                       'resolution:{"kind":"corrected|cancelled","evidence":更正原文引用}，保留旧证据。'
@@ -1184,7 +1189,11 @@ class WorldAgent:
                          and fact["effectiveDays"] is not None and day in fact["effectiveDays"]]
                 if not facts or resource in gapped or (resource, day) in suppressed:
                     continue
-                if all(fact["availability"] == "unavailable" for fact in facts):
+                # A price-only fact makes no availability assertion. Its unknown
+                # value neither refutes another outage nor creates one itself.
+                known_availability = [fact["availability"] for fact in facts
+                                      if fact["availability"] != "unknown"]
+                if known_availability and all(value == "unavailable" for value in known_availability):
                     unavailable.append(resource)  # price/direction conflicts never cancel this
         conflicts = [{**entry, "day": day} for entry in view["conflicts"]
                      if day in entry["possibleDays"]]

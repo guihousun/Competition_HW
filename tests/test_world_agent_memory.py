@@ -58,6 +58,34 @@ class WorldAgentMemoryTests(unittest.TestCase):
                 'closesAt': window[1] if window else None, 'uncertain': True,
                 'evidence': {'site': [], 'items': [], 'window': []}, **extra}
 
+    def test_explicit_unverified_prerequisite_still_blocks_complete_values(self):
+        text = '祭坛位于横坐标3、纵坐标4，需IronWhistle，游戏第2天白昼前30回合开启。必须先完成守卫仪式。'
+        self.turn(1, text)
+        h = self.hypothesis(site={'x': 3, 'y': 4}, items=['IronWhistle'],
+                            window=(131, 160), unknowns=['prerequisites'])
+        h['evidence'] = {field: self.proof(text) for field in ('site', 'items', 'window')}
+        h['candidates'] = [{'field': 'prerequisite', 'value': '必须先完成守卫仪式。',
+                            'evidence': self.proof('必须先完成守卫仪式。')}]
+        response = self.turn(2, text, {'hypothesis': h})
+        notes = self.world.policy_view(131)['treasure']
+        self.assertFalse(notes['known'])
+        self.assertFalse(notes['preparable'])
+        self.assertIn('prerequisites', notes['unknowns'])
+        self.assertFalse(any(c['action'] == 'summonTreasure'
+                             for c in response['roleCommandMap'].values()))
+
+    def test_model_cannot_hide_an_unverified_prerequisite_by_claiming_certainty(self):
+        text = '祭坛位于横坐标3、纵坐标4，需IronWhistle，游戏第2天白昼前30回合开启。必须先完成守卫仪式。'
+        self.turn(1, text)
+        h = self.hypothesis(site={'x': 3, 'y': 4}, items=['IronWhistle'],
+                            window=(131, 160), uncertain=False, unknowns=[])
+        h['evidence'] = {field: self.proof(text) for field in ('site', 'items', 'window')}
+        h['candidates'] = [{'field': 'prerequisite', 'value': '必须先完成守卫仪式。',
+                            'evidence': self.proof('必须先完成守卫仪式。')}]
+        self.turn(2, text, {'hypothesis': h})
+        self.assertFalse(self.world.policy_view(131)['treasure']['known'])
+        self.assertEqual(self.world.failures['treasure'], 1)
+
     def test_three_chunks_keep_negation_and_tail_correction_on_both_sides(self):
         head = '祭坛位于横坐标3、纵坐标4，最初告示要求IronWhistle。'
         middle = '补充：不能献祭AncientScroll。'
