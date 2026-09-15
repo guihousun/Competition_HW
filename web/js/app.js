@@ -71,6 +71,7 @@
     /* ------------------------------------------------------------- boot */
     async boot() {
       this.bind();
+      this.syncProfileControls();
       if (HW.guide) HW.guide.install(this);
       this.panel.collapse(true);
       this.renderer.options.preview = false;
@@ -172,6 +173,8 @@
         const payload = await this.postJson('/debug/llm/scenario', {
           seed: Number(document.getElementById('seed').value), side: document.getElementById('side').value,
           kind: document.getElementById('agent-demo-kind').value || 'mixed', backend,
+          profile: this.selectedProfile(),
+          pressure: Number(document.getElementById('pressure').value),
           max_calls: Number(document.getElementById('agent-api-limit').value || 20)});
         this.world = HW.World.fromScenario(payload);
         this.panel.empty(false); this.afterWorldChange(); this.renderer.fit(this.world);
@@ -195,12 +198,14 @@
       const seed = Number(opts.seed != null ? opts.seed : document.getElementById('seed').value);
       const side = opts.side || document.getElementById('side').value;
       const pressure = Number(opts.pressure != null ? opts.pressure : document.getElementById('pressure').value);
+      const profileSelect = document.getElementById('profile');
+      const profile = opts.profile || (profileSelect ? profileSelect.value : 'observed-seven-days');
       this.stop();
       this.panel.setBusy(true);
       this.panel.status('创建场景…');
       try {
         const started = performance.now();
-        const payload = await this.getJson(`/debug/scenario?seed=${encodeURIComponent(seed)}&side=${encodeURIComponent(side)}&pressure=${encodeURIComponent(pressure)}`);
+        const payload = await this.getJson(`/debug/scenario?seed=${encodeURIComponent(seed)}&side=${encodeURIComponent(side)}&pressure=${encodeURIComponent(pressure)}&profile=${encodeURIComponent(profile)}`);
         this.timings.scenario = performance.now() - started;
         this.world = HW.World.fromScenario(payload);
         this.panel.empty(false);
@@ -208,9 +213,11 @@
         document.getElementById('seed').value = String(seed);
         document.getElementById('side').value = side;
         document.getElementById('pressure').value = String(pressure);
+        if (profileSelect) profileSelect.value = profile;
         this.panel.setMode('live', `seed ${seed}`);
         this.panel.status('已就绪');
-        this.panel.toast(`新对局：种子 ${seed} · ${side === 'challenger' ? '蓝方' : '红方'} · 压力 ${pressure}`, null);
+        const sourceLabel = profile === 'local-pressure' ? `旧压力实验 ${pressure} 档` : '前七夜实测，后3夜为本地假设';
+        this.panel.toast(`新对局：种子 ${seed} · ${side === 'challenger' ? '蓝方' : '红方'} · ${sourceLabel}`, null);
         this.renderer.fit(this.world);
         await this.refreshPreview();
         return true;
@@ -232,6 +239,8 @@
       const seed = Number(document.getElementById('seed').value);
       const side = document.getElementById('side').value;
       const pressure = Number(document.getElementById('pressure').value);
+      const profileSelect = document.getElementById('profile');
+      const profile = profileSelect ? profileSelect.value : 'observed-seven-days';
       const full = !limit;
       this.stop();
       this.busy = true;
@@ -242,7 +251,7 @@
         : `正在录制 ${limit} 回合本地对局，请稍候…`, null);
       try {
         const started = performance.now();
-        const job = await this.postJson('/debug/recording/start', { seed, side, pressure, limit: limit || 1300 });
+        const job = await this.postJson('/debug/recording/start', { seed, side, pressure, profile, limit: limit || 1300 });
         this.recordingId = job.id;
         try { sessionStorage.setItem('hw-recording', job.id); } catch (error) { void error; }
         this.timings.series = performance.now() - started;
@@ -366,6 +375,57 @@
       this.panel.inspect(null);
       document.getElementById('scrub').max = String(this.world.maxIndex);
       this.refreshReplayTools();
+      this.syncProfileControls();
+      this.updateProfileNote();
+    }
+
+    /** The wave source selected on the page; the default is the observed table. */
+    selectedProfile() {
+      const select = document.getElementById('profile');
+      const value = select ? select.value : '';
+      return value || 'observed-seven-days';
+    }
+
+    /**
+     * The pressure dial is only meaningful to the old local experiment. When the
+     * observed attachment is selected it is disabled, so a user cannot believe a
+     * pressure choice is changing the 35/45/58… table.
+     */
+    syncProfileControls() {
+      const select = document.getElementById('profile');
+      const pressure = document.getElementById('pressure');
+      const hint = document.getElementById('pressure-hint');
+      if (!select) return;
+      const legacy = select.value === 'local-pressure';
+      if (pressure) {
+        pressure.disabled = !legacy || Boolean(this.panel.busy);
+        pressure.title = legacy ? '仅旧压力实验使用' : '仅旧压力实验使用；当前为前7天实测';
+      }
+      if (hint) {
+        hint.textContent = '（仅旧压力实验使用）';
+        hint.hidden = legacy;
+      }
+    }
+
+    /**
+     * Make the active wave source impossible to miss in user-facing words: the
+     * default uses the Issue19 attachment's first seven days, and days 8–10 are
+     * explicitly an unobserved local continuation — never presented as official.
+     */
+    updateProfileNote() {
+      const note = document.getElementById('profile-note');
+      if (!note) return;
+      const profile = (this.world && this.world.profile) || 'observed-seven-days';
+      if (profile === 'local-pressure') {
+        note.textContent = '波次来源：旧压力实验（非官方数量）';
+        note.className = 'pill warn';
+      } else if (profile === 'legacy-unknown') {
+        note.textContent = '波次来源：旧录像未记录，无法确认；仅按原录像回放';
+        note.className = 'pill warn';
+      } else {
+        note.textContent = '波次来源：前7天附件实测 · 第8–10天未观测，本地假设每夜多5只小型';
+        note.className = 'pill local';
+      }
     }
 
     /**
@@ -406,7 +466,7 @@
                         maxRounds: rounds, sides: ['challenger', 'defender'],
                         scores: {}, baseHp: {} };
       this.panel.renderTwoMatch(this.twoMatch);
-      fetch(`/debug/twomatch/start?seed=${encodeURIComponent(seed)}&rounds=${encodeURIComponent(rounds)}`)
+      fetch(`/debug/twomatch/start?seed=${encodeURIComponent(seed)}&rounds=${encodeURIComponent(rounds)}&profile=${encodeURIComponent(this.selectedProfile())}&pressure=${encodeURIComponent(document.getElementById('pressure').value)}`)
         .then((response) => response.json())
         .then((data) => { this.twoMatch = data; this.panel.renderTwoMatch(data); })
         .catch((error) => { this.twoMatch = { state: 'failed', error: String(error) };
@@ -703,6 +763,7 @@
       const on = (id, event, handler) => document.getElementById(id).addEventListener(event, handler);
       on('newmatch', 'click', () => this.startNewMatch());
       on('empty-new', 'click', () => this.startNewMatch());
+      on('profile', 'change', () => this.syncProfileControls());
       on('llm-demo', 'click', () => this.startLLMDemo());
       on('agent-source-select', 'change', () => HW.experience.updateAgent(this.world));
       on('debug-toggle', 'click', () => {
@@ -767,8 +828,7 @@
           if (station) this.renderer.centerOnActor(this.world, station);
         }
       });
-      on('ribbon-toggle', 'click', () => {
-        const note = document.querySelector('.diff-note');
+      on('ribbon-toggle', 'click', () => {        const note = document.querySelector('.diff-note');
         this.openDebug('rules');
         if (note) note.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
@@ -1027,8 +1087,11 @@
         this.panel.setMode(this.world.mode, `地图 ${this.world.seed} · 已记录 ${this.world.frameCount} 轮`);
         return;
       }
+      const knownProfile = ['observed-seven-days', 'local-pressure'].includes(this.world.profile)
+        ? this.world.profile : undefined;
       await this.newMatch({
         seed: this.world.seed, side: this.world.side, pressure: this.world.pressure,
+        profile: knownProfile,
       });
     }
 
@@ -1065,6 +1128,7 @@
         world.seed = (parsed._demo && parsed._demo.seed) || Number(document.getElementById('seed').value) || 1;
         world.side = (parsed.teamOur && parsed.teamOur.type) || 'challenger';
         world.pressure = (parsed._demo && parsed._demo.pressure) || 1;
+        world.profile = (parsed._demo && parsed._demo.profile) || 'legacy-unknown';
         world.states = [parsed];
         world.frames = [];
         world.index = 0;

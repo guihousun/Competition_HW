@@ -1,0 +1,414 @@
+{
+  "side": "defender",
+  "opened": false,
+  "rounds": 300,
+  "window": [
+    {
+      "round": 255,
+      "pioneer": {
+        "x": 31,
+        "y": 10
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 256,
+      "pioneer": {
+        "x": 31,
+        "y": 10
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 257,
+      "pioneer": {
+        "x": 31,
+        "y": 10
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 258,
+      "pioneer": {
+        "x": 31,
+        "y": 10
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 259,
+      "pioneer": {
+        "x": 31,
+        "y": 10
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 260,
+      "pioneer": {
+        "x": 31,
+        "y": 10
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 261,
+      "pioneer": {
+        "x": 32,
+        "y": 10
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 262,
+      "pioneer": {
+        "x": 33,
+        "y": 10
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 263,
+      "pioneer": {
+        "x": 34,
+        "y": 9
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 264,
+      "pioneer": {
+        "x": 35,
+        "y": 10
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 265,
+      "pioneer": {
+        "x": 35,
+        "y": 11
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 266,
+      "pioneer": {
+        "x": 34,
+        "y": 12
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 267,
+      "pioneer": {
+        "x": 33,
+        "y": 13
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 268,
+      "pioneer": {
+        "x": 32,
+        "y": 14
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 269,
+      "pioneer": {
+        "x": 33,
+        "y": 15
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 270,
+      "pioneer": {
+        "x": 34,
+        "y": 16
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 271,
+      "pioneer": {
+        "x": 35,
+        "y": 17
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 272,
+      "pioneer": {
+        "x": 36,
+        "y": 18
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 273,
+      "pioneer": {
+        "x": 36,
+        "y": 18
+      },
+      "hp": 200,
+      "action": "acceptTask",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 274,
+      "pioneer": {
+        "x": 36,
+        "y": 18
+      },
+      "hp": 200,
+      "action": "submitAnswer",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 275,
+      "pioneer": {
+        "x": 36,
+        "y": 18
+      },
+      "hp": 200,
+      "action": "submitAnswer",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 276,
+      "pioneer": {
+        "x": 35,
+        "y": 19
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 277,
+      "pioneer": {
+        "x": 34,
+        "y": 20
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 278,
+      "pioneer": {
+        "x": 33,
+        "y": 21
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 279,
+      "pioneer": {
+        "x": 34,
+        "y": 22
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 280,
+      "pioneer": {
+        "x": 35,
+        "y": 23
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 281,
+      "pioneer": {
+        "x": 35,
+        "y": 23
+      },
+      "hp": 200,
+      "action": "acceptTask",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 282,
+      "pioneer": {
+        "x": 35,
+        "y": 23
+      },
+      "hp": 200,
+      "action": "submitAnswer",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 283,
+      "pioneer": {
+        "x": 35,
+        "y": 23
+      },
+      "hp": 200,
+      "action": "submitAnswer",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 284,
+      "pioneer": {
+        "x": 34,
+        "y": 22
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 285,
+      "pioneer": {
+        "x": 35,
+        "y": 21
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 286,
+      "pioneer": {
+        "x": 36,
+        "y": 20
+      },
+      "hp": 200,
+      "action": "move",
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 287,
+      "pioneer": {
+        "x": 36,
+        "y": 20
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 288,
+      "pioneer": {
+        "x": 36,
+        "y": 20
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 289,
+      "pioneer": {
+        "x": 36,
+        "y": 20
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    },
+    {
+      "round": 290,
+      "pioneer": {
+        "x": 36,
+        "y": 20
+      },
+      "hp": 200,
+      "action": null,
+      "focus": false,
+      "summonResult": 0
+    }
+  ],
+  "final": {
+    "round": 300,
+    "pioneer": {
+      "x": 36,
+      "y": 20
+    },
+    "hp": 200,
+    "action": null,
+    "focus": false,
+    "summonResult": 0
+  }
+}

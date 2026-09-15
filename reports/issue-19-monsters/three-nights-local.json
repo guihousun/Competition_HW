@@ -1,0 +1,70 @@
+{
+  "profile_default": "observed-seven-days",
+  "rounds": 390,
+  "runs": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "profile": "observed-seven-days",
+      "rounds_run": 390,
+      "spawned_per_night": {
+        "1": 35,
+        "2": 45,
+        "3": 58
+      },
+      "first_wall_damage_round": 87,
+      "first_base_damage_round": null,
+      "final_base_hp": 1500,
+      "errors": 0,
+      "finished": false
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "profile": "observed-seven-days",
+      "rounds_run": 390,
+      "spawned_per_night": {
+        "1": 35,
+        "2": 45,
+        "3": 58
+      },
+      "first_wall_damage_round": 86,
+      "first_base_damage_round": null,
+      "final_base_hp": 1500,
+      "errors": 0,
+      "finished": false
+    },
+    {
+      "seed": 7,
+      "side": "challenger",
+      "profile": "observed-seven-days",
+      "rounds_run": 390,
+      "spawned_per_night": {
+        "1": 35,
+        "2": 45,
+        "3": 58
+      },
+      "first_wall_damage_round": 88,
+      "first_base_damage_round": null,
+      "final_base_hp": 1500,
+      "errors": 0,
+      "finished": false
+    },
+    {
+      "seed": 7,
+      "side": "defender",
+      "profile": "observed-seven-days",
+      "rounds_run": 390,
+      "spawned_per_night": {
+        "1": 35,
+        "2": 45,
+        "3": 58
+      },
+      "first_wall_damage_round": 89,
+      "first_base_damage_round": null,
+      "final_base_hp": 1500,
+      "errors": 0,
+      "finished": false
+    }
+  ]
+}

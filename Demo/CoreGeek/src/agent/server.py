@@ -86,29 +86,41 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, {"rows": debug.RULE_ROWS, "notes": debug.mismatch_notes()})
             return
         if path == "/debug/scenario":
-            self._json(200, debug.scenario_payload(
-                query.get("seed", ["1"])[0],
-                query.get("side", ["challenger"])[0],
-                query.get("pressure", ["1"])[0],
-            ))
+            try:
+                self._json(200, debug.scenario_payload(
+                    query.get("seed", ["1"])[0],
+                    query.get("side", ["challenger"])[0],
+                    query.get("pressure", ["1"])[0],
+                    query.get("profile", [None])[0],
+                ))
+            except ValueError as error:
+                self._json(400, {"error": str(error)})
             return
         if path == "/debug/series":
-            self._json(200, debug.series_payload(
-                query.get("seed", ["1"])[0],
-                query.get("side", ["challenger"])[0],
-                query.get("pressure", ["1"])[0],
-                query.get("limit", [None])[0],
-            ))
+            try:
+                self._json(200, debug.series_payload(
+                    query.get("seed", ["1"])[0],
+                    query.get("side", ["challenger"])[0],
+                    query.get("pressure", ["1"])[0],
+                    query.get("limit", [None])[0],
+                    profile=query.get("profile", [None])[0],
+                ))
+            except ValueError as error:
+                self._json(400, {"error": str(error)})
             return
         if path == "/debug/twomatch":
             self._json(200, twomatch.snapshot())
             return
         if path == "/debug/twomatch/start":
-            self._json(200, twomatch.start(
-                query.get("seed", ["1"])[0],
-                query.get("pressure", ["1"])[0],
-                query.get("rounds", ["1300"])[0],
-            ))
+            try:
+                self._json(200, twomatch.start(
+                    query.get("seed", ["1"])[0],
+                    query.get("pressure", ["1"])[0],
+                    query.get("rounds", ["1300"])[0],
+                    query.get("profile", [None])[0],
+                ))
+            except ValueError as error:
+                self._json(400, {"error": str(error)})
             return
         if path == "/debug/twomatch/stop":
             self._json(200, twomatch.stop())
@@ -229,13 +241,14 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == '/debug/llm/scenario':
                 self._json(200, debug.llm_scenario_payload(payload.get('seed', 1), payload.get('side', 'challenger'),
-                    payload.get('kind', 'arithmetic'), payload.get('backend', 'openrouter'), payload.get('max_calls')))
+                    payload.get('kind', 'arithmetic'), payload.get('backend', 'openrouter'), payload.get('max_calls'),
+                    payload.get('profile'), payload.get('pressure', 1)))
                 return
             if path == '/debug/recording/start':
                 try:
                     self._json(202, recordings.JOBS.start(payload.get('seed', 1),
                         payload.get('side', 'challenger'), payload.get('pressure', 1),
-                        payload.get('limit', 1300)))
+                        payload.get('limit', 1300), payload.get('profile')))
                 except RuntimeError as error:
                     self._json(409, {'error': str(error)})
                 return
@@ -251,6 +264,7 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("side", "challenger"),
                     payload.get("pressure", 1),
                     payload.get("limit"),
+                    profile=payload.get("profile"),
                 ))
                 return
             if path == "/debug/screenshot":

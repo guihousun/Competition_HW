@@ -30,10 +30,13 @@ class RuleSupplementTests(unittest.TestCase):
                 self.assertEqual(40 - expected_damage, target['health'])
 
     def test_basic_wave_size_increases_over_ten_nights_on_clear_boards(self):
+        # This is the *old* local pressure experiment; it must be selected
+        # explicitly now that the default profile follows the Issue19 attachment
+        # (whose days 8–10 are unobserved and therefore not strictly increasing).
         for side in ('challenger', 'defender'):
             for pressure in (1, 2, 3):
                 with self.subTest(side=side, pressure=pressure):
-                    initial = scenario(7, side, pressure)
+                    initial = scenario(7, side, pressure, profile='local-pressure')
                     counts = []
                     for night in range(1, 11):
                         state = deepcopy(initial)
@@ -42,10 +45,14 @@ class RuleSupplementTests(unittest.TestCase):
                     self.assertGreater(counts[0], 0)
                     self.assertTrue(all(a < b for a, b in zip(counts, counts[1:])), counts)
 
-    def test_random_spawn_is_labelled_as_conflicting_with_fixed_spawn_rule(self):
-        row = next(row for row in RULE_ROWS if row['id'] == 'R05/S03')
-        self.assertEqual('approx', row['status'])
-        self.assertIn('冲突', row['note'])
+    def test_fixed_spawn_and_wall_screen_rows_are_registered(self):
+        fixed = next(row for row in RULE_ROWS if row['id'] == 'R05/S03')
+        self.assertEqual('approx', fixed['status'])
+        self.assertIn('固定', fixed['item'])
+        wall = next(row for row in RULE_ROWS if row['id'] == 'R05/S04')
+        self.assertEqual('local', wall['status'])
+        self.assertIn('用户补充 S04', wall['note'])
+        self.assertIn('4.7.3', wall['note'])
 
 
 if __name__ == '__main__':

@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "Demo/CoreGeek/src"))
 
 from agent import vision  # noqa: E402
 from agent.match import TwoTeamMatch, base_health, score_of  # noqa: E402
-from agent.scenarios import scenario  # noqa: E402
+from agent.scenarios import scenario, configure_spawns  # noqa: E402
 
 
 def two_team_world(seed=1, pressure=1):
@@ -60,6 +60,82 @@ class SetupTests(unittest.TestCase):
         self.assertNotIn(enemy_worker["id"], ids, "视野外的敌方角色不应出现")
         # The opponent's private fields never cross over either.
         self.assertNotIn("backpack", seen["teamEnemy"])
+
+
+class SpawnIsolationTests(unittest.TestCase):
+    """Issue19: each side owns its fixed spawn pool; the two must not share one."""
+
+    def _match_at_night(self):
+        world = two_team_world()
+        # Round 70 is the last day round: step() generates the night wave for the
+        # round that follows, which is exactly where the judge would show it.
+        world['roundNo'] = 70
+        return TwoTeamMatch(world, max_rounds=200)
+
+    def test_each_side_gets_its_own_fixed_pool_columns(self):
+        match = self._match_at_night()
+        blue = match.private['challenger']['spawn_layout']
+        red = match.private['defender']['spawn_layout']
+        self.assertEqual(27, blue['center']['x'])
+        self.assertEqual(13, red['center']['x'])
+        self.assertIsNot(blue, red)
+        self.assertNotEqual(blue['slots'], red['slots'])
+        # Mutating one side's pool must not move the other's.
+        blue['slots'] = [{'x': 1, 'y': 1}]
+        self.assertNotEqual([{'x': 1, 'y': 1}],
+                            match.private['defender']['spawn_layout']['slots'])
+
+    def test_custom_blue_pool_is_preserved_and_red_gets_its_own(self):
+        world = scenario(1, 'challenger')
+        custom = [{'x': 25, 'y': 10}, {'x': 25, 'y': 11}]
+        configure_spawns(world, custom)
+        world['teamEnemy'] = scenario(1, 'defender')['teamOur']
+        match = TwoTeamMatch(world)
+        blue = match.private['challenger']['spawn_layout']
+        self.assertTrue(blue['custom'])
+        self.assertEqual('challenger', blue['ownerTeam'])
+        self.assertEqual(custom, blue['slots'])
+        red = match.private['defender']['spawn_layout']
+        self.assertEqual(13, red['center']['x'])
+        self.assertNotEqual(custom, red['slots'])
+
+    def test_custom_red_pool_from_the_mirror_is_preserved(self):
+        world = scenario(1, 'challenger')
+        red = scenario(1, 'defender')
+        custom = [{'x': 15, 'y': 5}, {'x': 15, 'y': 6}]
+        configure_spawns(red, custom)
+        world['teamEnemy'] = red['teamOur']
+        world['_mirror_demo'] = red['_demo']
+        match = TwoTeamMatch(world)
+        red_layout = match.private['defender']['spawn_layout']
+        self.assertTrue(red_layout['custom'])
+        self.assertEqual('defender', red_layout['ownerTeam'])
+        self.assertEqual(custom, red_layout['slots'])
+        self.assertEqual(27, match.private['challenger']['spawn_layout']['center']['x'])
+
+    def test_legacy_layout_without_owner_is_adopted_for_its_side_only(self):
+        world = two_team_world()
+        world['_demo']['spawn_layout'].pop('ownerTeam', None)
+        match = TwoTeamMatch(world)
+        blue = match.private['challenger']['spawn_layout']
+        self.assertEqual('challenger', blue['ownerTeam'])
+        # The red side only had a copy of the blue bookkeeping, so it must rebuild
+        # rather than inherit (or be "adopted" into) the blue pool.
+        self.assertEqual(13, match.private['defender']['spawn_layout']['center']['x'])
+        self.assertEqual('defender', match.private['defender']['spawn_layout']['ownerTeam'])
+
+    def test_both_sides_spawn_their_own_full_observed_wave_at_night(self):
+        match = self._match_at_night()
+        entry = match.round()
+        events = entry['events']
+        self.assertTrue(any(line.startswith('[challenger]') and '35' in line and '实测' in line
+                            for line in events), events)
+        self.assertTrue(any(line.startswith('[defender]') and '35' in line and '实测' in line
+                            for line in events), events)
+        for side, first_x in (('challenger', 27), ('defender', 13)):
+            layout = match.private[side]['spawn_layout']
+            self.assertEqual(first_x, layout['center']['x'])
+            self.assertEqual(35, match.private[side]['wave']['total_count'])
 
 
 class RoundTests(unittest.TestCase):

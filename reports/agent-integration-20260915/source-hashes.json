@@ -1,0 +1,190 @@
+{
+  "Demo/CoreGeek/src/agent/__init__.py": {
+    "worktree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "normalized_lf_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "Demo/CoreGeek/src/agent/actions.py": {
+    "worktree_sha256": "de79664cdf173f777a77beed6845513a0e2c50fbb0f40dc5332c3b16db8cde6e",
+    "normalized_lf_sha256": "618be20f5de35d42c13b188c921fbafc1ae2569a9223fdeb53d127d60eea8a22"
+  },
+  "Demo/CoreGeek/src/agent/ballistics.py": {
+    "worktree_sha256": "b8593587c4eec6f8518bf945591a16ff051fbecd26a7d8a582bdd97987c6bc62",
+    "normalized_lf_sha256": "b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f"
+  },
+  "Demo/CoreGeek/src/agent/brain.py": {
+    "worktree_sha256": "1124543616e9b5186f3e2a0efb75dd17e6a8f6c472d74dd6b6d3993dfe82e3eb",
+    "normalized_lf_sha256": "b1e479b7aa346cd2305f30dcbe255e216c013486d6ccd25833ab74152b20086c"
+  },
+  "Demo/CoreGeek/src/agent/console_digest.py": {
+    "worktree_sha256": "f5024f3fab15049be2393cd3d155d39e74a296ded01f2e1b68cd9280eca65d83",
+    "normalized_lf_sha256": "b6851a6b5a7779d29bcf57e20d28e57dc759bc8d72d888e23469907bef3ccd37"
+  },
+  "Demo/CoreGeek/src/agent/coordination.py": {
+    "worktree_sha256": "48abac2a5f7a22cbaa4e9079a0ba4fd1f0b35e1faa37e236dd67d00a7f06d92e",
+    "normalized_lf_sha256": "570fa0db13ea7bc48297dc9f85957a697b27960058d80c6cc6d9a9743e701794"
+  },
+  "Demo/CoreGeek/src/agent/debug.py": {
+    "worktree_sha256": "24dc604fa0ab253c3830d6d23affacd878cd3b93961e59e5832fdcb00386c7ae",
+    "normalized_lf_sha256": "01eb51d1a320c635945578f125448d7eaeec6cdba90025b5c18a7557b5eb1bd0"
+  },
+  "Demo/CoreGeek/src/agent/deepseek_client.py": {
+    "worktree_sha256": "e6afbac59daa9ec89f233494a4505e0974f689fc909ff1c31d50529e133163a5",
+    "normalized_lf_sha256": "bd9f623ba5c5d1ed9931c97cb8ff7945dde1c0ee13c256f4e1c72c433d8a759f"
+  },
+  "Demo/CoreGeek/src/agent/defense_layout.py": {
+    "worktree_sha256": "2153f79d78064f7173db3ce850ebd04cc4d1c64d935c21a14d7542d2db5031a2",
+    "normalized_lf_sha256": "dd3f4b8ae4d9ecf68954d07826ba71849081999db866b15aa2f0b1ea72c0b412"
+  },
+  "Demo/CoreGeek/src/agent/diagnostics.py": {
+    "worktree_sha256": "a5ecacb758edd5ddf25a9d5293e192c6d9ac04dc98d39aa76ae9a6540b174cb7",
+    "normalized_lf_sha256": "bdc1c2e69bf161780ac17ca434c9be460176ec2dfb8c0b99fc8f5201b03092a1"
+  },
+  "Demo/CoreGeek/src/agent/evidence_memory.py": {
+    "worktree_sha256": "361cb20c809804a62fde9598d8bf3a6881a5688925d973f442511e7fd33d7f97",
+    "normalized_lf_sha256": "ae737d7bd1e2136a4bfc09bb6c834bd41c450ca360b626ed671d179f485c1a35"
+  },
+  "Demo/CoreGeek/src/agent/grid.py": {
+    "worktree_sha256": "c22201882dae0f93fb8206e85daf72b9facfc539ce133a4f8cceacd1cf60dcea",
+    "normalized_lf_sha256": "d6863d968b251246284a80f2ddeaf8b4a2dc184fd1ec62e58ab866370a43e4aa"
+  },
+  "Demo/CoreGeek/src/agent/llm_router.py": {
+    "worktree_sha256": "82da401637b6d0c60f5926e0034d916c0b788c033bf5714f715ca02fb3f6249f",
+    "normalized_lf_sha256": "feadade63a88dc27aa0e8f0e0cd45048a2318b1f725f409fd7ba69ca7e8cae61"
+  },
+  "Demo/CoreGeek/src/agent/local_llm.py": {
+    "worktree_sha256": "7cc4c7af6caf3b8e94fc7eb858e607fd61662f9dd51843e04fef2a1a63644899",
+    "normalized_lf_sha256": "7a1381688a832d1697c526bc9c5222273020f72c4ae8c7584687ad7a7fd4a29a"
+  },
+  "Demo/CoreGeek/src/agent/local_scripted_model.py": {
+    "worktree_sha256": "327c980a3cb112a06f8ac0a3da55dff6befd8b80254ce13da1cf86a07a7b394c",
+    "normalized_lf_sha256": "27862ef8d99babeb4933aece118970a294d6dc7962a0aa6703ea0fd9952824f2"
+  },
+  "Demo/CoreGeek/src/agent/local_task_cases.py": {
+    "worktree_sha256": "8f3f1f41c15a65fb370fa39d24aa3d2527bf35a2a83ef284068f0ae738c3c5c2",
+    "normalized_lf_sha256": "e902b40784d21cb3dccb0dce61c11959b7552b68c6b7390c8cd272d845727ca9"
+  },
+  "Demo/CoreGeek/src/agent/local_task_sandbox.py": {
+    "worktree_sha256": "95c4a310ee8cf055289667f3b7a2f3b9d549ffeae5aa79a8d009663e99a2a5f8",
+    "normalized_lf_sha256": "b14de2ca8132b02a583d62f412b46b239a950116e2573758bc696f27d1d6178e"
+  },
+  "Demo/CoreGeek/src/agent/local_world_news.py": {
+    "worktree_sha256": "15eca5e8054f6b5f7e248b25854557ce858fcdd3c5db864597d3189bf54513dc",
+    "normalized_lf_sha256": "229dd357c2571a000dcc251d5454b378318f6ab7fe6c04644ba56449dba356fe"
+  },
+  "Demo/CoreGeek/src/agent/market.py": {
+    "worktree_sha256": "6a2b8b5aca57dbb21a0407c118deb9b472d8dfa272d25747a2fd8d3cfd550e39",
+    "normalized_lf_sha256": "8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9"
+  },
+  "Demo/CoreGeek/src/agent/match.py": {
+    "worktree_sha256": "07460f5d044212b04a13e6b2d0eb5a7e27e41f77fc8a5b2b92ba3d5e7c909f76",
+    "normalized_lf_sha256": "5e8698d43eded65d5c95a993a4bf7ccf1cde32d864659f83df3b2c99c2d6510f"
+  },
+  "Demo/CoreGeek/src/agent/news_economy.py": {
+    "worktree_sha256": "51ff62079621b3f2ddec00c0c481f420f4756aa6f8ad84356a4cb2c960431071",
+    "normalized_lf_sha256": "51ff62079621b3f2ddec00c0c481f420f4756aa6f8ad84356a4cb2c960431071"
+  },
+  "Demo/CoreGeek/src/agent/news_ledger.py": {
+    "worktree_sha256": "cc78baea87a26b3eb2c03e59d475201aaa11d162eec9eaf612ba05ad184c1510",
+    "normalized_lf_sha256": "cc78baea87a26b3eb2c03e59d475201aaa11d162eec9eaf612ba05ad184c1510"
+  },
+  "Demo/CoreGeek/src/agent/nightwork.py": {
+    "worktree_sha256": "d21459e5bcecd4dcf30df1e9c1a77cafbdc9badc1f3fd2d132e5781aec235bf2",
+    "normalized_lf_sha256": "b14ee0e4798dcad4501d8a5afd9a51c433f634f6cfac6c3d3a4137d240a3ed67"
+  },
+  "Demo/CoreGeek/src/agent/planner.py": {
+    "worktree_sha256": "03910eed09c99050268675e78e58e3f4bb584713bc9af0bf5ea924b220cb32dd",
+    "normalized_lf_sha256": "59e6ec9600ee3971750ce536eb9bceaab9de11af070ae309d95ddb9c111257ee"
+  },
+  "Demo/CoreGeek/src/agent/policy_supervisor.py": {
+    "worktree_sha256": "7280e55a03b0c99ec44869be453e27828be2a75b65c167291d54e8d667833463",
+    "normalized_lf_sha256": "f79ea96b832a220290c7e73f26f07defeeb0968fc4026d82b9783c2268e9cd6c"
+  },
+  "Demo/CoreGeek/src/agent/protocol.py": {
+    "worktree_sha256": "9d2ad1a53416b0a78b3267562edf1599fb214117ccfb7738aba6c0adbb804417",
+    "normalized_lf_sha256": "ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9"
+  },
+  "Demo/CoreGeek/src/agent/recordings.py": {
+    "worktree_sha256": "fa5139023cd554c366ee515a74275f683afe1586346cd1c2524adda768edc2f1",
+    "normalized_lf_sha256": "29b6b441ed8686be03da9cd7739b0958c8f5b45fdb6f56e20907aa6057dc7cc7"
+  },
+  "Demo/CoreGeek/src/agent/sandbox.py": {
+    "worktree_sha256": "78f9a2c240795f59e390041ecd05b3e7a59811e608a2da8921e5e06a762d248b",
+    "normalized_lf_sha256": "4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321"
+  },
+  "Demo/CoreGeek/src/agent/scenarios.py": {
+    "worktree_sha256": "691aabb8dcc5dc28f59362a6fb1ea2b7bec7e2a2bcaf96c85fe75ff3bc538ac7",
+    "normalized_lf_sha256": "8a7bf22c4e87ca28e0d8393bfb1053789e38a2dc5e959821de8db29886a6aa20"
+  },
+  "Demo/CoreGeek/src/agent/server.py": {
+    "worktree_sha256": "6dfe9090dc195d75b443cfe119f628562039a7d8667debb0e186ef3404baacde",
+    "normalized_lf_sha256": "67366de7d5f1c067d69a9fbf1338f12c8669ea43efc3d78fdd6ef81732e08221"
+  },
+  "Demo/CoreGeek/src/agent/simulator.py": {
+    "worktree_sha256": "4bd12b7ee2c82e7b291d1382b5fc009f7ecf43385381880f4f6b66a57357373c",
+    "normalized_lf_sha256": "3a242b2861ded3aa1e132edb74cdf073b534972df368163705c5b1f7f8896ae4"
+  },
+  "Demo/CoreGeek/src/agent/task_agent.py": {
+    "worktree_sha256": "bff4ba6c2f0590b5c962798258fd748556fbd80b93896003c9bd6d6d3cdac4f8",
+    "normalized_lf_sha256": "8c041b02d4bf3fde29867ffcd8d540f719e06a82a9ad9b4ff1b4a9c17673788e"
+  },
+  "Demo/CoreGeek/src/agent/task_context.py": {
+    "worktree_sha256": "f776f34deded999c8e03712a7ec8e8c6b36198003a5886ed9e36a983512e3c12",
+    "normalized_lf_sha256": "1b2b425b3a635169ae42ad4b01a0f09359d5316b9e848f1ed253757c0f25b099"
+  },
+  "Demo/CoreGeek/src/agent/task_journal.py": {
+    "worktree_sha256": "1724455a0290217ca688b9aacd8518b2a3d972f15d960ba081352211a89867de",
+    "normalized_lf_sha256": "409d38e3d63048a8dfb9ccef6bf0657b48c6c72289a5f899f603cf64ddbd5b37"
+  },
+  "Demo/CoreGeek/src/agent/task_lifecycle.py": {
+    "worktree_sha256": "fc2c79ee3239f952c453f4469b09261d87cf239c0b1a32bfe0532d9d6a009c7d",
+    "normalized_lf_sha256": "4ea4780b7fdaef535d26b236e3f21daa1be7f56293e2587572a03bd25e712d18"
+  },
+  "Demo/CoreGeek/src/agent/task_skills.py": {
+    "worktree_sha256": "2887edc85088f04c0937c7df114d284b7fc5e4db9639f7c426ddf67bd5de32c1",
+    "normalized_lf_sha256": "3c786ee1c10d936d163c3f5c928053eeb5639a798254fbc832ef462749c465df"
+  },
+  "Demo/CoreGeek/src/agent/tasks.py": {
+    "worktree_sha256": "7a8b4eeafbad393678954f1b980fc3da0d59cd04f23df0cc0d95b5f0e3a69a99",
+    "normalized_lf_sha256": "9805cea015074985ea58f9a452a0e78ed57f1fc8e10e9624403228aef13d3b1d"
+  },
+  "Demo/CoreGeek/src/agent/taskworld.py": {
+    "worktree_sha256": "64ba9e586dd10b9e2c8c713a720b6a18c6cc29e78d4e6ce9616004a0fc2254e9",
+    "normalized_lf_sha256": "d2609d14aba50b273d04a29611cbf4ca4d7809ee7053504c2a952370a2c79ca1"
+  },
+  "Demo/CoreGeek/src/agent/team_agent.py": {
+    "worktree_sha256": "d8fdc0536fc996bf4913faf2a93d011004d98cc43c30328fcf49b686ed0be5ea",
+    "normalized_lf_sha256": "5fa91f98d12f6b628f17659c8651ac9f395112dd02778f8c97e399d800700a6e"
+  },
+  "Demo/CoreGeek/src/agent/telemetry.py": {
+    "worktree_sha256": "5b512c0122214181a73803d70419a50b96a326992702b78c295461250f450d70",
+    "normalized_lf_sha256": "ba33d27b3c0addd88a569bb4edceb2778ebb6c068bf2e472d2883beedbca8fa1"
+  },
+  "Demo/CoreGeek/src/agent/treasure.py": {
+    "worktree_sha256": "76828a5d58eef2f09def72ef9e80cc63a8b523414634cc428a1a915ab6501da4",
+    "normalized_lf_sha256": "3ea358a764697769bbbb77a80bd1818eabf3a48d46badf5045e615cc9573002d"
+  },
+  "Demo/CoreGeek/src/agent/turnactions.py": {
+    "worktree_sha256": "00b2a86fce4ac015480d67241664e363edf95be4e33ee262990998e92272bc78",
+    "normalized_lf_sha256": "85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22"
+  },
+  "Demo/CoreGeek/src/agent/twomatch.py": {
+    "worktree_sha256": "9d3e0218adf190673f50a23cb2cc20e9185dbd38ef80b4b83bab5dc4776b06c3",
+    "normalized_lf_sha256": "c3e894080bb2044a6f16581953d8bd36171b0ef3e2c1f8ea99519ddee2e89189"
+  },
+  "Demo/CoreGeek/src/agent/vision.py": {
+    "worktree_sha256": "0bbc60474257caaabf8c50eab82bd9621b3cd7668870ba303ed4f86640102491",
+    "normalized_lf_sha256": "a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4"
+  },
+  "Demo/CoreGeek/src/agent/wave_data.py": {
+    "worktree_sha256": "0415267c69ff21fd26153664a077d4722dc6989071d1208075f13404d05d942f",
+    "normalized_lf_sha256": "0415267c69ff21fd26153664a077d4722dc6989071d1208075f13404d05d942f"
+  },
+  "Demo/CoreGeek/src/agent/world_agent.py": {
+    "worktree_sha256": "d755f67919de0d862c20b32e4b6144f15ae610c906913db28fdc4d57f4f12dca",
+    "normalized_lf_sha256": "8ef34e1478089b761cd383fb80bf6387f592148797f3b4aa77911c3332ee0d6b"
+  },
+  "Demo/CoreGeek/src/agent/world_memory.py": {
+    "worktree_sha256": "d72aa3daa971cfae05c6e8a978a71288f2b9c876be95743e4c6fbdf5f078a44f",
+    "normalized_lf_sha256": "c565daeaaa33517d55b6d7bcc14e0ca9e71a389da754c4f431a8aa2309aced5b"
+  }
+}

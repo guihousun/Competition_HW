@@ -52,6 +52,7 @@
   function capture(world) {
     return {
       seed: world.seed, side: world.side, pressure: world.pressure,
+      profile: world.profile,
       frames: world.frames, states: world.states, done: Boolean(world.done),
       metadata: world.metadata || {},
     };

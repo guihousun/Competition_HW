@@ -301,6 +301,29 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     return resolved, rejected
 
 
+def _intervening_wall(turn, origin, goal):
+    """First live friendly wall intersected by the robot-to-role centre segment.
+
+    S04: a wall screens roles from robot attacks. Corner-only contact is not a
+    passage through a cell (local geometric convention, not an official detail).
+    """
+    hits = []
+    for wall in turn.walls():
+        enter, leave = 0.0, 1.0
+        for start, delta, cell in ((origin.x, goal.x - origin.x, wall.pos.x),
+                                   (origin.y, goal.y - origin.y, wall.pos.y)):
+            if delta == 0:
+                if not cell - .5 < start < cell + .5:
+                    leave = -1
+                    break
+            else:
+                lo, hi = sorted(((cell - .5 - start) / delta, (cell + .5 - start) / delta))
+                enter, leave = max(enter, lo), min(leave, hi)
+        if leave - enter > 1e-12 and leave > 0 and enter < 1:
+            hits.append((enter, wall.unit_id, wall.pos))
+    return min(hits)[2] if hits else None
+
+
 def step(payload, commands=None, *, external_response=None):
     """Advance the environment; an external response bypasses local policy.
 
@@ -663,7 +686,10 @@ def step(payload, commands=None, *, external_response=None):
                 # an arbitrary free cell each round (every candidate scored as
                 # "equally far" from a None goal) and drifted off the board.
                 goal = _nearest_building_cell(refreshed, p)
+            screening_wall = None
             if victim is not None and goal is not None and distance(p, goal) <= 3:
+                screening_wall = _intervening_wall(refreshed, p, goal)
+            if victim is not None and goal is not None and distance(p, goal) <= 3 and screening_wall is None:
                 power = ROBOT_STATS.get(robot.get('roleType'), (40,5,1))[1]
                 role_damage[victim['id']] += power
                 events.append(f"机器人 {robot['id']} 攻击 {victim['id']}，伤害 {power}")
@@ -674,7 +700,9 @@ def step(payload, commands=None, *, external_response=None):
             # No unit in reach: hit whatever building is in the way. 任务书 §4.7.3
             # has robots attack blocking units *and buildings*, so a wall must be
             # breakable even when nothing else is nearby.
-            if goal is not None:
+            if screening_wall is not None:
+                blocked_by = screening_wall
+            elif goal is not None:
                 blocked_by = _blocking_building(refreshed, p, goal)
             else:
                 blocked_by = _adjacent_building(refreshed, p)

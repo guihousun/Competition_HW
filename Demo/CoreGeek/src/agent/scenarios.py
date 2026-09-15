@@ -3,6 +3,8 @@ import random
 from copy import deepcopy
 from .protocol import (TASK_ITEM_PRICE, TASK_ITEMS, Pos, Turn, distance,
                        station_footprint)
+from . import wave_data
+from .wave_data import DEFAULT_PROFILE
 
 ROBOT_STATS = {'smallRobot': (40, 5, 1), 'middleRobot': (60, 10, 2),
                'largeRobot': (500, 20, 4), 'bossRobot': (800, 40, 10)}
@@ -23,10 +25,12 @@ def observation(state):
     return filter_observation(public)
 
 
-def scenario(seed=1, side='challenger', pressure=1):
+def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
+             profile=DEFAULT_PROFILE):
     seed, pressure = int(seed), int(pressure)
     if side not in ('challenger', 'defender') or not 1 <= pressure <= 3:
         raise ValueError('side must be challenger/defender; pressure must be 1..3')
+    profile = wave_data.validate_profile(profile)
     rng = random.Random(seed)
     x, y = rng.randint(5, 12), rng.randint(22, 27)
     if side == 'defender':
@@ -63,7 +67,8 @@ def scenario(seed=1, side='challenger', pressure=1):
                                                     # (任务书 §4.6.3 末表), 15 each.
                                                     + [(item, TASK_ITEM_PRICE)
                                                        for item in TASK_ITEMS]],
-             '_demo': {'seed': seed, 'pressure': pressure, 'mines': {}, 'dead': {},
+             '_demo': {'seed': seed, 'pressure': pressure, 'profile': profile,
+                       'mines': {}, 'dead': {},
                        'kills': 0, 'finished': False, 'waves': 0, 'elapsed': 0,
                        'errands': {}}}
     # Exclude both build rings and every occupied cell from neutral placement.
@@ -80,6 +85,8 @@ def scenario(seed=1, side='challenger', pressure=1):
     # The treasure rite is a local fixture too: the official site, conditions and
     # timing are inferred from rumours and are not published (任务书 §5.2).
     treasure.attach(state, treasure.new_rite(seed, round_no=int(state.get('roundNo') or 1)))
+    configure_spawns(state, spawn_points)
+    state['_demo']['wave_source'] = wave_data.source_summary()
     state['_demo']['vis_prev'] = frame_view(state)
     # This constructor knows it is starting a new match. Missing memory in an
     # imported snapshot remains a conservative restore, never free quota.
@@ -95,6 +102,105 @@ def free_cells(state, exclude_rings=False):
     return [Pos(x,y) for x in range(turn.width) for y in range(turn.height)
             if Pos(x,y) not in blocked and (not exclude_rings or all(
                 min(distance(Pos(x,y), p) for p in station_footprint(b.pos)) > 2 for b in bases))]
+
+
+# Fixed local spawn geometry (Issue #12/#19). These are local assumptions: the
+# exact cells and the mirrored side were never published. The direction is known
+# from Issue #12 ("blue attackers come from its right, about a third-map distance
+# from the right edge"); everything else below is labelled local.
+SPAWN_SCHEMA = 'local-fixed-spawn/1'
+SPAWN_MAX_PER_COLUMN = 9
+SPAWN_FIRST_COLUMN_FRACTION = 2 / 3
+
+
+def spawn_row_band(center_y: int, height: int) -> list[int]:
+    """The 9-row band for one column, without squashing it at the map edge.
+
+    The band is *shifted* so it stays nine rows whenever the map is at least
+    nine tall (``height >= 9``); an edge base therefore keeps a full column
+    instead of collapsing to five. Only a genuinely shorter map uses fewer rows.
+    Within the band, rows are ordered from the centre outward so the nearest
+    slot is the one at the base's own row.
+    """
+    if height >= SPAWN_MAX_PER_COLUMN:
+        top = min(max(center_y - SPAWN_MAX_PER_COLUMN // 2, 0),
+                  height - SPAWN_MAX_PER_COLUMN)
+        band = list(range(top, top + SPAWN_MAX_PER_COLUMN))
+    else:
+        band = list(range(height))
+    return sorted(band, key=lambda y: (abs(y - center_y), y))
+
+
+def spawn_column_pool(turn: Turn):
+    """Fixed columns on the base's attack side: x near-to-far, <=9 y per column.
+
+    Blue-like bases (station in the left half) start at ``round((W-1)*2/3)`` and
+    step right; right-hand bases mirror to ``round((W-1)*1/3)`` and step left.
+    Each column uses :func:`spawn_row_band`, so it keeps nine distinct rows even
+    when the base sits on the top or bottom edge. Returned cells are not yet
+    filtered for terrain or occupancy.
+    """
+    station = turn.station()
+    if station is None:
+        return None, None, []
+    on_left = station.pos.x < turn.width / 2
+    first_x = round((turn.width - 1) * (SPAWN_FIRST_COLUMN_FRACTION if on_left else
+                                        1 - SPAWN_FIRST_COLUMN_FRACTION))
+    direction = 1 if on_left else -1
+    band = spawn_row_band(station.pos.y, turn.height)
+    columns, slots = [], []
+    for step in range(turn.width):
+        x = first_x + direction * step
+        if not 0 <= x < turn.width:
+            break
+        columns.append(x)
+        slots.extend(Pos(x, y) for y in band)
+    return first_x, columns, slots
+
+
+def configure_spawns(state, points=None):
+    """Freeze one local spawn pool for the whole match (Issue #12/#19).
+
+    Default: a fixed column array, never a nightly ring sample and never a
+    four-side siege. Static neutral cells and buildings are excluded when the
+    pool is built; a slot that is occupied later is skipped at spawn time and the
+    shortage is reported instead of spreading outside the pool. Caller-supplied
+    ``spawn_points`` are kept exactly in the given order and labelled as custom
+    local geometry.
+    """
+    turn = Turn.load(state)
+    station = turn.station()
+    if station is None:
+        raise ValueError('spawn configuration needs a live station')
+    owner = str((state.get('teamOur') or {}).get('type') or '')
+    if points is not None:
+        if (not isinstance(points, list) or not points or len(points) > turn.width * turn.height
+                or any(not isinstance(p, dict) or set(p) != {'x', 'y'}
+                       or type(p['x']) is not int or type(p['y']) is not int
+                       or not 0 <= p['x'] < turn.width or not 0 <= p['y'] < turn.height for p in points)):
+            raise ValueError('spawn_points must be in-map integer coordinates')
+        slots = [Pos.load(p) for p in points]
+        if len(set(slots)) != len(slots):
+            raise ValueError('duplicate spawn point')
+        layout = {'schema': SPAWN_SCHEMA, 'center': slots[0].dump(),
+                  'slots': [p.dump() for p in slots], 'columns': [],
+                  'max_per_column': None, 'custom': True, 'ownerTeam': owner,
+                  'source': 'explicit_local_configuration',
+                  'geometry': '调用方给定的本地坐标，顺序保持不变（非官方几何）'}
+    else:
+        first_x, columns, candidates = spawn_column_pool(turn)
+        free = set(free_cells(state))
+        slots = [p for p in candidates if p in free]
+        layout = {'schema': SPAWN_SCHEMA, 'center': Pos(first_x, station.pos.y).dump(),
+                  'slots': [p.dump() for p in slots], 'columns': columns,
+                  'max_per_column': SPAWN_MAX_PER_COLUMN, 'custom': False, 'ownerTeam': owner,
+                  'source': 'issue12_direction_exact_cells_and_red_mirror_provisional',
+                  'geometry': '临基地一侧首列起固定列阵，x 近到远；纵向以基地行居中并 clamp；本地几何'}
+    layout['occupancy'] = 'skip occupied fixed slots; report shortages; never spread outside pool'
+    layout['pool_size'] = len(layout['slots'])
+    layout['min_pool_size'] = wave_data.DEFAULT_POOL_REQUIRED
+    state['_demo']['spawn_layout'] = layout
+    return layout
 
 
 def prepare_round(state, events, extra_load=None):
@@ -120,38 +226,64 @@ def prepare_round(state, events, extra_load=None):
         events.append('黎明：清除残余机器人')
     if (n-1) % 130 == 70:
         day = (n-1)//130 + 1
-        available = free_cells(state, True)
-        station = Turn.load(state).station()
-        available = [p for p in available if 8 <= distance(p, station.pos) <= 13]
-        rng.shuffle(available)
+        # A snapshot generated before Issue19 has no `profile`. It was produced by
+        # the old day*pressure+1 experiment, so migrate it to that profile and say
+        # so — silently switching an old recording to the observed counts would
+        # change its wave sizes while still calling the replay "consistent".
+        legacy_profile = meta.get('profile') is None
+        profile = wave_data.PROFILE_PRESSURE if legacy_profile else meta.get('profile')
+        profile = wave_data.validate_profile(profile)
+        if legacy_profile:
+            meta['profile'] = profile
+            meta['profile_migration'] = 'legacy snapshot had no wave profile; kept as local-pressure'
+            events.append('旧快照缺少波次 profile：保留旧本地压力实验身份（day*pressure+1），'
+                          '未改标为附件实测')
+        layout = meta.get('spawn_layout')
+        if not isinstance(layout, dict) or layout.get('schema') != SPAWN_SCHEMA:
+            layout = configure_spawns(state)  # old generated snapshots migrate once
+            meta['layout_migration'] = 'legacy snapshot had no fixed spawn layout; rebuilt as local geometry'
+        free = set(free_cells(state, True))
+        available = [Pos.load(p) for p in layout['slots'] if Pos.load(p) in free]
         robots = state['robot']['roles']
-        plan = []
-        for i in range(min(len(available), day * meta['pressure'] + 1)):
-            kind = 'middleRobot' if day >= 3 and i % 3 == 0 else 'smallRobot'
-            if meta['pressure'] == 3 and day >= 5 and i == 0:
-                kind = 'largeRobot'
-            plan.append(kind)
+        extras = []
         for kind, amount in sorted((extra_load or {}).items()):
-            if kind not in ROBOT_STATS:
-                continue
-            plan.extend([kind] * max(0, int(amount)))
+            if kind in ROBOT_STATS:
+                extras.extend([kind] * max(0, int(amount)))
         pending = meta.get('summon_load') or {}
         for kind, amount in sorted(pending.items()):
-            if kind not in ROBOT_STATS:
-                continue
-            plan.extend([kind] * max(0, int(amount)))
+            if kind in ROBOT_STATS:
+                extras.extend([kind] * max(0, int(amount)))
         meta.pop('summon_load', None)
+        plan, wave_meta = wave_data.wave_plan(profile, day, meta.get('pressure', 1), extras)
+        meta['wave'] = wave_meta
         for i, kind in enumerate(plan):
             if not available:
                 break
             robot = {'id': 300000+n*100+i, 'roleType': kind, 'health': ROBOT_STATS[kind][0],
-                     'pos': available.pop().dump(), 'targetTeam': state['teamOur']['type'],
+                     'pos': available.pop(0).dump(), 'targetTeam': state['teamOur']['type'],
                      'abnormalState': ''}
             robots.append(robot)
             spawned.append({'robot': robot['id'], 'kind': kind, 'pos': robot['pos'],
                             'health': robot['health']})
         meta['waves'] += 1
-        events.append(f'第 {day} 夜：生成本地压力波次（非官方数量）')
+        meta['spawn_shortfall'] = len(plan) - len(spawned)
+        if profile == wave_data.PROFILE_PRESSURE:
+            events.append(f'第 {day} 夜：本地旧压力波次 {wave_meta["formula"]}'
+                          f'（{wave_meta["base_count"]} 只基础，非官方数量）')
+        elif wave_meta.get('observed'):
+            events.append(f'第 {day} 夜：附件实测 {wave_meta["base_count"]} 只'
+                          f'（Issue19 default.xlsx Sheet1）')
+        else:
+            events.append(f'第 {day} 夜：未观测（附件第8–10天为空）：本地续演假设每夜多 '
+                          f'{wave_meta["local_future_small_per_day"]} 只小型，共 '
+                          f'{wave_meta["base_count"]} 只；非官方统计')
+        if wave_meta.get('blank_types_zeroed'):
+            blanks = '、'.join(wave_meta['blank_types_zeroed'])
+            events.append(f'附件中 {blanks} 为空白：本地运行暂按 0 解释（假设，非实测）')
+        events.append(f'固定刷新区落位（精确格子与红方镜像为本地几何）；'
+                      f'每列≤{layout.get("max_per_column") or 9}')
+        if meta['spawn_shortfall']:
+            events.append(f"固定刷新格被占用或不足，少生成{meta['spawn_shortfall']}只；占格处理为本地假设")
     for unit in state['teamOur']['roles']:
         key = str(unit['id'])
         if unit['health'] <= 0 and unit['roleType'] in ('worker','pioneer'):

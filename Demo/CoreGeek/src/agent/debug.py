@@ -24,6 +24,7 @@ from .brain import decide
 from .protocol import TOWER_RANGE_BY_LEVEL, TOWER_TYPES
 from .scenarios import ROBOT_STATS, observation, scenario  # noqa: F401 (re-export)
 from .simulator import frame_view, step
+from . import wave_data
 
 MAX_ROUNDS = 1300
 SERIES_LIMIT = 6
@@ -80,9 +81,16 @@ RULE_ROWS: list[dict[str, str]] = [
     {"id": "R04/S01", "item": "己方围墙不阻挡己方子弹",
      "status": "local", "note": "用户补充（原文“围棋”，暂按围墙理解，待确认）；当前弹道已不受己方墙阻挡"},
     {"id": "R05/S02", "item": "机器人基础数量随夜数增加",
-     "status": "official", "note": "任务书 §4.7.3 与用户补充一致；具体数量公式仍是本地假设"},
-    {"id": "R05/S03", "item": "固定机器人刷新点",
-     "status": "approx", "note": "用户补充要求固定点；当前环带随机出生与之冲突。固定坐标/占用处理待确认，旧录像不是合规证据"},
+     "status": "official", "note": "任务书 §4.7.3 与用户补充一致；前7天具体数量来自 Issue19 附件观测（空白类型按0解释），"
+                                  "第8–10天附件为空，本地续演假设每夜多5只小型（96/101/106），均非官方认证数值"},
+    {"id": "R05/S03", "item": "固定机器人刷新点（列阵，非四面随机）",
+     "status": "approx", "note": "Issue12 给出方向（蓝方基地右侧约 1/3 地图）；精确坐标/纵向中心/红方镜像为本地几何。每夜复用同一固定池，占用跳过并报短缺"},
+    {"id": "R05/S04", "item": "机器人攻击角色前先命中路径第一面墙",
+     "status": "local", "note": "用户补充 S04（2026-09-15 转述，非新增官方原文）；任务书 §4.7.3 已有攻击阻挡单位/建筑的原则。"
+                               "射程3、回合末统一扣血、墙毁后下一轮才可命中后方；直线穿格/擦角判定为本地几何约定，未经官方认证"},
+    {"id": "R05", "item": "波次数据源与 profile",
+     "status": "local", "note": "默认 observed-seven-days 用 Issue19 附件前7天实测（空白按0解释）；第8–10天未观测，"
+                               "本地假设每夜多5只小型（非官方）；local-pressure 为旧 day*pressure+1 实验"},
     {"id": "R05", "item": "基础波次公式、机器人选敌与移动顺序",
      "status": "local", "note": "具体算法未给出；压力档不代表官方难度"},
     {"id": "R06", "item": "小贩卖出 / 商店购买（价格读观测）",
@@ -131,11 +139,13 @@ def stats_payload() -> dict[str, Any]:
         "robotScore": ROBOT_SCORE,
         "side": ["challenger", "defender"],
         "pressure": [1, 2, 3],
+        "waveProfiles": list(wave_data.PROFILES),
+        "waveProfileDefault": wave_data.DEFAULT_PROFILE,
     }
 
 
-def scenario_payload(seed: Any, side: Any, pressure: Any) -> dict[str, Any]:
-    state = scenario(seed, side, pressure)
+def scenario_payload(seed: Any, side: Any, pressure: Any, profile: Any = None) -> dict[str, Any]:
+    state = scenario(seed, side, pressure, profile=wave_data.validate_profile(profile))
     return {"state": _viewer_state(state), "view": frame_view(state),
             "metadata": recording_metadata()}
 
@@ -173,14 +183,16 @@ def step_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return safe
 
 
-def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='openrouter', max_calls=None):
+def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='openrouter', max_calls=None,
+                         profile=None, pressure=1):
     """One explicit local LLM fixture; never used by ordinary benchmarks."""
     import uuid
     from copy import deepcopy
     if kind not in ('arithmetic', 'tasks', 'long', 'world', 'world-long', 'mixed') or backend not in ('scripted', 'openrouter'):
         raise ValueError('unknown Agent demo or backend')
+    profile = wave_data.validate_profile(profile)
     from .protocol import Pos, distance
-    state = scenario(seed, side, 1)
+    state = scenario(seed, side, pressure, profile=profile)
     meta = state['_demo']
     meta.update(llm_enabled=backend == 'openrouter', llm_mode=backend,
                 llm_demo_kind=kind, llm_run_id=uuid.uuid4().hex)
@@ -282,16 +294,17 @@ def _json_safe(value: Any, depth: int = 0) -> Any:
 
 
 def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
-                   *, progress=None, cancelled=None) -> dict[str, Any]:
+                   *, profile: Any = None, progress=None, cancelled=None) -> dict[str, Any]:
     """Record a full local match: initial state, per-round frames, final state.
 
     This is a replay source, not a second simulator: every frame comes from the
     same step() the live path uses, and the initial state is the seeded scenario
     the live path starts from.
     """
-    initial = scenario(seed, side, pressure)
+    profile = wave_data.validate_profile(profile)
+    initial = scenario(seed, side, pressure, profile=profile)
     key = json.dumps(
-        [initial['_demo']['seed'], side, str(pressure), limit], sort_keys=True,
+        [initial['_demo']['seed'], side, str(pressure), profile, limit], sort_keys=True,
         ensure_ascii=False,
     )
     with _LOCK:
@@ -326,6 +339,7 @@ def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
         "seed": initial['_demo']['seed'],
         "side": initial['teamOur']['type'],
         "pressure": initial['_demo']['pressure'],
+        "profile": initial['_demo'].get('profile', wave_data.DEFAULT_PROFILE),
         "initial": states[0],
         "frames": frames,
         "states": states,
@@ -401,7 +415,10 @@ def mismatch_notes() -> list[str]:
         "本地模拟：不是官方判题器，分数/压力档不是官方成绩或难度。",
         "未覆盖：官方隔离沙盒、真实任务判题与完整官方双队胜负。真实 DeepSeek 仅在显式启用的本地场景调用。",
         "本地假设：建造区域几何、具体波次数量公式、机器人选敌与移动顺序。",
-        "非合规近似：当前环带随机出生与用户补充的固定刷新点要求冲突；具体固定坐标待确认（S03）。",
+        "刷怪：位置固定（Issue12 方向 + 本地列阵几何），不再四面随机；数量默认用 Issue19 附件前7天实测，"
+        "第8–10天附件为空，本地假设每夜多5只小型并标注“未观测”（非官方）。",
+        "墙体：机器人攻击角色前先命中直线路径上的第一面墙（任务书 §4.7.3），回合末统一扣血；"
+        "直线穿格、擦角不算穿透属本地几何约定。",
         "预览指令与已执行结果分开显示；箭头预览不代表一定执行成功。",
     ]
 

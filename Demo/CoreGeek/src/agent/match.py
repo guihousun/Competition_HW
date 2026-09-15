@@ -19,6 +19,7 @@ official score. Anything this file reports must be labelled that way.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Callable
 
 from . import planner, vision
@@ -66,9 +67,24 @@ class TwoTeamMatch:
         # copy means whichever side settles last overwrites the other's published
         # request — a completed task would score into the wrong team's total.
         shared = world.get("_demo") or {}
-        self.private: dict[str, dict[str, Any]] = {
-            side: dict(shared) for side in self.sides
-        }
+        mirror = world.get("_mirror_demo")
+        self.private: dict[str, dict[str, Any]] = {}
+        # Which sides received their *own* recorded `_demo` (as opposed to a copy of
+        # the first side's). A legacy layout without an owner may be adopted only
+        # when it came from that side's own bookkeeping.
+        self._own_layout_source: dict[str, bool] = {}
+        for index, side in enumerate(self.sides):
+            own = shared if index == 0 else (mirror if isinstance(mirror, dict) else None)
+            # Deep copy: the fixed spawn pool and wave source are mutable local
+            # state, and a shallow copy would let one side's night overwrite the
+            # other side's pool or make both sides spawn from one base's columns.
+            self.private[side] = deepcopy(own or shared or {})
+            self._own_layout_source[side] = own is not None
+        # A fixed spawn pool is per side (its own base's attack side). Rebuild any
+        # pool that belongs to the other side instead of sharing it; a pool already
+        # owned by this side is kept as-is, custom points included.
+        for side in self.sides:
+            self._ensure_spawn_layout(side)
         # The judge sends each team its own round-level fields (phaseTask,
         # playerTasks, lastCmdResult, lastRoundRoleActionResults). One shared copy
         # in the world means the side that settles last overwrites the other's
@@ -80,6 +96,46 @@ class TwoTeamMatch:
         self.finished = False
         self.winner: str | None = None
         self.reason = ""
+
+    # -- per-side spawn isolation -----------------------------------------
+    def _side_projection(self, side: str) -> dict[str, Any]:
+        projection = vision.side_view(self.world, side, vision_filter=False,
+                                      keep_private=True)
+        projection["_demo"] = self.private[side]
+        return projection
+
+    def _expected_first_column(self, side: str) -> int | None:
+        turn = Turn.load(self._side_projection(side))
+        station = turn.station()
+        if station is None:
+            return None
+        from .scenarios import spawn_column_pool
+        first_x, _columns, _slots = spawn_column_pool(turn)
+        return first_x
+
+    def _ensure_spawn_layout(self, side: str) -> None:
+        """Guarantee this side's private fixed pool belongs to *its* base.
+
+        Ownership is carried by the layout's ``ownerTeam`` field, never inferred
+        from the default column coordinate: a caller may legally configure a
+        custom pool (say blue at x=25) that must survive. A pool with no owner is
+        adopted only when it came from this side's own bookkeeping (a legacy
+        snapshot), and never rebuilt just to look newer. A pool owned by the other
+        side is rebuilt for this side.
+        """
+        from .scenarios import SPAWN_SCHEMA, configure_spawns
+        private = self.private[side]
+        layout = private.get("spawn_layout")
+        if isinstance(layout, dict) and layout.get("schema") == SPAWN_SCHEMA:
+            owner = layout.get("ownerTeam")
+            if owner == side:
+                return
+            if owner in (None, "") and self._own_layout_source.get(side):
+                layout["ownerTeam"] = side  # legacy pool from this side's own state
+                return
+        if self._expected_first_column(side) is None:
+            return
+        configure_spawns(self._side_projection(side))
 
     # -- one round ---------------------------------------------------------
     def request_for(self, side: str) -> dict[str, Any]:

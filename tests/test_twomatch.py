@@ -71,6 +71,14 @@ class TwoMatchJobTests(unittest.TestCase):
         self.assertEqual(started["pressure"], 3)
         self.assertEqual(started["maxRounds"], 1300)
 
+    def test_profile_choice_is_honoured_and_validated(self):
+        started = twomatch.start(seed=1, pressure=1, max_rounds=1, profile="local-pressure")
+        self.assertEqual(started["profile"], "local-pressure")
+        default = twomatch.start(seed=1, pressure=1, max_rounds=1)
+        self.assertEqual(default["profile"], "observed-seven-days")
+        with self.assertRaises(ValueError):
+            twomatch.start(seed=1, pressure=1, max_rounds=1, profile="official")
+
 
 if __name__ == "__main__":
     unittest.main()

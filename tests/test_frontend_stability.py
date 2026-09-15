@@ -357,6 +357,28 @@ function stubPost() {
     assert(writes > after, 'a real change must write canvas.width/height');
   });
 
+  await check('wave source keeps pressure disabled after blocking work', () => {
+    resetApp();
+    const profile = document.getElementById('profile');
+    const pressure = document.getElementById('pressure');
+    profile.value = 'observed-seven-days';
+    app.syncProfileControls();
+    assert(pressure.disabled, 'observed counts cannot be scaled by pressure');
+    app.panel.setBusy(true);
+    app.panel.setBusy(false);
+    assert(pressure.disabled, 'ending a scene load must not enable an ignored setting');
+    profile.value = 'local-pressure';
+    app.syncProfileControls();
+    assert(!pressure.disabled, 'legacy experiment allows pressure selection');
+    app.panel.setBusy(true);
+    app.syncProfileControls();
+    assert(pressure.disabled, 'busy work also locks legacy pressure');
+    app.panel.setBusy(false);
+    assert(!pressure.disabled, 'legacy pressure unlocks after work');
+    profile.value = 'observed-seven-days';
+    app.syncProfileControls();
+  });
+
   await check('resize ticks with the same box never clear the canvas', () => {
     resetApp();
     app.world = liveWorld(1);

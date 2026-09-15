@@ -41,6 +41,13 @@
             <option value="2">2 · 增强（本地假设）</option>
             <option value="3">3 · 高压（本地假设）</option>
           </select>
+          <small id="pressure-hint">（仅旧压力实验使用）</small>
+        </label>
+        <label>波次来源
+          <select id="profile">
+            <option value="observed-seven-days">前7天实测（附件）</option>
+            <option value="local-pressure">旧压力实验</option>
+          </select>
         </label>
 
         <button id="preset" type="button" title="换一个可复现的演示场景">换演示场景</button>
@@ -73,7 +80,8 @@
 
     <div class="ribbon" role="note">
       <span class="pill warn">本地模拟 · 非官方判题器</span>
-      <span id="ribbon-text">当前仍使用随机刷怪，尚不符合固定刷新点补充规则。</span>
+      <span id="ribbon-text">刷怪已改为固定列阵（Issue12 方向 + 本地几何）；数量默认用 Issue19 附件前7天实测，第8–10天未观测、本地假设每夜多5只小型。</span>
+      <span id="profile-note" class="pill local">波次 profile：—</span>
       <button id="ribbon-toggle" class="ghost tiny" type="button">规则与限制</button>
     </div>
 

@@ -25,7 +25,12 @@ class LongWorldSimulatorTests(unittest.TestCase):
         with patch.dict(os.environ, {brain.WORLD_AGENT_ENV: 'on', brain.TASK_AGENT_ENV: 'off'}):
             for side in ('challenger', 'defender'):
                 with self.subTest(side=side):
-                    state = local_world_news.install(scenarios.scenario(90317, side), long_context=True)
+                    # This test drives the treasure/travel pipeline, not the wave
+                    # size: keep the small legacy waves so the pioneer is not
+                    # overwhelmed. The observed wave table has its own tests.
+                    state = local_world_news.install(
+                        scenarios.scenario(90317, side, 1, profile='local-pressure'),
+                        long_context=True)
                     daily, inspected, bought, moved, opened = {}, False, False, False, False
                     for _ in range(300):
                         result = simulator.step(state)

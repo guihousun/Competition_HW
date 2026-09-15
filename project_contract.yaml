@@ -24,6 +24,10 @@ schema_version: 1
 scope: competition-hw
 runtime_loading: false
 last_reviewed: "2026-09-14"
+scoped_review:
+  date: "2026-09-15"
+  items: [V-001, V-004]
+  note: "仅复核怪物来源/位置与波次；其他历史条目及实现快照不冒充本次已核验"
 guide: docs/OFFICIAL_VERIFICATION_GUIDE.md
 
 provenance:
@@ -35,8 +39,8 @@ provenance:
     - "任务书 / 接口文档正文 > 官方示例 request.txt / response.txt"
     - "示例仅用于字段目录与形状；示例数值不自动等于判题器常量（见 D02 类冲突）"
     - "Demo/CoreGeek 是本地参赛程序，不是规则权威"
-    - "用户口述补充（RULE_SUPPLEMENTS.md S01–S03）是用户来源的开发约束，本身即约束本地实现；"
-    - "其中未被官方材料写明的细节（如 S03 的确切坐标）仍需官方附件或平台证据补齐后才能修复"
+    - "用户口述补充（RULE_SUPPLEMENTS.md S01–S04）是用户来源的开发约束，本身即约束本地实现；"
+    - "先落实已知约束；未知细节（如 S03 的确切坐标）保留本地假设，等待官方附件或平台证据校准，不阻断独立修复"
     - "本地模拟、动作审计、测试通过 = 本地证据，不是官方认证"
     - "另见 docs/DEVELOPMENT_RULES.md §1 与 docs/OFFICIAL_VERIFICATION_GUIDE.md"
 
@@ -113,7 +117,15 @@ source_refs:
     sha256: 0ec1eeacac7f58a435acb6dadbb3e4862cd70bc91b593d55c438223610c16b45
   user_supplements:
     path: docs/RULE_SUPPLEMENTS.md
-    note: S01/S02/S03 为用户转述，尚无官方附件
+    note: S01–S04 为用户转述；Issue19另有用户授权公开的统计附件，非官方认证
+  issue12:
+    url: https://github.com/guihousun/Competition_HW/issues/12
+    note: 用户报告蓝方进攻侧与近似位置
+  issue19:
+    url: https://github.com/guihousun/Competition_HW/issues/19
+    path: reports/issue-19-monsters/original.xlsx
+    sha256: d4f9d778f11dbf14caab1de82891c8cc5f18892f987cfd9b9a4d1e62727f7a93
+    note: "Sheet1 B2:H5 前7天数量，A14到墙观测，A15列阵排列；后3天空白"
   implementation_snapshot:
     # 关键：这是**工作树快照**，不是提交身份。git_head 是本地分支的提交，而
     # Demo/CoreGeek/ 与 tests/ 在编制时的 HEAD 下仍是未跟踪文件；因此 HEAD 不能代表
@@ -176,14 +188,14 @@ verification_items:
   - id: V-001
     title: 固定刷新点的确切坐标、批次落位与被占格处理
     priority: P0
-    category: noncompliant_approximation
+    category: assumption
     status: pending_official
     official:
-      requirement: "固定刷新点为用户来源的开发约束（RULE_SUPPLEMENTS S03，关联任务书 §4.7.3）；任务书只说夜晚第一回合统一出现、数量随天数增加，未给坐标"
-      refs: [user_supplements, taskbook]
+      requirement: "固定刷新点为用户来源的开发约束（RULE_SUPPLEMENTS S03，关联任务书 §4.7.3）；Issue12 给出方向（蓝方基地右侧、约距右边界 1/3 地图）。任务书只说夜晚第一回合统一出现、数量随天数增加，未给坐标"
+      refs: [user_supplements, taskbook, issue12]
     local:
-      behavior: "每夜从距己方基地切比雪夫距离 8–13 的环带内先 free_cells 过滤（排除已占格与中立/建造区外沿），再 rng.shuffle 后逐个 pop 落位；因此落点每夜不同，与固定点要求冲突"
-      code: "scenarios.prepare_round（free_cells → 8<=distance<=13 → shuffle/pop）；scenarios.free_cells"
+      behavior: "已实现固定列阵刷新池：临基地进攻侧首列 x≈27（蓝方，向右）或 x≈13（红方镜像，向左），每列至多 9 个纵向位置（高度≥9 时平移纵向带保持 9 格），整场复用、不四面随机；池容量≥106（可到边界）。高级怪（boss/大型/中型/小型）近到远占位，召唤附加怪并入同一排序；占用时跳过固定槽并报告短缺，不向池外扩散；调用方 spawn_points 按原顺序保留并标为自定义几何；layout 记录 ownerTeam，双队各自持有自己的池。精确格子、纵向中心、红方镜像与占格处理仍是本地几何假设"
+      code: "scenarios.configure_spawns / spawn_column_pool / spawn_row_band；match.TwoTeamMatch._ensure_spawn_layout（按 ownerTeam 隔离）；scenarios.prepare_round"
     question: "固定点的确切坐标有哪些（每侧、是否随地图变化）？一批多只机器人按什么顺序/规则落到这些点？某点被建筑、角色或中立单位占据时，该批机器人落在哪里或是否延后？"
     evidence_needed: "官方带坐标的刷怪点示意，或连续两夜同一地图的请求快照（同坐标重复出现，且能看到被占格时的处理）"
     confirmation: null
@@ -227,10 +239,10 @@ verification_items:
       requirement: "任务书 §4.7.3：数量随天数增加；召唤令叠加在基础浪潮之上；具体公式与类型比例未给出"
       refs: [taskbook]
     local:
-      behavior: "基础数量 = 夜数 × 本地压力 + 1（压力为本地参数 1–3）；类型为 smallRobot，每 3 只中第 1 只在第 3 夜起改 middleRobot，压力 3 且第 5 夜起首只改 largeRobot"
-      code: "scenarios.prepare_round（min(len(available), day*pressure+1) 与 i%3 规则）"
-    question: "官方每夜的基础数量公式是什么？各类型（小/中/大/BOSS）的构成比例与出现起始夜是什么？上限如何？"
-    evidence_needed: "多夜请求快照中 robot.roles 的类型与数量，或官方一句话公式说明"
+      behavior: "默认 `observed-seven-days`：第1–7天用 Issue19 附件 default.xlsx Sheet1 B2:H5 的实测数量（合计 35/45/58/69/75/86/91，空白类型运行时按0解释）；第8–10天附件为空，本地续演假设在 day7 基础上每夜多 5 只小型（96/101/106），元数据 observed=false/source_day=7/extrapolation=true、raw_counts 保持 null、day7 起点另存 seed_counts_day7。可选 `local-pressure` 保留旧实验 day×pressure+1（压力为本地参数1–3）；pressure 只影响该实验。类型排序 boss/大型/中型/小型 近到远，召唤附加怪并入同一排序"
+      code: "wave_data.py（OBSERVED_TYPES/ISSUE19_SOURCE/wave_plan）；scenarios.prepare_round（profile=observed-seven-days/local-pressure）"
+    question: "官方每夜的基础数量公式是什么？各类型（小/中/大/BOSS）的构成比例与出现起始夜是什么？上限如何？第8–10天的官方数量是多少？"
+    evidence_needed: "多夜请求快照中 robot.roles 的类型与数量，或官方一句话公式说明；第8–10天的坐标数量"
     confirmation: null
 
   - id: V-005

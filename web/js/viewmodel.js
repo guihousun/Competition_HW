@@ -128,6 +128,7 @@
       this.seed = 1;
       this.side = 'challenger';
       this.pressure = 1;
+      this.profile = 'observed-seven-days';
       this.states = [];
       this.frames = [];
       this.done = false;
@@ -152,6 +153,9 @@
       world.seed = (state._demo && state._demo.seed) || 1;
       world.side = state.teamOur.type;
       world.pressure = (state._demo && state._demo.pressure) || 1;
+      // A snapshot generated before Issue19 has no `profile`; label it as legacy
+      // instead of showing the new default, which would misdescribe its waves.
+      world.profile = (state._demo && state._demo.profile) || 'legacy-unknown';
       world.states = [state];
       world.metadata = payload.metadata || {};
       world.frames = [];
@@ -167,6 +171,9 @@
       world.seed = recording.seed;
       world.side = recording.side;
       world.pressure = recording.pressure;
+      world.profile = recording.profile
+        || (recording.initial && recording.initial._demo && recording.initial._demo.profile)
+        || 'legacy-unknown';
       world.metadata = recording.metadata || {};
       const frames = recording.frames || [];
       const provided = recording.states || null;

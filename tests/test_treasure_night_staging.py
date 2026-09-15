@@ -102,9 +102,51 @@ class TreasureNightStagingTests(unittest.TestCase):
                 payload['teamOur']['roles'][-1]['health'] = 999
             elif mode == 'guard':
                 payload['teamOur']['roles'][0]['health'] = 0
+                payload['teamOur']['roles'][1]['health'] = 0
             elif mode == 'conflict':
                 notes['preparable'] = False
             self.assertIsNone(self.proposal(payload, notes), mode)
+
+    def test_confirmed_worker_loss_allows_one_ready_guard_on_a_cleared_field(self):
+        payload = board()
+        payload['teamOur']['roles'][0]['health'] = 0
+        result = self.proposal(payload)
+        self.assertTrue(result['confirmed_reduced_crew'])
+        self.assertEqual(result['guard_count'], 1)
+        self.assertTrue(result['hold'])
+        commands = self.run_night(payload)
+        self.assertEqual(commands[3]['action'], 'move')
+        self.assertNotIn(2, commands, 'surviving guard stays at its gun')
+        self.assertLessEqual(distance(Pos.load(commands[3]['targetPos'][0]), Pos(5, 4)), 4)
+
+    def test_missing_worker_or_unknown_health_is_not_a_confirmed_loss(self):
+        for mode in ('missing', 'unknown', 'boolean'):
+            payload = board()
+            if mode == 'missing':
+                payload['teamOur']['roles'].pop(0)
+            elif mode == 'unknown':
+                payload['teamOur']['roles'][0].pop('health')
+                with self.assertRaises(KeyError):
+                    self.proposal(payload)  # protocol rejects missing required health
+                continue
+            else:
+                payload['teamOur']['roles'][0]['health'] = False
+            self.assertIsNone(self.proposal(payload), mode)
+
+    def test_reduced_crew_waits_for_guard_and_aborts_on_any_new_robot(self):
+        payload = board()
+        payload['teamOur']['roles'][0]['health'] = 0
+        payload['teamOur']['roles'][1]['pos'] = {'x': 10, 'y': 7}
+        self.assertFalse(self.proposal(payload)['hold'])
+        commands = self.run_night(payload)
+        self.assertNotIn(3, commands)
+        self.assertEqual(commands[2]['action'], 'move')
+        payload['teamOur']['roles'][1]['pos'] = {'x': 7, 'y': 7}
+        payload['teamOur']['roles'][2]['pos'] = {'x': 9, 'y': 5}
+        payload['robot']['roles'] = [{'id': 91, 'pos': {'x': 40, 'y': 0},
+                                     'health': 40, 'targetTeam': 'defender'}]
+        self.assertIsNone(self.proposal(payload))
+        self.assertLess(self.run_night(payload)[3]['targetPos'][0]['x'], 9)
 
     def test_geometric_radius_does_not_bypass_a_blocked_return_route(self):
         payload = board()

@@ -372,7 +372,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             preparation = {
                 'phase': 'waiting_guards' if not night_staging['hold'] else
                          'moving' if night_staging['command'] else 'holding',
-                'reason': 'public_items_ready_waiting_for_time', 'radius': nightwork.WORK_RADIUS}
+                'reason': 'public_items_ready_waiting_for_time', 'radius': nightwork.WORK_RADIUS,
+                'guard_count': night_staging['guard_count'],
+                'confirmed_reduced_crew': night_staging['confirmed_reduced_crew']}
             _DECISION_REPORT.get()['treasure_preparation'] = preparation
             planner_state.tasks['supervisor']['treasure_preparation'] = deepcopy(preparation)
     return response
@@ -1732,8 +1734,18 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     return staging
 
 
+def _confirmed_reduced_crew(payload, guards):
+    """One worker is explicitly dead; an absent observation is not a death."""
+    workers = [role for role in (payload.get('teamOur') or {}).get('roles', [])
+               if isinstance(role, dict) and role.get('roleType') == 'worker']
+    losses = [role for role in workers
+              if type(role.get('health')) is int and role['health'] <= 0]
+    return (len(guards) == 1 and guards[0][0].kind == 'worker'
+            and len(workers) == 2 and len(losses) == 1)
+
+
 def _treasure_night_staging(turn, payload, pairs):
-    """Prepare a bounded public trip while two other controllers keep their guns.
+    """Prepare a bounded trip while the surviving guards keep their guns.
 
     No predicted window or wave is consulted. Return None to restore ordinary
     defence immediately; a hold flag is internal arbitration, never an action.
@@ -1755,7 +1767,11 @@ def _treasure_night_staging(turn, payload, pairs):
     post = next((tower for role, tower in pairs if role.unit_id == pioneer.unit_id), None)
     guards = [(role, tower) for role, tower in pairs if role.unit_id != pioneer.unit_id]
     radius = nightwork.WORK_RADIUS
-    if post is None or len(guards) < 2 or distance(pioneer.pos, post.pos) > radius:
+    # After a confirmed loss, one ready worker can cover a completely cleared
+    # field. Missing own-role/health observations are not proof of a death.
+    reduced_crew = _confirmed_reduced_crew(payload, guards)
+    if (post is None or (len(guards) < 2 and not reduced_crew)
+            or distance(pioneer.pos, post.pos) > radius):
         return None
     routes = _RouteCost(turn, pioneer)
     stands = tuple(_stand_cells(turn, pioneer, post.pos, set()))
@@ -1767,10 +1783,11 @@ def _treasure_night_staging(turn, payload, pairs):
                 for cell in _stand_cells(turn, pioneer, site, set())), default=None)
     if goal is None or goal[0] >= 10 ** 6:
         return None
-    # Suppressing ordinary nightwork brings both workers back before the
+    # Suppressing ordinary nightwork returns all surviving guards before the
     # pioneer departs, and prevents a worker scout leaving during the hold.
     ready = all(distance(role.pos, tower.pos) <= 1 for role, tower in guards)
-    result = {'owner': pioneer.unit_id, 'hold': ready, 'command': None}
+    result = {'owner': pioneer.unit_id, 'hold': ready, 'command': None,
+              'guard_count': len(guards), 'confirmed_reduced_crew': reduced_crew}
     if not ready or goal[0] == 0:
         return result
     step = next_step(turn, pioneer, goal[3])

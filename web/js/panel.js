@@ -617,10 +617,11 @@
       if (this.busy === next) return;
       this.busy = next;
       for (const id of ['newmatch', 'preset', 'record', 'recordfull', 'play', 'step',
-        'stepback', 'reset', 'speed', 'seed', 'side', 'pressure', 'apply-json', 'decide-json',
+        'stepback', 'reset', 'speed', 'seed', 'side', 'pressure', 'profile', 'apply-json', 'decide-json',
         'sample', 'import', 'import-replay', 'export', 'empty-new', 'empty-sample', 'scrub', 'seek-go']) {
         setDisabled($(id), next);
       }
+      if (HW.app && typeof HW.app.syncProfileControls === 'function') HW.app.syncProfileControls();
       if (HW.experience && HW.app) HW.experience.update(HW.app.world || HW.app.placeholderWorld());
     }
 

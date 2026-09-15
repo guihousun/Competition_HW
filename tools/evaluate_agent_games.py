@@ -22,6 +22,8 @@ def main():
     parser.add_argument('--short-world', action='store_true')
     parser.add_argument('--price-drop-news', action='store_true', help='Explicit local one-day copper price-drop fixture')
     parser.add_argument('--disable-news-economy', action='store_true', help='Evaluation-only sale-advice ablation')
+    parser.add_argument('--disable-reduced-crew', action='store_true', help='Evaluation-only restoration of two-guard requirement')
+    parser.add_argument('--wave-profile', choices=['observed-seven-days', 'local-pressure'])
     parser.add_argument('--disable-night-staging', action='store_true', help='Explicit evaluation-only ablation')
     parser.add_argument('--legacy-route-estimate', action='store_true', help='Evaluation-only old projected-occupancy estimate')
     args = parser.parse_args()
@@ -35,6 +37,9 @@ def main():
     os.environ[brain.WORLD_AGENT_ENV] = 'on'
     os.environ[brain.TASK_AGENT_ENV] = 'on'
     overrides = []
+    if args.disable_reduced_crew:
+        brain._confirmed_reduced_crew = lambda *unused: False
+        overrides.append('confirmed_reduced_crew_disabled')
     if args.disable_news_economy:
         brain.news_economy.sale_signals = lambda *unused, **kwargs: {}
         overrides.append('news_economy_disabled')
@@ -57,10 +62,13 @@ def main():
     fixture_options = {'long_context': not args.short_world}
     if args.price_drop_news:
         fixture_options['price_drop'] = True
-    state = local_world_news.install(local_task_cases.install(scenarios.scenario(args.seed, args.side)), **fixture_options)
+    scenario_options = {'profile': args.wave_profile} if args.wave_profile else {}
+    state = local_world_news.install(local_task_cases.install(scenarios.scenario(args.seed, args.side, **scenario_options)), **fixture_options)
+    wave_profile = state['_demo'].get('profile', 'legacy_random_pressure')
     counts = {'prompts': 0, 'news': 0, 'treasure': 0, 'task': 0, 'legacy': 0, 'commands': 0,
               'tasks_completed': 0, 'attacks': 0, 'summons': 0, 'summon_successes': 0,
-              'channel_conflicts': 0, 'invalid_agent_states': 0}
+              'channel_conflicts': 0, 'invalid_agent_states': 0,
+              'news_sale_advice_turns': 0, 'reduced_crew_preparation_turns': 0}
     elapsed, events, days, errors = [], [], {}, []
     started = time.monotonic()
     min_base_hp = 1500
@@ -97,6 +105,10 @@ def main():
         counts['summon_successes'] += bool(summons and state.get('lastSummonTreasureResult') == 1)
         report = state['_demo'].get('task_report') or {}
         counts['tasks_completed'] += report.get('ended') == 'completed'
+        supervisor = memory.tasks.get('supervisor') or {}
+        counts['news_sale_advice_turns'] += bool(supervisor.get('news_economy'))
+        counts['reduced_crew_preparation_turns'] += bool(
+            (supervisor.get('treasure_preparation') or {}).get('confirmed_reduced_crew'))
         sales.extend({'round': n, **sale} for sale in result['frame'].get('actions', [])
                      if sale.get('a') == 'sell')
         if report.get('ended') or summons:
@@ -114,7 +126,7 @@ def main():
     summary = {'scope': 'Full local simulator game; prompt-only scripted model and virtual sandbox; not intranet PASS',
         'source_sha': source_sha, 'files': initial, 'stable_source': hashes() == initial,
         'python': sys.version.split()[0], 'seed': args.seed, 'side': args.side, 'long_world': not args.short_world,
-        'runtime_overrides': overrides, 'price_drop_news': args.price_drop_news,
+        'runtime_overrides': overrides, 'price_drop_news': args.price_drop_news, 'wave_profile': wave_profile,
         'rounds': len(elapsed), 'score': state['teamOur']['totalScore'], 'base_hp': base['health'],
         'min_base_hp': min_base_hp, 'daily_calls': days, 'counts': counts,
         'simulation_step_p99_ms': ordered[int((len(ordered) - 1) * .99)], 'simulation_step_max_ms': max(ordered),

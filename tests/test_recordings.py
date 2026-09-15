@@ -30,7 +30,7 @@ def wait_done(jobs, job_id):
 class RecordingTests(unittest.TestCase):
     def test_cancel_keeps_only_completed_frames_and_never_starts_second_job(self):
         entered, release = threading.Event(), threading.Event()
-        def producer(*args, progress, cancelled):
+        def producer(*args, progress, cancelled, **_kwargs):
             entered.set()
             release.wait(5)
             progress(1, 4)
@@ -78,7 +78,8 @@ class RecordingTests(unittest.TestCase):
 
     def test_invalid_parameters_do_not_create_jobs(self):
         jobs = RecordingJobs()
-        for params in ({'side': 'other'}, {'limit': -1}, {'limit': 1301}, {'pressure': 4}, {'seed': 'oops'}):
+        for params in ({'side': 'other'}, {'limit': -1}, {'limit': 1301}, {'pressure': 4},
+                       {'seed': 'oops'}, {'profile': 'nope'}):
             with self.subTest(params=params), self.assertRaises(ValueError):
                 jobs.start(**params)
         self.assertEqual({}, jobs.jobs)

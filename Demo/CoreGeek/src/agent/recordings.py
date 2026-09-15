@@ -7,6 +7,7 @@ import uuid
 from typing import Any
 
 from .debug import series_payload
+from . import wave_data
 
 
 class RecordingJobs:
@@ -15,8 +16,9 @@ class RecordingJobs:
         self.lock = threading.RLock()
         self.jobs: dict[str, dict[str, Any]] = {}
 
-    def start(self, seed=1, side='challenger', pressure=1, limit=1300):
+    def start(self, seed=1, side='challenger', pressure=1, limit=1300, profile=None):
         seed, pressure, limit = int(seed), int(pressure), int(limit or 1300)
+        profile = wave_data.validate_profile(profile)
         if side not in ('challenger', 'defender') or not 1 <= pressure <= 3 or not 1 <= limit <= 1300:
             raise ValueError('阵营、压力或录制回合数无效（回合范围 1–1300）')
         with self.lock:
@@ -25,7 +27,7 @@ class RecordingJobs:
             while len(self.jobs) >= 3:
                 self.jobs.pop(next(iter(self.jobs)))
             job_id = uuid.uuid4().hex
-            job = dict(id=job_id, seed=seed, side=side, pressure=pressure,
+            job = dict(id=job_id, seed=seed, side=side, pressure=pressure, profile=profile,
                        limit=limit, round=0, state='running', started=time.monotonic(),
                        ended=None, cancel=threading.Event(), result=None, error=None)
             self.jobs[job_id] = job
@@ -39,6 +41,7 @@ class RecordingJobs:
                 job['round'] = count
         try:
             result = self.producer(job['seed'], job['side'], job['pressure'], job['limit'],
+                                   profile=job['profile'],
                                    progress=progress, cancelled=job['cancel'].is_set)
             with self.lock:
                 job['result'] = result
@@ -61,7 +64,8 @@ class RecordingJobs:
         with self.lock:
             job = self._job(job_id)
             elapsed = (job['ended'] or time.monotonic()) - job['started']
-            return {**{k: job[k] for k in ('id', 'seed', 'side', 'pressure', 'limit', 'round', 'state', 'error')},
+            return {**{k: job[k] for k in ('id', 'seed', 'side', 'pressure', 'profile', 'limit',
+                                           'round', 'state', 'error')},
                     'elapsed': round(elapsed, 2), 'progress': job['round'] / job['limit'],
                     'local': True}
 

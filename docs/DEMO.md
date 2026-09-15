@@ -3,9 +3,11 @@
 LLM 通道补缺见 [LOCAL_LLM.md](LOCAL_LLM.md)：完整官方响应字段、待回请求存档和可选本地
 OpenRouter/DeepSeek API 已接通；模型与版本化验证范围见上述文档。真实任务判题与官方隔离沙盒仍未覆盖。
 
-**规则补充 S03：** 用户确认刷新点固定，现有环带随机刷怪与之冲突，属于非合规近似。
-固定坐标和占用处理尚待确认。下文历史波次假设说明不再构成该行为的合规依据，
-详见 [RULE_SUPPLEMENTS.md](RULE_SUPPLEMENTS.md)。
+**规则补充 S03/S04 与 Issue #19：** 固定刷新点已按 Issue12 方向实现为固定列阵池
+（精确格子/纵向中心/红方镜像/占格处理仍为本地几何）；默认波次来源改为 Issue19 附件
+第 1–7 天实测，第 8–10 天附件为空、本地假设每夜多 5 只小型并标注未观测。旧的 `day×pressure+1`
+压力实验仍可用，但须显式选择 `local-pressure`。机器人攻击角色前先命中挡路围墙。
+详见 [RULE_SUPPLEMENTS.md](RULE_SUPPLEMENTS.md) 与 [specs/ISSUE_19_MONSTERS.md](../specs/ISSUE_19_MONSTERS.md)。
 
 完整录像、后台录制和复盘操作已更新，见 [REPLAY.md](REPLAY.md)。这次更新只涉及本地调试设施，
 不改变下述模拟器规则覆盖；旧报告仍是对应版本的历史证据。
