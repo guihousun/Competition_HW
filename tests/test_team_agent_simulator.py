@@ -35,7 +35,8 @@ def exercise(case_id, side, *, wrong_first=False, seed=90601):
     pioneer["pos"] = {"x": zone["pos"]["x"], "y": zone["pos"]["y"] + (1 if zone["pos"]["y"] < 31 else -1)}
     plans = list(PLANS[case_id])
     if wrong_first:
-        plans.insert(0, ("answer", "deliberately wrong"))
+        plans.insert(0, ("answer", "-999" if case_id == "decimal-aggregation" else
+                         '{"city":"wrong","temperature":-999}'))
     calls = tools = 0
     trace = []
     for _ in range(24):

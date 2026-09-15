@@ -14,6 +14,7 @@ from .task_skills import SkillLibrary
 from .task_context import public_task_confirmed, build_context, COMMAND_LIMIT
 from .task_workspace import bootstrap
 from . import task_tools
+from . import task_answer_contract
 from .sandbox import parse_command_result
 from .tasks import Plan
 from .world_agent import WorldAgent
@@ -134,7 +135,7 @@ class TeamAgent:
                                 continue
                             identity = request.request_id + ':' + str(index)
                             cut = result.truncated or doc['truncated']
-                            self.memory.put(identity, doc['text'], label=doc['path'], upstream_truncated=cut)
+                            self.memory.put(identity, doc['text'], label=doc['path'], pinned=index == 0, upstream_truncated=cut)
                             self.evidence.append({**event, 'id': identity, 'path': doc['path'],
                                 'text': doc['text'], 'sha256': digest(doc['text']), 'truncated': cut})
                         self.evidence = self.evidence[-EVIDENCE_LIMIT:]
@@ -183,15 +184,23 @@ class TeamAgent:
                 self.focus = result
         # Explicit stop/wait must not fall through to the legacy answer solver.
         task_document = self.memory.document(task_id)
+        contract_documents = [
+            {'id': doc['id'], 'path': doc['label'], 'text': doc['text'],
+             'truncated': not self.memory.complete(doc), 'exit_code': 0, 'verified': True}
+            for doc in self.memory.records if doc['label'].startswith('/')]
+        contract_documents += [self._full_document(event) for event in self.evidence]
+        contract = task_answer_contract.for_task(context.phase_task, contract_documents)
         references = ([{"kind": "agent_memory", "name": task_id,
                         "sha256": task_document["received_sha256"]}]
                       if task_document and self.memory.complete(task_document) else [])
         envelope = build_context("task", confirmation.generation, confirmation.source_digest,
                                  task_text=context.phase_task,
-                                 answer_contract={"requirement": "遵守题目原文指定的格式、字段与单位"},
+                                 answer_contract={**(contract or {}), "requirement": "遵守题目原文指定的格式、字段与单位"},
                                  trace_refs=references)
         state.ensure_task_context().put(envelope)
         parts = ["本题原文记忆索引（inspect只能访问这些已收到的来源）：" + json.dumps(self.memory.index(), ensure_ascii=False)]
+        if contract:
+            parts.append('本题提交契约（来自原题；示例数值/占位符不是答案）：' + json.dumps(contract, ensure_ascii=False))
         parts.append('任务时间预算：' + json.dumps({
             'current_round': context.round_no,
             'accepted_round': context.cycle.accepted_round,
@@ -264,7 +273,19 @@ class TeamAgent:
         if proposal is None:
             return Plan("wait", purpose="Agent: " + (self.task.stop_reason or self.task.stage))
         if proposal["kind"] == "submit":
-            return Plan("submit", answer=proposal["payload"], purpose=proposal["purpose"])
+            accepted, answer, reason = task_answer_contract.validate(proposal['payload'], contract, contract_documents)
+            if accepted:
+                if answer != proposal['payload']:
+                    self.task.proposal['payload'] = answer
+                    self.task._event('answer_format_normalized', reason, context.round_no)
+                return Plan("submit", answer=answer, purpose=proposal["purpose"])
+            self.task.proposal = None
+            self.task._event('answer_contract_rejected', reason, context.round_no)
+            if remaining is not None and remaining <= 1:
+                return Plan('wait', purpose='答案不符合本题结构，已无重规划窗口')
+            proposal = self.task.decide(text, evidence_ids, active=True, round_no=context.round_no)
+            if proposal is None:
+                return Plan('wait', purpose=reason)
         request = state.ensure_llm_router().offer(
             "task", confirmation.generation, confirmation.source_digest,
             kind=proposal["kind"], payload=proposal["payload"], purpose=proposal["purpose"],

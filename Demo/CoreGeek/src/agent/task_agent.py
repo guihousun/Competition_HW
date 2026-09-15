@@ -10,9 +10,12 @@ from __future__ import annotations
 from copy import deepcopy
 import hashlib
 import json
+import re
 from typing import Any
 from .task_context import PROMPT_LIMIT, COMMAND_LIMIT
 from . import task_tools
+from .model_json import unwrap_json
+from .task_answer_contract import bad_heredoc_chain
 
 SCHEMA = 'competition-task-agent/2'
 MAX_PROMPTS = 8  # engineering limits for one task, not official LLM allowances
@@ -184,9 +187,12 @@ class TaskAgent:
             return False
         self._event('received_' + kind, text, round_no)
         if kind == 'cmd':
+            if (re.match(r'\[exitCode:[1-9][0-9]*\]', text)
+                    and re.search(r'syntax error|SyntaxError|unexpected EOF|bad interpreter', text, re.I)):
+                self._event('shell_syntax_failed', _digest(pending['payload']), round_no)
             return True  # next prompt incorporates the actual result/exit status
         try:
-            envelope = _json_unique(text)
+            envelope = _json_unique(unwrap_json(text))
             if (not isinstance(envelope, dict) or not {'request_id', 'plan'} <= set(envelope)
                     or set(envelope) - {'request_id', 'plan', 'summary'}):
                 raise ValueError('invalid response envelope')
@@ -253,6 +259,14 @@ class TaskAgent:
                 self._event('payload_over_limit', f'{field}实际{len(value)}字符，上限{cap}；请缩短或拆分，不会截断执行。', round_no)
                 return False
             if plan_kind == 'run':
+                last_command = next((e for e in reversed(self.history)
+                    if e['kind'] in ('shell_syntax_failed','emitted_cmd')), None)
+                repeated_syntax = (last_command and last_command['kind']=='shell_syntax_failed'
+                                   and last_command['text']==_digest(value))
+                if bad_heredoc_chain(value) or repeated_syntax:
+                    self._event('command_syntax_rejected',
+                        '命令存在heredoc终止后换行&&，或原样重复了已确认的语法失败。请改用单段Python写文件或printf；修复后调用check。', round_no)
+                    return False
                 if self.commands >= MAX_COMMANDS or self.command_attempts.get(_digest(value), 0) >= 2:
                     self.finish('command_soft_limit_or_repeated_no_progress', stopped=True)
                     return False

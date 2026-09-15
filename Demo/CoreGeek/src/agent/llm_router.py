@@ -95,7 +95,7 @@ def _no_duplicate_keys(pairs: Any) -> dict[str, Any]:
     return dict(pairs)
 
 
-def verify_json_token(text: str, token: str) -> bool:
+def verify_json_token(text: str, token: str, *, allow_fence=False) -> bool:
     """Strict top-level JSON correlation: ``request_id``/``nonce`` must equal token.
 
     A JSON object with a different top-level id, duplicate keys, or the token
@@ -104,7 +104,11 @@ def verify_json_token(text: str, token: str) -> bool:
     """
     if not NONCE_RE.match(token):
         return False
-    text = text.strip()
+    from .model_json import unwrap_json
+    try:
+        text = unwrap_json(text) if allow_fence else text.strip()
+    except ValueError:
+        return False
     if not text or len(text) > PROMPT_PAYLOAD_LIMIT:
         return False
     try:
@@ -642,7 +646,7 @@ class LLMRouter:
             return True, "single_inflight"
         shape = request.expected_result_shape
         if shape == "plan_json":
-            return ((True, "verified_json_token") if verify_json_token(text, request.nonce)
+            return ((True, "verified_json_token") if verify_json_token(text, request.nonce, allow_fence=request.owner == "task")
                     else (False, "request_id_mismatch"))
         if shape == "command_output":
             return ((True, "verified_command_header") if verify_command_header(text, request.nonce)

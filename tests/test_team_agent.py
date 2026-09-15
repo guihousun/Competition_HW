@@ -76,11 +76,12 @@ class TeamAgentIntegrationTests(unittest.TestCase):
 
     def test_wrong_answer_feedback_replans_instead_of_claiming_success(self):
         self.run_round()
-        self.run_round(llm=self.model_reply("answer", "wrong"))
+        self.run_round(llm=self.model_reply("answer", '{"city":"wrong","temperature":-999}'))
         repair = self.run_round(errors=[{"errorCode": 2, "description": "答案不完全正确"}])
         self.assertIn("prompt", repair)
-        corrected = self.run_round(llm=self.model_reply("answer", '  exact\n'))
-        self.assertEqual(corrected["roleCommandMap"]["10011"]["taskAnswer"], '  exact\n')
+        exact = '  {"city":"北京","temperature":23}\n'
+        corrected = self.run_round(llm=self.model_reply("answer", exact))
+        self.assertEqual(corrected["roleCommandMap"]["10011"]["taskAnswer"], exact)
         self.assertEqual(self.state.team_agent.task.answers, 2)
 
     def test_lost_or_wrong_token_reply_never_falls_back_to_legacy_answer(self):

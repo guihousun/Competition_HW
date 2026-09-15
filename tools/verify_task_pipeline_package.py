@@ -10,6 +10,7 @@ from agent.local_task_sandbox import execute
 from test_tasks import observation
 p=argparse.ArgumentParser();p.add_argument('--archive',required=True);p.add_argument('--output',required=True)
 p.add_argument('--structured-http',action='store_true')
+p.add_argument('--fenced-model',action='store_true')
 a=p.parse_args();archive=Path(a.archive).resolve();output=Path(a.output).resolve()
 expected=archive.with_suffix('.gz.sha256').read_text().split()[0]
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==expected
@@ -68,6 +69,8 @@ with tempfile.TemporaryDirectory() as tmp:
                                 'headers':{'X-API-Key':'fixture-key'},'params':{'city':'current'}}}
                         kind_index+=1;plan['evidence_ids']=ids
                         llm=json.dumps({'request_id':token,'plan':plan})
+                        if a.fenced_model:
+                            llm='```json\n'+llm+'\n```'
                 submitted=[v for v in decision['roleCommandMap'].values() if v.get('action')=='submitAnswer']
                 assert len(submitted)==1 and json.loads(submitted[0]['taskAnswer'])=={'value':17+index}
                 assert kind_index==2
@@ -78,6 +81,6 @@ with tempfile.TemporaryDirectory() as tmp:
             except subprocess.TimeoutExpired: process.kill();process.wait()
 report={'scope':'Actual tar.gz main3 HTTP; scripted model/virtual tools, not intranet PASS',
     'source_commit':source,'archive_sha256':expected,'passed':len(rows)==2,'cases':rows,
-    'structured_http':a.structured_http}
+    'structured_http':a.structured_http,'fenced_model':a.fenced_model}
 output.parent.mkdir(parents=True,exist_ok=True);output.write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
 print(json.dumps({'passed':report['passed'],'requests':10,'source':source,'http_max_ms':max(t['ms'] for r in rows for t in r['trace'])}))
