@@ -62,7 +62,7 @@ Issue 只需描述现象并附可公开日志；版本优先从启动 identity �
 
 默认 compact 控制台现在会额外打印 `task_event {JSON}`：题目出现/结束、实际发出的 prompt/executeCmd/submitAnswer、新收到的 llmResp/lastCmdResult/错误，以及 Agent 阶段、步骤数和停止原因。原文相同的连续回执去重；每次实际发出的新命令仍记录。每条包含回合、阵营、事件 ID 和任务观测上下文，不把这些内部关联当作平台回传的请求 ID。
 
-控制台每段最多显示前后各 600 字符，中间省略时带 `truncated:true`、长度与已过滤内容的 SHA256。完整内容仍在本地 trace。文本消失只记“任务文本结束”，不会自动当成完成或失败；应结合判题回执。日志在官方回包后输出，磁盘 trace 不可用时仍可看控制台；`COMPETITION_HW_CONSOLE=off` 可关闭控制台记录。
+控制台原文事件每段最多显示前后各 600 字符，中间省略时带 `truncated:true`、长度与已过滤内容的 SHA256。任务结束结构摘要单独保留最多4096字符，避免关键字段被普通原文截断额度裁掉。完整内容仍在本地 trace。文本消失只记“任务文本结束”，不会自动当成完成或失败；应结合判题回执。日志在官方回包后输出，磁盘 trace 不可用时仍可看控制台；`COMPETITION_HW_CONSOLE=off` 可关闭控制台记录。
 
 只导出解题链路，不带逐帧地图：
 
@@ -94,3 +94,5 @@ python tools/trace_tool.py compare --actual .\evidence\official-round-72.json --
 支持原始请求或 `request` / `observation` / `state` 包装。回合不同会拒绝标为已对齐；当前差异比较覆盖共同观测的角色位置、血量、背包、等级、冷却及金币/分数字段，并报告出现/消失与重复 ID。完整地图和未知字段仍保存在原请求中，当前工具不做全地图差异报告。
 
 不能从有限观测恢复隐藏敌人、随机刷新和未来波次。正确闭环是：找到最早分歧 → 核对官方规则和版本 → 提炼独立预期回归用例 → 修复模拟器或策略 → 发布新 SHA → 同 SHA 内网复测。日志采集完整、本地回放一致，都不是官方 PASS。
+
+任务进展新增 `task_check_result`（check退出码、全部通过标记、token哈希）、`task_submission_feedback`（提交后相邻回执与金币/积分差）和每题一条 `task_outcome_summary`（阶段、次数、最后check/提交及中文说明）。筛选这三个kind即可快速查看；`submitted_unconfirmed` 表示已提交但官方结果未确认，`check_passed_not_submitted` 表示观察到check通过但未观察到提交。`official_success_confirmed:false` 不是官方失败。详细说明在源码仓库 docs/TASK_OUTCOME_LOGS.md。

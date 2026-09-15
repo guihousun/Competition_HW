@@ -10,6 +10,7 @@ import json
 import threading
 
 from .telemetry import clean
+from . import task_progress
 
 TEXT_LIMIT = 1200
 MAX_STREAMS = 8
@@ -65,13 +66,20 @@ class TaskJournal:
                          'continuity': 'reset' if reset else 'gap' if gap else
                                        'first_observation' if first else 'consecutive',
                          'attribution': 'observed_context_only_not_official_request_id',
-                         'content': excerpt(content, self.text_limit)})
+                         'content': excerpt(content, max(self.text_limit, 4096) if kind == 'task_outcome_summary' else self.text_limit)})
 
         question = request.get('phaseTask')
         question = question if isinstance(question, str) else ''
         question_hash = excerpt(question)['sha256'] if question else None
+        progress = previous.get('progress')
+        if progress:
+            for kind, content in task_progress.observe(progress, request,
+                    not question or question_hash == previous['question'], gap):
+                add(kind, content)
         if question_hash != previous['question']:
             if previous['question']:
+                if progress:
+                    add('task_outcome_summary', task_progress.summary(progress, round_no, team, bool(question)))
                 submission = previous.get('submission')
                 changes = {}
                 for field in ('gold', 'totalScore'):
@@ -91,6 +99,7 @@ class TaskJournal:
                      'action_receipt': receipts.get(submission['role']) if submission and isinstance(receipts, dict) else None,
                      'errors': request.get('errors', [])})
             previous['submission'] = None
+            previous['progress'] = task_progress.start(round_no, team) if question else None
             if question:
                 previous['episode'] = f'{round_no}:{question_hash[:12]}'
                 add('task_text_observed', question)
@@ -136,6 +145,8 @@ class TaskJournal:
                         answer = action.get('taskAnswer')
                         previous['submission'] = {'round': round_no, 'role': str(role_id),
                             'answer_sha256': hashlib.sha256(answer.encode()).hexdigest() if isinstance(answer, str) else None}
+        if question and previous.get('progress'):
+            task_progress.issued(previous['progress'], response, round_no, team)
         previous['stats'] = {field: team.get(field) for field in ('gold', 'totalScore')}
         return rows
 
