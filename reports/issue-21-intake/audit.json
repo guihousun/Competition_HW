@@ -1,0 +1,824 @@
+{
+  "schema": "competition-issue21-intake/1",
+  "source_issue": 21,
+  "tested_source_sha": "1831136d5a30f89caba3cb5ec1d2b91838684c2a",
+  "baseline_delivery_sha": "4572e620de0394aecd489c8a50a646c46c0d927d",
+  "input_digest": "d48bf3ec398c2bbb257f2c50f27e694469673e388437b7ae08f41cdde9e4d2dc",
+  "coverage": "Issue body/excerpts and source review, not full raw-log replay",
+  "opponent_reported_count": 78,
+  "entries_found_in_section_B": 79,
+  "count_note": "保留实际摘录条数，不生成缺失条目或把启动声明当完整清单",
+  "parameters": [
+    {
+      "key": "combat.target_weights",
+      "reported_value": "{'health': 0.2, 'threat': 1.0, 'kill': 0.2, 'distance': 0.3}",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "UNC-H-04",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.trip_safety_rounds",
+      "reported_value": "10",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.answer_error_markers",
+      "reported_value": "('error', 'exception', 'traceback', 'not found', 'no such file', 'permission denied', '失败', '找不到', '错误')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.answer_format",
+      "reported_value": "'json'",
+      "opponent_label": "UNKNOWN",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "UNC-L-05",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.answer_min_fields",
+      "reported_value": "1",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.check_interpreters",
+      "reported_value": "('bash', 'sh', 'python3', 'python', './')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "UNC-B-08",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.fix_patch_fence",
+      "reported_value": "('<<<PATCH>>>', '<<<END>>>')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.section_check_run_bytes",
+      "reported_value": "1500",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.section_check_src_bytes",
+      "reported_value": "1200",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.token_field",
+      "reported_value": "'token'",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "R-SBX-10",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.token_patterns",
+      "reported_value": "('token\\\\s*[:=]\\\\s*[\\\\\"\\']?([A-Za-z0-9_-]{6,64})', '\\\\b([0-9a-f]{12})\\\\b')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "R-SBX-10",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.token_placeholder_markers",
+      "reported_value": "('xxx', 'placeholder', 'your_token', 'your-token', 'token_here', 'todo', 'example', 'sample', '填入', '示例', '占位', '真实')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.token_sections",
+      "reported_value": "('CHECK_RUN', 'TOKEN')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "R-SBX-10",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.workspace_markers",
+      "reported_value": "('spec.md', 'check', 'check.sh')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "HIGH",
+      "opponent_reference": "R-SBX-10",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "builder.site_min_gap",
+      "reported_value": "3",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "builder.upgrade_preference",
+      "reported_value": "('railgun', 'rocket', 'gatling')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "combat.bomb_min_targets",
+      "reported_value": "4",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "UNC-K-10",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "combat.man_tower_prefer_threat",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "combat.rocket_cooldown",
+      "reported_value": "3",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "UNC-I-13",
+      "classification": "official_rule_crosscheck",
+      "our_rule": "R04",
+      "action": "发射后3轮空窗，不能照搬对手冷却实现"
+    },
+    {
+      "key": "economy.gold_reserve_target",
+      "reported_value": "110",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.medicine_stock",
+      "reported_value": "2",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.regroup_radius",
+      "reported_value": "5",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.repair_hp_ratio",
+      "reported_value": "0.8",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.voucher_default_price",
+      "reported_value": "100",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "economy.wall_soft_target",
+      "reported_value": "10",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "geometry.vision_radius",
+      "reported_value": "4",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "UNC-D-01",
+      "classification": "official_rule_crosscheck",
+      "our_rule": "R02",
+      "action": "官方视野4"
+    },
+    {
+      "key": "priority.build_tower",
+      "reported_value": "90",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.man_tower",
+      "reported_value": "85",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.repair",
+      "reported_value": "65",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "runtime.log_round_payloads",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "strategy.repair_walls",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "R-UNIT-3",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "strategy.retreat_radius",
+      "reported_value": "2",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.accept_expected_rounds",
+      "reported_value": "6",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.accept_night_margin",
+      "reported_value": "15",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.answer_feedback",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.answer_separator",
+      "reported_value": "';'",
+      "opponent_label": "UNKNOWN",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "UNC-L-05",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.check_names",
+      "reported_value": "('check', 'check.sh', 'check.py', 'run_check.sh', 'verify.sh')",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "task.enabled",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "UNC-L-01",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.fix_max_file_bytes",
+      "reported_value": "3000",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.fix_max_iterations",
+      "reported_value": "4",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.fix_payload_bytes",
+      "reported_value": "8000",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.max_probe_attempts",
+      "reported_value": "2",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "R-SBX-3",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.section_files_bytes",
+      "reported_value": "1200",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.section_spec_bytes",
+      "reported_value": "1500",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.workspace_enabled",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.workspace_evidence_bytes",
+      "reported_value": "6000",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "timing.pre_night_setup_rounds",
+      "reported_value": "30",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "UNC-H-03",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "treasure.max_rounds",
+      "reported_value": "150",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "treasure.min_gold",
+      "reported_value": "200",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.stone_batch",
+      "reported_value": "3",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "economy.stone_reserve",
+      "reported_value": "6",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.accept_task",
+      "reported_value": "70",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.bomb",
+      "reported_value": "85",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.build_wall",
+      "reported_value": "55",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.collect",
+      "reported_value": "60",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.combat_fire",
+      "reported_value": "100",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.move",
+      "reported_value": "40",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.remove",
+      "reported_value": "30",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.retreat",
+      "reported_value": "70",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.sandbox",
+      "reported_value": "75",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.submit_answer",
+      "reported_value": "80",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.survival",
+      "reported_value": "95",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.trade",
+      "reported_value": "50",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "priority.treasure",
+      "reported_value": "20",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "runtime.log_dir",
+      "reported_value": "'runtime/logs'",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "UNC-B-12",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "runtime.log_payload_max_bytes",
+      "reported_value": "49152",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "runtime.state_dir",
+      "reported_value": "'runtime/state'",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "UNC-B-12",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "runtime.write_snapshot",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "UNC-B-12",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "strategy.enable_news",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "strategy.enable_treasure",
+      "reported_value": "False",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "strategy.retreat_hp",
+      "reported_value": "80",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.error_feedback_max_rounds",
+      "reported_value": "3",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.fix_revert_on_regression",
+      "reported_value": "True",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.max_retry_on_failure",
+      "reported_value": "1",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "UNC-O-03",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.max_submit_attempts",
+      "reported_value": "3",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "UNC-L-06",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.sandbox_evidence_bytes",
+      "reported_value": "6000",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "task.section_listing_bytes",
+      "reported_value": "700",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "-",
+      "classification": "opponent_strategy_or_engineering_choice",
+      "our_rule": null,
+      "action": "仅记录对手设置；不自动导入规则或我方策略"
+    },
+    {
+      "key": "treasure.item_price",
+      "reported_value": "15",
+      "opponent_label": "ASSUMED",
+      "opponent_impact": "LOW",
+      "opponent_reference": "UNC-M-06",
+      "classification": "task_or_observation_dependent",
+      "our_rule": null,
+      "action": "从当前公开题目/工具回执/商店核验；不能升格为全局常量"
+    },
+    {
+      "key": "economy.tower_limit",
+      "reported_value": "3",
+      "opponent_label": "OVERTURNED",
+      "opponent_impact": "MEDIUM",
+      "opponent_reference": "R-UNIT-1",
+      "classification": "official_rule_crosscheck",
+      "our_rule": "R03",
+      "action": "官方全局同时最多3座，对手OVERTURNED不是官方来源"
+    }
+  ],
+  "reproduced_internal_mismatch": {
+    "command_chars": 2001,
+    "agent_accepts": true,
+    "router_accepts": false,
+    "executed_shell": false,
+    "status": "confirmed_unfixed"
+  },
+  "verification": {
+    "python": "3.11.10",
+    "task_agent_tests": 8,
+    "team_agent_tests": 11,
+    "passed": 19,
+    "uses_scripted_model": true,
+    "official_pass": false
+  },
+  "files_sha256": {
+    "Demo/CoreGeek/src/agent/task_agent.py": "bff4ba6c2f0590b5c962798258fd748556fbd80b93896003c9bd6d6d3cdac4f8",
+    "Demo/CoreGeek/src/agent/team_agent.py": "d8fdc0536fc996bf4913faf2a93d011004d98cc43c30328fcf49b686ed0be5ea",
+    "Demo/CoreGeek/src/agent/tasks.py": "7a8b4eeafbad393678954f1b980fc3da0d59cd04f23df0cc0d95b5f0e3a69a99",
+    "Demo/CoreGeek/src/agent/llm_router.py": "82da401637b6d0c60f5926e0034d916c0b788c033bf5714f715ca02fb3f6249f"
+  }
+}
