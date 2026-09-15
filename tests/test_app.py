@@ -460,8 +460,6 @@ class HandleTest(unittest.TestCase):
         )
         self.assertEqual(messages[3]["role"], "tool")
         self.assertIn("[exitCode:0]\n2", messages[3]["content"])
-        self.assertEqual(messages[4]["role"], "user")
-        self.assertIn("——请判断", messages[4]["content"])
         self.assertEqual(body["executeCmd"], "")
 
         # ④ LLM 给出答案 ⇒ **只交 `<answer>` 里的内容**（不是整段回复）

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import Agent  # noqa: E402
-from coregeek.agent.chat import answer_of, looks_like_tool, tool_of  # noqa: E402
+from coregeek.agent.chat import answer_of, looks_like_tool, summary_of, tool_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.game.planner import task_channel  # noqa: E402
 
@@ -260,6 +260,66 @@ class AnswerParseTest(unittest.TestCase):
         ):
             with self.subTest(reply=reply):
                 self.assertEqual(answer_of(reply), "")
+
+    def test_a_literal_in_the_summary_is_not_the_answer(self):
+        """⚠️ **第 39 步的污染守门员**（第 35/36 步 SOP 那条的翻版，一层新皮）：
+        摘要讲的是"任务与执行状态"，很可能引用到答案格式 ⇒ 里面会出现**字面量**
+        `<answer>…</answer>`。摘要落在工具块**外**，不挖掉它 `answer_of` 就会把
+        摘要里那段当成答案交上去 —— 而且日志上看不出来。**先挖摘要块再扫。**
+
+        反向验证：把"挖摘要块"退掉 ⇒ 这里取到 `假答案`（挂）。
+        """
+        reply = (
+            "<summary>答案要写成 <answer>假答案</answer> 的形状</summary>\n"
+            "<answer>真答案</answer>"
+        )
+        self.assertEqual(answer_of(reply), "真答案")
+        #: 摘要里塞了假答案、块外没有 ⇒ 不交（宁缺勿错 —— 判题器取通过率最高的一份）
+        self.assertEqual(answer_of(reply[: reply.index("\n<answer>")]), "")
+
+    def test_structural_blocks_are_all_stripped_before_the_scan(self):
+        """第 39 步起挖的是**全部**结构块（工具块 + 摘要块），不是"第一个工具块"：
+        任何结构块**内**的 `<answer>` 都分不清是真答案还是示例 —— 宁可不交。
+        块外的照旧认。"""
+        two_tools = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
+            "<tool><tool_name>executeCmd</tool_name>"
+            "<tool_param><cmd>答案是 <answer>块内答案</answer></cmd></tool_param></tool>"
+        )
+        self.assertEqual(answer_of(two_tools), "")
+        self.assertEqual(answer_of(two_tools + "\n<answer>块外答案</answer>"), "块外答案")
+
+
+class SummaryParseTest(unittest.TestCase):
+    """`summary_of`：每条回复搭车的**执行摘要**（第 39 步压缩机制的原料）。
+
+    **best-effort 是它的立身规则**：摘要取不到 ⇒ `""`，调用方带着旧摘要继续 ——
+    绝不因为摘要缺失而重问（重问要花一回合，而摘要是纯赚的搭车品；
+    任务得分 `5 × 标准回合数 / (完成回合 − 接取回合)`，分母就是回合数）。
+    """
+
+    def test_the_first_paired_block_is_taken(self):
+        """成对块 ⇒ 内容（首尾空白去掉）。摘要与工具调用/答案并列在一条回复里。"""
+        reply = "<summary>【总目标】交 token</summary>\n<tool>ls</tool>"
+        self.assertEqual(summary_of(reply), "【总目标】交 token")
+
+    def test_only_the_first_block_is_taken(self):
+        """多块只取第一对 —— 与 `tool_of` 只取第一个工具块同一条规矩。"""
+        reply = "<summary>第一份</summary>\n<summary>第二份</summary>"
+        self.assertEqual(summary_of(reply), "第一份")
+
+    def test_no_summary_or_half_written_yields_nothing(self):
+        """没有 / 半截 / 空块 ⇒ `""`，**不回落原文** —— 跟 `answer_of` 对空块的
+        态度一致：拿半截标记去凑，只会把标签串当内容用。"""
+        for reply in (
+            "",
+            "没有摘要的回复",
+            "<summary>半截",
+            "<summary></summary>",
+            "<summary>   </summary>",
+        ):
+            with self.subTest(reply=reply):
+                self.assertEqual(summary_of(reply), "")
 
 
 if __name__ == "__main__":

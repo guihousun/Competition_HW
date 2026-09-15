@@ -440,8 +440,8 @@ class TaskChannelTest(unittest.TestCase):
         prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
         self.assertEqual(execute, "")
         messages = json.loads(prompt)
-        self.assertEqual(messages[-2]["role"], "tool")
-        self.assertIn(output, messages[-2]["content"])
+        self.assertEqual(messages[-1]["role"], "tool")
+        self.assertIn(output, messages[-1]["content"])
 
     def test_the_reply_is_remembered_even_on_command_rounds(self):
         """**发命令那一轮也记回复**（第 25 步 `AGENT.hear` 的存在理由）：③ 那轮没有
@@ -466,11 +466,6 @@ class TaskChannelTest(unittest.TestCase):
                 ("user", self.TASK),
                 ("assistant", call),
                 ("tool", "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"),
-                (
-                    "user",
-                    "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
-                    "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
-                ),
             ],
         )
 
@@ -490,7 +485,7 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertEqual(execute, "", "沙盒刚交作业，这轮不许再发命令")
         messages = json.loads(prompt)
-        self.assertIn("[exitCode:0]\nok", messages[-2]["content"])
+        self.assertIn("[exitCode:0]\nok", messages[-1]["content"])
 
     def test_a_result_and_a_rejection_come_back_together(self):
         """⚠️ **沙盒结果与"答错了"是同一个分支的两面，不能互相吞掉。**
@@ -510,7 +505,7 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertEqual(execute, "")
         messages = json.loads(prompt)
-        self.assertIn("[exitCode:0]\n晴", messages[-3]["content"])
+        self.assertIn("[exitCode:0]\n晴", messages[-2]["content"])
         users = [m["content"] for m in messages if m["role"] == "user"]
         self.assertIn(self.ANSWER, users[-1])
         self.assertIn(self.RETRY_MARK, users[-1])
@@ -656,7 +651,7 @@ class TaskChannelTest(unittest.TestCase):
             with self.subTest(output=output):
                 prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
                 messages = json.loads(prompt)
-                self.assertIn(output, messages[-2]["content"])
+                self.assertIn(output, messages[-1]["content"])
                 self.assertEqual(execute, "")
 
     def test_prompt_and_command_are_never_both_set(self):

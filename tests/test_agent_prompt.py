@@ -125,7 +125,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("【你上一次提交的答案", plain)
 
         with_result = json.loads(self.agent.chat("题目", result="[exitCode:0]\nok"))
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result[-2]["content"])
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result[-1]["content"])
 
         with_retry = json.loads(self.agent.chat("题目", retry="晴 26 度"))
         self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry[-1]["content"])
@@ -157,11 +157,6 @@ class ChatPromptTest(unittest.TestCase):
                 ("user", "题"),
                 ("assistant", "<tool>ls</tool>"),
                 ("tool", "【上一条命令的执行结果（原文）】\n[exitCode:0]\nok"),
-                (
-                    "user",
-                    "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
-                    "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
-                ),
             ],
         )
 
@@ -212,12 +207,24 @@ class ChatPromptTest(unittest.TestCase):
         contents = [m["content"] for m in messages]
         self.assertIn("题目 {task} {0} {}", contents)
         self.assertIn("【上一条命令的执行结果（原文）】\n{'a': 1}", contents)
-        self.assertIn(
-            "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
-            "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
-            contents,
-        )
         self.assertIn("SOP 里有 {sop} 和 {0}", messages[0]["content"])
+
+
+    def test_the_summary_ride_along_is_taught(self):
+        """第 39 步压缩：输出约定教 `<summary>` 搭车块 —— 四槽结构 + 时序提醒 +
+        "漏写不算错"。这是压缩机制唯一能让 LLM 配合的杠杆（与第 32 步"同轮沉淀"
+        同一条经验：代码侧支持了，prompt 不教就等于没有）。
+        ⚠️ 措辞是拍的，效果只能靠实盘（`code-task.md` 第 39 步的不确定性）。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        self.assertIn("<summary>", system)
+        self.assertIn("【总目标】", system)
+        self.assertIn("【关键数据】", system)
+        #: 时序提醒（第 39 步设计的第 ④ 点）：摘要写在命令结果回来之前，
+        #: 不讲清楚这条，LLM 会拿一步旧的摘要当现状。
+        self.assertIn("不在", system)
+        self.assertIn("最近的消息", system)
+        #: 缺失容忍（第 39 步设计的第 ① 点）：摘要缺失绝不重问。
+        self.assertIn("漏写", system)
 
 
 if __name__ == "__main__":

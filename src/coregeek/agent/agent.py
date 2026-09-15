@@ -15,7 +15,7 @@
 
 from collections.abc import Callable
 
-from .chat import strip_answers
+from .chat import summary_of, strip_answers
 from .context import Context
 from .prompt import gen_system_prompt
 from .tools.cmd import executeCmd
@@ -85,9 +85,17 @@ class Agent:
         交答案那两轮没有 prompt，回复照样得进会话，否则回灌时它自己的命令凭空消失）。
 
         还没开过会话（这道题一次都没问过）⇒ 忽略。粘住的重复由 `Context.hear` 去重。
+
+        第 39 步起顺带**被动提取**执行摘要（`chat.summary_of`）：回复里带了
+        `<summary>` 就更新 `Context.summary`，没带就**保留旧值** —— best-effort，
+        绝不因为摘要缺失而重问（那会把搭车品变成每回合的税）。**静默**：prompt 行
+        里本来就有全文，摘要更新再打一行日志是白花 stdout 预算。
         """
         if self._context is not None:
             self._context.hear(reply)
+            summary = summary_of(reply)
+            if summary:
+                self._context.summary = summary
 
     def tool_call(self, tool_name: str, params: list[tuple[str, str]]) -> str:
         """**顶层调度入口**：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。

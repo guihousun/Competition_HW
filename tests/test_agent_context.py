@@ -78,25 +78,19 @@ class ContextTest(unittest.TestCase):
         )
 
     def test_feed_adds_the_two_titled_blocks(self):
-        """回灌轮**按 role 分条**：结果 = `tool` 消息、决策句与纠错 = `user` 消息 ——
+        """回灌轮**按 role 分条**：结果 = `tool` 消息、纠错 = `user` 消息 ——
         标题留在 content 里当内容标签（沙盒输出是任意文本，没标签分不清哪段是什么）。
-        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`（影响判题判断）。"""
+        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`（影响判题判断）。
+        ⚠️ "做完了吗"的决策指引在第 39 步挪进了 system（输出约定第 4 条）——
+        它是常驻规则，不是跟着每条结果走一遍的消息。"""
         self.ctx.feed("[exitCode:0]\n2", "晴 26 度")
         self.assertEqual(
             [m["role"] for m in self.messages()],
-            ["system", "user", "tool", "user", "user"],
-        )
-        self.assertEqual(
-            self.messages()[-3],
-            {"role": "tool", "content": "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"},
+            ["system", "user", "tool", "user"],
         )
         self.assertEqual(
             self.messages()[-2],
-            {
-                "role": "user",
-                "content": "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
-                "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
-            },
+            {"role": "tool", "content": "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"},
         )
         self.assertEqual(
             self.messages()[-1],
@@ -113,8 +107,9 @@ class ContextTest(unittest.TestCase):
         self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
 
     def test_every_message_survives_verbatim_and_in_order(self):
-        """**全量、不截断、逐字**（用户拍板"先不压缩"）：题目/回复/结果里的 `{}`、
-        换行、标签一个都不许动，顺序就是进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。"""
+        """**进表逐字**：题目/回复/结果里的 `{}`、换行、标签一个都不许动，顺序就是
+        进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。（渲染侧的窗口与摘要是
+        第 39 步的事，钉在下面的窗口用例里；**存储**始终是全量逐字。）"""
         self.ctx.hear("回复 {'a': 1}")
         self.ctx.feed("结果 {task} {0}", "")
         self.ctx.hear("<answer>答案</answer>")
@@ -125,14 +120,60 @@ class ContextTest(unittest.TestCase):
                 ("user", "请查询北京天气"),
                 ("assistant", "回复 {'a': 1}"),
                 ("tool", "【上一条命令的执行结果（原文）】\n结果 {task} {0}"),
-                (
-                    "user",
-                    "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
-                    "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
-                ),
                 ("assistant", "<answer>答案</answer>"),
             ],
         )
+
+
+    def test_the_summary_rides_right_after_the_task(self):
+        """第 39 步：`summary` 渲染成题目后面的**一条 user 消息**（`【历史摘要】` 头 ——
+        标题当内容标签的既有模式）。没有摘要时这条不出现（首问 = `[system, user]`，
+        由 `test_a_fresh_context_opens_with_the_task` 钉着）。"""
+        self.ctx.summary = "【总目标】交 token"
+        roles = [m["role"] for m in self.messages()]
+        self.assertEqual(roles[:3], ["system", "user", "user"])
+        self.assertEqual(
+            self.messages()[2],
+            {"role": "user", "content": "【历史摘要】\n【总目标】交 token"},
+        )
+
+    def test_the_window_keeps_the_last_two_rounds(self):
+        """第 39 步压缩：题目与摘要永远在，**原始往来只留最近两轮**（最后
+        `_WINDOW` 条 assistant 及其后全部 —— tool 结果、纠错、nudge 都跟着
+        它们前面那条 assistant 走）。更早的只活在摘要里 ⇒ prompt 从
+        O(全部历史) 变成 O(窗口)，64KB 回执堆不出来了。"""
+        for i in (1, 2, 3):
+            self.ctx.hear(f"回复{i}")
+            self.ctx.feed(f"结果{i}", "")
+        self.ctx.summary = "旧账都在这里"
+        self.assertEqual(
+            [m["role"] for m in self.messages()],
+            ["system", "user", "user", "assistant", "tool", "assistant", "tool"],
+        )
+        contents = [m["content"] for m in self.messages()]
+        self.assertIn("回复2", contents)
+        self.assertIn("回复3", contents)
+        self.assertNotIn("回复1", contents, "第一轮的原文被窗口掐掉 —— 它只有摘要替它记着")
+
+    def test_a_short_history_is_kept_in_full(self):
+        """assistant 不超过 `_WINDOW` 条 ⇒ 全量保留（窗口掐不着）—— 短任务与
+        压缩前逐字节同形，压缩只在长任务上才真正生效。"""
+        self.ctx.hear("回复1")
+        self.ctx.feed("结果1", "")
+        self.ctx.hear("回复2")
+        self.assertEqual(
+            [m["role"] for m in self.messages()],
+            ["system", "user", "assistant", "tool", "assistant"],
+        )
+
+    def test_a_tail_nudge_stays_in_the_window(self):
+        """尾巴上的 nudge 跟着最后一条 assistant 走 —— 窗口切的是"轮"，
+        不是"条数"，收尾那句话不会被单独掐掉。"""
+        for i in (1, 2, 3):
+            self.ctx.hear(f"回复{i}")
+            self.ctx.feed(f"结果{i}", "")
+        self.ctx.nudge()
+        self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
 
 
 if __name__ == "__main__":

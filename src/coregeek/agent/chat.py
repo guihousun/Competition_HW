@@ -1,4 +1,4 @@
-"""Agent 的"怎么读回复"：三个谓词 + 一处清洗。**模板不在这里**（第 37 步起在 `prompt.py`）。
+"""Agent 的"怎么读回复"：四个谓词 + 一处清洗。**模板不在这里**（第 37 步起在 `prompt.py`）。
 
 **这个包不认识游戏**：收字符串、吐字符串，只依赖标准库。切分判据是"什么时候跟 LLM 说话"
 属策略（在 `planner.task_channel`），"说什么、怎么解析回复"与战场规则无关。
@@ -42,6 +42,9 @@ _INNER_RE = re.compile(r"<(\w+)\b[^>]*>(.*?)</\1>", re.DOTALL)
 #: 是个**前缀**判据，`<answer>`、`<answer >`、`<answer 乱写>` 都算"它想作答"）。
 _ANSWER_RE = re.compile(r"<answer[^>]*>(.*?)</answer>", re.DOTALL)
 _ANSWER_MARK_RE = re.compile(r"<answer")
+#: **执行摘要**（第 39 步压缩机制的原料）：LLM 每条回复搭车的 `<summary>` 块。
+#: 成对才作数（与 `_ANSWER_RE` 同一条规矩），`summary_of` 只取**第一对**。
+_SUMMARY_RE = re.compile(r"<summary\b[^>]*>(.*?)</summary>", re.DOTALL)
 #: `looks_like_tool` 那个**宽**判据（见那里）。与上面几个相反，它**故意只认前缀**。
 _TOOL_MARK_RE = re.compile(r"<tool")
 #: **反转义表**（第 37 步）：`prompt.TOOL_PROMPT` 教了 LLM 对 XML 特殊字符转义 ⇒
@@ -126,6 +129,18 @@ def _unescape(text: str) -> str:
     return text
 
 
+def summary_of(reply: str) -> str:
+    """每条回复搭车的**执行摘要** ⇒ 第一对 `<summary>` 块的内容；取不到 ⇒ `""`。
+
+    ⚠️ **best-effort 是它的立身规则**：摘要取不到（没写 / 半截 / 空块）⇒ `""`，
+    调用方（`Agent.hear`）**保留旧摘要继续** —— 绝不因为摘要缺失而重问
+    （重问要花一回合，而摘要是纯赚的搭车品）。与 `answer_of` 对空块的态度一致：
+    **不回落原文**，拿半截标记去凑只会把标签串当内容用。
+    """
+    block = _SUMMARY_RE.search(reply)
+    return block.group(1).strip() if block else ""
+
+
 def looks_like_tool(reply: str) -> bool:
     """这条回复**像是**工具调用吗？只认开标签前缀出现（故意判宽）。
 
@@ -148,20 +163,20 @@ def answer_of(reply: str) -> str:
 
     三级判据：
 
-    1. 把**第一个工具块整段挖掉**得到 `rest`，再扫：出现 `<answer` 标记 ⇒ 只认**成对块**的内容
-       （配对不上或为空 ⇒ `""`，**不回落成原文**）。
-       ⚠️ **"先挖掉工具块"这一条是第 35 步那个污染缺陷的正面修法**：`SOP2Prompt` 沉淀的正文
-       讲的往往正是"答案要用 `<answer>` 包" ⇒ 里面会出现**字面量** `<answer>…</answer>`，
-       而整块挖走后那些实例压根扫不到。落在块**内**的 `<answer>` 一律**不算答案**
-       （分不清那是真答案还是 SOP 里的示例，就不许当成答案交上去）。
+    1. 把**全部结构块**（每一对 `<tool>` 与 `<summary>`，第 39 步起从"第一个工具块"
+       放宽成"所有结构块"）整段挖掉得到 `rest`，再扫：出现 `<answer` 标记 ⇒ 只认
+       **成对块**的内容（配对不上或为空 ⇒ `""`，**不回落成原文**）。
+       ⚠️ **"先挖掉结构块"是污染缺陷的正面修法**：`SOP2Prompt` 沉淀的正文（第 35 步）与
+       执行摘要（第 39 步）讲的往往都是"答案要用 `<answer>` 包" ⇒ 里面会出现**字面量**
+       `<answer>…</answer>`，而整块挖走后那些实例压根扫不到。落在结构块**内**的
+       `<answer>` 一律**不算答案**（分不清那是真答案还是示例，就不许当成答案交上去）。
     2. **否则像是工具调用 ⇒ `""`**（⚠️ 用**原文**判，不能用挖过的 —— 挖完就不像了，会误放行
        `<tool>ls</tool>` 后面跟着的那句话）。
     3. **否则原文即答案**（判题器的 LLM 是黑盒，这是唯一的退路）。
 
-    没有工具块的回复 ⇒ 与第 34 步之前的实现**逐字一致**。
+    没有结构块的回复 ⇒ 与第 34 步之前的实现**逐字一致**。
     """
-    match = _TOOL_RE.search(reply)
-    rest = reply[: match.start()] + reply[match.end() :] if match else reply
+    rest = _SUMMARY_RE.sub("", _TOOL_RE.sub("", reply))
     if _ANSWER_MARK_RE.search(rest):
         block = _ANSWER_RE.search(rest)
         return block.group(1).strip() if block else ""

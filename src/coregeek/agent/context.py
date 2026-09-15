@@ -7,10 +7,12 @@
 `Context` 只管存储与渲染；什么时候建、每轮往里放什么 是 `Agent` 的事
 （这里收发的全是字符串，不认识游戏）。
 
-**全量、不压缩**（用户拍板"先不压缩"）：题目、回复、沙盒回执逐字进表、逐字渲染
-（`json.dumps`/`loads` 负责转义与还原，`{}` 天然无害）。代价是长任务的 prompt
-无上界增长（极端 = 多轮 64KB 沙盒回执）—— 已记进 `code-task.md` 的
-"仍生效的不确定性"，压缩是既定的下一步。
+**存储全量、渲染有窗**（第 39 步起，"先不压缩"的旧口径就此兑现退役）：消息表仍是
+**逐字全量**（`json.dumps`/`loads` 负责转义与还原），但 `render()` 只输出
+**题目 + 执行摘要 + 最近 `_WINDOW` 轮** —— prompt 从 O(全部历史) 变成 O(窗口)，
+长任务的 64KB 沙盒回执堆不出来了（旧账：无上界增长会撞"响应超时"这条红线）。
+摘要由 `Agent.hear` 从每条回复的 `<summary>` 块被动提取（best-effort），渲染成
+题目后面的一条 user 消息，替被窗口掐掉的旧往来记账。
 
 **`system` 不在消息表里**：它是 Agent **每次发送前刷新**的一整段（模板 + 工具清单 +
 沉淀的 SOP）。不冻在构造时的原因是 SOP 是活的 —— 任务进行中沉淀的 SOP，下一轮就
@@ -43,6 +45,12 @@ _TOOL = "tool"
 #: 措辞是拍的，实盘可调。
 NUDGE = "请继续。"
 
+#: 渲染窗口（第 39 步，**拍的**）：原始往来最多保留最近几"轮"——一条 assistant 及
+#: 其后跟着的 tool 结果 / 纠错 / nudge 算一轮。更早的只有摘要替它记着。2 的依据：
+#: 短任务（≤3 轮）在这个窗口下与不压缩**逐字节同形**（掐不着），长任务的 prompt
+#: 才真正被压住。要调就改这一个常量。
+_WINDOW = 2
+
 
 class Context:
     """同一道题的会话上下文。**建一个用一道题**（`Agent.chat` 换题即换新）。"""
@@ -53,6 +61,11 @@ class Context:
         self.task = task
         #: system（`prompt.py` 的段模板）。**Agent 每次发送前刷新**，见模块 docstring。
         self.system = ""
+        #: **执行摘要**（第 39 步压缩的另一半）：LLM 每条回复搭车的 `<summary>` 内容，
+        #: 由 `Agent.hear` 被动提取（**best-effort**：这条回复没带就保留旧值）。
+        #: 渲染成题目后面的一条 user 消息，替被窗口掐掉的旧往来记账 —— 所以它必须
+        #: 装得下"要交什么 + 关键数据原文"（prompt 的四槽结构管这个）。
+        self.summary = ""
         #: **构造即问**：首条 user 消息就是题目原文（不加包装 —— 结构由 role 表达）。
         self._messages: list[Message] = [Message(_USER, task)]
 
@@ -96,11 +109,29 @@ class Context:
         self._messages.append(Message(_ASSISTANT, reply))
 
     def render(self) -> str:
-        """整份 prompt：**标准 messages JSON** —— system 头 + 这道题的全部往来。
+        """整份 prompt：**system + 题目 + 摘要 + 最近 `_WINDOW` 轮**（第 39 步压缩）。
 
-        `json.dumps`（`ensure_ascii=False`、紧凑分隔符）—— 正文里的 `{}`、换行、
-        标签全部逐字保留（`loads` 一转回来就是原文），也永远不经过 `str.format`。
+        存储全量、渲染有窗（见模块 docstring）：题目永远完整（那是"要交什么"的
+        权威来源，掐什么也不能掐它）；摘要在题目后面、原始往来前面 —— 它讲的是
+        旧账，最近的往来才是现状。`json.dumps`（`ensure_ascii=False`、紧凑分隔符）
+        —— 正文里的 `{}`、换行、标签全部逐字保留。
         """
-        messages = [{"role": "system", "content": self.system}]
-        messages += [{"role": m.role, "content": m.text} for m in self._messages]
+        messages = [
+            {"role": "system", "content": self.system},
+            {"role": _USER, "content": self.task},
+        ]
+        if self.summary:
+            messages.append({"role": _USER, "content": f"【历史摘要】\n{self.summary}"})
+        messages += [{"role": m.role, "content": m.text} for m in self._window()]
         return json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+
+    def _window(self) -> list[Message]:
+        """最近 `_WINDOW` 轮的原始往来：从消息表第 1 条起（第 0 条是题目，
+        render 单独放），最后 `_WINDOW` 条 assistant 里**最早**的那条起、其后全部
+        保留 —— tool 结果 / 纠错 / nudge 都跟着它们前面那条 assistant 走。
+        assistant 不足 `_WINDOW` 条 ⇒ 全量（短任务掐不着）。"""
+        body = self._messages[1:]
+        kept = [i for i, m in enumerate(body) if m.role == _ASSISTANT]
+        if len(kept) <= _WINDOW:
+            return body
+        return body[kept[-_WINDOW]:]

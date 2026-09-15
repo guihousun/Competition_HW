@@ -3,6 +3,7 @@
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -216,6 +217,42 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("    - 参数: 测试参数", gen_all_tool_prompt(self.agent._tools))
         self.assertEqual(self.agent.tool_call("测试用工具", [("参数", "实参")]), "命令:实参")
         self.assertNotIn("测试用工具", gen_all_tool_prompt(Agent()._tools))
+
+
+class HearSummaryTest(unittest.TestCase):
+    """`Agent.hear` 对执行摘要的**被动提取**（第 39 步压缩的接线）。
+
+    **best-effort**：回复里带了 `<summary>` 就更新、没带就原样保留旧摘要 ——
+    摘要缺失绝不重问、绝不报错（那会把"免费的搭车品"变成"每回合的税"）。
+    提取在 `Agent` 这一层做（`chat.summary_of` 是谓词、`Context` 只管存与渲染），
+    `context.py` 保持零包内 import 的叶子身份。
+    """
+
+    def setUp(self) -> None:
+        self.agent = Agent()
+
+    def test_a_summary_in_the_reply_is_carried_into_the_next_prompt(self):
+        self.agent.chat("题")
+        self.agent.hear("<summary>【总目标】交 token</summary><tool>ls</tool>")
+        prompt = json.loads(self.agent.chat("题"))
+        self.assertIn("【历史摘要】\n【总目标】交 token", [m["content"] for m in prompt])
+
+    def test_a_reply_without_a_summary_keeps_the_old_one(self):
+        """没带摘要的回复**不动**旧摘要 —— 摘要是一步一步滚出来的，
+        某一轮忘了写不该把它清掉。"""
+        self.agent.chat("题")
+        self.agent.hear("<summary>旧摘要</summary>")
+        self.agent.hear("没有摘要的回复")
+        prompt = json.loads(self.agent.chat("题"))
+        self.assertIn("【历史摘要】\n旧摘要", [m["content"] for m in prompt])
+
+    def test_a_new_summary_replaces_the_old_one(self):
+        self.agent.chat("题")
+        self.agent.hear("<summary>旧的</summary>")
+        self.agent.hear("<summary>新的</summary>")
+        prompt = json.loads(self.agent.chat("题"))
+        self.assertIn("【历史摘要】\n新的", [m["content"] for m in prompt])
+        self.assertNotIn("旧的", [m["content"] for m in prompt])
 
 
 if __name__ == "__main__":
