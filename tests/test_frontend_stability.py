@@ -379,6 +379,16 @@ function stubPost() {
     app.syncProfileControls();
   });
 
+  await check('dense wave keeps every arrival but uses one readable text cue', () => {
+    const effects = new HW.Effects();
+    const spawned = Array.from({length:35}, (_, i) => ({kind:i<5?'middleRobot':'smallRobot',
+      robot:300000+i, pos:{x:13-Math.floor(i/9), y:5+i%%9}}));
+    effects.spawnForFrame({actors:[]}, {spawned}, 550, {tile:24, height:32});
+    assert(effects.items.filter(e => e.type === 'warp').length === 35, 'all actual robots still appear');
+    const labels = effects.items.filter(e => e.type === 'float');
+    assert(labels.length === 1 && labels[0].text.includes('35'), 'one count replaces overlapping repeated labels');
+  });
+
   await check('resize ticks with the same box never clear the canvas', () => {
     resetApp();
     app.world = liveWorld(1);

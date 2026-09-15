@@ -276,12 +276,13 @@
       awaiting_judgement: '等待判题反馈', stopped: '本次求解已停止', ended: '任务已结束'};
     const active = Boolean(state.phaseTask);
     const report = meta.task_report || {};
-    const ended = !active && Boolean(report.ended || report.rewards);
+    const ended = !active && Boolean(task.stage === 'ended' || report.ended || report.rewards);
     setText($('agent-stage'), ended ? '任务已结束 · 可回看证据' : stages[task.stage] || '尚未启动');
     const used = Number(judge.llmUsedToday || 0);
     setText($('agent-budget'), `第 ${Math.floor((Number(state.roundNo || 1) - 1) / 130) + 1} 天普通额度 ${used}/3 · ${active ? '当前自进化任务调用不计日限' : '新闻与宝藏共享日限'}`);
     const counts = `${ended ? '最近一题' : '本题'} ${task.prompts || 0} 次模型 · ${task.commands || 0} 次沙盒 · ${task.inspections || 0} 次原文检索`;
-    setText($('agent-operation'), counts + (task.stop_reason ? ` · ${task.stop_reason}` : ''));
+    const stopReason = task.stop_reason === 'task_not_confirmed' ? '当前已不在有效任务中' : task.stop_reason;
+    setText($('agent-operation'), counts + (stopReason ? ` · ${stopReason}` : ''));
     const worldState = coordinator.world || {};
     updateWorldEvidence(state, worldState, ((planner.tasks || {}).supervisor || {}).news_economy || {});
     const status = worldState.status || {};

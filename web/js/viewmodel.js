@@ -427,8 +427,15 @@
       for (const death of frame.robotDeaths || []) {
         lines.push({ type: 'kill', text: `${U.kindName(death.kind)} ${death.robot} 被击毁 ${U.cellLabel(death.pos)}，击杀分 +${death.score}` });
       }
-      for (const spawn of frame.spawned || []) {
-        lines.push({ type: 'spawn', text: `生成 ${U.kindName(spawn.kind)} ${spawn.robot} ${U.cellLabel(spawn.pos)}（本地压力波次，非官方数量）` });
+      const arrivals = frame.spawned || [];
+      if (arrivals.length > 1) {
+        const counts = new Map();
+        for (const spawn of arrivals) counts.set(spawn.kind, (counts.get(spawn.kind) || 0) + 1);
+        const detail = Array.from(counts, ([kind, count]) => `${U.kindName(kind)} ${count} 只`).join('、');
+        lines.push({ type: 'spawn', text: `本轮生成 ${arrivals.length} 只机器人：${detail}` });
+      }
+      for (const spawn of arrivals) {
+        lines.push({ type: 'spawn', text: `生成 ${U.kindName(spawn.kind)} ${spawn.robot} ${U.cellLabel(spawn.pos)}（本地模拟）` });
       }
       if (frame.gold && frame.gold.before !== frame.gold.after) {
         const delta = frame.gold.after - frame.gold.before;

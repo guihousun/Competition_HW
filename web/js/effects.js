@@ -171,16 +171,21 @@
       }
 
       // 4. Arrivals at dusk, and economy changes.
-      for (const spawn of frame.spawned || []) {
+      const arrivals = frame.spawned || [];
+      for (const spawn of arrivals) {
         const at = center(spawn.pos, 1);
         this._push({
           type: 'warp', at, born: phase(0.6), ttl: lifetime(700, frameMs),
           radius: tile * 1.3, color: PALETTE.robot,
         });
-        this._push({
-          type: 'float', at, text: `${U.kindName(spawn.kind)} 出现`, born: phase(0.62),
-          ttl: lifetime(1100, frameMs), color: PALETTE.robot,
-        });
+      }
+      if (arrivals.length) {
+        const points = arrivals.map(spawn => center(spawn.pos, 1));
+        const at = { x: points.reduce((sum, p) => sum + p.x, 0) / points.length,
+          y: Math.max(tile * 0.5, Math.min(...points.map(p => p.y)) - tile * 0.8) };
+        this._push({ type: 'float', at,
+          text: arrivals.length === 1 ? `${U.kindName(arrivals[0].kind)} 出现` : `机器人出现 ×${arrivals.length}`,
+          born: phase(0.62), ttl: lifetime(1100, frameMs), color: PALETTE.robot });
       }
       if (frame.gold && frame.gold.before !== frame.gold.after) {
         const actor = (world.actors || []).find((a) => a.kind === 'station' && a.owner === 'own');

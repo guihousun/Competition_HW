@@ -174,6 +174,18 @@ class ApproachPriorTests(unittest.TestCase):
         self.assertEqual(defense_layout.primary_approach(plain.station().pos, WIDTH, HEIGHT),
                          defense_layout.primary_approach(built.station().pos, WIDTH, HEIGHT))
 
+    def test_side_base_vertical_offset_does_not_rotate_front(self):
+        # Hand-expected directions from public base geometry, not simulator seeds.
+        for y in (3, 6, 16, 28):
+            with self.subTest(y=y):
+                self.assertEqual(defense_layout.primary_approach(Pos(29, y), WIDTH, HEIGHT), 'W')
+                self.assertEqual(defense_layout.primary_approach(Pos(10, y), WIDTH, HEIGHT), 'E')
+
+    def test_central_footprints_keep_vertical_fallback_under_reflection(self):
+        for x in (19, 20):
+            self.assertEqual(defense_layout.primary_approach(Pos(x, 6), WIDTH, HEIGHT), 'N')
+            self.assertEqual(defense_layout.primary_approach(Pos(x, 28), WIDTH, HEIGHT), 'S')
+
     def test_side_priority_mirrors(self):
         east = defense_layout.layout(Pos(*REPORTED), WIDTH, HEIGHT)
         west = defense_layout.layout(Pos(*MIRROR), WIDTH, HEIGHT)

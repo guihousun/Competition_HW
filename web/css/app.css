@@ -113,6 +113,7 @@ code { font-family: var(--pixel); color: var(--accent-2); }
   background: #10202e; white-space: nowrap;
 }
 .pill.warn { color: #ffd9a0; border-color: #5c4520; background: #241c0f; }
+#profile-note { display: inline-block; max-width: 100%; box-sizing: border-box; white-space: normal; border-radius: 8px; line-height: 1.5; }
 
 /* ----------------------------------------------------------------- stage */
 .stage-head {

@@ -9,7 +9,7 @@ What this module is allowed to know
 -----------------------------------
 Only **public observation geometry**: the map width/height and the base footprint
 (``station_footprint``). The "primary approach" is a strategy *prior* derived from
-"the enemy most likely comes from the map interior" — it is **not** knowledge of
+"side bases expect a horizontal approach from the interior" — it is **not** knowledge of
 future spawns, of the local simulator's wave generation, or of any hidden field
 (no ``_demo``/seed/colour/robot type). It can be wrong for a given night; see the
 limitations in ``docs/ISSUE_12_DEFENCE.md``.
@@ -49,11 +49,11 @@ OPPOSITE = {EAST: WEST, WEST: EAST, NORTH: SOUTH, SOUTH: NORTH}
 def primary_approach(base_pos: Pos, width: int, height: int) -> str:
     """Which map border the enemy is expected to arrive from, as a prior.
 
-    The rule is "toward the map interior": the dominant axis of the vector from
-    the base footprint centre to the map centre wins, and its sign picks the
-    border. A base in the lower-left therefore expects the enemy from the east or
-    the north; a base on the right expects the west. Ties (a base exactly on the
-    centre line) resolve to the horizontal axis, deterministically.
+    Side bases expect an inward horizontal approach, consistent with the fixed
+    approach reported in Issues 12/19. Vertical displacement must not rotate a
+    right-side base's front north merely because it is near the bottom edge.
+    A footprint intersecting the map's centre column uses the vertical interior
+    direction instead. This is a strategy prior, not a claim about exact spawns.
 
     This reads only ``mapInfo.width/height`` and the base position, so it is
     stable across identical snapshots and does not change as towers/walls appear.
@@ -66,15 +66,13 @@ def primary_approach(base_pos: Pos, width: int, height: int) -> str:
     map_cy = (height - 1) / 2.0
     dx = map_cx - base_cx
     dy = map_cy - base_cy
-    if abs(dx) >= abs(dy):
-        if dx == 0:
-            # Exactly on the vertical centre line: fall back to the vertical axis
-            # rather than returning an arbitrary horizontal border.
-            return NORTH if dy < 0 else SOUTH
-        return EAST if dx > 0 else WEST
-    if dy == 0:
-        return EAST if dx > 0 else WEST
-    return NORTH if dy > 0 else SOUTH
+    if max(xs) < map_cx:
+        return EAST
+    if min(xs) > map_cx:
+        return WEST
+    if dy:
+        return NORTH if dy > 0 else SOUTH
+    return EAST if dx >= 0 else WEST
 
 
 def footprint_bounds(base_pos: Pos) -> tuple[int, int, int, int]:
