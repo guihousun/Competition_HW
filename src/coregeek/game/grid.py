@@ -1,6 +1,13 @@
 """几何基元：坐标、方向、距离、寻路、基地几何。**不依赖任何其它模块。**
 
-距离一律用切比雪夫 `max(|dx|, |dy|)`；角色可朝 8 个方向移动。
+两个距离口径，**别混用**（第 33 步起）：
+
+- `Pos.dist` = **切比雪夫直线**。用于"谁离得近"这类**选点**（挑最近的矿、最近的炮）。
+  不绕障，所以它**不是**能走到的步数。
+- `steps_between` = **BFS 真实步数**（绕障）。用于**回合预算**（"这天还来不来得及来回"）。
+  ⚠️ 它有一个 `Pos.dist` 给不出的返回值 **-1（不可达）**，调用方必须自己接住。
+
+角色可朝 8 个方向移动；无权重 ⇒ BFS 的步数就是切比雪夫下的最短路长度。
 """
 
 from collections import deque
@@ -91,6 +98,39 @@ def step_outside(pos: Pos, box: Set[Pos], blocked: Set[Pos], size: tuple[int, in
     return None
 
 
+def steps_between(start: Pos, goal: Pos, blocked: Set[Pos], size: tuple[int, int]) -> int:
+    """走到"**贴着 goal 的一格**"要几步 —— **BFS 真实步数**（绕障）；走不到 ⇒ **-1**。
+
+    与 `step_toward` 同一个终点约定（贴着 goal 一格、goal 自己当障碍）、同一套边界裁剪，
+    差别只在它**返回步数而不是第一步**：`start` 已经贴着 goal ⇒ 0。
+
+    **存在的理由**：回炮位必须绕过整面围墙、从背面那道门进来，直线距离会把它低估得离谱
+    （第 33 步：所有回合预算从切比雪夫换成它，见模块 docstring）。
+    ⚠️ **-1 是本函数独有的失败态** —— `Pos.dist` 永远不会返回它，所以每个调用点都要自己
+    决定"不可达怎么办"：一律按"这趟不去了"处理（安全方向：宁可少干一件事，
+    不可把回程预算算成负数、把人留在墙外过夜）。
+    """
+    if start.dist(goal) <= 1:
+        return 0  # 已经贴着 goal（含 start 就是 goal）
+    width, height = size
+    # 队列里存 `(当前格, 从 start 走了几步)` —— 这是与 `step_toward` 唯一的实现差别
+    queue: deque[tuple[Pos, int]] = deque([(start, 0)])
+    seen = {start}
+    while queue:
+        cell, depth = queue.popleft()
+        for step in STEPS:
+            nxt = Pos(cell.x + step.x, cell.y + step.y)
+            if nxt in seen or nxt in blocked:
+                continue
+            if not (0 <= nxt.x < width and 0 <= nxt.y < height):
+                continue
+            seen.add(nxt)
+            if nxt.dist(goal) == 1:
+                return depth + 1
+            queue.append((nxt, depth + 1))
+    return -1
+
+
 def base_cells(top_left: Pos) -> set[Pos]:
     """基地的 2×2 四格。`pos` 给的是**左上角** ⇒ x 向右增、**y 向下减**。"""
     return {Pos(top_left.x + dx, top_left.y - dy) for dx in (0, 1) for dy in (0, 1)}
@@ -137,30 +177,72 @@ def _front_back(base: Pos, width: int) -> tuple[int, int, int]:
 
 
 def wall_cells(base: Pos, width: int) -> tuple[Pos, ...]:
-    """可砌围墙的 **14 格，按建造优先级排**（**背面整列一格都不砌**）。
+    """可砌围墙的 **18 格，按建造优先级排**（**背面只留中间 2 格当门**）。
 
-    6×6 边框里既不属于基地 4 格、也不属于武器环 12 格的格子，共 20 格；砌其中 14 格：
-    **正面列 6 + 顶行 4 + 底行 4**。正面/背面由 `_front_back` 给（左半基地 ⇒ 正面 `x = bx+3`）。
-    顺序 = 正面列（正对基地的先砌）→ 顶行 → 底行。
+    6×6 边框里既不属于基地 4 格、也不属于武器环 12 格的格子，共 20 格；砌其中 18 格：
+    **正面列 6（含封口那一格）+ 两侧行各 5（含背面两角）+ 背面 2**。
+    正面/背面由 `_front_back` 给（左半基地 ⇒ 正面 `x = bx+3`、背面 `x = bx-2`）。
 
-    **背面整列 6 格（含上下两角）留成一道永远不砌的"门"**：环一闭合工人就进出不得
-    （采不了矿、回不到环内操炮），而 `remove`（拆墙）没实现 ⇒ 关进去就是整场出不来。
-    正面仍完整，钻进来的机器人紧贴着武器列与基地，等于直接撞在火力上。
-    ⚠️ 门那 6 格里**没有任何建筑**，所以能堵门的只有**单位**。
+    **顺序 = 沿环走一圈**，起点在正面列的一端、终点紧挨封口格（零新机制，就是元组的次序）：
+    正面列（一端扫到另一端）→ 一侧行（正面 → 背面）→ 背面自上而下
+    （**先砌中间那 2 格把门收窄**、穿过门、落到另一侧的背面角）→ 另一侧行（背面 → 正面）
+    → **封口格**。
+    ⚠️ 这不是"顺手排的"：**走一圈的绕行量最小**，而工人一天只有 70 回合。同一份合成局面实测
+    （`BuildWallTest`，矿在 9 步外）：旧的"正面列 → 顶行 → 底行 → 背面 → 封口格"跑完 70 回合
+    只砌上 **17** 格、**封口格当天没砌上**（正面整晚开着口）；走一圈 **18** 格全砌上，
+    第 65 回合收官、手里正好剩 0 块石头。差的就是那些横穿盒子再折回来的来回。
+
+    **背面中间 2 格（基地纵深中心那一行及其下一行）永远是空地**（`door_cells` 给的就是它）：
+    它是工人进出、采石、
+    跑商店的唯一通道。环一闭合就只剩这一处能进出 ⇒ **门被单位堵死时里面的人出不来**
+    （第 34 步起有 `remove` 补救：`planner` 拆一格放人、当天当临时门、天黑前补回；
+    第 33 步把门从"整列 6 格"收成这 2 格：入口从 6 路并行变 2 路串行，
+    机器人只能挤在同一处进，火箭溅射与加特林双弹的价值都翻倍）。
+    ⚠️ 门那 2 格里**没有任何建筑**，所以能堵门的只有**单位** —— 堵满 2 格比堵满 6 格容易得多，
+    `_trapped` 那道闸门因此反而更常真的合上。
+
+    **封口格 = 正面列正中 `(front_x, by)`，排在最后一个** —— 这是"白天开着方便通行、
+    天黑前砌上封死"的落地方式，**零新机制**：靠建造优先级表达（`_ring` 保序、
+    `_build_walls` 取 `free[0]`），排最后 ⇒ 白天最后才砌它。
+    ⚠️ **第 1 天**靠建造顺序表达（排最后 ⇒ 白天最后才砌它）；**第 2 天起环开局就是满的**，
+    开口改由 `planner` 的**临时门**机制重开（第 34 步）：工人拆一格当白天的通道、
+    `day_rounds_left <= HOLE_PATCH_LEFT` 时再砌回去 —— 语义还是"白天开着、天黑前封死"，
+    只是从"排在建墙顺序最后"换成"排到时间窗最后"。**几何与函数一个字没动。**
+    ⚠️ 也正因为排最后，**封口格的落位决定了工人一天够不够用** —— 走一圈的排法让它在第 65 回合
+    就砌上了（见上），换回"先一侧行再另一侧行"的排法它当天砌不上、整整一晚前面开着口。
     """
-    d, far, _ = _front_back(base, width)
-    front_x = far + 2 * d
+    d, far, near = _front_back(base, width)
+    front_x, back_x = far + 2 * d, near - 2 * d
     ys = list(range(base.y - 3, base.y + 3))  # 6 格
     xs = list(range(base.x - 2, base.x + 4))  # 6 格
-    #: 基地纵深中心的 2 倍 —— 用整数比大小，避免浮点
-    center = 2 * base.y - 1
+    #: 侧面两条的中间 4 格（两端的角归正面列 / 背面列）
+    side = xs[1:-1]
 
-    front = sorted(ys, key=lambda y: (abs(2 * y - center), y))
-    order = [Pos(front_x, y) for y in front]
-    # `xs[1:-1]` 正好排除两端的正面列与背面列；`reversed` = 从正面往背面铺
-    for row_y in (ys[-1], ys[0]):
-        order += [Pos(x, row_y) for x in reversed(xs[1:-1])]
-    return tuple(order)
+    #: 白天开口、天黑前封上的那一格（正面列正中）
+    seal = Pos(front_x, base.y)
+    # ① 正面列（迎着机器人）：从一端扫到另一端（跳过封口格），含上下两角。
+    #    终点是 `ys[-1]` 那个角，正好接上 ② 的第一格。
+    order = [Pos(front_x, y) for y in ys if Pos(front_x, y) != seal]
+    # ② `ys[-1]` 那一行：从正面往背面铺，末了补上背面那个角
+    order += [Pos(x, ys[-1]) for x in reversed(side)] + [Pos(back_x, ys[-1])]
+    # ③ 背面从那个角一路下来：先砌中间 2 格之一（门从整列 6 格收成中间 2 格就靠这两格），
+    #    再穿过门、砌另一格，最后落到底行那个角
+    order += [Pos(back_x, base.y + 1), Pos(back_x, base.y - 2), Pos(back_x, ys[0])]
+    # ④ 另一行：从背面往正面铺，终点紧挨封口格
+    order += [Pos(x, ys[0]) for x in side]
+    # ⑤ **封口格排最后** ⇒ 白天最后才砌它
+    return tuple(order + [seal])
+
+
+def door_cells(base: Pos, width: int) -> tuple[Pos, ...]:
+    """**永远不砌的那 2 格** —— 背面列正中（基地纵深中心那一行及其下一行），盒子唯一的进出口。
+
+    存在理由是给"自己人算不算障碍"一个判据（`planner._walled`）：**能堵门的只有单位**
+    （那 18 格墙里没有任何建筑），所以"自己人站在待砌的格子上"这个问题**只在门口有意义**。
+    """
+    d, _far, near = _front_back(base, width)
+    back_x = near - 2 * d
+    return (Pos(back_x, base.y), Pos(back_x, base.y - 1))
 
 
 def weapon_sites(base: Pos, width: int) -> tuple[Pos, ...]:

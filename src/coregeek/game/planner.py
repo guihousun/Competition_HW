@@ -3,8 +3,17 @@
 每个角色每回合只有一个动作（顺序见 `docs/策略指导.md`）：
 
 - **白天·开拓者**：去最近一个能接的任务点 `acceptTask`；领到就被钉死（见 `plan`）。
-- **白天·工人**：建武器 → 采石砌墙 → 卖矿 → 采最值钱的矿，一件不行才轮到下一件。
+- **白天·工人**：建武器 → 采石砌墙 → 卖矿 → 采最值钱的矿，一件不行才轮到下一件；
+  **环砌完后的白天末尾提前回炮位**（第 33 步，只为夜里第一波能站在炮前）。
 - **夜里·所有角色**（含开拓者，`attack` 的可用角色是"全部"）：认领一座武器走过去，贴着就开火。
+
+⚠️ **两个距离口径别混用**（第 33 步）：**回合预算**（来不来得及来回）一律用 BFS 真实步数
+（`steps_between`，绕障，**-1 = 走不到**）；**选点/贴着**用切比雪夫 `Pos.dist`
+（`dist <= 1` 是"站在建造位/采集位/炮位旁"的判据，不是步数）。射程与溅射也是切比雪夫 —— 那是规则。
+
+⚠️ **围墙是 18 格、背面只留中间 2 格**（第 33 步把门从整列 6 格收窄）：环几乎闭合之后，
+进出只剩环内那几条走廊 ⇒ ① 回炮位/回工地的**真实步数远大于直线**（BFS 那条口径的来源）；
+② "谁站在走廊格上"会频繁影响判据 —— `_walled` 因此把自己人**只在门口**算成障碍（见它的 docstring）。
 
 返回 `{角色ID: 指令}`，key 用字符串（JSON 对象的 key 本来就是字符串）；
 ⚠️ **`attack` 是唯一的例外** —— 它的 key 是**武器 id**，操控者在 `controllerId` 里。
@@ -23,10 +32,20 @@ from ..agent import AGENT  # 与 LLM 说什么不在策略层
 from ..agent.chat import answer_of, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
-from .grid import STEPS, Pos, box_cells, step_outside, step_toward, wall_cells, weapon_sites
+from .grid import (
+    STEPS,
+    Pos,
+    box_cells,
+    door_cells,
+    step_outside,
+    step_toward,
+    steps_between,
+    wall_cells,
+    weapon_sites,
+)
 from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
-from .world import Robot, Turn, Weapon
+from .world import ROUNDS_PER_DAY, Robot, Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,8 +73,10 @@ WALL_COST = 1
 #: 一块石头的完整代价：采 1 回合 + 挪 1 回合 + 建 1 回合。
 ROUNDS_PER_STONE = 3
 
-#: 容错余量（回合）：留给"从矿走回工地、把石头砌完"，同时吸收距离估算的误差
-#: —— 下面的距离一律用切比雪夫，绕障时会低估。
+#: 容错余量（回合）：留给"从矿走回工地、把石头砌完"这类收尾动作。
+#: ⚠️ 第 33 步起下面的距离一律用 **BFS 真实步数**（`grid.steps_between`）⇒ 它现在是**真余量**，
+#: 不再是"吸收切比雪夫低估"的补丁（那正是实盘里"人到不了炮位"的根因之一）。
+#: 唯一还够不到的是"下一回合地图变了"——那是黑盒，留多少都不够，5 是拍的。
 TIME_MARGIN = 5
 
 #: 能卖给小贩的矿：三种（含多余的石头），顺序无关紧要，挑哪种由 `Turn.vendor_prices` 现算。
@@ -81,6 +102,18 @@ VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
 
 #: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
 DETOUR_MAX = 2
+
+#: 拆墙（第 34 步）—— **开洞能省下这么多步以上才值得拆**（用户拍的口径）。
+#: ⚠️ 它只算**这一趟**的收益，而拆 + 补的账是：拆 1 回合 + 补 1 回合 + 再采一块补回去的石头
+#: ≈ 2 回合（拆掉的那块石头不回收）⇒ **单向 4 回合上下**。所以 5 是"单趟回本点"：
+#: 工人一天出/回各过一趟就赚，只出不回则打平。**5 是拍的，且是这一步唯一的调参旋钮。**
+HOLE_MIN_SAVING = 5
+
+#: 白天还剩这么多回合以上才允许拆（门要开得够久才回本）；剩这么多回合以内**必须补上**。
+#: ⚠️ `HOLE_MIN_LEFT > HOLE_PATCH_LEFT` ⇒ **两个窗口不相交 ⇒ 一天最多拆一次** ——
+#: 这才是防"拆了补、补了拆"净亏的真正机制（不是上面那个门槛）。两个数都是拍的。
+HOLE_MIN_LEFT = 30
+HOLE_PATCH_LEFT = 15
 
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
@@ -115,8 +148,22 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
                 claimed.add(step)
                 continue
 
+        # **有人被关在盒子里 ⇒ 工人去拆一格放人**（第 34 步，用户要求）。
+        # 与上面那道闸门是**预防 vs 补救**的关系：闸门管"还没砌完时别把谁关进去"，
+        # 这一支管"已经被关住了怎么办"（门让机器人堵死是闸门拦不住的）。放在收工闸门**之前**：
+        # 放人比回炮位要紧，而且它自己带`day_rounds_left > HOLE_MIN_LEFT`这道时间门。
+        if turn.is_day and _rescue(role, turn, cmds, claimed, box):
+            continue
+
         if not turn.is_day:
             _defend(role, turn, cmds, claimed, taken, assigned)  # 夜里还没被钉住的角色回炮位
+            continue
+
+        # **白天收工**（第 33 步）：环砌完了 ⇒ 只在"离夜里第一波只剩回程步数"时才回家
+        # （判据在 `_leave_for_the_post` 里）。**补墙优先于收工**，所以环没砌完时这一支不生效
+        # —— 那时人继续砌/采石，而 `_stones_to_mine` 的 BFS 预算自己会拦住"来不及的远矿"，
+        # 不会把人拖到天黑还在墙外。⚠️ 这一支**只发 move**，绝不能复用 `_defend`（会发 attack）。
+        if not _ring(turn) and _leave_for_the_post(role, turn, cmds, claimed, taken):
             continue
 
         if isinstance(role, Pioneer):
@@ -219,7 +266,17 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
     call = tool_of(reply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
-    retry = answer if any(e.code == 2 for e in turn.errors) else ""
+    #: 判题器**本轮**报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件。
+    rejected = any(e.code == 2 for e in turn.errors)
+    #: 它自己的原话：黑盒里**唯一**能回答"错在哪一项"的东西。第 35 步起跟答案一起回灌，
+    #: 在那之前它只进日志（`_clip(turn.errors)` 那行 INFO）。
+    why = "；".join(e.description for e in turn.errors if e.code == 2 and e.description)
+    #: ⚠️ **没答案就不纠错**（判据 ④ 的定义）：骂的那一份必须与交的那一份同源。
+    #: 判题器没给描述（`why` 空）⇒ 退回第 34 步的行为：只骂答案本身，
+    #: 不为"少了一句话"把整段纠错吞掉（那是判题器侧的信息缺失，不是我们该丢的信心）。
+    retry = ""
+    if rejected and answer:
+        retry = f"{answer}\n【判题器反馈】：{why}" if why else answer
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（**必须压在 ③ 前**）
         return AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
@@ -287,7 +344,8 @@ def _take_task(
 def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) -> None:
     """服任务中：把手上的答案**原样**交上去。**这里从来不移动**（挪出任务点周围一格任务即作废）。
 
-    答案 = `answer_of(llmResp)`：`<answer>…</answer>` 里包着就取块内容，否则**原文即答案**。
+    答案 = `answer_of(llmResp)`：先挖掉工具块、认块外 `<answer>…</answer>` 里的内容，
+    再不然**原文即答案**（工具块**内**的 `<answer>` 一律不算 —— 那多半是 SOP 正文里的示例）。
     **空答案不发**（可能被判成"字段缺失"，那是红线里的"指令非法"）。
 
     **每回合都交**：判题器按"提交过的通过率最高的答案"算分，反复提交是预期用法；
@@ -317,6 +375,12 @@ def _build_walls(
     前者墙还没砌完，跑去采矿就是跑到地图另一头、几十回合回不来。所以闸门挡住的这一支原地待命。
     """
     free = [c for c in _ring(turn) if c not in sites]
+    if free and _door_open(turn):
+        # **白天中段：环上那个缺口当"临时门"用，先别补**（第 34 步）。
+        # 这正是封口格 `(13,24)` 的同一个语义（"白天开着通行、天黑前封死"），
+        # 只是第 2 天起开口不是靠建造顺序、而是靠时间窗表达 —— 于是 `free` 空掉之后
+        # 自然落进下面那一支（卖 → 升级 → 采闲矿），**不需要单独一个"别补墙"的分支**。
+        free = []
     if not free:
         # 墙砌满了 ⇒ **先卖矿、买得起就去升级、最后才去采**（第 29 步的顺序：升级优先于
         # 采矿是用户拍板；卖在最前是因为卖来的钱正好补上券的差价）。
@@ -360,25 +424,45 @@ def _build_walls(
 
 
 def _walled(turn: Turn) -> frozenset[Pos]:
-    """"**假设墙砌满**"时的障碍集：现已挡路的照原样 + 全部 14 格墙。
+    """"**假设墙砌满**"时的障碍集：现已挡路的照原样 + 全部 18 格墙。
 
-    闸门问的是**将来** —— 现在走得出去不代表砌完还走得出去，而 `remove`（拆墙）没实现。
-    ⚠️ **自己人站的那格也算障碍**，与 `_ring` 的"自己人算路过"故意相反：
-    `_ring` 问"这格要不要砌"，这里问"会不会有人出不来"。代价是宁可晚砌一回合。
+    闸门问的是**将来** —— 现在走得出去不代表砌完还走得出去。
+
+    ⚠️ **第 34 步起补救的通道有了**（`remove` + `_rescue`），但那**不构成撤销这道闸门的理由**：
+    闸门是**预防**（零成本、砌墙的那一刻就避开），`_rescue` 是**补救**（1 回合 + 1 块不退的石头
+    + 一整天的洞）。两者并存，各管各的 —— 别因为"反正能救"就把闸门拆了。
+
+    ⚠️ **自己人算不算障碍，只看门那 2 格**（与 `_ring` 的"自己人一律算路过"故意相反，
+    但也不是一律算障碍）：那 18 格墙里没有任何建筑 ⇒ **能堵门的只有单位**，
+    所以"自己人站在格子上"这个问题**只在门口有意义**。环内那 16 格（基地 + 武器环）
+    站着的自己人是**过路的**：那不是墙，他下一回合就走。
+    ⚠️ **第 33 步实测的代价**（门从 6 格收到 2 格之后暴露出来的）：环一闭合，进出只剩
+    环内那几条走廊，于是"一个工人正好站在走廊格上"变成常事。旧口径把他也算成墙 ⇒
+    走廊另一头的工人被判成"砌满就出不去"，闸门 (2) 把他送出去一格；下一回合他不被围了、
+    又走回来砌墙 —— **两人之间来回踱步，一整天不砌墙**（合成局面上 16 个回合 0 座）。
+    只认门口那 2 格之后这条消失，而**真正会关人的局面照样接得住**（门那 2 格真被占住时
+    一样判成被围，见 `test_a_colleague_in_the_door_still_holds_the_wall_back`）。
     """
     station = turn.map.station
     if station is None:
         return frozenset()
-    return turn.map.blocked | set(wall_cells(station, turn.map.size[0]))
+    blocked = turn.map.blocked
+    #: 自己人站在门那 2 格上的，照旧算障碍；站在别处的从障碍里摘掉（见 docstring）
+    door = set(door_cells(station, turn.map.size[0]))
+    mine = {r.pos for r in turn.roles} - door
+    return (blocked - mine) | set(wall_cells(station, turn.map.size[0]))
 
 
 def _trapped(turn: Turn, box: frozenset[Pos]) -> frozenset[str]:
     """**砌满这一圈墙之后就走不出去了的**我方角色 id；没有就空集。
 
-    判据是"整面墙"不是"某一格"：障碍集里永远有全部 14 格墙，真发生就是整面墙一起发生
+    判据是"整面墙"不是"某一格"：障碍集里永远有全部 18 格墙，真发生就是整面墙一起发生
     ⇒ 调用方要的是一个布尔量（该不该砌），而不是一串"可以砌的格子"。
     返回 id 是因为配套的闸门 (2) 得知道**谁**先出来，逐角色问 `step_outside` 才对
     "站在自己那格上的人"天然正确。
+
+    ⚠️ 第 33 步把门从"整列 6 格"收成"背面中间 2 格" ⇒ 能堵门的单位从 6 个降到 2 个
+    ⇒ 这条判据反而**更常真的命中**（以前要把 6 格全堵满才合得上，现在两个人就够）。
     """
     station = turn.map.station
     if station is None or not box:
@@ -412,6 +496,165 @@ def _ring(turn: Turn) -> tuple[Pos, ...]:
     )
 
 
+# ── 拆墙（第 34 步）：临时门 ─────────────────────────────────────────
+def _after_first_day(turn: Turn) -> bool:
+    """是不是**第 2 天及以后** —— 整套"临时门"机制成立的前提。
+
+    ⚠️ **为什么必须有这一条**：环上"孤零零一个缺口"这一个状态，**既是"刚挖的洞"、
+    也是"还差一格没砌"** —— 地图上逐字节同形，任何无状态判据都分不开。
+    区分只能靠**时间**：第 1 天环在建，缺口是真的没砌（`_ring` / `_build_walls` 现在就是对的，
+    一个字都别改）；**第 2 天起环在开局时必然是满的，于是环上一切缺口只可能来自我们自己的
+    `remove`**。没有这一条，第 1 天砌到只剩中段某一格时那一格会被当成"洞"推迟到当天末尾，
+    白天再也不补（合成局面上会直接挂掉 `test_a_worker_on_the_last_cell_still_finishes_the_ring`）。
+
+    代价（记在 `code-task.md` 的不确定性里）：第 1 天没砌完的残局，次日起会被误读成"门"、
+    推迟到当天末尾才补 —— 而末尾一定会补（见 `HOLE_PATCH_LEFT`）。
+    """
+    return turn.round_no > ROUNDS_PER_DAY
+
+
+def _door_open(turn: Turn) -> bool:
+    """白天中段：环上的缺口当**临时门**用，先别补（第 2 天起、离天黑还早）。
+
+    补墙的时刻由它和 `HOLE_PATCH_LEFT` 一对窗口决定 —— "白天开着通行、天黑前封死"，
+    与封口格 `(13,24)` 是同一个语义，只是从"排在建墙顺序最后"换成了"排到时间窗最后"。
+    """
+    return _after_first_day(turn) and turn.day_rounds_left > HOLE_PATCH_LEFT
+
+
+def _dig(
+    role: BaseRole,
+    goal: Pos,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    walk: Set[Pos],
+) -> bool:
+    """工人**贴着一格墙**、而拆了它能少走 `HOLE_MIN_SAVING` 步以上 ⇒ 这一回合拆它。
+
+    钩在 `_step` 里而不是各个差事里：`_step` 是所有"走路"的公共出口（采矿 / 卖矿 / 顺路卖 /
+    升级 / 砌墙 / 回炮位），一处就能覆盖全部差事，调用点一个字不用改。
+
+    **"出不来"不用第二套逻辑**：出不去 ⇒ 到差事目标的步数是 **-1**，而这里对 `now < 0`
+    的处理本来就是"拆了能到就更该拆"，两个触发条件在这一个函数里合流。
+
+    ⚠️ **但实测过：`now < 0` 这一支今天是进不去的**（各差事 `_step` 之前都已经把
+    "走不到的目标"滤掉了 —— `_mine_spare_ore` / `_sell_ore` / `_detour_sell` / `_upgrade_line`
+    四处都有 `-1 ⇒ 这趟不去`），而且"人在盒里出不来"那种局面会先被 `plan` 里的 `_rescue`
+    接管。它**仍然保留**，理由是 `_step` 的 `walk` 比各差事自己算的那份多了 `claimed` / `avoid`
+    两样 ⇒ 差事算得通、走到 `_step` 时却不通是可能的。删掉它的代价是"工人安静地不动"
+    （正是本步要治的那类症状），留着的代价只是一次条件判断。**别当它是死代码顺手删。**
+    唯一不用它的是**被任务钉死的开拓者**（走 ① 支路，压根到不了这里）与非工人 —— 那由 `_rescue` 管。
+
+    ⚠️ **候选只取当前已经贴着的墙格**（`Pos.dist <= 1`，`remove` 的站位要求就是这么定的）。
+    刻意**不做**"走到最优的那一格再拆"：那会引入"在路上"的中间态（目标每回合重算 ⇒ 来回抖），
+    而且省下的步数没有扣掉走过去的回合 ⇒ 系统性高估收益。沿墙走的过程里这种机会很多，不必提前跑。
+    """
+    if not turn.is_day or not isinstance(role, Worker):
+        return False
+    station = turn.map.station
+    if station is None or not _after_first_day(turn):
+        return False
+    wall = wall_cells(station, turn.map.size[0])
+    #: 环已砌满（⇒ 同时最多一个洞）；`claimed` 里出现墙格 ⇒ 本回合已经有人拆过了
+    if _ring(turn) or claimed & set(wall):
+        return False
+    if role.stone < WALL_COST or turn.day_rounds_left <= HOLE_MIN_LEFT:
+        return False
+
+    size = turn.map.size
+    now = steps_between(role.pos, goal, walk, size)
+    best: tuple[int, Pos] | None = None
+    for cell in wall:
+        if role.pos.dist(cell) > 1:
+            continue  # 直接排除：拆墙要贴着，走不到的那一格这一回合根本没得拆
+        after = steps_between(role.pos, goal, walk - {cell}, size)
+        if after < 0:
+            continue  # 开了这个洞也还是到不了 ⇒ 白拆
+        # `now < 0` = 现在压根走不到（出不去）⇒ 拆了能到就该拆，省下的步数没有意义
+        if now >= 0 and now - after < HOLE_MIN_SAVING:
+            continue
+        if best is None or (after, cell) < best:
+            best = (after, cell)
+    if best is None:
+        return False
+    #: 登记被拆的那一格（它本来就在 `blocked` 里 ⇒ 对别人的寻路是空操作，但能挡住同回合的第二个工人）
+    claimed.add(best[1])
+    return _emit(cmds, role, actions.Remove, best[1])
+
+
+def _stuck_inside(turn: Turn, box: frozenset[Pos]) -> tuple[BaseRole, ...]:
+    """**现在真的走不出盒子**的人；没有就空元组。
+
+    与 `_trapped` 的区别是**用"现在"的障碍**而不是"假设砌满"：闸门问的是将来（预防），
+    这里问的是眼下（补救）。两者并存，各管各的。
+
+    ⚠️ **自己人一律不算障碍**（除起点外把全部角色从障碍里摘掉）：同事站在门格上只是路过，
+    下一回合就走 —— 把他算成障碍会**白拆一次**（1 回合 + 1 块不退的石头）。
+    这正是第 33 步改 `_walled` 口径要治的那个活锁的同一条道理。
+    """
+    if not box:
+        return ()
+    walk = turn.map.blocked - {r.pos for r in turn.roles}
+    size = turn.map.size
+    return tuple(
+        r for r in turn.roles if r.pos in box and step_outside(r.pos, box, walk, size) is None
+    )
+
+
+def _rescue(
+    role: BaseRole,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    box: frozenset[Pos],
+) -> bool:
+    """有人被关在盒子里 ⇒ **工人**去拆一格放人（第 34 步）。
+
+    与 `_dig` 的分工：`_dig` 治"**自己**要去的地方到不了"，这里治"**别人**（或**自己**）出不来"。
+    ⚠️ **工人被关住时也走这里，而且先走这里**（第 34 步真服务实测：门被两台机器人堵死、
+    工人在盒内 ⇒ 它自己 `remove (13,23)`，压根没轮到差事）—— `_rescue` 在 `plan` 里排在
+    白天所有差事之前。`_dig` 的 `now < 0` 那一支因此是**第二道**（留给"差事目标不通、
+    但人还出得去"这种局面），不是唯一一道。**被任务钉死的开拓者**才非靠别人救不可
+    —— 它走 ① 支路 `continue`，永远到不了这一段（用户拍板：开拓者被挡 ⇒ 工人去救）。
+
+    开哪一格：**开了之后真能让某个被困的人迈出去、且离救援者最近的那一格**
+    （并列取坐标序，可复现）。判据用"不开洞 + 本回合已认领的落脚格"，与 `_dig` 同一套账。
+    ⚠️ 门被**机器人**堵死时 `walk` 不动那一格 ⇒ 命中；被**同事**堵住时 `_stuck_inside`
+    先一步就把人放出来了（自己人不算障碍）⇒ 这里不命中 —— 那正是"不白拆一次"的意思。
+    """
+    if not turn.is_day or not isinstance(role, Worker) or not box:
+        return False
+    station = turn.map.station
+    if station is None or not _after_first_day(turn):
+        return False
+    wall = wall_cells(station, turn.map.size[0])
+    if _ring(turn) or claimed & set(wall):
+        return False
+    if role.stone < WALL_COST or turn.day_rounds_left <= HOLE_MIN_LEFT:
+        return False
+    stuck = _stuck_inside(turn, box)
+    if not stuck:
+        return False
+
+    walk, size = turn.map.blocked | claimed, turn.map.size
+    free = [
+        (role.pos.dist(c), c)
+        for c in wall
+        if any(step_outside(v.pos, box, walk - {c}, size) is not None for v in stuck)
+    ]
+    if not free:
+        return False
+    site = min(free)[1]
+    if role.pos.dist(site) <= 1:
+        #: 登记被拆的那一格：挡住同回合的第二个工人（对寻路是空操作，它本来就在 `blocked` 里）
+        claimed.add(site)
+        return _emit(cmds, role, actions.Remove, site)
+    #: 走 `_step` 会再进一次 `_dig`（同一个目标，多半不命中：省不到 5 步）—— 两条路都只是
+    #: "朝那一格挪一格"，贴近了下一回合自然就拆。
+    return _step(role, site, turn, cmds, claimed)
+
+
 def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, free: int) -> int:
     """这一趟还该采几块石头 —— 按**回合预算**每回合现算。
 
@@ -424,18 +667,19 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
     令它 ≤ `白天还剩的回合 − TIME_MARGIN`，解出 k，再与"还差几格墙"取小
     （没有转移物品的指令，多采的石头给不了别人，只防采得离谱，不必精确分账）。
 
-    距离用切比雪夫（本游戏的移动度量），绕障时会低估，由 `TIME_MARGIN` 吸收。
+    **距离一律用 BFS 真实步数**（第 33 步）：回工地常常要绕整面围墙、从背面那 2 格门进来，
+    切比雪夫会把 10+ 步说成 3 步，于是采到天黑都走不回来（实盘问题 ②）。`TIME_MARGIN` 现在是真余量。
+    ⚠️ **-1（走不到）⇒ 一块都别采**：切比雪夫永远给不出这个值，是本步新增的失败态，
+    往"少干一件事"的方向退化（安全：宁可这回合不动，不可把人留在墙外过夜）。
     """
     if mine is None:
         return 0
-    budget = (
-        turn.day_rounds_left
-        - TIME_MARGIN
-        - role.pos.dist(mine)
-        - mine.dist(target)
-        - 2 * role.stone
-        + 1
-    )
+    walk, size = turn.map.blocked, turn.map.size
+    to_mine = steps_between(role.pos, mine, walk, size)
+    to_wall = steps_between(mine, target, walk, size)
+    if to_mine < 0 or to_wall < 0:
+        return 0
+    budget = turn.day_rounds_left - TIME_MARGIN - to_mine - to_wall - 2 * role.stone + 1
     return max(0, min(budget // ROUNDS_PER_STONE, free - role.stone))
 
 
@@ -448,10 +692,13 @@ def _sell_ore(
     第 29 步）都走这里。四条门，任一条不成立就 `False`：
 
     ① **有货**：`_best_load` 从 `SELLABLE` 里挑收购价最高的一种；
-    ② **有小贩**：`Map.vendors` 空就无处可卖；
-    ③ **够本**：**已经不贴着才算** —— 货值 < 往返回合数（`2 × 距离`）就留在矿边接着采
+    ② **有小贩**：`Map.vendors` 空、或**一个都走不到**就无处可卖（第 33 步的 -1）；
+    ③ **够本**：**已经不贴着才算** —— 货值 < 往返回合数（`2 × 步数`）就留在矿边接着采
        （已经站在小贩旁边时这趟路早付过了，不再拦）。⚠️ "1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮；
     ④ **回得来**：`走到小贩 + 从小贩回基地 ≤ 白天剩余 − TIME_MARGIN`（夜里必须在炮位上）。
+
+    **距离一律用 BFS 真实步数**（第 33 步）：小贩常在盒子外，回基地要绕背面那道门。
+    ⚠️ **-1（走不到）一律当"这趟不去"**：切比雪夫永远给不出这个值，是本步新增的失败态。
 
     站位是 `sell` 要求的"小贩周围一格内"，与小贩格本身挡路正好对上（`step_toward` 自然停在一格外）。
     一回合只能发一条指令 ⇒ 一次只卖一种矿，`num` = 手上那种矿的全部件数（卖光）。
@@ -460,14 +707,20 @@ def _sell_ore(
     kind, num = _best_load(role, turn.vendor_prices)
     if not kind or station is None or not turn.map.vendors:
         return False
-    # 并列按坐标排：先后不能取决于 payload 里的顺序。
-    vendor = min(turn.map.vendors, key=lambda p: (role.pos.dist(p), p))
-    if role.pos.dist(vendor) <= 1:
+    walk, size = turn.map.blocked, turn.map.size
+    # 并列按坐标排：先后不能取决于 payload 里的顺序。**走不到的小贩直接剔掉**（BFS -1）。
+    hops = [(steps_between(role.pos, p, walk, size), p) for p in turn.map.vendors]
+    hops = [(steps, pos) for steps, pos in hops if steps >= 0]
+    if not hops:
+        return False
+    to_vendor, vendor = min(hops)
+    if to_vendor <= 1:
         return _emit(cmds, role, actions.Sell, kind, num)
     value = turn.vendor_prices.get(kind, 0) * num
-    if value < 2 * role.pos.dist(vendor):
+    if value < 2 * to_vendor:
         return False  # ③ 为这一堆货走这么远不划算，接着采
-    if role.pos.dist(vendor) + vendor.dist(station) > turn.day_rounds_left - TIME_MARGIN:
+    back = steps_between(vendor, station, walk, size)
+    if back < 0 or to_vendor + back > turn.day_rounds_left - TIME_MARGIN:
         return False  # ④ 去了就赶不回来
     return _step(role, vendor, turn, cmds, claimed, sites)
 
@@ -477,11 +730,16 @@ def _best_load(role: Worker, prices: Mapping[str, int]) -> tuple[str, int]:
 
     **价 ≤ 0 或件数为 0 的矿跳过**：小贩不收（价目表里没有也算不收）的矿换不来金币。
     价目表为空 ⇒ 一件都不卖。名字参与比较只是为了让并列可复现。
+
+    ⚠️ **石头保底留 1 块不卖**（第 33 步）：收工时手里得有石头才能把正面那个口封上
+    （`wall_cells` 的最后一格），封不上就是整夜的一道门。只有 1 块 ⇒ 这一趟不卖石头
+    （另外两种矿照卖；一件可卖的都没有 ⇒ 挑不出来）。规则是"墙砌完了才卖石头"，
+    所以这 1 块**买不到墙**，它的用途只有封口。
     """
     loads = [
-        (prices.get(kind, 0), role.bag.get(kind, 0), kind)
+        (prices.get(kind, 0), role.bag.get(kind, 0) - (1 if kind == STONE else 0), kind)
         for kind in SELLABLE
-        if prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > 0
+        if prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > (1 if kind == STONE else 0)
     ]
     if not loads:
         return "", 0
@@ -500,16 +758,25 @@ def _mine_spare_ore(
     **顺路卖矿**（`_detour_sell`）：手里有货、去矿的路上绕去小贩不超过 `DETOUR_MAX` 格
     ⇒ 先绕过去（贴上它的那回合 `_sell_ore` 自然出手），之后再继续去矿。
     **拿不到收购价就哪儿也不去**；一座可行的矿都没有 ⇒ 待命（空指令合法）。
+
+    **距离一律用 BFS 真实步数**（第 33 步）：回炮位必须绕到背面那道门再横穿盒子，
+    切比雪夫把 10+ 步说成 3 步 ⇒ 工人越采越远、天黑还在墙外（实盘问题 ②）。
+    ⚠️ **-1（走不到）的矿直接作废**：切比雪夫永远给不出这个值，是本步新增的失败态。
     """
     station = turn.map.station
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
     budget = turn.day_rounds_left - TIME_MARGIN
-    #: 先筛可行（走过去 + 从矿回到炮位），再交给 `_pick_ore` 按价挑
-    feasible = {
-        p: kind
-        for p, kind in turn.map.ores.items()
-        if posts and role.pos.dist(p) + min(p.dist(post) for post in posts) <= budget
-    }
+    walk, size = turn.map.blocked, turn.map.size
+    #: 先筛可行（走过去 + 从矿回得来），再交给 `_pick_ore` 按价挑。
+    #: ⚠️ BFS 是"命中目标即停"的，所以这里的开销跟**距离**相关、不是整张图 ——
+    #: 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒（真服务量过，见 code-task 第 33 步）。
+    feasible: dict[Pos, str] = {}
+    for p, kind in turn.map.ores.items():
+        out = steps_between(role.pos, p, walk, size)
+        return_home = [steps_between(post, p, walk, size) for post in posts]
+        return_home = [d for d in return_home if d >= 0]
+        if out >= 0 and return_home and out + min(return_home) <= budget:
+            feasible[p] = kind
     mine = _pick_ore(role.pos, feasible, turn.vendor_prices, want_stone=False)
     if station is None or mine is None:
         return
@@ -527,18 +794,29 @@ def _detour_sell(
     """去矿的路上**顺路卖矿**：绕去小贩比直走多花 ≤ `DETOUR_MAX` 格 ⇒ 先朝小贩迈一步。
 
     贴上小贩的那一回合同一条链里更早的 `_sell_ore` 自然把货出手（贴着跳过够本门），
-    卖完没货、绕路条件消失，下一回合继续去矿。货里得有**小贩肯收**的（价 > 0）。
-    已经贴着矿就别绕了（这一回合该采）。
+    卖完没货、绕路条件消失，下一回合继续去矿。已经贴着矿就别绕了（这一回合该采）。
+
+    **"有没有可卖的货"用 `_best_load` 判，不在这里重抄一遍**（第 33 步）：那边有
+    "石头保底留 1 块"的口径，抄一遍就会出现"绕小贩去卖那 1 块石头、到了却不肯卖"
+    —— 白绕一趟，且两处口径迟早分家。
+
+    **距离一律用 BFS 真实步数**（第 33 步，与 `_sell_ore` 同口径）；绕路省下来的那几格
+    只有在绕障之后才算数。⚠️ **-1（走不到）的绕法直接放弃**。
     """
     if role.pos.dist(mine) <= 1:
         return False
-    if not any(
-        turn.vendor_prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > 0 for kind in SELLABLE
-    ):
+    if _best_load(role, turn.vendor_prices)[1] <= 0:
         return False
-    direct = role.pos.dist(mine)
+    walk, size = turn.map.blocked, turn.map.size
+    direct = steps_between(role.pos, mine, walk, size)
+    if direct < 0:
+        return False
     for vendor in sorted(turn.map.vendors):
-        if role.pos.dist(vendor) + vendor.dist(mine) - direct <= DETOUR_MAX:
+        via = steps_between(role.pos, vendor, walk, size)
+        after = steps_between(vendor, mine, walk, size)
+        if via < 0 or after < 0:
+            continue
+        if via + after - direct <= DETOUR_MAX:
             return _step(role, vendor, turn, cmds, claimed)
     return False
 
@@ -553,6 +831,9 @@ def _upgrade_line(
     —— 背包物品保留）。跑腿者 = **持券的那个工人**；没人持券 ⇒ 名册上第一个工人
     （别的工人照常卖/采）。**只在白天跑**（这条挂在 `_build_walls` 的白天支路上；夜里
     `_defend` 会把人接回炮位，明早预算重算、接着走）。
+
+    **距离一律用 BFS 真实步数**（第 33 步）：商店/炮位都在盒子内外两侧，整趟要绕门。
+    ⚠️ **-1（走不到）一律当天不去**，明天重算 —— 切比雪夫永远给不出这个值。
     """
     workers = [r for r in turn.roles if isinstance(r, Worker)]
     holder = next(
@@ -565,23 +846,29 @@ def _upgrade_line(
         return False
     weapon, voucher = target
     budget = turn.day_rounds_left - TIME_MARGIN
+    walk, size = turn.map.blocked, turn.map.size
     if voucher in role.bag:
         # 持券阶段：终点就是炮位，用完正好站岗 —— 不用留回程
         if role.pos.dist(weapon.pos) <= 1:
             return _emit(cmds, role, actions.Use, voucher, weapon.pos)
-        if role.pos.dist(weapon.pos) + 1 > budget:
-            return False  # 今天来不及走到 ⇒ 待命，明天接着走
+        to_weapon = steps_between(role.pos, weapon.pos, walk, size)
+        if to_weapon < 0 or to_weapon + 1 > budget:
+            return False  # 走不到 / 今天来不及 ⇒ 待命，明天接着走
         return _step(role, weapon.pos, turn, cmds, claimed)
     # 买券阶段：整趟 = 走到商店 + 买到武器 + 买/用两个动作回合
     price = turn.shop_prices.get(voucher, 0)
     if price <= 0 or turn.gold < price:
         return False
-    if not turn.map.shops:
-        return False
-    shop = min(turn.map.shops, key=lambda s: (role.pos.dist(s), s))
-    if role.pos.dist(shop) <= 1:
+    # 并列按坐标排：先后不能取决于 payload 里的顺序。**走不到的商店直接剔掉**（BFS -1）。
+    hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
+    hops = [(steps, pos) for steps, pos in hops if steps >= 0]
+    if not hops:
+        return False  # 没有商店、或者一个都走不到
+    to_shop, shop = min(hops)
+    if to_shop <= 1:
         return _emit(cmds, role, actions.Buy, voucher, 1)
-    if role.pos.dist(shop) + shop.dist(weapon.pos) + 2 > budget:
+    to_weapon = steps_between(shop, weapon.pos, walk, size)
+    if to_weapon < 0 or to_shop + to_weapon + 2 > budget:
         return False
     return _step(role, shop, turn, cmds, claimed)
 
@@ -626,6 +913,52 @@ def _pick_ore(
     )
     # 价 0 ⇒ 小贩不收，不为它多走一步；一张空价目表也就自然落成"谁也不采"
     return best[2] if best is not None and best[0] < 0 else None
+
+
+def _leave_for_the_post(
+    role: BaseRole,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    taken: set[Pos],
+) -> bool:
+    """白天收工（第 33 步）：**离夜里的第一波只剩回程步数了就回炮位**；这一回合到此为止 ⇒ `True`。
+
+    为什么白天就得动身：机器人**在夜里第一个回合就全部出现**，而回炮位常常要**绕整面围墙、
+    从背面那 2 格门进来、再横穿盒子** —— 在正面墙外干活时，直线三四步、BFS 十几步
+    ⇒ 不提前出发，开局那几个回合就是白丢的（实盘问题 ②）。
+
+    ⚠️ **与 `_defend` 的唯一区别是它不调 `_fire`**：`attack` 仅黑夜（§4.4），白天发就是
+    **非法指令**、5 次出局。选炮口径与它一致（最近且没人认领、贴着就认领、不换炮）。
+
+    ⚠️ **先看时间、再看位置**：还早 ⇒ 一律不打断白天的活。少了这一道，"到岗就待命"
+    会让早上正好站在炮边的工人（升级线、卖矿都可能把人在那儿放下）**整天不动**。
+    判据是"到最近那座炮的 BFS 步数 ≥ 白天还剩的回合 − 1"（`− 1` = 留 1 回合余量，拍的）；
+    已经贴着那座炮时步数是 **0**，于是只有**白天最后一回合**才轮得到"在岗待命"。
+
+    返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；
+    `False` = 还来得及干活（或没有可去的炮），照常走白天的活。
+    """
+    walk, size = turn.map.blocked, turn.map.size
+    #: 最近、还没人认领、而且**真走得到**的那座炮 —— 一趟判定就够：最近的都赶不上，
+    #: 更远的更赶不上。⚠️ BFS **-1（不可达）剔掉**，切比雪夫给不出这个值。
+    #: 已经贴着某座 ⇒ 步数 0（`steps_between` 的约定），与"还差 3 步"是同一个刻度。
+    hops = [
+        (steps_between(role.pos, weapon.pos, walk, size), weapon.pos)
+        for weapon in turn.weapons
+        if weapon.pos not in taken
+    ]
+    hops = [(steps, pos) for steps, pos in hops if steps >= 0]
+    if not hops:
+        return False
+    steps, post = min(hops)
+    if steps < turn.day_rounds_left - 1:
+        return False  # 还剩富裕回合 ⇒ 照常干活
+    taken.add(post)  # 定下这座了：认领，免得另一个角色也奔这里（一人只能操一座）
+    if steps == 0:
+        return True  # 已经在岗 ⇒ 这一回合待命（什么都不发 = 合法空指令）
+    _step(role, post, turn, cmds, claimed)  # ⚠️ 只发 move，绝不调 `_fire`
+    return True
 
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────
@@ -779,8 +1112,15 @@ def _step(
 
     `avoid` = 额外要避开的格：工人传**建造格**（免得径直走到建造格**上**去，
     那样建完自己站在墙里），开拓者用默认的空集。
+
+    ⚠️ **拆墙（第 34 步）钩在这里**：`_step` 是所有差事（采矿 / 卖矿 / 顺路卖 / 升级 / 砌墙 /
+    回炮位）走路的**公共出口** ⇒ 一处覆盖全部调用点，调用点一个字不用改。
+    代价是它也覆盖了开拓者与夜里的回炮位 —— 那两边由 `_dig` 自己的闸门（`is_day` + `Worker` +
+    环满 + 窗口）挡住，**不在这里加分支**。
     """
     walk = turn.map.blocked | claimed | avoid
+    if _dig(role, goal, turn, cmds, claimed, walk):
+        return True  # 与其绕远，不如把这格的墙拆了（省 ≥ `HOLE_MIN_SAVING` 步）
     step = step_toward(role.pos, goal, walk, turn.map.size)
     if step is None or not _emit(cmds, role, actions.Move, step):
         return False

@@ -15,7 +15,7 @@
 
 from collections.abc import Callable
 
-from .chat import PROMPT
+from .chat import PROMPT, strip_answers
 from .context import Context
 from .tools.cmd import executeCmd
 from .tools.sop import store
@@ -40,14 +40,16 @@ class Agent:
         ] = {
             "executeCmd": (
                 executeCmd,
-                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。"
-                "当命令涉及到文件 path 时，若无法判定文件的位置，先找到文件的位置。",
+                "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。",
                 (("cmd", "命令原文"),),
             ),
             "SOP2Prompt": (
                 self.SOP2Prompt,
-                "把你总结出的解题方法**整段替换**进后续每一份 prompt 的「沉淀的 SOP」段。"
-                "它不产出命令、当回合也没有回执，但从此每道题都会看到它。",
+                "把你总结出的解题方法整段替换进后续每一份 prompt 的「沉淀的 SOP」段。"
+                "它只沉淀、不产出命令、当回合也没有回执，但从此每道题都会看到它。"
+                "产出的sop应该是任务无关的，而是对方法的总结，且要尽量简短。"
+                "它不影响你作答：答案照旧写在工具块外的 `<answer>` 里，"
+                "两者写在同一条回复里即可。",
                 (("sop", "SOP 全文"),),
             ),
         }
@@ -61,7 +63,7 @@ class Agent:
         是个含糊指令。返回值是**标准 messages JSON**（第 28 步：`[{role, content}]`，
         自造文本版式实测效果非常差、已弃）。
 
-        system（四段模板）**每次现刷**：SOP 是活的，任务进行中沉淀的下一轮就得看得见
+        system（五段模板）**每次现刷**：SOP 是活的，任务进行中沉淀的下一轮就得看得见
         —— 那是 `SOP2Prompt` "调用成功"的回执（它不产出命令）。
         """
         fresh = self._context is None or self._context.task != request
@@ -129,26 +131,49 @@ class Agent:
     def tool_desc(self) -> str:
         """「可使用的工具」那一段的正文 —— 由工具表**生成**，不手写第二份。
 
-        第 30 步起**参数说明也是生成的**：每个声明的参数一行 `参数 名：用途`、
-        无参数的工具打 `（无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。
-        手写第二份迟早会出现"prompt 里写了、代码里没有"（或反过来），而那种不一致
-        **只有实盘上 LLM 报错才看得出来**（本地怎么测都是绿的）。
+        第 32 步起每个工具是一个**块**（用户指定的格式）：
+
+            ## ToolName: {name}
+            Description: 一句话说清它干什么
+            Params:
+                - 参数名: 用途
+
+        无参数的工具打 `Params: （无参数）` —— 不用 `- （无参数）`，那看起来像
+        多了一个叫"（无参数）"的参数。块之间空一行（`##` 标题摆在那里，不空行会黏成一坨）。
+        参数说明是**生成**的，LLM 照着表写调用、不靠描述正文里的散文：手写第二份迟早会出现
+        "prompt 里写了、代码里没有"（或反过来），而那种不一致**只有实盘上 LLM 报错
+        才看得出来**（本地怎么测都是绿的）。
         """
-        lines: list[str] = []
+        blocks: list[str] = []
         for name, (_, desc, params) in self._tools.items():
-            lines.append(f"- {name}：{desc}")
-            lines += [f"    参数 {pname}：{pdesc}" for pname, pdesc in params]
-            if not params:
-                lines.append("    （无参数）")
-        return "\n".join(lines)
+            lines = [f"## ToolName: {name}", f"Description: {desc}"]
+            if params:
+                lines.append("Params:")
+                lines += [f"    - {pname}: {pdesc}" for pname, pdesc in params]
+            else:
+                lines.append("Params: （无参数）")
+            blocks.append("\n".join(lines))
+        return "\n\n".join(blocks)
 
     def SOP2Prompt(self, sop: str) -> str:
         """把 `sop` **整段替换**进「沉淀的 SOP」段。返回 `""` —— **它不产出命令**。
 
         存储规则（上限、截断留痕、内容没变就静默）在 `tools/sop.py`，这里只管
         **把新值记在自己身上**。方法名同时是注册表里的工具名。
+
+        ⚠️ **只有一个参数、只做流程沉淀**（第 36 步的用户口径）：**答案不归这个工具管**。
+        同轮作答交给 `chat.answer_of`（答案写在工具块外的 `<answer>` 里）⇒ 沉淀与作答分家：
+        这一回合算不算作答由那个谓词判，两条都走不通就落到判据 ⑥ 重问 —— 而沉淀**已经落库**了，
+        丢的只是那一回合。（第 35 步曾把 `answer` 做成它的**必需**参数，那是条死路：声明即必需
+        的参数没法同时又是一个可选的作答通道，而 LLM 把答案写成块外的 `<answer>` 时那个版本会
+        **静默丢掉沉淀**、连重问都没有。）
+
+        ⚠️ **`sop` 里成对的 `<answer>…</answer>` 一定在入库前挖掉**（`chat.strip_answers`）：
+        那段正文的用处正是讲"答案怎么写"，不挖掉就会带着这对串进后续每一份 prompt。
+        **挖掉、不是作废整次调用** —— 沉淀是这个工具的全部价值，不该因为它多写一句示例就整段丢。
         """
-        self._sop = store(self._sop, sop)
+        sop, stripped = strip_answers(sop)
+        self._sop = store(self._sop, sop, stripped=stripped)
         return ""
 
     @property

@@ -7,8 +7,9 @@
 子类落地时补四样：`code`（动作码）、`roles`（可用角色，任务书 §4.4 表格**最右列**）、
 参数（`RoleCommand` 里该动作用到的字段）、`to_wire`（编成扁平记录）。
 
-已实现七个：`move` / `attack` / `sell`（**对全部角色合法**）、`build` / `collect`（**仅工人**）、
-`acceptTask` / `submitAnswer`（**仅开拓者**）。没实现的动作为空壳，等落地时再加。
+已实现十个：`move` / `attack` / `sell` / `buy` / `use`（**对全部角色合法**）、
+`build` / `remove` / `collect`（**仅工人**）、`acceptTask` / `submitAnswer`（**仅开拓者**）。
+没实现的动作为空壳，等落地时再加。
 ⚠️ 权限两个方向都会错：窄了（`sell` 写成仅工人）本地测不出来 —— 报文照样合法，只有判题器会说"不"。
 """
 
@@ -103,6 +104,36 @@ class Build(BaseAction):
         return {
             "action": self.code,
             "name": self.name,
+            "targetPos": [{"x": self.target.x, "y": self.target.y}],
+        }
+
+
+class Remove(BaseAction):
+    """拆掉一座围墙。**仅工人**，**仅白天**（与 `build` 同一条：白天那半边不进闸门，由 `planner` 把关）。
+
+    §4.4 原文"用于拆除围墙，**需指定与自身距离一格内的围墙位置**" ⇒ 站位契约与 `build`
+    完全相同（切比雪夫 ≤1）。拆完那格变**可穿越空地**（任务书 L73），
+    但**不回收建造时花掉的石头**（L209）—— 所以拆墙不是免费的，`planner` 那边要按成本掂量。
+
+    实证报文（`docs/response.txt`，全项目唯一有实证的三个动作之一）：
+    `{"action":"remove","targetPos":[{"x":29,"y":7}]}` —— **没有 `name` 字段**（`build` 才有）。
+    多打一个字段就是赌"指令非法"，所以用例里专门钉了 `"name" not in wire`。
+
+    ⚠️ 昼夜限制**任务书那一格没写**（`build` 写了"仅白天"），但项目口径按"仅白天"保守执行：
+    夜里不发最多是少拆一次，反过来若实际禁夜就是指令非法 —— 红线优先。
+    打空处 / 目标不是己方围墙 ⇒ **执行失败，不计异常**（只回 `lastRoundRoleActionsResult[id]=false`）。
+    """
+
+    code = "remove"
+    roles = WORKER
+
+    def __init__(self, role_type: str, target: Pos) -> None:
+        super().__init__(role_type)
+        self.target = target
+
+    def to_wire(self) -> dict[str, Any]:
+        return {
+            "action": self.code,
             "targetPos": [{"x": self.target.x, "y": self.target.y}],
         }
 
