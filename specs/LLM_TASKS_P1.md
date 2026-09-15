@@ -36,6 +36,8 @@ taskworld._advance_once 在任何 pending_answer 后都结算并结束，包括 
 
 ## 当前控制器原型及待接入接口
 
+2026-09-15状态更新：以下“尚未接入/仍待”描述保留为原型阶段记录。TaskAgent已通过TeamAgent接入共享router、比赛TaskPipeline和模拟器；对应证据见LLM_TASKS_AGENT_INTEGRATION.md及最终审计。Issue #18暴露了真实题目诊断信息不足，不能用原型测试或固定模型题库成功推定实际题目通过。
+
 task_agent.TaskAgent 已编写，尚未接入比赛决策函数，不能据独立测试宣称P1完成。
 
 - begin(generation,source)：只在新代际建立工作状态。损坏恢复状态保持降级，不能悄悄重建成免费重试。

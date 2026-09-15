@@ -1,0 +1,195 @@
+{
+  "scope": "Actual model and public long text through planner/router/JSON; not simulator settlement or intranet PASS",
+  "source_sha": "ac0b8cbeca815e2298543852d254d161d1723b94",
+  "files": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "actions.py": "de79664cdf173f777a77beed6845513a0e2c50fbb0f40dc5332c3b16db8cde6e",
+    "ballistics.py": "b8593587c4eec6f8518bf945591a16ff051fbecd26a7d8a582bdd97987c6bc62",
+    "brain.py": "c4e25b27c2705ad61fbf2eacc0aed290c198ef6b9ca29014bf27313ecfb22ae3",
+    "console_digest.py": "f5024f3fab15049be2393cd3d155d39e74a296ded01f2e1b68cd9280eca65d83",
+    "coordination.py": "48abac2a5f7a22cbaa4e9079a0ba4fd1f0b35e1faa37e236dd67d00a7f06d92e",
+    "debug.py": "e19366025f250be2583782f308c19f24a8e3c8baf871bca1fbf3c37715527e04",
+    "deepseek_client.py": "9eb3e97a38f56de99dc92c578ea3ea98a3ff005bd03c8b021f081155d8265aeb",
+    "defense_layout.py": "2153f79d78064f7173db3ce850ebd04cc4d1c64d935c21a14d7542d2db5031a2",
+    "diagnostics.py": "a6e5de7c9868fa0f3196be05a9f9ca7536c6a2d354aed40ef3f7d6b364e806db",
+    "evidence_memory.py": "ae737d7bd1e2136a4bfc09bb6c834bd41c450ca360b626ed671d179f485c1a35",
+    "grid.py": "be508610386683357584981cef031f13dd968cd8af66ecb2ee759b53cb4d1a07",
+    "llm_router.py": "b396e5d8e92fc601288f0e14285545e267af0ae7a2bc2cd3d1a1e923ff120c92",
+    "local_llm.py": "cf2f72bd1c7e31d7870549349a1c85b87e71280f38f927691a258548cd1252ea",
+    "local_scripted_model.py": "3852dbcf163ab7203118340a179082ea0acb795a803ced68ab01df1f28a2acb7",
+    "local_task_cases.py": "8f3f1f41c15a65fb370fa39d24aa3d2527bf35a2a83ef284068f0ae738c3c5c2",
+    "local_task_sandbox.py": "95c4a310ee8cf055289667f3b7a2f3b9d549ffeae5aa79a8d009663e99a2a5f8",
+    "local_world_news.py": "f25c2ce1c5170de1037cbca484bef630be79f74d1d92e78bf724032d7e4ac701",
+    "market.py": "6a2b8b5aca57dbb21a0407c118deb9b472d8dfa272d25747a2fd8d3cfd550e39",
+    "match.py": "248e943857d5c86e17e4b4f0aefd408f1c4dd07d3311c28923c15bf0d9d5b201",
+    "nightwork.py": "d21459e5bcecd4dcf30df1e9c1a77cafbdc9badc1f3fd2d132e5781aec235bf2",
+    "planner.py": "9b64aa9fb9eaa5beab8d3a4ec4fa9c198eaa732b8394d4abcd4d93eaef0c26bd",
+    "policy_supervisor.py": "7280e55a03b0c99ec44869be453e27828be2a75b65c167291d54e8d667833463",
+    "protocol.py": "9d2ad1a53416b0a78b3267562edf1599fb214117ccfb7738aba6c0adbb804417",
+    "recordings.py": "25b3f9d585c0e576a3eefeb68b815897ed97f6f5e35888af688e4695b90fa9bd",
+    "sandbox.py": "78f9a2c240795f59e390041ecd05b3e7a59811e608a2da8921e5e06a762d248b",
+    "scenarios.py": "afcf5445b441404581f046f54731c21eaea3334bcb0a08f6e33038c63835bc6e",
+    "server.py": "6ca3f106451a600064d7f019f2399d604fab4a2428af060526c69915ec718fa5",
+    "simulator.py": "c191e2a9e47f3abe768406fbbb4f12e371e1e706cfa5401203ba9cf977971b20",
+    "task_agent.py": "f0b2b64fdec646cf0797b57e9d3fecf263bbf4e698afd857885f56dca1479491",
+    "task_context.py": "297d74dff6647d534617c5d6b2ff488b94f2e5720501caa410f7665dd12b6363",
+    "task_lifecycle.py": "fc2c79ee3239f952c453f4469b09261d87cf239c0b1a32bfe0532d9d6a009c7d",
+    "task_skills.py": "2887edc85088f04c0937c7df114d284b7fc5e4db9639f7c426ddf67bd5de32c1",
+    "tasks.py": "7a8b4eeafbad393678954f1b980fc3da0d59cd04f23df0cc0d95b5f0e3a69a99",
+    "taskworld.py": "64ba9e586dd10b9e2c8c713a720b6a18c6cc29e78d4e6ce9616004a0fc2254e9",
+    "team_agent.py": "16a39e5b7399b82bced4b97b6d6f9a3ccaa6e5b89b2349821ced246ed9586119",
+    "telemetry.py": "5b512c0122214181a73803d70419a50b96a326992702b78c295461250f450d70",
+    "treasure.py": "76828a5d58eef2f09def72ef9e80cc63a8b523414634cc428a1a915ab6501da4",
+    "turnactions.py": "00b2a86fce4ac015480d67241664e363edf95be4e33ee262990998e92272bc78",
+    "twomatch.py": "5c25fedd63b4ebf0e38f0427aa1f7fcb10c5c5096956a7b8c6d4445ff1ea2a89",
+    "vision.py": "0bbc60474257caaabf8c50eab82bd9621b3cd7668870ba303ed4f86640102491",
+    "world_agent.py": "7b8a6d8a86fd7ac819016e3773accbb0ab824c59142ac93559fad4cd28d160b7",
+    "world_memory.py": "c565daeaaa33517d55b6d7bcc14e0ca9e71a389da754c4f431a8aa2309aced5b"
+  },
+  "side": "challenger",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "effort": "max",
+  "python": "3.11.10",
+  "max_output_tokens": 16384,
+  "public_chars": 4308,
+  "calls": 3,
+  "daily_used": {
+    "1": 3
+  },
+  "returned_usage_tokens": 24767,
+  "usage_note": "Only returned usage is counted; missing usage is unknown, not free",
+  "elapsed_seconds": 293.06299999999464,
+  "checks": {
+    "complete": true,
+    "site": true,
+    "items": true,
+    "window": true,
+    "full_source_sent": true,
+    "no_sandbox": true,
+    "ordinary_quota": true,
+    "no_degraded_state": true,
+    "source_stable": true
+  },
+  "passed": true,
+  "final_status": {
+    "news": "idle",
+    "treasure": "interpreted"
+  },
+  "final_hypothesis": {
+    "site": {
+      "x": 3,
+      "y": 4
+    },
+    "items": [
+      "AcientTablet",
+      "AcientTablet"
+    ],
+    "opensAt": 261,
+    "closesAt": 290,
+    "uncertain": false,
+    "unknowns": [],
+    "candidates": [
+      {
+        "field": "site",
+        "value": {
+          "x": 3,
+          "y": 4
+        },
+        "evidence": [
+          {
+            "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+            "quote": "祭坛位于横坐标3、纵坐标4"
+          }
+        ]
+      },
+      {
+        "field": "items",
+        "value": [
+          "IronWhistle"
+        ],
+        "evidence": [
+          {
+            "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+            "quote": "最初告示要求IronWhistle"
+          }
+        ],
+        "resolution": {
+          "kind": "corrected",
+          "evidence": [
+            {
+              "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+              "quote": "更正：IronWhistle要求取消，只需两份AcientTablet。"
+            }
+          ]
+        }
+      },
+      {
+        "field": "items",
+        "value": [
+          "AncientScroll"
+        ],
+        "polarity": "exclude",
+        "evidence": [
+          {
+            "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+            "quote": "补充：不能献祭AncientScroll。"
+          }
+        ]
+      },
+      {
+        "field": "items",
+        "value": [
+          "AcientTablet",
+          "AcientTablet"
+        ],
+        "evidence": [
+          {
+            "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+            "quote": "更正：IronWhistle要求取消，只需两份AcientTablet。"
+          },
+          {
+            "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+            "quote": "补充：不能献祭AncientScroll。"
+          }
+        ]
+      },
+      {
+        "field": "window",
+        "value": {
+          "opensAt": 261,
+          "closesAt": 290
+        },
+        "evidence": [
+          {
+            "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+            "quote": "游戏第3天白昼开始后的前30回合开启。"
+          }
+        ]
+      }
+    ],
+    "evidence": {
+      "site": [
+        {
+          "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+          "quote": "祭坛位于横坐标3、纵坐标4"
+        }
+      ],
+      "items": [
+        {
+          "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+          "quote": "更正：IronWhistle要求取消，只需两份AcientTablet。"
+        },
+        {
+          "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+          "quote": "补充：不能献祭AncientScroll。"
+        }
+      ],
+      "window": [
+        {
+          "sourceId": "404cc3bab4ab2634c9a2c7bb61f7291b0c467f25bc4e4a32258de7401685067e",
+          "quote": "游戏第3天白昼开始后的前30回合开启。"
+        }
+      ]
+    }
+  }
+}

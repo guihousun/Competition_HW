@@ -20,6 +20,8 @@ def main():
     parser.add_argument('--seed', required=True, type=int)
     parser.add_argument('--side', choices=['challenger', 'defender'], required=True)
     parser.add_argument('--short-world', action='store_true')
+    parser.add_argument('--disable-night-staging', action='store_true', help='Explicit evaluation-only ablation')
+    parser.add_argument('--legacy-route-estimate', action='store_true', help='Evaluation-only old projected-occupancy estimate')
     args = parser.parse_args()
     source, out = Path(args.source).resolve(), Path(args.output).resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -30,6 +32,14 @@ def main():
     from agent import brain, local_scripted_model, local_task_cases, local_task_sandbox, local_world_news, scenarios, simulator
     os.environ[brain.WORLD_AGENT_ENV] = 'on'
     os.environ[brain.TASK_AGENT_ENV] = 'on'
+    overrides = []
+    if args.disable_night_staging:
+        brain._treasure_night_staging = lambda *unused: None
+        overrides.append('night_staging_disabled')
+    if args.legacy_route_estimate:
+        original_cost = brain._route_cost
+        brain._route_cost = lambda turn, start, goal, moving=None: original_cost(turn, start, goal)
+        overrides.append('legacy_projected_route_estimate')
 
     def hashes():
         return {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
@@ -94,6 +104,7 @@ def main():
     summary = {'scope': 'Full local simulator game; prompt-only scripted model and virtual sandbox; not intranet PASS',
         'source_sha': source_sha, 'files': initial, 'stable_source': hashes() == initial,
         'python': sys.version.split()[0], 'seed': args.seed, 'side': args.side, 'long_world': not args.short_world,
+        'runtime_overrides': overrides,
         'rounds': len(elapsed), 'score': state['teamOur']['totalScore'], 'base_hp': base['health'],
         'min_base_hp': min_base_hp, 'daily_calls': days, 'counts': counts,
         'simulation_step_p99_ms': ordered[int((len(ordered) - 1) * .99)], 'simulation_step_max_ms': max(ordered),

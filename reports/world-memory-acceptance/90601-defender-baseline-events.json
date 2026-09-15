@@ -1,0 +1,296 @@
+[
+  {
+    "round": 20,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 63,
+        "gold": 30,
+        "answer": "{\"city\": \"北京\", \"temperature\": 23}",
+        "expected": "{\"city\":\"北京\",\"temperature\":23}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 65,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 63,
+        "gold": 30,
+        "answer": "{\"temperature\": 17, \"city\": \"上海\"}",
+        "expected": "{\"city\":\"上海\",\"temperature\":17}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 168,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 63,
+        "gold": 30,
+        "answer": "0.3",
+        "expected": "0.3",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 271,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"city\": \"北京\", \"temperature\": 23}",
+        "expected": "{\"city\":\"北京\",\"temperature\":23}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 314,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"temperature\": 17, \"city\": \"上海\"}",
+        "expected": "{\"city\":\"上海\",\"temperature\":17}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 434,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "0.3",
+        "expected": "0.3",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 537,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"city\": \"北京\", \"temperature\": 23}",
+        "expected": "{\"city\":\"北京\",\"temperature\":23}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 580,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"temperature\": 17, \"city\": \"上海\"}",
+        "expected": "{\"city\":\"上海\",\"temperature\":17}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 668,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "0.3",
+        "expected": "0.3",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 711,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"city\": \"北京\", \"temperature\": 23}",
+        "expected": "{\"city\":\"北京\",\"temperature\":23}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 828,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"temperature\": 17, \"city\": \"上海\"}",
+        "expected": "{\"city\":\"上海\",\"temperature\":17}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 956,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "0.3",
+        "expected": "0.3",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 1086,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"city\": \"北京\", \"temperature\": 23}",
+        "expected": "{\"city\":\"北京\",\"temperature\":23}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  },
+  {
+    "round": 1216,
+    "task": {
+      "accepted": null,
+      "ended": "completed",
+      "rewards": {
+        "rate": 1.0,
+        "score": 67,
+        "gold": 30,
+        "answer": "{\"temperature\": 17, \"city\": \"上海\"}",
+        "expected": "{\"city\":\"上海\",\"temperature\":17}",
+        "bestRate": 1.0
+      },
+      "phaseTask": "",
+      "submission": {
+        "rate": 1.0,
+        "bestRate": 1.0
+      }
+    },
+    "summon_result": 0
+  }
+]
