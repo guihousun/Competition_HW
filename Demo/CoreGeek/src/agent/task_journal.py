@@ -72,9 +72,25 @@ class TaskJournal:
         question_hash = excerpt(question)['sha256'] if question else None
         if question_hash != previous['question']:
             if previous['question']:
+                submission = previous.get('submission')
+                changes = {}
+                for field in ('gold', 'totalScore'):
+                    old = previous.get('stats', {}).get(field)
+                    new = team.get(field)
+                    changes[field] = new-old if type(old) is int and type(new) is int else None
+                receipts = request.get('lastRoundRoleActionResults')
                 add('task_text_ended' if not question else 'task_text_replaced',
                     {'previous_question_sha256': previous['question'],
-                     'outcome': 'unknown_without_judge_feedback'})
+                     'outcome': 'unknown_without_judge_feedback',
+                     'meaning': '本地未确认判题结果，不是官方失败回执',
+                     'official_success_confirmed': False,
+                     'last_submission': submission,
+                     'change_since_previous_observation': changes,
+                     'change_is_task_reward': 'unknown_other_actions_may_contribute',
+                     'observation_gap': gap,
+                     'action_receipt': receipts.get(submission['role']) if submission and isinstance(receipts, dict) else None,
+                     'errors': request.get('errors', [])})
+            previous['submission'] = None
             if question:
                 previous['episode'] = f'{round_no}:{question_hash[:12]}'
                 add('task_text_observed', question)
@@ -97,7 +113,8 @@ class TaskJournal:
         agent = decision.get('agent') if isinstance(decision, dict) else None
         if isinstance(agent, dict):
             summary = {key: agent.get(key) for key in ('generation', 'stage', 'stopReason',
-                       'prompts', 'commands', 'answers', 'memoryReads', 'degraded')}
+                       'prompts', 'commands', 'answers', 'memoryReads', 'methodCount',
+                       'httpMethodCount', 'memorySources', 'degraded')}
             signature = excerpt(summary)['sha256']
             if signature != previous['fields'].get('agent'):
                 add('agent_state', summary)
@@ -115,6 +132,11 @@ class TaskJournal:
                 if isinstance(action, dict) and action.get('action') in ('acceptTask', 'submitAnswer', 'summonTreasure'):
                     previous['task_action'] = True
                     add('issued_' + action['action'], {'role': role_id, 'command': deepcopy(action)})
+                    if action['action'] == 'submitAnswer' and question:
+                        answer = action.get('taskAnswer')
+                        previous['submission'] = {'round': round_no, 'role': str(role_id),
+                            'answer_sha256': hashlib.sha256(answer.encode()).hexdigest() if isinstance(answer, str) else None}
+        previous['stats'] = {field: team.get(field) for field in ('gold', 'totalScore')}
         return rows
 
 

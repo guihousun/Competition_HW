@@ -14,6 +14,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 from .task_context import COMMAND_LIMIT
 from .task_workspace import virtual_probe
+from . import task_tools
 
 OUTPUT_BYTES = 65536  # interface 1.1: local implementation of the 64KB cap
 MAX_COMMAND_CHARS = COMMAND_LIMIT  # shared engineering bound, not an official limit
@@ -50,6 +51,11 @@ Unsupported shell constructs return nonzero without partially executing them.
             return _reply('Injected local test fault', marker=fault)
         if fault == 'TRUNCATED':
             return _reply('Injected partial output\n[TRUNCATED]')
+        if command.startswith('# task-http/1\n'):
+            config = task_tools.http_request(command)
+            if config is None:
+                return _reply('Invalid structured HTTP command', 2)
+            return _virtual_http(config, fixture.get('http_services') or {})
         if command.startswith('# task-workspace/1\n'):
             cwd = _path(str(fixture.get('cwd') or '/workspace'), '/')
             files = {_path(str(k), cwd): str(v) for k, v in (fixture.get('files') or {}).items()}
@@ -111,6 +117,44 @@ Unsupported shell constructs return nonzero without partially executing them.
         return _reply('Unsupported virtual command', 127)
     except (ValueError, TypeError, KeyError, AttributeError, InvalidOperation, ArithmeticError):
         return _reply('Invalid command or local fixture schema', 2)
+
+
+def _virtual_http(config, services):
+    """Declarative local fixture service; no host sockets or arbitrary code."""
+    from copy import deepcopy
+    from urllib.parse import urlsplit, parse_qsl
+    url = task_tools.endpoint(config['url'])
+    service = services.get(url)
+    if not isinstance(service, dict):
+        return _reply('No such virtual HTTP service', 2)
+    params = dict(parse_qsl(urlsplit(config['url']).query), **config['params'])
+    headers = {k.lower():v for k,v in config['headers'].items()}
+    auth = 'bearer' if headers.get('authorization','').startswith('Bearer ') else 'document'
+    attempts, aliases = [], {}
+    for attempt in range(3):
+        required = service.get('parameter', 'location')
+        if service.get('bearer_key') and headers.get('authorization') != 'Bearer '+service['bearer_key']:
+            status, data = 401, {'message': 'Missing Authorization header. Expected Authorization: Bearer <api_key>'}
+        elif required not in params:
+            status, data = 400, {'message': 'Missing required parameter: '+required}
+        else:
+            status = 200
+            data = deepcopy((service.get('records') or {}).get(params[required], {'total':0,'count':0}))
+        attempts.append({'status':status,'parameters':sorted(params),'auth':auth})
+        if attempt<2 and status==401 and 'authorization' not in headers:
+            keys=[k for k in headers if k in ('x-api-key','api-key')]
+            if len(keys)==1:
+                headers['authorization']='Bearer '+headers.pop(keys[0]); auth='bearer'; continue
+        if attempt<2 and status==400:
+            business=[k for k in params if k.lower() not in ('page','size','limit','offset','page_size','per_page')]
+            if len(business)==1:
+                old=business[0];params[required]=params.pop(old);aliases[old]=required;continue
+        break
+    return _reply(json.dumps({'tool':'task-http/1','endpoint':url,'status':status,'data':data,
+        'truncated':False,'attempts':attempts,'shape':{'type':type(data).__name__,
+        'keys':list(data)[:30] if isinstance(data,dict) else [],
+        'length':len(data) if isinstance(data,(dict,list)) else None},
+        'profile':{'endpoint':url,'auth':auth,'aliases':aliases} if status==200 else None},ensure_ascii=False))
 
 
 def _query(args: list[str], program: dict[str, Any]) -> str:

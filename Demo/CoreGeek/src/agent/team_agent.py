@@ -13,12 +13,13 @@ from .task_agent import TaskAgent
 from .task_skills import SkillLibrary
 from .task_context import public_task_confirmed, build_context, COMMAND_LIMIT
 from .task_workspace import bootstrap
+from . import task_tools
 from .sandbox import parse_command_result
 from .tasks import Plan
 from .world_agent import WorldAgent
 from .evidence_memory import EvidenceMemory
 
-SCHEMA = "competition-team-agent/3"
+SCHEMA = "competition-team-agent/4"
 EVIDENCE_LIMIT = 8
 TEXT_LIMIT = 6000
 
@@ -38,6 +39,7 @@ class TeamAgent:
         self.world = WorldAgent()
         self.memory = EvidenceMemory(owner)
         self.focus = None
+        self.http_profiles = []
 
     def consume(self, request, receipt, raw):
         """Called once by planner ingestion, including when defence pauses work."""
@@ -79,6 +81,44 @@ class TeamAgent:
             if len(argv) == 2 and argv[0] == "cat" and argv[1].startswith("/"):
                 event["path"] = argv[1]
             self.evidence = (self.evidence + [event])[-EVIDENCE_LIMIT:]
+            http_request = task_tools.http_request(request.payload)
+            if http_request and result.exit_code == 0 and not result.truncated:
+                try:
+                    wrapper = json.loads(result.output)
+                    requested_endpoint = task_tools.endpoint(http_request['url'])
+                    if (wrapper.get('tool') == 'task-http/1'
+                            and (wrapper.get('status') in (400,401,403) or wrapper.get('error'))):
+                        self.http_profiles = [p for p in self.http_profiles
+                                              if p['profile']['endpoint'] != requested_endpoint]
+                    profile = task_tools.clean_profile(wrapper.get('profile'))
+                    if (wrapper.get('tool') == 'task-http/1' and wrapper.get('status') == 200
+                            and wrapper.get('truncated') is False
+                            and profile['endpoint'] == task_tools.endpoint(http_request['url'])):
+                        seen_paths = set()
+                        for doc in reversed(self.evidence[:-1]):
+                            if doc.get('path') in seen_paths:
+                                continue
+                            if doc.get('path'):
+                                seen_paths.add(doc['path'])
+                            full = self._full_document(doc)
+                            if (full.get('path') and not full['truncated'] and full.get('exit_code') == 0
+                                    and profile['endpoint'] in full['text']):
+                                entry = {'document_path': full['path'], 'document_sha256': digest(full['text']),
+                                         'profile': profile}
+                                for old in self.http_profiles:
+                                    if (old['document_path'] == entry['document_path']
+                                            and old['document_sha256'] == entry['document_sha256']
+                                            and old['profile']['endpoint'] == profile['endpoint']):
+                                        combined = {**old['profile']['aliases'], **profile['aliases']}
+                                        if len(combined) <= 2:
+                                            profile['aliases'] = combined
+                                self.http_profiles = [p for p in self.http_profiles if
+                                    (p['document_path'], p['profile']['endpoint']) !=
+                                    (entry['document_path'], profile['endpoint'])]
+                                self.http_profiles = (self.http_profiles + [entry])[-8:]
+                                break
+                except (ValueError, TypeError, AttributeError):
+                    pass
             if request.payload.startswith('# task-workspace/1\n') and result.exit_code == 0:
                 # The actual correlated probe receipt, not a model-created path.
                 try:
@@ -175,6 +215,15 @@ class TeamAgent:
         candidates = self.skills.candidates(context.phase_task)
         if candidates:
             append_context("同类方法的候选文档，必须重新读取核验：" + json.dumps(candidates, ensure_ascii=False))
+        for profile in self.http_profiles:
+            for doc in reversed(self.evidence):
+                full = self._full_document(doc)
+                if full.get('path') == profile['document_path']:
+                    if (not full['truncated'] and full.get('exit_code') == 0
+                            and digest(full['text']) == profile['document_sha256']):
+                        append_context('同文档重新核验的HTTP方法（只有传输方法，没有凭据或答案；新错误优先）：'
+                                       + json.dumps(profile['profile'], ensure_ascii=False))
+                    break
         # Latest actual evidence wins space over old history. Include complete
         # medium documents directly instead of forcing multiple inspect rounds.
         recent = list(reversed(self.evidence[-4:]))
@@ -266,13 +315,15 @@ class TeamAgent:
         return {"schema": SCHEMA, "owner": self.owner, "task": self.task.dump(),
                 "skills": self.skills.dump(), "evidence": deepcopy(self.evidence),
                 "link": deepcopy(self.link), "degraded": self.degraded, "world": self.world.dump(),
-                "memory": self.memory.dump(), "focus": deepcopy(self.focus)}
+                "memory": self.memory.dump(), "focus": deepcopy(self.focus),
+                "httpProfiles": deepcopy(self.http_profiles)}
 
     def summary(self):
         return {"stage": self.task.stage, "generation": self.task.generation,
                 "prompts": self.task.prompts, "commands": self.task.commands,
                 "answers": self.task.answers, "evidenceCount": len(self.evidence),
                 "methodCount": len(self.skills.entries), "stopReason": self.task.stop_reason,
+                "httpMethodCount": len(self.http_profiles),
                 "degraded": self.degraded, "world": deepcopy(self.world.status),
                 "memoryReads": self.task.inspections, "memorySources": len(self.memory.records)}
 
@@ -280,6 +331,8 @@ class TeamAgent:
     def load(cls, raw, owner):
         result = cls(owner)
         try:
+            if isinstance(raw, dict) and raw.get('schema') == "competition-team-agent/3" and 'httpProfiles' not in raw:
+                raw = {**raw, 'schema': SCHEMA, 'httpProfiles': []}
             if (not isinstance(raw, dict) or set(raw) != set(result.dump())
                     or raw["schema"] != SCHEMA or raw["owner"] != owner
                     or type(raw["degraded"]) is not bool
@@ -335,6 +388,18 @@ class TeamAgent:
                 if result.memory.inspect(focus.get('source_id'), **request) != focus:
                     raise ValueError('focus is not the original memory result')
             result.focus = deepcopy(focus)
+            profiles = raw['httpProfiles']
+            if not isinstance(profiles, list) or len(profiles) > 8:
+                raise ValueError('invalid http profile count')
+            for entry in profiles:
+                if (not isinstance(entry, dict) or set(entry) != {'document_path','document_sha256','profile'}
+                        or not isinstance(entry['document_path'], str) or not entry['document_path'].startswith('/')
+                        or len(entry['document_path']) > 500 or not isinstance(entry['document_sha256'], str)
+                        or len(entry['document_sha256']) != 64
+                        or any(c not in '0123456789abcdef' for c in entry['document_sha256'])):
+                    raise ValueError('invalid source for http profile')
+                task_tools.clean_profile(entry['profile'])
+            result.http_profiles = deepcopy(profiles)
         except (ValueError, TypeError, KeyError, RecursionError):
             result.degraded = True
             result.task.finish("state_restore_rejected", stopped=True)

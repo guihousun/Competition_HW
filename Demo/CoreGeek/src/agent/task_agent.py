@@ -12,6 +12,7 @@ import hashlib
 import json
 from typing import Any
 from .task_context import PROMPT_LIMIT, COMMAND_LIMIT
+from . import task_tools
 
 SCHEMA = 'competition-task-agent/2'
 MAX_PROMPTS = 8  # engineering limits for one task, not official LLM allowances
@@ -20,7 +21,7 @@ MAX_CONTEXT = 12000
 MAX_REPLY = 16000
 MAX_HISTORY = 12
 ANSWER_LIMIT = 8000
-PLAN_KINDS = ('run', 'answer', 'inspect', 'need_info', 'give_up')
+PLAN_KINDS = ('run', 'http', 'check', 'answer', 'inspect', 'need_info', 'give_up')
 
 
 def _digest(value):
@@ -128,6 +129,11 @@ class TaskAgent:
             '长资料先定位关键字，再读取附近内容；摘要截断不等于原文缺失。\n'
             '可在外层JSON附带summary字符串（最多600字符），仅简记待办和下一步；不额外请求摘要。'
             '摘要是模型建议，不能覆盖真实工具结果，不写入一次性token或凭据。\n'
+            'HTTP查询优先用plan.kind=http和tool_args={url,headers,params}，所有参数值为字符串；'
+            '工具会URL编码、描述响应JSON结构，并仅依据明确错误提示有限重试鉴权/参数。'
+            '不要假定响应是数组，200空数据不代表任务完成；以当前服务回执修正文档假设。'
+            '工程校验优先用kind=check和tool_args={path:"绝对check路径"}，只在内存处理CRLF，'
+            '不修改check原件，保持工作目录和退出码。http/check不同时提供command或answer。\n'
         )
         events = json.dumps([{**item, 'text': item['text'][:200],
                               'truncated': item['truncated'] or len(item['text']) > 200}
@@ -187,7 +193,7 @@ class TaskAgent:
             if envelope['request_id'] != token:
                 raise ValueError('wrong model correlation')
             plan = envelope['plan']
-            if not isinstance(plan, dict) or set(plan) - {'kind', 'command', 'answer', 'reason', 'evidence_ids', 'source_id', 'offset', 'length', 'query'}:
+            if not isinstance(plan, dict) or set(plan) - {'kind', 'command', 'answer', 'reason', 'evidence_ids', 'source_id', 'offset', 'length', 'query', 'tool_args'}:
                 raise ValueError('unsupported model fields')
             plan_kind = plan.get('kind')
             if plan_kind not in PLAN_KINDS:
@@ -203,6 +209,21 @@ class TaskAgent:
             summary = envelope.get('summary')
             if isinstance(summary, str) and 0 < len(summary) <= 600:
                 self._event('model_summary_unverified', summary, round_no)
+            if plan_kind in ('http', 'check'):
+                if set(plan) - {'kind', 'tool_args', 'reason', 'evidence_ids'}:
+                    raise ValueError('conflicting structured tool fields')
+                try:
+                    command = task_tools.command(plan_kind, plan.get('tool_args'))
+                except ValueError as error:
+                    self._event('invalid_tool_arguments', str(error), round_no)
+                    return False
+                if self.commands >= MAX_COMMANDS or self.command_attempts.get(_digest(command), 0) >= 2:
+                    self.finish('command_soft_limit_or_repeated_no_progress', stopped=True)
+                    return False
+                self._propose('cmd', command, reason or '结构化' + plan_kind + '工具')
+                return True
+            if 'tool_args' in plan:
+                raise ValueError('tool_args on a non-tool plan')
             if plan_kind == 'inspect':
                 source_id = plan.get('source_id')
                 offset, length, query = plan.get('offset', 0), plan.get('length', 2000), plan.get('query', '')
