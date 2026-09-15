@@ -117,12 +117,16 @@ def _task(prompt, token):
     ids = _line_json(prompt, '可引用证据ID：') or []
     index = _line_json(prompt, '本题原文记忆索引（inspect只能访问这些已收到的来源）：') or []
     evidence = []
+    newest_first = False
     for line in prompt.splitlines():
-        if line.startswith('关联工具摘要') and '：' in line:
+        if line.startswith(('关联工具摘要', '关联工具原文')) and '：' in line:
             try:
                 evidence.append(json.loads(line.split('：', 1)[1]))
+                newest_first = newest_first or line.startswith('关联工具原文')
             except ValueError:
                 pass
+    if newest_first:
+        evidence.reverse()  # current prompt prioritizes newest receipt for its byte budget
     focus = _line_json(prompt, '最近本地原文检索结果：')
     question = prompt.split('任务原文 (', 1)[-1].split('答案格式约束:', 1)[0]
     plan = {'kind': 'need_info', 'reason': '脚本模型不支持该题；可切换真实模型', 'evidence_ids': ids}
@@ -137,7 +141,8 @@ def _task(prompt, token):
         except (ValueError, TypeError, KeyError):
             pass
     else:
-        doc = next((e for e in reversed(evidence) if e.get('exit_code') == 0 and e.get('command', '').startswith('cat ')), None)
+        doc = next((e for e in reversed(evidence) if e.get('exit_code') == 0
+                    and (e.get('command', '').startswith('cat ') or e.get('path'))), None)
         text = (focus or {}).get('text', '') or (doc or {}).get('text', '')
         api = re.search(r'python3\s+(/[^\s]+)\s+(--[a-z]+)', text)
         if api:
