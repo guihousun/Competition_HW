@@ -1,0 +1,497 @@
+2026-09-15 11:49:51,568 | listening on 0.0.0.0:6666
+PLAYER_111_STARTED pid=22 port=6666
+2026-09-15 11:49:52.4457
+process start...
+loop times: 2
+2026-09-15 11:49:52.44688
+/usr/local/bin/python3.11
+2026-09-15 11:49:55,642 | round 1 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 7}]}}, 'prompt': '你是一名《未来战争》游戏中的宝藏猎人。根据以下多天的【民间传闻】线索，推断祭坛宝藏信息。\n地图大小为 41x32，坐标原点(0,0)在地图左下角，x向右增大，y向上增大。\n我方阵营为 defender，我方基地位置为 (30, 10)（左上角坐标，基地占2x2）。\n请推断：\n1. 祭坛（宝藏）所在坐标 pos，必须是地图内整数坐标(x,y)。\n2. 开启宝藏需要献祭的任务用品 items（物品名从以下列表选择，必须与线索对应）：\n   AcientTablet(古符石板)、StarSand(星辰之沙)、FlameBreath(烈焰之息)、FrostPotion(寒霜药剂)、ThornAmulet(荆棘护符)、IronWhistle(回音铁哨)\n3. 宝藏的开启时间 unlockHint，用中文简述（例如第几天、夜晚/白天、具体回合数等）。\n请严格只输出一个 JSON 对象，不要输出其他内容，格式如下：\n{"pos": {"x": 整数, "y": 整数}, "items": ["物品名1", "物品名2"], "unlockHint": "描述"}\n【民间传闻】：\n村里最年长的采药人昨天过世了，活了九十三岁。他孙子在整理遗物时发现了一本发霉的笔记，最后一页潦草地写着："西部有一石门，门需三钥"下面还画了一个圆圈，圆圈里画了三道杠。家里人看不懂，打算当废纸烧了。南边渡口的船夫抱怨最近水位下降得厉害，船底已经刮了三次礁石了。'}
+2026-09-15 11:50:03,657 | round 2 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 8}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}}}
+2026-09-15 11:50:11,139 | round 3 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:50:11,204 | round 4 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}}}
+2026-09-15 11:50:11,252 | round 5 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 7}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:50:11,301 | round 6 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 32, 'y': 8}], 'name': 'rocket'}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 11}]}}}
+2026-09-15 11:50:11,342 | round 7 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 7}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:50:11,423 | round 8 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:50:12,086 | round 9 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:50:12,173 | round 10 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 14}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:50:17,076 | round 11 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 32, 'y': 11}], 'name': 'rocket'}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 15}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:50:17,128 | round 12 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'sell', 'name': 'copper', 'num': 1}, '20011': {'action': 'acceptTask'}}}
+2026-09-15 11:50:26,618 | round 13 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 14}]}, '20011': {'action': 'submitAnswer', 'taskAnswer': '{"token":"fc1e78eb2a5a"}'}}}
+2026-09-15 11:50:26,783 | round 14 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 7}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 26, 'y': 15}]}}}
+2026-09-15 11:50:30,858 | round 15 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 29, 'y': 8}], 'name': 'rocket'}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}}}
+2026-09-15 11:50:30,882 | round 16 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 6}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}}}
+2026-09-15 11:50:30,943 | round 17 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 5}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}, '20011': {'action': 'acceptTask'}}}
+2026-09-15 11:50:31,577 | round 18 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 4}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}, '20011': {'action': 'submitAnswer', 'taskAnswer': '{"city":"北京","oldest_era":"周口店遗址","total_count":15,"types":["军事防御","园林","城门","宗教建筑","建筑","教育建筑","桥梁","遗址","陵墓"],"world_heritage_count":6}'}}}
+2026-09-15 11:50:31,635 | round 19 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 3}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}}}
+2026-09-15 11:50:31,725 | round 20 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 2}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}}}
+2026-09-15 11:50:32,403 | round 21 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}}}
+2026-09-15 11:50:32,475 | round 22 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 26, 'y': 12}]}}}
+2026-09-15 11:50:41,605 | round 23 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 11}]}}}
+2026-09-15 11:50:41,684 | round 24 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 14}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 10}]}}}
+2026-09-15 11:50:47,686 | round 25 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 15}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:50:47,762 | round 26 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 16}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:50:57,562 | round 27 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:50:57,629 | round 28 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 13}]}}}
+2026-09-15 11:51:06,065 | round 29 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}}}
+2026-09-15 11:51:06,131 | round 30 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 25, 'y': 1}]}, '20012': {'action': 'buy', 'name': 'WeaponUpgradeVoucher1', 'num': 1}}}
+2026-09-15 11:51:09,867 | round 31 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 3}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 18}]}}}
+2026-09-15 11:51:37,143 | round 32 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 4}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 17}]}}}
+2026-09-15 11:51:46,486 | round 33 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 5}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 16}]}}}
+2026-09-15 11:51:46,567 | round 34 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 6}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 15}]}}}
+2026-09-15 11:51:46,584 | round 35 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 7}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 14}]}}}
+2026-09-15 11:51:46,638 | round 36 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 7}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:51:46,695 | round 37 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 8}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 12}]}}}
+2026-09-15 11:51:46,757 | round 38 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:51:46,817 | round 39 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 9}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:51:46,872 | round 40 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}}}
+2026-09-15 11:51:46,928 | round 41 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 10}], 'name': 'wall'}, '20012': {'action': 'use', 'name': 'WeaponUpgradeVoucher1', 'targetPos': [{'x': 32, 'y': 8}]}}}
+2026-09-15 11:51:46,987 | round 42 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}}}
+2026-09-15 11:51:47,043 | round 43 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 11}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}}}
+2026-09-15 11:51:47,101 | round 44 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}}
+2026-09-15 11:51:47,156 | round 45 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 12}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:51:47,212 | round 46 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:51:47,269 | round 47 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:51:47,327 | round 48 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:51:47,981 | round 49 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 29, 'y': 12}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:51:48,064 | round 50 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}, '20011': {'action': 'acceptTask'}}}
+2026-09-15 11:51:51,796 | round 51 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 29, 'y': 12}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}, '20011': {'action': 'submitAnswer', 'taskAnswer': '{"token":"0de1b57493cf"}'}}}
+2026-09-15 11:51:51,864 | round 52 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:51:57,092 | round 53 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 14}]}}}
+2026-09-15 11:51:57,243 | round 54 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:52:01,852 | round 55 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:52:01,869 | round 56 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 29, 'y': 7}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:52:01,925 | round 57 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 30, 'y': 7}], 'name': 'wall'}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:52:02,000 | round 58 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}}
+2026-09-15 11:52:02,057 | round 59 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}}}
+2026-09-15 11:52:02,116 | round 60 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:52:02,170 | round 61 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}}}
+2026-09-15 11:52:02,223 | round 62 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:52:02,279 | round 63 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:52:02,341 | round 64 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 30, 'y': 12}], 'name': 'wall'}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}}}
+2026-09-15 11:52:02,396 | round 65 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:52:02,458 | round 66 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:52:02,518 | round 67 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:52:02,581 | round 68 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:52:02,649 | round 69 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 17}]}}}
+2026-09-15 11:52:03,296 | round 70 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:52:03,366 | round 71 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 5}, {'x': 17, 'y': 6}], 'controllerId': '20011'}, '20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:52:09,683 | round 72 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:52:09,807 | round 73 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 19, 'y': 5}], 'controllerId': '20012'}, '20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:52:14,330 | round 74 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:52:14,442 | round 75 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 20, 'y': 7}, {'x': 19, 'y': 7}], 'controllerId': '20011'}, '20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:52:21,393 | round 76 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 22, 'y': 5}], 'controllerId': '20010'}}}
+2026-09-15 11:52:21,513 | round 77 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 21, 'y': 7}], 'controllerId': '20012'}}}
+2026-09-15 11:52:25,262 | round 78 -> {'roleCommandMap': {}}
+2026-09-15 11:52:25,283 | round 79 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 22, 'y': 7}, {'x': 24, 'y': 8}], 'controllerId': '20011'}}}
+2026-09-15 11:52:25,371 | round 80 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 8}], 'controllerId': '20010'}}}
+2026-09-15 11:52:25,395 | round 81 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:52:25,458 | round 82 -> {'roleCommandMap': {}}
+2026-09-15 11:52:25,514 | round 83 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 9}, {'x': 25, 'y': 9}], 'controllerId': '20011'}}}
+2026-09-15 11:52:25,569 | round 84 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 8}], 'controllerId': '20010'}}}
+2026-09-15 11:52:25,622 | round 85 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:52:25,676 | round 86 -> {'roleCommandMap': {}}
+2026-09-15 11:52:25,731 | round 87 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 8}, {'x': 26, 'y': 8}], 'controllerId': '20011'}}}
+2026-09-15 11:52:25,786 | round 88 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}], 'controllerId': '20010'}}}
+2026-09-15 11:52:25,840 | round 89 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}], 'controllerId': '20012'}}}
+2026-09-15 11:52:25,893 | round 90 -> {'roleCommandMap': {}}
+2026-09-15 11:52:25,944 | round 91 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 6}, {'x': 27, 'y': 12}], 'controllerId': '20011'}}}
+2026-09-15 11:52:25,997 | round 92 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:52:26,049 | round 93 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:52:26,101 | round 94 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,153 | round 95 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 28, 'y': 6}, {'x': 27, 'y': 7}], 'controllerId': '20011'}}}
+2026-09-15 11:52:26,209 | round 96 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20010'}}}
+2026-09-15 11:52:26,261 | round 97 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 28, 'y': 6}], 'controllerId': '20012'}}}
+2026-09-15 11:52:26,327 | round 98 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,379 | round 99 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20011'}}}
+2026-09-15 11:52:26,430 | round 100 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20010'}}}
+2026-09-15 11:52:26,481 | round 101 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,532 | round 102 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,582 | round 103 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,634 | round 104 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,686 | round 105 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,745 | round 106 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,798 | round 107 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,853 | round 108 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,902 | round 109 -> {'roleCommandMap': {}}
+2026-09-15 11:52:26,953 | round 110 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,003 | round 111 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,053 | round 112 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,104 | round 113 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,156 | round 114 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,206 | round 115 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,256 | round 116 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,305 | round 117 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,357 | round 118 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,407 | round 119 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,458 | round 120 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,507 | round 121 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,561 | round 122 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,612 | round 123 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,664 | round 124 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,713 | round 125 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,762 | round 126 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,814 | round 127 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,864 | round 128 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,915 | round 129 -> {'roleCommandMap': {}}
+2026-09-15 11:52:27,974 | round 130 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:52:28,031 | round 131 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}, 'prompt': '你是一名《未来战争》游戏中的宝藏猎人。根据以下多天的【民间传闻】线索，推断祭坛宝藏信息。\n地图大小为 41x32，坐标原点(0,0)在地图左下角，x向右增大，y向上增大。\n我方阵营为 defender，我方基地位置为 (30, 10)（左上角坐标，基地占2x2）。\n请推断：\n1. 祭坛（宝藏）所在坐标 pos，必须是地图内整数坐标(x,y)。\n2. 开启宝藏需要献祭的任务用品 items（物品名从以下列表选择，必须与线索对应）：\n   AcientTablet(古符石板)、StarSand(星辰之沙)、FlameBreath(烈焰之息)、FrostPotion(寒霜药剂)、ThornAmulet(荆棘护符)、IronWhistle(回音铁哨)\n3. 宝藏的开启时间 unlockHint，用中文简述（例如第几天、夜晚/白天、具体回合数等）。\n请严格只输出一个 JSON 对象，不要输出其他内容，格式如下：\n{"pos": {"x": 整数, "y": 整数}, "items": ["物品名1", "物品名2"], "unlockHint": "描述"}\n【民间传闻】：\n东边林场的伐木工说最近夜里老听见狼嚎，而且声音越来越近。村里组织了巡逻队，今晚开始值夜。'}
+2026-09-15 11:52:30,202 | round 132 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}}}
+2026-09-15 11:52:35,278 | round 133 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:52:35,294 | round 134 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:52:35,353 | round 135 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:52:35,410 | round 136 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:52:36,042 | round 137 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 14}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}}}
+2026-09-15 11:52:36,115 | round 138 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 15}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:52:53,268 | round 139 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 16}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:53:00,184 | round 140 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 17}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:53:00,688 | round 141 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 18}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:53:10,002 | round 142 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}, '20011': {'action': 'acceptTask'}}}
+2026-09-15 11:53:10,645 | round 143 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'buy', 'name': 'WeaponUpgradeVoucher1', 'num': 1}, '20011': {'action': 'submitAnswer', 'taskAnswer': '{"token":"c8be2288b213"}'}}}
+2026-09-15 11:53:16,643 | round 144 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'buy', 'name': 'StationUpgradeVoucher1', 'num': 1}, '20011': {'action': 'move', 'targetPos': [{'x': 26, 'y': 15}]}}}
+2026-09-15 11:53:16,657 | round 145 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'buy', 'name': 'WallUpgradeVoucher1', 'num': 1}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}}}
+2026-09-15 11:53:16,715 | round 146 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 18}]}, '20011': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}}}
+2026-09-15 11:53:16,774 | round 147 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 31, 'y': 20}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 17}]}, '20011': {'action': 'acceptTask'}}}
+2026-09-15 11:53:17,418 | round 148 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 16}]}, '20011': {'action': 'submitAnswer', 'taskAnswer': '{"city":"南京","total_count":12,"world_heritage_count":1,"types":["陵墓","建筑群","军事防御","建筑","宗教建筑","园林","纪念地"],"oldest_era":"鸡鸣寺"}'}}}
+2026-09-15 11:53:17,477 | round 149 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 15}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}}}
+2026-09-15 11:53:18,152 | round 150 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 14}]}, '20011': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:53:18,209 | round 151 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}}}
+2026-09-15 11:53:22,891 | round 152 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:53:22,996 | round 153 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:53:33,243 | round 154 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}, '20012': {'action': 'use', 'name': 'WeaponUpgradeVoucher1', 'targetPos': [{'x': 32, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:53:33,365 | round 155 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 14}]}}}
+2026-09-15 11:53:36,894 | round 156 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 31, 'y': 12}], 'name': 'wall'}, '20012': {'action': 'use', 'name': 'StationUpgradeVoucher1', 'targetPos': [{'x': 30, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 13}]}}}
+2026-09-15 11:53:37,327 | round 157 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:53:40,495 | round 158 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}}
+2026-09-15 11:53:40,832 | round 159 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}}}
+2026-09-15 11:53:41,218 | round 160 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 7}]}}}
+2026-09-15 11:53:41,669 | round 161 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 6}]}}}
+2026-09-15 11:53:42,123 | round 162 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 6}]}}}
+2026-09-15 11:53:42,548 | round 163 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 31, 'y': 7}], 'name': 'wall'}, '20012': {'action': 'use', 'name': 'WallUpgradeVoucher1', 'targetPos': [{'x': 28, 'y': 7}]}}}
+2026-09-15 11:53:42,991 | round 164 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 7}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 6}]}}}
+2026-09-15 11:53:43,437 | round 165 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 6}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 7}]}}}
+2026-09-15 11:53:43,860 | round 166 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 5}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 8}]}}}
+2026-09-15 11:53:44,290 | round 167 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 5}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 9}]}}}
+2026-09-15 11:53:44,718 | round 168 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 6}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 10}]}}}
+2026-09-15 11:53:45,120 | round 169 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 7}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 11}]}}}
+2026-09-15 11:53:45,500 | round 170 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 12}]}}}
+2026-09-15 11:53:45,851 | round 171 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 13}]}}}
+2026-09-15 11:53:46,213 | round 172 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 14}]}}}
+2026-09-15 11:53:46,478 | round 173 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 20, 'y': 15}]}}}
+2026-09-15 11:53:46,723 | round 174 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 16}]}}}
+2026-09-15 11:53:46,956 | round 175 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 21, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}}}
+2026-09-15 11:53:47,167 | round 176 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 20, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}}}
+2026-09-15 11:53:47,358 | round 177 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 19, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}}}
+2026-09-15 11:53:47,522 | round 178 -> {'roleCommandMap': {'20010': {'action': 'sell', 'name': 'stone', 'num': 8}, '20012': {'action': 'buy', 'name': 'WallUpgradeVoucher1', 'num': 1}}}
+2026-09-15 11:53:47,646 | round 179 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 19, 'y': 16}]}, '20012': {'action': 'buy', 'name': 'WallUpgradeVoucher2', 'num': 1}}}
+2026-09-15 11:53:47,804 | round 180 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 20, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:53:47,889 | round 181 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 21, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:53:47,995 | round 182 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 21, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 16}]}}}
+2026-09-15 11:53:48,106 | round 183 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 15}]}}}
+2026-09-15 11:53:48,205 | round 184 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}}}
+2026-09-15 11:53:48,321 | round 185 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 14}]}}}
+2026-09-15 11:53:48,415 | round 186 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 13}]}}}
+2026-09-15 11:53:48,536 | round 187 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:53:48,656 | round 188 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 7}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:53:48,743 | round 189 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 6}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:53:48,813 | round 190 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 5}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:53:48,875 | round 191 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 5}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:53:48,937 | round 192 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 6}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:53:48,986 | round 193 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 7}]}}}
+2026-09-15 11:53:49,022 | round 194 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}}}
+2026-09-15 11:53:49,071 | round 195 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}}}
+2026-09-15 11:53:49,120 | round 196 -> {'roleCommandMap': {}}
+2026-09-15 11:53:49,168 | round 197 -> {'roleCommandMap': {}}
+2026-09-15 11:53:49,217 | round 198 -> {'roleCommandMap': {}}
+2026-09-15 11:53:49,263 | round 199 -> {'roleCommandMap': {}}
+2026-09-15 11:53:49,312 | round 200 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:53:49,441 | round 201 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 7}, {'x': 17, 'y': 8}], 'controllerId': '20010'}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:53:49,461 | round 202 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 18, 'y': 7}, {'x': 18, 'y': 6}], 'controllerId': '20012'}}}
+2026-09-15 11:53:49,513 | round 203 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 19, 'y': 8}], 'controllerId': '20011'}}}
+2026-09-15 11:53:49,566 | round 204 -> {'roleCommandMap': {}}
+2026-09-15 11:53:49,619 | round 205 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 19, 'y': 7}, {'x': 18, 'y': 7}], 'controllerId': '20010'}}}
+2026-09-15 11:53:49,673 | round 206 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 20, 'y': 7}, {'x': 19, 'y': 7}], 'controllerId': '20012'}}}
+2026-09-15 11:53:49,727 | round 207 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 21, 'y': 9}], 'controllerId': '20011'}}}
+2026-09-15 11:53:49,783 | round 208 -> {'roleCommandMap': {}}
+2026-09-15 11:53:49,836 | round 209 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 23, 'y': 9}, {'x': 22, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:53:49,897 | round 210 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 22, 'y': 8}, {'x': 24, 'y': 10}], 'controllerId': '20012'}}}
+2026-09-15 11:53:49,953 | round 211 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 9}], 'controllerId': '20011'}}}
+2026-09-15 11:53:50,008 | round 212 -> {'roleCommandMap': {}}
+2026-09-15 11:53:50,066 | round 213 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 9}, {'x': 26, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:53:50,127 | round 214 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 8}, {'x': 27, 'y': 8}], 'controllerId': '20012'}}}
+2026-09-15 11:53:50,183 | round 215 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 9}], 'controllerId': '20011'}}}
+2026-09-15 11:53:50,237 | round 216 -> {'roleCommandMap': {}}
+2026-09-15 11:53:50,292 | round 217 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 7}, {'x': 27, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:53:50,347 | round 218 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 8}, {'x': 25, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:53:50,401 | round 219 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 9}], 'controllerId': '20011'}}}
+2026-09-15 11:53:50,453 | round 220 -> {'roleCommandMap': {}}
+2026-09-15 11:53:50,504 | round 221 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 9}, {'x': 27, 'y': 11}], 'controllerId': '20010'}}}
+2026-09-15 11:53:50,557 | round 222 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 6}, {'x': 27, 'y': 7}], 'controllerId': '20012'}}}
+2026-09-15 11:53:50,609 | round 223 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}], 'controllerId': '20011'}}}
+2026-09-15 11:53:50,662 | round 224 -> {'roleCommandMap': {}}
+2026-09-15 11:53:50,711 | round 225 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}, {'x': 26, 'y': 11}], 'controllerId': '20010'}}}
+2026-09-15 11:53:50,762 | round 226 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 6}, {'x': 27, 'y': 7}], 'controllerId': '20012'}}}
+2026-09-15 11:53:50,812 | round 227 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20011'}}}
+2026-09-15 11:53:50,863 | round 228 -> {'roleCommandMap': {}}
+2026-09-15 11:53:50,913 | round 229 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}, {'x': 28, 'y': 14}], 'controllerId': '20010'}}}
+2026-09-15 11:53:50,963 | round 230 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 6}, {'x': 30, 'y': 6}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,012 | round 231 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 13}], 'controllerId': '20011'}}}
+2026-09-15 11:53:51,062 | round 232 -> {'roleCommandMap': {}}
+2026-09-15 11:53:51,112 | round 233 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 6}, {'x': 30, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:53:51,163 | round 234 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,213 | round 235 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,265 | round 236 -> {'roleCommandMap': {'20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,313 | round 237 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20010'}, '20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,365 | round 238 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20010'}, '20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,415 | round 239 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20011'}, '20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20010'}, '20041': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 13}], 'controllerId': '20012'}}}
+2026-09-15 11:53:51,467 | round 240 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:53:51,517 | round 241 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:53:51,566 | round 242 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:53:51,616 | round 243 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:53:51,665 | round 244 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:53:51,713 | round 245 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}}}
+2026-09-15 11:53:51,761 | round 246 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:51,809 | round 247 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:51,858 | round 248 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:51,906 | round 249 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:51,954 | round 250 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:52,002 | round 251 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:52,050 | round 252 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:52,098 | round 253 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 13}]}}}
+2026-09-15 11:53:52,146 | round 254 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}}}
+2026-09-15 11:53:52,194 | round 255 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 15}]}}}
+2026-09-15 11:53:52,244 | round 256 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:53:52,294 | round 257 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:53:52,341 | round 258 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:53:52,388 | round 259 -> {'roleCommandMap': {'20012': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:53:52,445 | round 260 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}}
+2026-09-15 11:53:52,499 | round 261 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}}, 'prompt': '你是一名《未来战争》游戏中的宝藏猎人。根据以下多天的【民间传闻】线索，推断祭坛宝藏信息。\n地图大小为 41x32，坐标原点(0,0)在地图左下角，x向右增大，y向上增大。\n我方阵营为 defender，我方基地位置为 (30, 10)（左上角坐标，基地占2x2）。\n请推断：\n1. 祭坛（宝藏）所在坐标 pos，必须是地图内整数坐标(x,y)。\n2. 开启宝藏需要献祭的任务用品 items（物品名从以下列表选择，必须与线索对应）：\n   AcientTablet(古符石板)、StarSand(星辰之沙)、FlameBreath(烈焰之息)、FrostPotion(寒霜药剂)、ThornAmulet(荆棘护符)、IronWhistle(回音铁哨)\n3. 宝藏的开启时间 unlockHint，用中文简述（例如第几天、夜晚/白天、具体回合数等）。\n请严格只输出一个 JSON 对象，不要输出其他内容，格式如下：\n{"pos": {"x": 整数, "y": 整数}, "items": ["物品名1", "物品名2"], "unlockHint": "描述"}\n【民间传闻】：\n集市上来了个倒卖古董的外乡人，说话油腔滑调，摆了一地稀奇玩意儿。有人问他见没见过"会发光的石头"，他撇嘴说："你说的是那种灰白色、上面刻着歪歪扭扭字儿的石板吧？我在武器商店老板那儿见过一块，老板说这东西摆在店里好几个月了，根本没人问津，打算当镇纸用了。"又有人问"光之尘"是什么，他想了想："是不是一小袋银白色的粉末，摸起来凉丝丝的，在黑处自己会发光的那种？那也是武器商店从我这收走的！最邪门的是一个水晶瓶子，里头封着一团橙红色的雾，晃一晃还会自己亮——老板说三样东西是同一个怪人卖给他的，卖完人就再没出现过。"说完他压低声音："我要价不高，你们去武器商店看看就知道了，老板加价不多。"'}
+2026-09-15 11:54:09,547 | round 262 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:54:15,696 | round 263 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:54:15,716 | round 264 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:54:15,768 | round 265 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:54:15,821 | round 266 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 14}]}, '20012': {'action': 'use', 'name': 'WallUpgradeVoucher1', 'targetPos': [{'x': 28, 'y': 8}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:15,873 | round 267 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 8}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:54:15,925 | round 268 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 16}]}, '20012': {'action': 'use', 'name': 'WallUpgradeVoucher2', 'targetPos': [{'x': 28, 'y': 7}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:54:15,977 | round 269 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:54:16,029 | round 270 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:54:16,079 | round 271 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:54:16,128 | round 272 -> {'roleCommandMap': {'20010': {'action': 'buy', 'name': 'WallFixer', 'num': 1}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}}}
+2026-09-15 11:54:16,182 | round 273 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 13}]}, '20011': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:16,248 | round 274 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 14}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}}}
+2026-09-15 11:54:16,299 | round 275 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 20, 'y': 15}]}, '20011': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}}}
+2026-09-15 11:54:16,353 | round 276 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 15}]}, '20012': {'action': 'sell', 'name': 'copper', 'num': 13}, '20011': {'action': 'acceptTask'}}}
+2026-09-15 11:54:16,983 | round 277 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 16}]}, '20011': {'action': 'submitAnswer', 'taskAnswer': '{"city":"成都","oldest_era":"金沙遗址","total_count":10,"types":["园林","宗教建筑","建筑","水利工程","祠堂","街区","遗址","陵墓"],"world_heritage_count":1}'}}}
+2026-09-15 11:54:17,054 | round 278 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}, '20011': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}}}
+2026-09-15 11:54:17,124 | round 279 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20011': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:17,249 | round 280 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}, '20011': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}}}
+2026-09-15 11:54:17,388 | round 281 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 10}]}, '20012': {'action': 'buy', 'name': 'WeaponUpgradeVoucher1', 'num': 1}, '20011': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:54:17,536 | round 282 -> {'roleCommandMap': {'20010': {'action': 'use', 'name': 'WallFixer', 'targetPos': [{'x': 28, 'y': 9}]}, '20012': {'action': 'buy', 'name': 'WallFixer', 'num': 1}, '20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:54:17,781 | round 283 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}, '20012': {'action': 'buy', 'name': 'WallUpgradeVoucher1', 'num': 1}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:54:17,961 | round 284 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 18}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:54:18,090 | round 285 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 17}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 13}]}}}
+2026-09-15 11:54:18,213 | round 286 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 16}]}}}
+2026-09-15 11:54:18,321 | round 287 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 15}]}}}
+2026-09-15 11:54:18,404 | round 288 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 14}]}}}
+2026-09-15 11:54:18,500 | round 289 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:54:18,584 | round 290 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:54:18,667 | round 291 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:54:18,754 | round 292 -> {'roleCommandMap': {'20010': {'action': 'buy', 'name': 'WallFixer', 'num': 1}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:54:18,847 | round 293 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:18,930 | round 294 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:54:19,019 | round 295 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:54:19,104 | round 296 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}}
+2026-09-15 11:54:19,190 | round 297 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 14}]}, '20012': {'action': 'use', 'name': 'WeaponUpgradeVoucher1', 'targetPos': [{'x': 29, 'y': 8}]}}}
+2026-09-15 11:54:19,279 | round 298 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 13}]}, '20012': {'action': 'use', 'name': 'WallUpgradeVoucher1', 'targetPos': [{'x': 28, 'y': 9}]}}}
+2026-09-15 11:54:19,364 | round 299 -> {'roleCommandMap': {'20010': {'action': 'use', 'name': 'WallFixer', 'targetPos': [{'x': 28, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:54:19,447 | round 300 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:54:19,529 | round 301 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:19,611 | round 302 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:54:19,701 | round 303 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:54:19,789 | round 304 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:54:19,876 | round 305 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:54:19,953 | round 306 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 15}]}}}
+2026-09-15 11:54:20,035 | round 307 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 27, 'y': 16}]}}}
+2026-09-15 11:54:20,116 | round 308 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 14}]}}}
+2026-09-15 11:54:20,144 | round 309 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:54:20,197 | round 310 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:54:20,249 | round 311 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 21, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:54:20,340 | round 312 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 33, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 14}]}}}
+2026-09-15 11:54:20,419 | round 313 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 13}]}}}
+2026-09-15 11:54:20,490 | round 314 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 12}]}}}
+2026-09-15 11:54:20,560 | round 315 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 11}]}}}
+2026-09-15 11:54:20,626 | round 316 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:20,688 | round 317 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:20,751 | round 318 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:20,831 | round 319 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:20,905 | round 320 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:20,981 | round 321 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:21,043 | round 322 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:21,105 | round 323 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:21,170 | round 324 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:21,250 | round 325 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:21,312 | round 326 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:21,375 | round 327 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:21,496 | round 328 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:21,521 | round 329 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:21,581 | round 330 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:54:21,645 | round 331 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}}}
+2026-09-15 11:54:21,715 | round 332 -> {'roleCommandMap': {'20011': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}, '20040': {'action': 'attack', 'targetPos': [{'x': 18, 'y': 8}, {'x': 18, 'y': 7}], 'controllerId': '20012'}, '20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}}}
+2026-09-15 11:54:21,782 | round 333 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 7}, {'x': 16, 'y': 7}], 'controllerId': '20011'}, '20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}}}
+2026-09-15 11:54:21,845 | round 334 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:54:21,908 | round 335 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:54:22,005 | round 336 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 20, 'y': 7}, {'x': 19, 'y': 7}], 'controllerId': '20012'}, '20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:54:22,026 | round 337 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 19, 'y': 7}, {'x': 19, 'y': 8}], 'controllerId': '20011'}, '20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:54:22,083 | round 338 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:54:22,137 | round 339 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:22,208 | round 340 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 22, 'y': 9}, {'x': 23, 'y': 9}], 'controllerId': '20012'}, '20041': {'action': 'attack', 'targetPos': [{'x': 22, 'y': 9}, {'x': 23, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:54:22,270 | round 341 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 23, 'y': 8}, {'x': 24, 'y': 8}], 'controllerId': '20011'}}}
+2026-09-15 11:54:22,327 | round 342 -> {'roleCommandMap': {}}
+2026-09-15 11:54:22,386 | round 343 -> {'roleCommandMap': {}}
+2026-09-15 11:54:22,450 | round 344 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 25, 'y': 8}, {'x': 24, 'y': 8}], 'controllerId': '20012'}, '20041': {'action': 'attack', 'targetPos': [{'x': 25, 'y': 8}, {'x': 24, 'y': 8}], 'controllerId': '20010'}}}
+2026-09-15 11:54:22,513 | round 345 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 9}, {'x': 26, 'y': 8}], 'controllerId': '20011'}}}
+2026-09-15 11:54:22,570 | round 346 -> {'roleCommandMap': {}}
+2026-09-15 11:54:22,625 | round 347 -> {'roleCommandMap': {}}
+2026-09-15 11:54:22,683 | round 348 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 8}, {'x': 25, 'y': 11}], 'controllerId': '20012'}, '20041': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 8}, {'x': 25, 'y': 11}], 'controllerId': '20010'}}}
+2026-09-15 11:54:22,739 | round 349 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 8}, {'x': 27, 'y': 8}], 'controllerId': '20011'}}}
+2026-09-15 11:54:22,793 | round 350 -> {'roleCommandMap': {}}
+2026-09-15 11:54:22,845 | round 351 -> {'roleCommandMap': {}}
+2026-09-15 11:54:22,901 | round 352 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 8}, {'x': 27, 'y': 7}], 'controllerId': '20012'}, '20041': {'action': 'attack', 'targetPos': [{'x': 26, 'y': 8}, {'x': 27, 'y': 7}], 'controllerId': '20010'}}}
+2026-09-15 11:54:22,954 | round 353 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 12}, {'x': 26, 'y': 12}], 'controllerId': '20011'}}}
+2026-09-15 11:54:23,007 | round 354 -> {'roleCommandMap': {}}
+2026-09-15 11:54:23,062 | round 355 -> {'roleCommandMap': {}}
+2026-09-15 11:54:23,123 | round 356 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 6}, {'x': 27, 'y': 12}], 'controllerId': '20012'}, '20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 6}, {'x': 27, 'y': 12}], 'controllerId': '20010'}}}
+2026-09-15 11:54:23,177 | round 357 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:54:23,236 | round 358 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:54:23,290 | round 359 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:54:23,343 | round 360 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 33, 'y': 9}]}, '20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 8}, {'x': 27, 'y': 11}], 'controllerId': '20012'}}}
+2026-09-15 11:54:23,396 | round 361 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}}}
+2026-09-15 11:54:23,450 | round 362 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}}}
+2026-09-15 11:54:23,504 | round 363 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 8}, {'x': 27, 'y': 6}], 'controllerId': '20012'}}}
+2026-09-15 11:54:23,555 | round 364 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 12}, {'x': 29, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:54:23,608 | round 365 -> {'roleCommandMap': {}}
+2026-09-15 11:54:23,660 | round 366 -> {'roleCommandMap': {}}
+2026-09-15 11:54:23,712 | round 367 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 12}, {'x': 27, 'y': 10}], 'controllerId': '20012'}}}
+2026-09-15 11:54:23,765 | round 368 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 6}, {'x': 30, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:54:23,822 | round 369 -> {'roleCommandMap': {}}
+2026-09-15 11:54:23,872 | round 370 -> {'roleCommandMap': {}}
+2026-09-15 11:54:23,922 | round 371 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 10}, {'x': 29, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:54:24,015 | round 372 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 10}, {'x': 29, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:54:24,070 | round 373 -> {'roleCommandMap': {}}
+2026-09-15 11:54:24,130 | round 374 -> {'roleCommandMap': {}}
+2026-09-15 11:54:24,203 | round 375 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 28, 'y': 6}, {'x': 30, 'y': 6}], 'controllerId': '20012'}}}
+2026-09-15 11:54:24,265 | round 376 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 28, 'y': 13}, {'x': 27, 'y': 13}], 'controllerId': '20010'}}}
+2026-09-15 11:54:24,337 | round 377 -> {'roleCommandMap': {}}
+2026-09-15 11:54:24,419 | round 378 -> {'roleCommandMap': {}}
+2026-09-15 11:54:24,501 | round 379 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 9}, {'x': 28, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:54:24,588 | round 380 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 9}, {'x': 28, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:54:24,669 | round 381 -> {'roleCommandMap': {}}
+2026-09-15 11:54:24,756 | round 382 -> {'roleCommandMap': {}}
+2026-09-15 11:54:24,845 | round 383 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 9}, {'x': 28, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:54:24,929 | round 384 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 9}, {'x': 28, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:54:25,016 | round 385 -> {'roleCommandMap': {}}
+2026-09-15 11:54:25,100 | round 386 -> {'roleCommandMap': {}}
+2026-09-15 11:54:25,186 | round 387 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 9}, {'x': 28, 'y': 9}], 'controllerId': '20012'}}}
+2026-09-15 11:54:25,272 | round 388 -> {'roleCommandMap': {'20040': {'action': 'attack', 'targetPos': [{'x': 29, 'y': 9}, {'x': 28, 'y': 9}], 'controllerId': '20010'}}}
+2026-09-15 11:54:25,358 | round 389 -> {'roleCommandMap': {}}
+2026-09-15 11:54:25,449 | round 390 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}}}
+2026-09-15 11:54:25,538 | round 391 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}}}
+2026-09-15 11:54:44,015 | round 392 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}}}
+2026-09-15 11:55:02,203 | round 393 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}, '20012': {'action': 'use', 'name': 'WallFixer', 'targetPos': [{'x': 28, 'y': 10}]}}}
+2026-09-15 11:55:02,217 | round 394 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}}}
+2026-09-15 11:55:02,269 | round 395 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}}}
+2026-09-15 11:55:02,321 | round 396 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:55:02,372 | round 397 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:55:02,421 | round 398 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}}}
+2026-09-15 11:55:02,471 | round 399 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 34, 'y': 12}]}}}
+2026-09-15 11:55:02,520 | round 400 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 35, 'y': 13}]}}}
+2026-09-15 11:55:02,571 | round 401 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 36, 'y': 14}]}}}
+2026-09-15 11:55:02,620 | round 402 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 37, 'y': 15}]}}}
+2026-09-15 11:55:02,671 | round 403 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 37, 'y': 15}]}}}
+2026-09-15 11:55:02,721 | round 404 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 37, 'y': 15}]}}}
+2026-09-15 11:55:02,770 | round 405 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'collect', 'targetPos': [{'x': 37, 'y': 15}]}}}
+2026-09-15 11:55:02,826 | round 406 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 35, 'y': 13}]}}}
+2026-09-15 11:55:02,882 | round 407 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 34, 'y': 12}]}}}
+2026-09-15 11:55:02,935 | round 408 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}}}
+2026-09-15 11:55:02,989 | round 409 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:55:03,041 | round 410 -> {'roleCommandMap': {'20010': {'action': 'collect', 'targetPos': [{'x': 23, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:55:03,107 | round 411 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20011': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}}}
+2026-09-15 11:55:03,168 | round 412 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 31, 'y': 8}]}}}
+2026-09-15 11:55:03,225 | round 413 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}}}
+2026-09-15 11:55:03,278 | round 414 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 9}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:55:03,331 | round 415 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 10}]}, '20011': {'action': 'move', 'targetPos': [{'x': 33, 'y': 11}]}}}
+2026-09-15 11:55:03,381 | round 416 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 11}]}}}
+2026-09-15 11:55:03,430 | round 417 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 12}]}}}
+2026-09-15 11:55:03,479 | round 418 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 13}]}}}
+2026-09-15 11:55:03,526 | round 419 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 14}]}}}
+2026-09-15 11:55:03,574 | round 420 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 15}]}}}
+2026-09-15 11:55:03,621 | round 421 -> {'roleCommandMap': {'20010': {'action': 'build', 'targetPos': [{'x': 28, 'y': 9}], 'name': 'wall'}, '20012': {'action': 'sell', 'name': 'copper', 'num': 5}}}
+2026-09-15 11:55:03,671 | round 422 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 21, 'y': 16}]}}}
+2026-09-15 11:55:03,720 | round 423 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}}}
+2026-09-15 11:55:03,768 | round 424 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 11}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}}}
+2026-09-15 11:55:03,816 | round 425 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 12}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}}}
+2026-09-15 11:55:03,862 | round 426 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 13}]}, '20012': {'action': 'buy', 'name': 'WallFixer', 'num': 1}}}
+2026-09-15 11:55:03,909 | round 427 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 21, 'y': 14}]}, '20012': {'action': 'buy', 'name': 'WallUpgradeVoucher1', 'num': 1}}}
+2026-09-15 11:55:03,960 | round 428 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 20, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}}}
+2026-09-15 11:55:04,008 | round 429 -> {'roleCommandMap': {'20010': {'action': 'sell', 'name': 'copper', 'num': 5}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}}}
+2026-09-15 11:55:04,057 | round 430 -> {'roleCommandMap': {'20010': {'action': 'sell', 'name': 'stone', 'num': 9}, '20012': {'action': 'move', 'targetPos': [{'x': 22, 'y': 16}]}}}
+2026-09-15 11:55:04,106 | round 431 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 21, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 23, 'y': 15}]}}}
+2026-09-15 11:55:04,154 | round 432 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}, '20012': {'action': 'move', 'targetPos': [{'x': 24, 'y': 14}]}}}
+2026-09-15 11:55:04,202 | round 433 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20012': {'action': 'move', 'targetPos': [{'x': 25, 'y': 13}]}}}
+2026-09-15 11:55:04,249 | round 434 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 19}]}, '20012': {'action': 'move', 'targetPos': [{'x': 26, 'y': 12}]}}}
+2026-09-15 11:55:04,295 | round 435 -> {'roleCommandMap': {'20010': {'action': 'buy', 'name': 'WallFixer', 'num': 1}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 11}]}}}
+2026-09-15 11:55:04,343 | round 436 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 18}]}, '20012': {'action': 'use', 'name': 'WallUpgradeVoucher1', 'targetPos': [{'x': 28, 'y': 10}]}}}
+2026-09-15 11:55:04,390 | round 437 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 22, 'y': 17}]}, '20012': {'action': 'use', 'name': 'WallFixer', 'targetPos': [{'x': 28, 'y': 11}]}}}
+2026-09-15 11:55:04,447 | round 438 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 23, 'y': 16}]}, '20012': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}}}
+2026-09-15 11:55:04,502 | round 439 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 24, 'y': 15}]}, '20012': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}}}
+2026-09-15 11:55:04,555 | round 440 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 25, 'y': 14}]}, '20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:55:04,607 | round 441 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 26, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:55:04,666 | round 442 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 27, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:55:04,727 | round 443 -> {'roleCommandMap': {'20010': {'action': 'use', 'name': 'WallFixer', 'targetPos': [{'x': 28, 'y': 12}]}, '20011': {'action': 'move', 'targetPos': [{'x': 32, 'y': 9}]}, '20012': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:55:04,790 | round 444 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 28, 'y': 13}]}, '20012': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:55:04,848 | round 445 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 11}]}, '20010': {'action': 'move', 'targetPos': [{'x': 29, 'y': 13}]}}}
+2026-09-15 11:55:04,902 | round 446 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 10}]}, '20010': {'action': 'move', 'targetPos': [{'x': 30, 'y': 13}]}}}
+2026-09-15 11:55:04,954 | round 447 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 29, 'y': 9}]}, '20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 13}]}}}
+2026-09-15 11:55:05,004 | round 448 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 12}]}}}
+2026-09-15 11:55:05,053 | round 449 -> {'roleCommandMap': {'20010': {'action': 'move', 'targetPos': [{'x': 31, 'y': 11}]}}}
+2026-09-15 11:55:05,099 | round 450 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,146 | round 451 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,191 | round 452 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,238 | round 453 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,286 | round 454 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,333 | round 455 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,380 | round 456 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,427 | round 457 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,474 | round 458 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,521 | round 459 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,570 | round 460 -> {'roleCommandMap': {'20012': {'action': 'move', 'targetPos': [{'x': 30, 'y': 8}]}, '20010': {'action': 'move', 'targetPos': [{'x': 32, 'y': 10}]}}}
+2026-09-15 11:55:05,620 | round 461 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 7}, {'x': 16, 'y': 7}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 8}, {'x': 17, 'y': 7}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 8}, {'x': 17, 'y': 7}], 'controllerId': '20010'}}}
+2026-09-15 11:55:05,670 | round 462 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,719 | round 463 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,766 | round 464 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,819 | round 465 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 17, 'y': 7}, {'x': 17, 'y': 8}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 19, 'y': 7}, {'x': 19, 'y': 8}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 19, 'y': 7}, {'x': 19, 'y': 8}], 'controllerId': '20010'}}}
+2026-09-15 11:55:05,869 | round 466 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,918 | round 467 -> {'roleCommandMap': {}}
+2026-09-15 11:55:05,967 | round 468 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,029 | round 469 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 20, 'y': 7}, {'x': 20, 'y': 8}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 20, 'y': 7}, {'x': 20, 'y': 8}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 20, 'y': 7}, {'x': 20, 'y': 8}], 'controllerId': '20010'}}}
+2026-09-15 11:55:06,082 | round 470 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,132 | round 471 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,184 | round 472 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,241 | round 473 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 9}, {'x': 24, 'y': 8}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 9}, {'x': 24, 'y': 8}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 24, 'y': 9}, {'x': 24, 'y': 8}], 'controllerId': '20010'}}}
+2026-09-15 11:55:06,295 | round 474 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,346 | round 475 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,394 | round 476 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,450 | round 477 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 25, 'y': 11}, {'x': 25, 'y': 6}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 25, 'y': 11}, {'x': 25, 'y': 6}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 25, 'y': 11}, {'x': 25, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:55:06,503 | round 478 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,565 | round 479 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,626 | round 480 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,693 | round 481 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}, {'x': 26, 'y': 12}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}, {'x': 26, 'y': 12}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 11}, {'x': 26, 'y': 12}], 'controllerId': '20010'}}}
+2026-09-15 11:55:06,757 | round 482 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,820 | round 483 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,884 | round 484 -> {'roleCommandMap': {}}
+2026-09-15 11:55:06,949 | round 485 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 7}, {'x': 27, 'y': 6}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 7}, {'x': 27, 'y': 6}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 7}, {'x': 27, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:55:07,015 | round 486 -> {'roleCommandMap': {}}
+2026-09-15 11:55:07,079 | round 487 -> {'roleCommandMap': {}}
+2026-09-15 11:55:07,130 | round 488 -> {'roleCommandMap': {}}
+2026-09-15 11:55:07,194 | round 489 -> {'roleCommandMap': {'20042': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 12}, {'x': 28, 'y': 6}], 'controllerId': '20012'}, '20040': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 12}, {'x': 28, 'y': 6}], 'controllerId': '20011'}, '20041': {'action': 'attack', 'targetPos': [{'x': 27, 'y': 12}, {'x': 28, 'y': 6}], 'controllerId': '20010'}}}
+2026-09-15 11:55:07,257 | round 490 -> {'roleCommandMap': {}}
