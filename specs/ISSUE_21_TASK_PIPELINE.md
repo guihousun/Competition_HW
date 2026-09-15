@@ -1,5 +1,7 @@
 # Issue #21 — 真实平台任务失败复盘与分阶段实施 Spec
 
+实施更新：已发布运行代码候选，包内源码66a4d9a。已完成项与仍未覆盖项见[候选说明](../docs/INTRANET_ISSUE21_CANDIDATE.md)；下文保留初次分诊依据。
+
 - 来源：[Issue #21](https://github.com/guihousun/Competition_HW/issues/21)，2026-09-15 正文；读取全部评论，当前 0 条。
 - 输入 digest：`d48bf3ec398c2bbb257f2c50f27e694469673e388437b7ae08f41cdde9e4d2dc`。
 - 实测源码：`1831136d5a30f89caba3cb5ec1d2b91838684c2a`；当前测试交付基线：`4572e620de0394aecd489c8a50a646c46c0d927d`。
@@ -74,6 +76,6 @@ A05 保留逐角色动作限额、保持任务范围、工人正常调度、红�
 
 DSH当前配置保持OpenRouter deepseek/deepseek-v4.1-flash/max。已有strategy与rules-engine任务已收到原生403 Key total limit失败，当前worker空闲；本次不重复派单/不改模型。Codex负责此次诊断与Spec，后续P0可直接实施；DSH额度恢复后复用原生专员session做确定性阶段，不重建历史。
 
-本轮仅提交Spec、参数审核与诊断证据；尚未修改运行代码，尚无“#21修复参赛包”。本轮现有控制链测试19项通过，只能反驳结构上没有submitAnswer，不能反驳实机0/6失败。
+初次分诊提交仅包含Spec、参数审核与诊断证据，当时尚未修改运行代码。初次控制链测试19项通过，只能反驳结构上没有submitAnswer，不能反驳实机0/6失败。后续候选已修改运行代码，详见顶部实施更新。
 
 每个实施阶段单独审核：保护官方原文/样例、禁止未经审核DSH差异、git diff --check、相关测试与全量unittest；策略影响另跑换边和留出地图。生成新源码SHA后构建tar.gz，验证包入口与HTTP，提交到codex/sgh；公司仍git pull同一分支。当前4572e62/183包作为回滚与失败对照保留。最终报告各题收到/读题/工具/校验/提交/判题的漏斗以及基地生存，不只报总分。

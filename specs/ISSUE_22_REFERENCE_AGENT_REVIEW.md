@@ -1,5 +1,7 @@
 # Issue #22 — 参考选手 Agent 设计评审与实施补充
 
+实施更新：已有运行代码候选66a4d9a落实批量读题、时间预算、原文上下文与可选摘要，详见[候选说明](../docs/INTRANET_ISSUE21_CANDIDATE.md)。设计验收清单仍有待完成项，不能将本条视为全部实现。
+
 - 来源：[Issue #22](https://github.com/guihousun/Competition_HW/issues/22)，正文链接 https://gitcode.com/sa1tyfsh/CoreGeek；全部评论已读取，分诊时0条。
 - 输入digest：`18e2d8adb62fdb6c364ee8c7270555591d0689cd950a7040a23486a251a69c16`。
 - 参考源码固定到 `6bf71c8ffcfd1c267c0f331c67afd3815d8d4b21`；通过Git读取成功，网页抓取超时不影响源码核查。
