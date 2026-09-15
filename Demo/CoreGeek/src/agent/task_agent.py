@@ -11,7 +11,7 @@ from copy import deepcopy
 import hashlib
 import json
 from typing import Any
-from .task_context import PROMPT_LIMIT
+from .task_context import PROMPT_LIMIT, COMMAND_LIMIT
 
 SCHEMA = 'competition-task-agent/2'
 MAX_PROMPTS = 8  # engineering limits for one task, not official LLM allowances
@@ -19,6 +19,8 @@ MAX_COMMANDS = 8
 MAX_CONTEXT = 12000
 MAX_REPLY = 16000
 MAX_HISTORY = 12
+ANSWER_LIMIT = 8000
+PLAN_KINDS = ('run', 'answer', 'inspect', 'need_info', 'give_up')
 
 
 def _digest(value):
@@ -82,7 +84,8 @@ class TaskAgent:
                          'purpose': purpose, 'generation': self.generation}
         return deepcopy(self.proposal)
 
-    def decide(self, context: str, evidence_ids: list[str], *, active: bool, round_no: int):
+    def decide(self, context: str, evidence_ids: list[str], *, active: bool, round_no: int,
+               bootstrap_command=None):
         """Return a proposal or None. Repeated previews/offers do not count calls."""
         if not active:
             self.finish('task_not_confirmed')
@@ -101,20 +104,30 @@ class TaskAgent:
         if self.prompts >= MAX_PROMPTS:
             self.finish('task_prompt_soft_limit', stopped=True)
             return None
+        if (self.commands == 0 and self.prompts == 0 and bootstrap_command
+                and isinstance(bootstrap_command, str) and len(bootstrap_command) <= COMMAND_LIMIT):
+            return self._propose('cmd', bootstrap_command, '一次定位任务文件并读取题文与相关说明')
         action = self._propose('prompt', '', '选择下一步解题操作')
         header = (
             '你负责一个比赛沙盒任务。依据题目格式要求和真实工具回执逐步求解。\n'
             '工具命令由平台沙盒执行；不生成角色移动/攻击等官方动作。\n'
             '只返回一个JSON对象：{"request_id":"' + action['token'] + '","plan":{'
-            '"kind":"run|answer|inspect|need_info|give_up","command":"仅run需要",'
+            '"kind":"' + '|'.join(PLAN_KINDS) + '","command":"仅run需要",'
             '"answer":"仅answer需要，原样答案字符串","reason":"简短依据",'
             '"evidence_ids":["已提供的证据ID"]}}。不要输出隐藏思维链。\n'
-            'run用于读取文档、查询或计算；查看退出码和结果后决定下一步。'
+            f'run命令上限{COMMAND_LIMIT}字符（工程限制），不要输出超长脚本；可以合并相关的查找、读取、查询和校验。'
+            'run用于读取文档、查询、计算或按任务要求修改工作区并运行check；查看退出码和结果后决定下一步。'
             'answer必须符合题目指定格式，不能默认改成键值对。'
             '遇到答案错误应检查数据和格式，修正后重新提交；不能声称已经通过判题。\n'
+            '文件名不代表当前目录存在该文件。优先使用已找到的绝对路径；只允许在任务工作区修改文件。'
+            'API题先从实际文档获取接口、鉴权、字段和分页规则；工程题先读spec和check，再按要求修改并验证。'
+            '运行check返回的有效答案应立即answer，不要再查找或为确认而重复运行。不要读取验证服务内存或伪造校验。'
+            '一次文件缺失不等于任务无解；先有界定位。同一文件同一内容已在原文中则不要重复读取。\n'
             'inspect是读取已收到原文的本地记忆操作，不运行Shell。使用字段source_id（索引中的ID）、'
             'offset（从0起）、length（1..2000），可选query为要查找的原文片段。'
             '长资料先定位关键字，再读取附近内容；摘要截断不等于原文缺失。\n'
+            '可在外层JSON附带summary字符串（最多600字符），仅简记待办和下一步；不额外请求摘要。'
+            '摘要是模型建议，不能覆盖真实工具结果，不写入一次性token或凭据。\n'
         )
         events = json.dumps([{**item, 'text': item['text'][:200],
                               'truncated': item['truncated'] or len(item['text']) > 200}
@@ -168,7 +181,8 @@ class TaskAgent:
             return True  # next prompt incorporates the actual result/exit status
         try:
             envelope = _json_unique(text)
-            if not isinstance(envelope, dict) or set(envelope) != {'request_id', 'plan'}:
+            if (not isinstance(envelope, dict) or not {'request_id', 'plan'} <= set(envelope)
+                    or set(envelope) - {'request_id', 'plan', 'summary'}):
                 raise ValueError('invalid response envelope')
             if envelope['request_id'] != token:
                 raise ValueError('wrong model correlation')
@@ -176,7 +190,7 @@ class TaskAgent:
             if not isinstance(plan, dict) or set(plan) - {'kind', 'command', 'answer', 'reason', 'evidence_ids', 'source_id', 'offset', 'length', 'query'}:
                 raise ValueError('unsupported model fields')
             plan_kind = plan.get('kind')
-            if plan_kind not in ('run', 'answer', 'inspect', 'need_info', 'give_up'):
+            if plan_kind not in PLAN_KINDS:
                 raise ValueError('unsupported plan kind')
             ids = plan.get('evidence_ids')
             if not isinstance(ids, list) or not ids or len(ids) > 32 or any(
@@ -185,6 +199,10 @@ class TaskAgent:
             reason = plan.get('reason', '')
             if not isinstance(reason, str) or len(reason) > 400:
                 raise ValueError('invalid plan reason')
+            # Advisory, bounded, never a source of verified facts or an answer.
+            summary = envelope.get('summary')
+            if isinstance(summary, str) and 0 < len(summary) <= 600:
+                self._event('model_summary_unverified', summary, round_no)
             if plan_kind == 'inspect':
                 source_id = plan.get('source_id')
                 offset, length, query = plan.get('offset', 0), plan.get('length', 2000), plan.get('query', '')
@@ -207,8 +225,12 @@ class TaskAgent:
             field = 'command' if plan_kind == 'run' else 'answer'
             value = plan.get(field)
             other = 'answer' if field == 'command' else 'command'
-            if not isinstance(value, str) or not value.strip() or len(value) > 8000 or plan.get(other):
+            cap = COMMAND_LIMIT if plan_kind == 'run' else ANSWER_LIMIT
+            if not isinstance(value, str) or not value.strip() or plan.get(other):
                 raise ValueError('invalid or conflicting payload')
+            if len(value) > cap:
+                self._event('payload_over_limit', f'{field}实际{len(value)}字符，上限{cap}；请缩短或拆分，不会截断执行。', round_no)
+                return False
             if plan_kind == 'run':
                 if self.commands >= MAX_COMMANDS or self.command_attempts.get(_digest(value), 0) >= 2:
                     self.finish('command_soft_limit_or_repeated_no_progress', stopped=True)
@@ -310,6 +332,9 @@ class TaskAgent:
                         or not isinstance(value.get('purpose'), str) or len(value['purpose']) > 400
                         or value.get('generation') != raw['generation']):
                     raise ValueError('invalid pending proposal')
+                if value['kind'] in ('cmd', 'submit') and len(value['payload']) > (
+                        COMMAND_LIMIT if value['kind'] == 'cmd' else ANSWER_LIMIT):
+                    raise ValueError('stored operation exceeds shared payload limit')
                 fields = {'kind', 'payload', 'token', 'purpose', 'generation'}
                 if value['kind'] == 'prompt':
                     fields.add('evidence_ids')

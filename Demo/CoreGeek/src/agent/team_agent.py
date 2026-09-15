@@ -11,7 +11,8 @@ import shlex
 
 from .task_agent import TaskAgent
 from .task_skills import SkillLibrary
-from .task_context import public_task_confirmed, build_context
+from .task_context import public_task_confirmed, build_context, COMMAND_LIMIT
+from .task_workspace import bootstrap
 from .sandbox import parse_command_result
 from .tasks import Plan
 from .world_agent import WorldAgent
@@ -78,6 +79,27 @@ class TeamAgent:
             if len(argv) == 2 and argv[0] == "cat" and argv[1].startswith("/"):
                 event["path"] = argv[1]
             self.evidence = (self.evidence + [event])[-EVIDENCE_LIMIT:]
+            if request.payload.startswith('# task-workspace/1\n') and result.exit_code == 0:
+                # The actual correlated probe receipt, not a model-created path.
+                try:
+                    probe = json.loads(result.output)
+                    docs = probe.get('files', [])
+                    if (probe.get('probe') == 'task-workspace/1' and probe.get('status') == 'found'
+                            and isinstance(docs, list) and len(docs) <= 4):
+                        for index, doc in enumerate(docs):
+                            if (not isinstance(doc, dict) or not isinstance(doc.get('path'), str)
+                                    or not doc['path'].startswith('/') or len(doc['path']) > 500
+                                    or not isinstance(doc.get('text'), str) or len(doc['text']) > TEXT_LIMIT
+                                    or type(doc.get('truncated')) is not bool):
+                                continue
+                            identity = request.request_id + ':' + str(index)
+                            cut = result.truncated or doc['truncated']
+                            self.memory.put(identity, doc['text'], label=doc['path'], upstream_truncated=cut)
+                            self.evidence.append({**event, 'id': identity, 'path': doc['path'],
+                                'text': doc['text'], 'sha256': digest(doc['text']), 'truncated': cut})
+                        self.evidence = self.evidence[-EVIDENCE_LIMIT:]
+                except (ValueError, TypeError, AttributeError):
+                    pass  # raw receipt remains available even if probe JSON is incomplete
             # A successful query can teach a method only against a document
             # which actually names that program. Never cache its output/answer.
             if len(argv) >= 2 and argv[0] in ("python", "python3"):
@@ -130,6 +152,15 @@ class TeamAgent:
                                  trace_refs=references)
         state.ensure_task_context().put(envelope)
         parts = ["本题原文记忆索引（inspect只能访问这些已收到的来源）：" + json.dumps(self.memory.index(), ensure_ascii=False)]
+        parts.append('任务时间预算：' + json.dumps({
+            'current_round': context.round_no,
+            'accepted_round': context.cycle.accepted_round,
+            'deadline_exclusive': context.cycle.deadline,
+            'rounds_remaining': context.cycle.rounds_left(context.round_no),
+            'timeout_known': context.cycle.deadline is not None,
+            'submission_buffer': 2}, ensure_ascii=False)
+            + '。每次模型请求与沙盒命令均要等待后续回合。优先合并必要操作；'
+              '预留2轮提交缓冲，有符合题意的答案立即提交；剩余轮数未知时不能假定15轮。')
         if self.focus:
             focus = json.dumps(self.focus, ensure_ascii=False)
             if len(focus) <= 4000:
@@ -144,11 +175,25 @@ class TeamAgent:
         candidates = self.skills.candidates(context.phase_task)
         if candidates:
             append_context("同类方法的候选文档，必须重新读取核验：" + json.dumps(candidates, ensure_ascii=False))
-        for event in self.evidence[-3:]:
-            view = {k: event[k] for k in ("id", "command", "status", "exit_code", "sha256", "truncated")}
-            view["text"] = event["text"][:800]
-            view["truncated"] = view["truncated"] or len(event["text"]) > 800
-            append_context("关联工具摘要（不完整时先inspect原文；上游本已截断则应缩小沙盒查询）：" + json.dumps(view, ensure_ascii=False))
+        # Latest actual evidence wins space over old history. Include complete
+        # medium documents directly instead of forcing multiple inspect rounds.
+        recent = list(reversed(self.evidence[-4:]))
+        if recent and all(e["command"].startswith('# task-workspace/1\n') for e in recent):
+            recent.reverse()  # probe emits task contract first, supporting files next
+        for event in recent:
+            view = {k: event[k] for k in ("id", "status", "exit_code", "sha256", "truncated")}
+            view['command'] = event["command"][:240]
+            view['command_truncated'] = len(event["command"]) > 240
+            if event.get('path'):
+                view['path'] = event['path']
+            full = self._full_document(event)
+            for cap in (4500, 3000, 1800, 800, 200):
+                view["text"] = full["text"][:cap]
+                view["truncated"] = full["truncated"] or len(full["text"]) > cap
+                item = "关联工具原文（truncated=true时才需定位缺失片段；不要重复读取已有内容）：" + json.dumps(view, ensure_ascii=False)
+                if sum(len(p) + 1 for p in parts) + len(item) <= 7500:
+                    parts.append(item)
+                    break
             if event.get("path"):
                 for candidate in candidates:
                     hint = self.skills.hint(candidate["id"], self._full_document(event))
@@ -158,7 +203,15 @@ class TeamAgent:
         if len(text) > 10000:
             self.task.finish("context_budget_exceeded", stopped=True)
             return Plan("wait", purpose="上下文过大，停止本次解题尝试")
-        proposal = self.task.decide(text, evidence_ids, active=True, round_no=context.round_no)
+        remaining = context.cycle.rounds_left(context.round_no)
+        if (remaining is not None and remaining <= 1 and not self.task.pending and self.link is None
+                and (self.task.proposal is None or self.task.proposal['kind'] != 'submit')):
+            # A newly issued tool/model receipt could only arrive at/after the
+            # deadline. Preserve any already available submit, never guess one.
+            self.task.proposal = None
+            return Plan("wait", purpose="最后提交窗口没有现成答案，不再启动来不及回收的调用")
+        proposal = self.task.decide(text, evidence_ids, active=True, round_no=context.round_no,
+                                   bootstrap_command=bootstrap(context.phase_task))
         if proposal is None:
             return Plan("wait", purpose="Agent: " + (self.task.stop_reason or self.task.stage))
         if proposal["kind"] == "submit":
@@ -246,7 +299,7 @@ class TeamAgent:
                         or item.get("generation") != task.generation
                         or not isinstance(item.get("text"), str) or len(item["text"]) > TEXT_LIMIT
                         or not isinstance(item.get("id"), str) or len(item["id"]) > 160
-                        or not isinstance(item.get("command"), str) or len(item["command"]) > 2000
+                        or not isinstance(item.get("command"), str) or len(item["command"]) > COMMAND_LIMIT
                         or item.get("verified") is not True or type(item.get("truncated")) is not bool
                         or type(item.get("round")) is not int or item["round"] < 1
                         or item.get("status") not in ("exit", "empty", "timeout", "judger_error")

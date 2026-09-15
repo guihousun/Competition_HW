@@ -48,10 +48,27 @@ CASES = (
 )
 
 
+PIPELINE_CASES = (
+    {
+        'id': 'nested-api-15-rounds',
+        'description': '请阅读task_delta.md，获取任务信息',
+        'answer': '{"city":"丙地","value":17}', 'grading': 'json_fields',
+        'timeout_rounds': 15, 'score_reward': 80, 'gold_reward': 80,
+        'sandbox_fixture': {'cwd': '/', 'files': {
+            '/tmp/changed/work/task_delta.md': '阅读同目录API_DOCS.md，查询丙地；只返回JSON字段city和value。',
+            '/tmp/changed/work/API_DOCS.md': 'python3 /svc/catalog.py --place 城市，返回记录数组。接口与其它任务可能不同。'},
+            'programs': {'/svc/catalog.py': {'filters': ['place'], 'required_filters': ['place'],
+                'records': [{'place': '丙地', 'city': '丙地', 'value': 17},
+                            {'place': '丁地', 'city': '丁地', 'value': 91}],
+                'output_fields': ['city', 'value']}}},
+    },
+)
+
+
 def install(state, case_ids=None):
     """Explicitly enable a local suite before acceptance; default games unchanged."""
     selected = list(case_ids) if case_ids is not None else [c['id'] for c in CASES]
-    by_id = {c['id']: c for c in CASES}
+    by_id = {c['id']: c for c in CASES + PIPELINE_CASES}
     if not selected or any(key not in by_id for key in selected):
         raise ValueError('unknown or empty local task suite')
     world = (state.get('_demo') or {}).get('task_world')

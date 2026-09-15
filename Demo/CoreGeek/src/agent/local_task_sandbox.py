@@ -12,9 +12,11 @@ import posixpath
 import shlex
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from .task_context import COMMAND_LIMIT
+from .task_workspace import virtual_probe
 
 OUTPUT_BYTES = 65536  # interface 1.1: local implementation of the 64KB cap
-MAX_COMMAND_CHARS = 8192  # engineering bound, not an official command limit
+MAX_COMMAND_CHARS = COMMAND_LIMIT  # shared engineering bound, not an official limit
 
 
 def _reply(body: str, code: int = 0, *, marker: str = '') -> str:
@@ -48,6 +50,11 @@ Unsupported shell constructs return nonzero without partially executing them.
             return _reply('Injected local test fault', marker=fault)
         if fault == 'TRUNCATED':
             return _reply('Injected partial output\n[TRUNCATED]')
+        if command.startswith('# task-workspace/1\n'):
+            cwd = _path(str(fixture.get('cwd') or '/workspace'), '/')
+            files = {_path(str(k), cwd): str(v) for k, v in (fixture.get('files') or {}).items()}
+            result = virtual_probe(command, files)
+            return _reply(result) if result is not None else _reply('Invalid workspace probe', 2)
         lex = shlex.shlex(command, posix=True, punctuation_chars=';&|<>')
         lex.whitespace_split = True
         lex.commenters = ''

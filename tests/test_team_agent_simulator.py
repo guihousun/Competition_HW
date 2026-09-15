@@ -26,8 +26,8 @@ PLANS = {
 }
 
 
-def exercise(case_id, side, *, wrong_first=False):
-    state = scenarios.scenario(90601, side)
+def exercise(case_id, side, *, wrong_first=False, seed=90601):
+    state = scenarios.scenario(seed, side)
     local_task_cases.install(state, [case_id])
     state["worldNews"] = {"officialNews": "", "folkLegends": ""}
     zone = next(z for z in state["mapInfo"]["zones"] if z["neutralType"] == side + "TaskPoint1")

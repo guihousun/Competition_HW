@@ -101,11 +101,24 @@ def _find_pioneer(state: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _case_terms(case):
+    """Explicit fixture metadata, never a global official reward/timeout change."""
+    result = {'timeout': DEFAULT_TIMEOUT, 'score': 50, 'gold': 30}
+    for target, source in (('timeout', 'timeout_rounds'), ('score', 'score_reward'), ('gold', 'gold_reward')):
+        value = (case or {}).get(source)
+        if type(value) is int and 1 <= value <= 10000:
+            result[target] = value
+    return result
+
+
 def player_tasks(state: dict[str, Any], world: dict[str, Any],
                  team: str) -> list[dict[str, Any]]:
     """The published ``playerTasks`` list for our team, rebuilt each round."""
     zones = _zone_lookup(state)
     tasks: list[dict[str, Any]] = []
+    suite = world.get('agent_cases') or []
+    upcoming = suite[int(world.get('generated') or 0) % len(suite)] if suite else None
+    terms = _case_terms(upcoming)
     for index in (1, 2):
         kind = f"{team}TaskPoint{index}"
         pos = zones.get(kind)
@@ -117,10 +130,10 @@ def player_tasks(state: dict[str, Any], world: dict[str, Any],
             "taskType": active["type"] if active else POINT_KINDS[index - 1],
             "taskPosition": pos.dump(),
             "coldDownRounds": int(book["cooldown"]),
-            "scoreReward": int(active["score"]) if active else 50,
-            "goldReward": int(active["gold"]) if active else 30,
+            "scoreReward": int(active["score"]) if active else terms['score'],
+            "goldReward": int(active["gold"]) if active else terms['gold'],
             "isValid": bool(book["cooldown"] <= 0 and book["tasks_left"] > 0),
-            "timeoutRounds": int(active["timeout"]) if active else DEFAULT_TIMEOUT,
+            "timeoutRounds": int(active["timeout"]) if active else terms['timeout'],
         })
     return tasks
 
@@ -321,6 +334,7 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
         case = deepcopy(suite[ordinal % len(suite)]) if suite else None
         if case:
             description, answer = case['description'], case['answer']
+        terms = _case_terms(case)
         if world.pop('llm_demo_once', False):
             description = '【本地LLM演示】计算十七加二十五。返回一个键值对，字段名 result，值为阿拉伯整数，不要解释。'
             answer = 'result=42'
@@ -328,12 +342,12 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
         book["active"] = {
             "type": POINT_KINDS[index - 1],
             "accepted": round_no,
-            "deadline": round_no + DEFAULT_TIMEOUT,
-            "timeout": DEFAULT_TIMEOUT,
+            "deadline": round_no + terms['timeout'],
+            "timeout": terms['timeout'],
             "description": description,
             "answer": answer,
-            "score": 50,
-            "gold": 30,
+            "score": terms['score'],
+            "gold": terms['gold'],
             "best_rate": 0.0,
             "best_answer": "",
             "pending_answer": None,
