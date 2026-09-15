@@ -1,78 +1,23 @@
-"""Agent 的"说什么 / 怎么读回复"：prompt 的五段模板（system 消息的内容）+ 三个谓词 + 一处清洗。
+"""Agent 的"怎么读回复"：三个谓词 + 一处清洗。**模板不在这里**（第 37 步起在 `prompt.py`）。
 
 **这个包不认识游戏**：收字符串、吐字符串，只依赖标准库。切分判据是"什么时候跟 LLM 说话"
 属策略（在 `planner.task_channel`），"说什么、怎么解析回复"与战场规则无关。
-机械保证就是模板与 `Context` 收发的全是字符串、不收 `Turn`。
+机械保证就是 `Context` 与模板收发的全是字符串、不收 `Turn`。
 
 **本模块是纯的**：不 import 包里的任何东西。会话的存储与渲染第 25 步起在 `context.py`
 （`Context`）、编排在 `Agent.chat`；第 28 步起整份 prompt 是**标准 messages JSON**
-（`[{role, content}]`，自造的文本版式用户实测效果非常差、已弃），这里的模板只当
-**system 消息的 content**。模板与谓词不拆成两个模块：它们是同一份约定的两面，
-拆开就是"改一处要翻两个文件"；那个清洗函数（`strip_answers`）同住也是这个理由 ——
-它认的就是 `_ANSWER_RE` 那一个模式，分家等于把标签语法抄成两份。
+（`[{role, content}]`，自造的文本版式用户实测效果非常差、已弃）。
+第 37 步起模板搬去 `prompt.py`（用户建的文件）—— 旧版"模板与谓词同住、拆开就是改一处
+翻两个文件"的取舍就此作废，分家的代价（协议的两半各住一个文件）记在 `code-task.md`。
+`strip_answers` 同住的理由不变：它认的就是 `_ANSWER_RE` 那一个模式，分家等于把标签语法
+抄成两份。
 
 ⚠️ **协议形状是我们自己定的**（任务书只说了沙盒能跑什么，没规定 LLM 该怎么要命令）
-⇒ `# 输出格式` 那段必须把两个形状逐字给全，并保留旧形状兼容与"原文即答案"的兜底。
+⇒ 第 37 步起**只认嵌套形状**（用户拍板"严格只认新形状"）：`prompt.py` 教什么、这里就
+只认什么；旧形状落重问（`looks_like_tool` 判宽接住），丢一回合、不碰红线。
 """
 
 import re
-
-#: 发给判题器 LLM 的 **system 消息内容**。五段（**定位** → **工具** → **输出格式** →
-#: **沉淀的 SOP** → **工作流**），由 `Context.render` 装进 `[{"role": "system", "content": …}]`
-#: 的头一条、后面跟这道题的全部往来（第 28 步起整份 prompt 是标准 messages JSON）。
-#:
-#: ⚠️ **「沉淀的 SOP」那一段的头永远都在**，哪怕还没沉淀过任何东西：那个槽是 LLM 自己写的
-#: 目标，看不见槽就不会去用它。两个占位符由 `Agent.chat` 填，`str.format` **只做一次**
-#: —— 替换值里若含 `{}`（python 片段里太常见了）不会被二次扫描成占位符。
-#: ⚠️ **模板自身的正文里也不许出现裸 `{}`**（第 35 步加「工作流」时定的规矩）：`format` 会把
-#: 它当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成空指令。命令范式用 `$(...)`，安全。
-PROMPT = """
-# Agent定位
-你是一个自主任务执行Agent，能根据用户的任务基于现有的工具了解任务并理解任务，理解任务后严格按照任务要求完成任务；当认为解题流程值得沉淀时，用 SOP2Prompt 把方法沉淀下来 —— 它只沉淀、不产出命令，所以你照样要在同一条回复里把答案交给 `<answer>`。
-
-当手上的信息不足时，就调用工具去取；认定完成任务后，就直接作答。
-一回合只输出一样东西：一次工具调用，或者一个答案。唯一的例外是 SOP2Prompt —— 它不产出命令，所以调用它的那一回合照样是你的作答回合：工具块后面再跟一个 `<answer>`。不要解释、不要前言、不要 Markdown 代码块标记。
-
-# 可使用的工具
-{tool_desc}
-
-# 输出格式
-要调工具时，用 `<tool>` 包住，里面写工具名与参数：
-
-<tool>
-    <tool_name>
-        工具名
-    </tool_name>
-    <tool_param>
-        参数原文
-    </tool_param>
-</tool>
-
-例：<tool><tool_name>executeCmd</tool_name><tool_param>cat /tmp/a.txt</tool_param></tool>
-
-无参数的工具不用写 `<tool_param>`；有多个参数的工具，每块 `<tool_param name="参数名">` 各写一个、都带上 `name`。
-
-一次只调用一个工具。不用再调工具、可以直接作答时，把**答案本身**放进 `<answer>`：
-
-<answer>答案本身</answer>
-
-**沉淀 SOP 与作答写在同一条回复里**（它不产出命令，所以答案得另外给）：SOP2Prompt 只有一个参数 `sop`，答案写在**工具块之外**的 `<answer>` 里；漏了的话沉淀**照样生效**，但这一回合算没作答、下回合还会再问你一遍：
-
-<tool><tool_name>SOP2Prompt</tool_name><tool_param name="sop">沉淀的方法</tool_param></tool>
-<answer>答案本身</answer>
-
-`sop` 的正文里**不要出现 `<answer>` 与 `</answer>` 这对标签**（讲答案格式时换个说法，比如"把答案用 answer 标签包起来"）。
-
-# 沉淀的 SOP
-{sop}
-
-# 工作流
-1. 任务信息里给的往往只是一个**文件名**、不是完整路径。先用**一条**命令把它找出来并读完 ——
-   每条命令要花一个回合，不要拆成两回合。例如把「找文件在哪」和「读文件内容」合成一条：
-   f=$(find / -maxdepth 4 -name '*任务书*' -print -quit 2>/dev/null); echo "FILE=$f"; cat "$f"
-2. 读完任务书后，**先把它要求的「要交什么、什么格式」抄进回复里**，再动手去做；规格没看清楚就不要猜。
-3. 提交答案前，逐条对照任务书核对一遍，不允许跳过任务书里的任何一条要求。
-"""
 
 # ── 标签的语法 ────────────────────────────────────────────────────────
 #: ⚠️ **所有 `<>` 的解析都在下面这几个正则里**（第 36 步从 `str.find` + 下标算术换成正则）：
@@ -83,20 +28,33 @@ PROMPT = """
 #: 停在**第一对**上：一回合只跑得了一条命令（接口文档 L210）。
 #:
 #: 开标签一律写成 `<tool\b[^>]*>` —— **按 `>` 的位置定位，不是逐字匹配整段标签**：LLM 多敲
-#: 一个空格（`<tool >`）、给标签加个属性（`<tool_param name="cmd">`）都不该让整条回复作废。
+#: 一个空格（`<tool >`）、给标签加个属性都不该让整条回复作废。
 #: `\b` 挡的是 `<tool_name>`／`<tool_param>` 这两个**前缀相同**的标签被当成工具块的开头。
 _TOOL_RE = re.compile(r"<tool\b[^>]*>(.*?)</tool>", re.DOTALL)
 _NAME_RE = re.compile(r"<tool_name\b[^>]*>(.*?)</tool_name>", re.DOTALL)
-_PARAM_RE = re.compile(r"<tool_param\b([^>]*)>(.*?)</tool_param>", re.DOTALL)
+#: **第 37 步的嵌套形状**：参数不再写在 `<tool_param>` 的属性里、也不直接当它的正文，
+#: 而是里面再包一层具名标签 —— `<tool_param><cmd>ls</cmd></tool_param>`。
+#: 开标签按 `>` 定位（`<cmd >` 也认），闭标签用反向引用 `\1` 认**同名**的那一对；
+#: `\w+` 是 Unicode 感知的 ⇒ 中文参数名（`<参数>`）一样认。
+_PARAM_RE = re.compile(r"<tool_param\b[^>]*>(.*?)</tool_param>", re.DOTALL)
+_INNER_RE = re.compile(r"<(\w+)\b[^>]*>(.*?)</\1>", re.DOTALL)
 #: `<answer>` 的两下：成对的取内容，**只判标记在不在**用 `_ANSWER_MARK_RE`（`<answer`
 #: 是个**前缀**判据，`<answer>`、`<answer >`、`<answer 乱写>` 都算"它想作答"）。
 _ANSWER_RE = re.compile(r"<answer[^>]*>(.*?)</answer>", re.DOTALL)
 _ANSWER_MARK_RE = re.compile(r"<answer")
 #: `looks_like_tool` 那个**宽**判据（见那里）。与上面几个相反，它**故意只认前缀**。
 _TOOL_MARK_RE = re.compile(r"<tool")
-#: 开标签里的 `name="参数名"`：单双引号都认、`name = "x"`（多敲空格）也认 —— LLM 的标点
-#: 风格不该让调用作废。`group(1)` 是引号（反向引用 `\1` 要求首尾同一种）、`group(2)` 是值。
-_PARAM_ATTR_RE = re.compile(r"""name\s*=\s*(["'])(.*?)\1""", re.DOTALL)
+#: **反转义表**（第 37 步）：`prompt.TOOL_PROMPT` 教了 LLM 对 XML 特殊字符转义 ⇒
+#: 参数值里的五个预定义实体要还原。⚠️ `&amp;` **必须最后换**：`&amp;lt;` 只该还原一层
+#: （`&lt;`），先换 `&amp;` 就把它变成了 `<`（两层）。LLM 没转义时这条是空操作 ——
+#: 裸 `<` / `>` / `&` 在 shell 命令里太常见了，一个都不许被改写。
+_ENTITIES = (
+    ("&lt;", "<"),
+    ("&gt;", ">"),
+    ("&apos;", "'"),
+    ("&quot;", '"'),
+    ("&amp;", "&"),
+)
 
 
 def strip_answers(text: str) -> tuple[str, int]:
@@ -114,24 +72,21 @@ def strip_answers(text: str) -> tuple[str, int]:
     return _ANSWER_RE.subn("", text)
 
 
-def tool_of(reply: str) -> tuple[str, list[tuple[str | None, str]]] | None:
-    """解析工具调用 ⇒ `(工具名, [(参数名|None, 原文), …])`；不是工具调用、或形状不完整 ⇒ `None`。
+def tool_of(reply: str) -> tuple[str, list[tuple[str, str]]] | None:
+    """解析工具调用 ⇒ `(工具名, [(参数名, 原文), …])`；不是工具调用、或形状不完整 ⇒ `None`。
 
-    判据**严格**（与 `looks_like_tool` 故意相反）。参数**可零个可多个**（第 30 步）：
+    判据**严格**（与 `looks_like_tool` 故意相反），第 37 步起**只认嵌套形状**：
 
     1. 取**第一对** `<tool>` … `</tool>`（`_TOOL_RE`，开标签按 `>` 的位置定位 ⇒ `<tool >` 也认）；
        不成对 ⇒ `None`。
-    2. `<tool_name>` 取第一块；`<tool_param>` **全部收集**（出现顺序即表序）：每块可带
-       `name="参数名"`（单双引号都认），带名的按名收、无名的留 `None` —— 位置填充是
-       `Agent.tool_call` 的事（那边才有工具的参数声明；这个模块只管语法、不认识工具）。
-       ⚠️ 参数的内部换行原样保留，只去首尾空白。
-    3. **两个标签都没有 ⇒ 整块正文就是一条 `executeCmd` 命令**（旧形状 `<tool>ls -la</tool>`，
-       用户拍板的兼容层），落成 `(None, 正文)` 的位置参数 —— 与无名参数同一个机制。
-       这里不加"含 `<` 就当畸形"的守卫：那会误杀 `cat < input.txt`。
-    4. **只有参数没有名字 ⇒ `None`**（不猜工具名）。**只有名字没有参数**是合法形状 ——
-       那可能是无参数工具的调用（第 30 步起 0 参是常态而非畸形），放不放行由
+    2. `<tool_name>` 取第一块；`<tool_param>` **全部收集**，每块里面必须是**一个或多个
+       具名元素**（`<参数名>值</参数名>`）—— **任何一块里一个都没有 ⇒ 整次调用 `None`**
+       （属性式 `name="…"`、裸值都是旧协议的形状，不再认）。参数值只去首尾空白、
+       内部换行原样保留，再过 `_unescape` 还原转义。
+    3. **只有参数没有名字 ⇒ `None`**（不猜工具名）。**只有名字没有参数**是合法形状 ——
+       那可能是无参数工具的调用（prompt 教的：无参工具不写 `<tool_param>`），放不放行由
        `tool_call` 按声明的参数表判。
-    5. 块是空的 ⇒ `None`。
+    4. 块是空的 ⇒ `None`。
 
     只取**第一条** `<tool>` 块：一回合只跑得了一条（接口文档 L210）。
     """
@@ -141,44 +96,42 @@ def tool_of(reply: str) -> tuple[str, list[tuple[str | None, str]]] | None:
     body = match.group(1)
     name = _NAME_RE.search(body)
     params = _params(body)
-    if name is None and not params:
-        text = body.strip()
-        return ("executeCmd", [(None, text)]) if text else None
-    if name is None:
+    if name is None or params is None:
         return None
     return name.group(1).strip(), params
 
 
-def _params(body: str) -> list[tuple[str | None, str]]:
-    """收集**全部** `<tool_param>` 块：`[(参数名|None, 原文), …]`，`finditer` 的顺序即表序。
+def _params(body: str) -> list[tuple[str, str]] | None:
+    """收集**全部** `<tool_param>` 块里的具名元素 ⇒ `[(参数名, 原文), …]`；
+    **任何一块里一个具名元素都没有 ⇒ `None`**（整次调用不成立）。
 
-    名字取开标签里的 `name` 属性（`<tool_param name="cmd">`），没有/为空 ⇒ `None`
-    —— 位置填充是 `Agent.tool_call` 的事（那边才有工具的参数声明；这个模块只管语法、
-    不认识工具）。⚠️ 值**只去首尾空白**（内部换行原样保留 —— 多行命令、带缩进的 python
-    都合法）。半截的块（有开无闭）**不要**：`_PARAM_RE` 自带 `</tool_param>` ⇒ 天然只认
-    成对块，而半截参数**绝不能**当内容用（会被当命令发进沙盒）。
+    元素名取标签名（`\w+`，中文也认），值只去首尾空白（内部换行原样保留 —— 多行命令、
+    带缩进的 python 都合法）。参数可拆进多个块（块数不是判据，**块里的格式**才是）。
+    半截的内层标签（有开无闭）配不上 `\1` ⇒ 那块算"没有具名元素" ⇒ 整次调用 `None`
+    —— 半截的东西**绝不能**当内容用（会被当命令发进沙盒）。
     """
-    return [
-        (_attr(match.group(1)), match.group(2).strip())
-        for match in _PARAM_RE.finditer(body)
-    ]
+    params: list[tuple[str, str]] = []
+    for match in _PARAM_RE.finditer(body):
+        inner = _INNER_RE.findall(match.group(1))
+        if not inner:
+            return None
+        params += [(tag, _unescape(value.strip())) for tag, value in inner]
+    return params
 
 
-def _attr(attrs: str) -> str | None:
-    """开标签的属性串（如 `<tool_param name="cmd">` 里的 ` name="cmd"`）里 `name` 的值。
-
-    只认这一种属性、值须用成对的引号包着（单双都行，`\1` 反向引用保证首尾同一种）；
-    `name = "cmd"`（多敲空格）也认。不做完整的属性语法分析：标签里没有第二种属性要认。
-    """
-    match = _PARAM_ATTR_RE.search(attrs)
-    return (match.group(2).strip() or None) if match else None
+def _unescape(text: str) -> str:
+    """把五个 XML 预定义实体还原成原字符（`&amp;` 最后换，见 `_ENTITIES` 的注释）。"""
+    for entity, char in _ENTITIES:
+        text = text.replace(entity, char)
+    return text
 
 
 def looks_like_tool(reply: str) -> bool:
     """这条回复**像是**工具调用吗？只认开标签前缀出现（故意判宽）。
 
-    判得比 `tool_of` 宽是有意的：`<tool ls`、`<tool >ls</tool>`、只有 `<tool_name>` 的回复，
-    都该被认成"它想调工具、但格式没凑对" ⇒ 落到**重问**，而不是被当成答案交上去。
+    判得比 `tool_of` 宽是有意的：`<tool ls`、`<tool >ls</tool>`、只有 `<tool_name>` 的回复、
+    第 37 步起**不再解析的旧形状**（属性式 / 裸参数 / 裸工具块），都该被认成
+    "它想调工具、但格式没凑对" ⇒ 落到**重问**，而不是被当成答案交上去。
     代价是答案里若含字面量 `<tool` 会被误判（拒绝提交、改问），概率极低，且降级方向安全。
     ⚠️ 它是本模块**唯一**只认前缀、不认成对的地方（`_TOOL_MARK_RE`）—— 别顺手改成
     `_TOOL_RE`：那会把"想调但没凑对"的回复从重问变成"原文即答案"。

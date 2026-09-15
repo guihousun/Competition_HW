@@ -46,7 +46,7 @@ class Context:
         #: 身份 = **题目原文**（`phaseTask`）。换题即换会话；冷却后同文再现则续上 ——
         #: 它还记得自己试过什么。任务结束不清（死会话，下场换题时自然被替）。
         self.task = task
-        #: 五段 header（定位/工具/格式/SOP/工作流）。**Agent 每次发送前刷新**，见模块 docstring。
+        #: system（`prompt.py` 的段模板）。**Agent 每次发送前刷新**，见模块 docstring。
         self.system = ""
         #: **构造即问**：首条 user 消息就是题目原文（不加包装 —— 结构由 role 表达）。
         self._messages: list[Message] = [Message(_USER, task)]

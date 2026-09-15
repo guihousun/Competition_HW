@@ -1,12 +1,17 @@
 """
 构建system prompt的地方
 调试只用调这个，分为六段：role定位、工具描述、输出格式、示例、沉淀的SOP、注意事项
+
+⚠️ **两个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT` 的 `{sop}`）正文里
+不许出现别的裸 `{}`**：`str.format` 会把它当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成
+空指令（第 35 步传下来的规矩）。替换值（工具描述、流程正文）里的 `{}` 不会被二次扫描
+—— python 片段太常见了。命令范式用 `$(...)`，安全。
 """
 
 # 1. role定位
 ROLE_PROMPT = """
 # 【ROLE定位】
-你是一个自主任务执行Agent，能根据用户的任务基于现有的工具了解任务并理解任务，理解任务后严格按照任务要求完成任务；当认为解题流程值得沉淀时，用 SOP2Prompt 把方法沉淀下来 
+你是一个自主任务执行Agent，能根据用户的任务基于现有的工具了解任务并理解任务，理解任务后严格按照任务要求完成任务；当认为解题流程值得沉淀时，用 SOP2Prompt 把方法沉淀下来
 
 当手上的信息不足时，就调用工具去取；认定完成任务后，就直接作答。
 一回合只输出一样东西：一次工具调用，或者一个答案。唯一的例外是 SOP2Prompt —— 它不产出命令，所以调用它的那一回合照样是你的作答回合：工具块后面再跟一个 `<answer>`。
@@ -53,6 +58,7 @@ OUTPUT_PROMPT = """
     <tool>
         <tool_name>SOP2Prompt</tool_name>
         <tool_param>
+            <name> 流程名 </name>
             <sop> xxx </sop>
         </tool_param>
     </tool>
@@ -67,7 +73,8 @@ SOP_PROMPT = """
 {sop}
 """
 
-# 5. 示例
+# 5. 示例 —— **占位、未启用**：现在示例都内联在工具段 / 输出段里，空段头只会白花
+#    prompt 字节；要加 few-shot 示例段时把它加进 `gen_system_prompt` 的 sections。
 EXAMPLE_PROMPT = """
 # 【输出示例】
 """
@@ -82,42 +89,68 @@ ATTENTION = """
 4. 提交答案前，逐条对照任务书核对一遍，不允许跳过任务书里的任何一条要求。
 """
 
-def gen_system_prompt(tools, sop) -> str:
-    sections = [ROLE_PROMPT, 
-                gen_all_tool_prompt(tools=tools), 
-                OUTPUT_PROMPT, 
-                SOP_PROMPT, 
-                gen_sop_prompt(sop=sop), 
-                ATTENTION]
 
-    return "\n\n".join(sections)
+def gen_system_prompt(tools, sop) -> str:
+    """组装整份 system 消息：五段生效（示例段占位未启用），段间空一行。
+
+    `tools` = `Agent` 的工具注册表（名 → (实现, 描述, 参数表)），`sop` = 流程表
+    `{流程名: 正文}`（第 37 步起），两个槽分别填进工具段与 SOP 段。
+    各段 `strip()` 后再拼 —— 三引号串首尾各带一个换行，直接 join 会出现三连空行。
+    """
+    sections = [
+        ROLE_PROMPT,
+        gen_all_tool_prompt(tools=tools),
+        OUTPUT_PROMPT,
+        gen_sop_prompt(sop=sop),
+        ATTENTION,
+    ]
+    return "\n\n".join(section.strip() for section in sections)
+
 
 def gen_all_tool_prompt(tools) -> str:
-    tools_desc = ""
-    for tool in tools:
-        tools_desc += gen_tool_prompt(tool=tool)
+    """「工具描述」整段：每个工具一块，块间空一行（`##` 标题摆在那里，不空行会黏成一坨）。"""
+    tools_desc = "\n\n".join(
+        gen_tool_prompt((name, desc, params))
+        for name, (_, desc, params) in tools.items()
+    )
     return TOOL_PROMPT.format(tool_desc=tools_desc)
 
+
 def gen_tool_prompt(tool) -> str:
+    """一个工具一块（**由注册表生成、不手写第二份** —— 手写的描述迟早与调度分家，
+    而那种不一致只有实盘上 LLM 报错才看得出来）：
+
+        ## ToolName - {toolname}
+        - Description: {description}
+        - Params:
+            - parma1: {parma1 description}
+            - parma2: {parma2 description}
+
+    `tool` = `(名字, 描述, ((参数名, 用途), …))` —— 实现那一元在 `gen_all_tool_prompt`
+    里剥掉（描述段用不上可调用对象）。无参数打 `- Params: （无参数）`。
     """
-    tool是一个抽象结构，需要有工具的名字，工具描述，参数名，参数描述
-    组装成
-    ## ToolName - {toolname}
-    - Description: {description}
-    - Params:
-        - parma1: {parma1 description}
-        - parma2: {parma1 description}
-        ……
-    """
-    pass
+    name, desc, params = tool
+    lines = [f"## ToolName - {name}", f"- Description: {desc}"]
+    if params:
+        lines.append("- Params:")
+        lines += [f"    - {pname}: {pdesc}" for pname, pdesc in params]
+    else:
+        lines.append("- Params: （无参数）")
+    return "\n".join(lines)
+
 
 def gen_sop_prompt(sop) -> str:
+    """「沉淀的SOP」整段：流程表（`{流程名: 正文}`）逐条组装。
+
+        ## SopName - sop name1
+        流程描述
+        ## SopName - sop name2
+        流程描述
+
+    空表打占位 —— **段头永远都在**（哪怕一条都没沉淀过）：那个槽是 LLM 自己写的
+    目标，看不见槽就不会去用它（第 18 步传下来的规矩）。
     """
-    sop应该有多个流程，组装成：
-    ## SopName - sop name1
-    流程描述
-    ## SopName - sop name2
-    流程描述
-    ……
-    """
-    pass
+    if not sop:
+        return SOP_PROMPT.format(sop="（暂无沉淀）")
+    flows = "\n\n".join(f"## SopName - {name}\n{text}" for name, text in sop.items())
+    return SOP_PROMPT.format(sop=flows)
