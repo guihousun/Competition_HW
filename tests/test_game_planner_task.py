@@ -439,8 +439,9 @@ class TaskChannelTest(unittest.TestCase):
         output = "[exitCode:0]\n" + "y" * 5000
         prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
         self.assertEqual(execute, "")
-        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
-        self.assertIn(output, users[-1])
+        messages = json.loads(prompt)
+        self.assertEqual(messages[-2]["role"], "tool")
+        self.assertIn(output, messages[-2]["content"])
 
     def test_the_reply_is_remembered_even_on_command_rounds(self):
         """**发命令那一轮也记回复**（第 25 步 `AGENT.hear` 的存在理由）：③ 那轮没有
@@ -464,7 +465,12 @@ class TaskChannelTest(unittest.TestCase):
             [
                 ("user", self.TASK),
                 ("assistant", call),
-                ("user", "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"),
+                ("tool", "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"),
+                (
+                    "user",
+                    "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
+                    "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
+                ),
             ],
         )
 
@@ -483,8 +489,8 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, "", "沙盒刚交作业，这轮不许再发命令")
-        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
-        self.assertIn("[exitCode:0]\nok", users[-1])
+        messages = json.loads(prompt)
+        self.assertIn("[exitCode:0]\nok", messages[-2]["content"])
 
     def test_a_result_and_a_rejection_come_back_together(self):
         """⚠️ **沙盒结果与"答错了"是同一个分支的两面，不能互相吞掉。**
@@ -503,8 +509,9 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, "")
-        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
-        self.assertIn("[exitCode:0]\n晴", users[-1])
+        messages = json.loads(prompt)
+        self.assertIn("[exitCode:0]\n晴", messages[-3]["content"])
+        users = [m["content"] for m in messages if m["role"] == "user"]
         self.assertIn(self.ANSWER, users[-1])
         self.assertIn(self.RETRY_MARK, users[-1])
 
@@ -648,8 +655,8 @@ class TaskChannelTest(unittest.TestCase):
         for output in ("[TIMEOUT]\n部分输出", "[JUDGER_ERROR]\n沙盒挂了", "[exitCode:127]\nno"):
             with self.subTest(output=output):
                 prompt, execute = task_channel(self._turn(self.TASK, cmd_result=output))
-                users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
-                self.assertIn(output, users[-1])
+                messages = json.loads(prompt)
+                self.assertIn(output, messages[-2]["content"])
                 self.assertEqual(execute, "")
 
     def test_prompt_and_command_are_never_both_set(self):

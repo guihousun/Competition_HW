@@ -78,12 +78,33 @@ class ContextTest(unittest.TestCase):
         )
 
     def test_feed_adds_the_two_titled_blocks(self):
-        """回灌轮的 user 消息：沙盒结果与（或）纠错 —— 标题留在 content 里当内容标签
-        （沙盒输出是任意文本，没标签分不清哪段是什么）。"""
+        """回灌轮**按 role 分条**：结果 = `tool` 消息、决策句与纠错 = `user` 消息 ——
+        标题留在 content 里当内容标签（沙盒输出是任意文本，没标签分不清哪段是什么）。
+        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`（影响判题判断）。"""
         self.ctx.feed("[exitCode:0]\n2", "晴 26 度")
-        content = self.messages()[-1]["content"]
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\n2", content)
-        self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。", content)
+        self.assertEqual(
+            [m["role"] for m in self.messages()],
+            ["system", "user", "tool", "user", "user"],
+        )
+        self.assertEqual(
+            self.messages()[-3],
+            {"role": "tool", "content": "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"},
+        )
+        self.assertEqual(
+            self.messages()[-2],
+            {
+                "role": "user",
+                "content": "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
+                "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
+            },
+        )
+        self.assertEqual(
+            self.messages()[-1],
+            {
+                "role": "user",
+                "content": "【你上一次提交的答案被判定为不正确】\n晴 26 度\n请重新作答。",
+            },
+        )
 
     def test_nudge_appends_the_standing_line(self):
         """无新内容的重问轮 ⇒ 一句固定收尾（会话不能停在它自己的输出上）。"""
@@ -98,13 +119,18 @@ class ContextTest(unittest.TestCase):
         self.ctx.feed("结果 {task} {0}", "")
         self.ctx.hear("<answer>答案</answer>")
         self.assertEqual(
-            [m["content"] for m in self.messages()],
+            [(m["role"], m["content"]) for m in self.messages()],
             [
-                self.SYSTEM,
-                "请查询北京天气",
-                "回复 {'a': 1}",
-                "【上一条命令的执行结果（原文）】\n结果 {task} {0}",
-                "<answer>答案</answer>",
+                ("system", self.SYSTEM),
+                ("user", "请查询北京天气"),
+                ("assistant", "回复 {'a': 1}"),
+                ("tool", "【上一条命令的执行结果（原文）】\n结果 {task} {0}"),
+                (
+                    "user",
+                    "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
+                    "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
+                ),
+                ("assistant", "<answer>答案</answer>"),
             ],
         )
 

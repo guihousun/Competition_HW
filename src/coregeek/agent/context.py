@@ -32,6 +32,11 @@ class Message(NamedTuple):
 
 _USER = "user"
 _ASSISTANT = "assistant"
+#: 工具结果用 `tool` 角色（标准 chat 格式的第三个 role）：沙盒回执是**工具的产出**，
+#: 不是人类的指令 —— 标成 `user` 会让判题器的 LLM 把命令输出当成"用户说了什么"，
+#: 影响它对"任务是否已完成"的判断（上一轮加了决策句之后这点更关键：决策句是
+#: 系统的话、归 `user`；结果本身是工具的话、归 `tool`，两者不该混在一条消息里）。
+_TOOL = "tool"
 
 #: 无新内容的重问轮（畸形回复 / `SOP2Prompt` 之后）追加的固定收尾。判题器的 LLM
 #: 是黑盒：会话停在它自己的输出上是个含糊指令，一句"请继续"把"该你了"说清楚。
@@ -52,15 +57,25 @@ class Context:
         self._messages: list[Message] = [Message(_USER, task)]
 
     def feed(self, result: str = "", retry: str = "") -> None:
-        """回灌轮的新 user 消息：沙盒结果与（或）纠错 —— 标题留在 content 里当
-        **内容标签**（沙盒输出是任意文本，没标签分不清哪段是什么）。"""
-        blocks = []
+        """回灌轮的新消息（**按 role 分条**，不再拼成一条 user）：沙盒结果 = `tool`，
+        决策句与纠错 = `user` —— 标题留在 content 里当**内容标签**
+        （沙盒输出是任意文本，没标签分不清哪段是什么）。
+
+        ⚠️ **结果单独占一条 `tool` 消息**：命令输出是**工具的产出**、不是人类指令，
+        标成 `user` 会让判题器的 LLM 把输出当成"用户说了什么"（见 `_TOOL` 的注释）。
+
+        ⚠️ **结果后紧跟一句 user 决策句**：结果回灌是"任务有没有做完"的关键判据轮
+        —— LLM 只有这一轮能看到输出并决定下一步。不提示，它容易在答案已经在输出里
+        时继续执行多余命令（一轮命令 = 一轮掉分）；提示把它拽回"先判断、再决定"。
+        """
         if result:
-            blocks.append(f"【上一条命令的执行结果（原文）】\n{result}")
+            self._messages.append(
+                Message(_TOOL, f"【上一条命令的执行结果（原文）】\n{result}")
+            )
         if retry:
-            blocks.append(f"【你上一次提交的答案被判定为不正确】\n{retry}\n请重新作答。")
-        if blocks:
-            self._messages.append(Message(_USER, "\n\n".join(blocks)))
+            self._messages.append(
+                Message(_USER, f"【你上一次提交的答案被判定为不正确】\n{retry}\n请重新作答。")
+            )
 
     def nudge(self) -> None:
         """无新内容的重问轮：追加一句固定收尾（见 `NUDGE`）。"""

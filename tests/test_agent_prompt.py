@@ -125,7 +125,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("【你上一次提交的答案", plain)
 
         with_result = json.loads(self.agent.chat("题目", result="[exitCode:0]\nok"))
-        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result[-1]["content"])
+        self.assertIn("【上一条命令的执行结果（原文）】\n[exitCode:0]\nok", with_result[-2]["content"])
 
         with_retry = json.loads(self.agent.chat("题目", retry="晴 26 度"))
         self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry[-1]["content"])
@@ -156,7 +156,12 @@ class ChatPromptTest(unittest.TestCase):
             [
                 ("user", "题"),
                 ("assistant", "<tool>ls</tool>"),
-                ("user", "【上一条命令的执行结果（原文）】\n[exitCode:0]\nok"),
+                ("tool", "【上一条命令的执行结果（原文）】\n[exitCode:0]\nok"),
+                (
+                    "user",
+                    "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
+                    "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
+                ),
             ],
         )
 
@@ -207,6 +212,11 @@ class ChatPromptTest(unittest.TestCase):
         contents = [m["content"] for m in messages]
         self.assertIn("题目 {task} {0} {}", contents)
         self.assertIn("【上一条命令的执行结果（原文）】\n{'a': 1}", contents)
+        self.assertIn(
+            "——请判断：以上输出是否已满足任务要求？若已满足，请直接提交答案，"
+            "不要再执行多余命令；若信息仍不足，请说明还缺什么，然后只执行下一步命令。",
+            contents,
+        )
         self.assertIn("SOP 里有 {sop} 和 {0}", messages[0]["content"])
 
 
