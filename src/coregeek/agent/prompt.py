@@ -77,6 +77,14 @@ SOP_PROMPT = """
 #    prompt 字节；要加 few-shot 示例段时把它加进 `gen_system_prompt` 的 sections。
 EXAMPLE_PROMPT = """
 # 【输出示例】
+用于需求：解决promble.txt的任务
+
+step1. 通过shell命令找寻promble.txt的位置并获取文件内容
+    假设文件内容为：
+    需求描述文档spec.md中描述了需求要求，完成需求，并通过check.sh验证是否通过，全部通过后会返回一个token，token即为答案内容
+step2. 读取spec.md的内容了解需求要求
+step3. 按照需求要求完成需求，并验证是否通过
+step4. 通过则返回token，未通过则参考报错和spec.md的内容回到第三步
 """
 
 # 6. 注意事项
@@ -84,14 +92,14 @@ ATTENTION = """
 # 【注意事项】
 1. 任务信息里给的往往只是一个文件名、不是完整路径。
 2. 每条命令要花一个回合，不要拆成两回合。例如把「找文件在哪」和「读文件内容」合成一条：
-   f=$(find / -maxdepth 4 -name '*任务书*' -print -quit 2>/dev/null); echo "FILE=$f"; cat "$f"
+   f=$(find / -maxdepth 6 -name '*任务书*' -print -quit 2>/dev/null); echo "FILE=$f"; cat "$f"
 3. 读完任务书后，**先把它要求的「要交什么、什么格式」抄进回复里**，再动手去做；规格没看清楚就不要猜。
 4. 提交答案前，逐条对照任务书核对一遍，不允许跳过任务书里的任何一条要求。
 """
 
 
 def gen_system_prompt(tools, sop) -> str:
-    """组装整份 system 消息：五段生效（示例段占位未启用），段间空一行。
+    """组装整份 system 消息：六段生效
 
     `tools` = `Agent` 的工具注册表（名 → (实现, 描述, 参数表)），`sop` = 流程表
     `{流程名: 正文}`（第 37 步起），两个槽分别填进工具段与 SOP 段。
@@ -102,6 +110,7 @@ def gen_system_prompt(tools, sop) -> str:
         gen_all_tool_prompt(tools=tools),
         OUTPUT_PROMPT,
         gen_sop_prompt(sop=sop),
+        EXAMPLE_PROMPT,
         ATTENTION,
     ]
     return "\n\n".join(section.strip() for section in sections)
