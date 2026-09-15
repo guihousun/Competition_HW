@@ -1,5 +1,5 @@
 {
-  "commit": "9f1a2c82ed09126db35abb4799cd74e3ce9e2e3c",
+  "commit": "2a95c26c715c22aedf3263dc95ccd64f7ea0dc60",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -122,9 +122,9 @@
       "source": "Demo/CoreGeek/src/agent/grid.py"
     },
     {
-      "bytes": 39115,
+      "bytes": 39309,
       "path": "CoreGeek/src/agent/llm_router.py",
-      "sha256": "feadade63a88dc27aa0e8f0e0cd45048a2318b1f725f409fd7ba69ca7e8cae61",
+      "sha256": "190cbaf528a6e3d6f7d17a179a4d1c43f7a671fecc28c518aedf87f9870903ef",
       "source": "Demo/CoreGeek/src/agent/llm_router.py"
     },
     {
@@ -168,6 +168,12 @@
       "path": "CoreGeek/src/agent/match.py",
       "sha256": "5e8698d43eded65d5c95a993a4bf7ccf1cde32d864659f83df3b2c99c2d6510f",
       "source": "Demo/CoreGeek/src/agent/match.py"
+    },
+    {
+      "bytes": 497,
+      "path": "CoreGeek/src/agent/model_json.py",
+      "sha256": "15ad22129f510cf72228f4b299cf809435d39adf7948a4df3c91f63ab59a6d98",
+      "source": "Demo/CoreGeek/src/agent/model_json.py"
     },
     {
       "bytes": 3322,
@@ -236,10 +242,16 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 22949,
+      "bytes": 23987,
       "path": "CoreGeek/src/agent/task_agent.py",
-      "sha256": "1d93d9d1280af20254af6e321afaaa2c99712a483f6df9dfa1ca123d2ff4e350",
+      "sha256": "491712fd2ba48f56884fb4ea34368eb64b72746d727a0e9e93f23ce9fc087292",
       "source": "Demo/CoreGeek/src/agent/task_agent.py"
+    },
+    {
+      "bytes": 7374,
+      "path": "CoreGeek/src/agent/task_answer_contract.py",
+      "sha256": "b89ef3cdfa10f3d55b01625d2a59fc709b51c6521063410cfd2468a881b43ebd",
+      "source": "Demo/CoreGeek/src/agent/task_answer_contract.py"
     },
     {
       "bytes": 30287,
@@ -290,9 +302,9 @@
       "source": "Demo/CoreGeek/src/agent/taskworld.py"
     },
     {
-      "bytes": 25016,
+      "bytes": 26503,
       "path": "CoreGeek/src/agent/team_agent.py",
-      "sha256": "54e12cb8d7b7256da5386e1eb328f4d04c72a149210b37f2fc84b91e42a9fdd8",
+      "sha256": "5f4005f0a3e07134cb6cae235ae12922089782b917335e15db5ac9add55c6d1d",
       "source": "Demo/CoreGeek/src/agent/team_agent.py"
     },
     {
@@ -363,5 +375,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "20862afe857edebb62ad4630e2d5fe32fc588b77b8ab218ec959a7e9ae4b6506"
+  "source_digest": "768910bfe95606d45c62786f01fe9291ff8490cd3a3307b4a44ff66eda66fc8c"
 }
