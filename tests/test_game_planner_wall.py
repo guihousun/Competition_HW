@@ -14,8 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _records, _terrain  # noqa: E402
-from coregeek.game.grid import Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
+from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
+from coregeek.game import planner  # noqa: E402
 from coregeek.game.planner import HOLE_MIN_LEFT, HOLE_MIN_SAVING, HOLE_PATCH_LEFT, WALL, WEAPONS_BY_SITE, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Weapon  # noqa: E402
@@ -525,11 +526,29 @@ class WallGateTest(unittest.TestCase):
         "走不出去"都返回 `None`（它的契约），所以筛"谁在盒子里"时漏掉 `r.pos in box`，
         就会把**所有在盒外干活的人**判成要被关住 ⇒ 闸门永远合上、墙一格都砌不上。
         症状极安静：不报错、不违规，只是工人站在工地上一动不动。
+        ⚠️ 第 40 步切段后，2 号工人（后处理的那个）分到的是**后段首格** ——
+        站位改贴那一格（意图不变：有石头、贴着自己被分到的目标 ⇒ 该砌）。
         """
-        turn = self._turn(door_blocked=True, at1=Pos(5, 24), at2=Pos(14, 21))
+        gaps = wall_cells(self.BASE, 41)
+        target = gaps[(len(gaps) + 1) // 2]
+        occupied = (
+            set(base_cells(self.BASE)) | {w.pos for w in self.WEAPONS} | self.DOOR | {Pos(5, 24)}
+        )
+        spot = next(
+            Pos(target.x + d.x, target.y + d.y)
+            for d in STEPS
+            if 0 <= target.x + d.x < 41 and 0 <= target.y + d.y < 32
+            and Pos(target.x + d.x, target.y + d.y) not in occupied
+        )
+        turn = self._turn(door_blocked=True, at1=Pos(5, 24), at2=spot)
         cmds = plan(turn)
-        self.assertEqual(cmds["2"]["action"], "build", "盒外那个手里有石头、又贴着待砌的第一格 ⇒ 该砌")
+        self.assertEqual(cmds["2"]["action"], "build", "盒外那个手里有石头、又贴着分到的目标 ⇒ 该砌")
         self.assertEqual(cmds["2"]["name"], WALL)
+        self.assertEqual(
+            Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"]),
+            target,
+            "砌的正是分给它的后段首格",
+        )
         self.assertNotIn("1", cmds, "1 号没石头、也没石矿可采 ⇒ 空指令")
 
     def test_two_workers_walking_out_never_aim_at_the_same_cell(self):
@@ -1223,9 +1242,10 @@ class TwoWallBuildersTest(unittest.TestCase):
         self.assertGreaterEqual(len(built), 4, "两个工人在原地打转 ⇒ 一座墙都砌不上")
         self.assertEqual(len(built), len(set(built)), "同一格砌了两遍（石头白花）")
         self.assertTrue(set(built) <= set(order), f"砌到环外去了：{set(built) - set(order)}")
-        # 只钉"前两格必须是正面列"：18 格的新顺序里紧跟着就是底行的 (12,26)/(11,26)，
-        # 再往后锁死集合只会把"顺序微调"误报成回归。
-        self.assertEqual({c.x for c in built[:2]}, {13}, "先砌的必须是**正面**那一列")
+        # 第 40 步切段后的分工契约：**A（先处理的工人）从缺口队头砌起** —— 第一格必是
+        # 正面列；B 从中点砌起（首格落在后段，这局是 x=8 的那一格），两人不再挤同一段墙。
+        # 再往后锁死集合只会把"顺序微调"误报成回归，不钉。
+        self.assertEqual(built[0].x, 13, "A 的第一格 = 缺口队头（正面列）")
         self.assertTrue({Pos(13, 21), Pos(13, 25)} <= set(built), "夹缝里那两格得砌上")
 
 
@@ -1300,6 +1320,122 @@ class StandingOnTheTargetTest(unittest.TestCase):
             Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"]),
             self.ON,
             "砌的还是原来那一格（绕一圈回到同一格 ⇒ 不是收敛，是踱步）",
+        )
+
+
+class SegmentSplitTest(unittest.TestCase):
+    """两个工人的**切段分配**（第 40 步）：A 领前段首格、B 领后段首格，沿环同向推进。
+
+    旧机制里两人都从 `free[0]` 取、靠认领错开一格 ⇒ B 的目标贴着 A 的目标，两人在
+    同一段墙上挤（抢位 / 堵路 / B 的 BFS 路径横穿 A 的工地）。切段后 A 从队头往后砌、
+    B 从中点往后砌：**后段的任何一格都不高于前段还剩下的** —— 优先级保住、互不抢同一格。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+
+    def _spot(self, cell: Pos, occupied: set[Pos]) -> Pos:
+        """`cell` 的某个空邻格（站位即建造位 —— 贴着目标即可 `build`）。"""
+        for d in STEPS:
+            p = Pos(cell.x + d.x, cell.y + d.y)
+            if 0 <= p.x < 41 and 0 <= p.y < 32 and p not in occupied:
+                return p
+        raise AssertionError(f"{cell} 找不到空邻格")
+
+    def _turn(self, *workers: Worker) -> Turn:
+        occupied = set(base_cells(self.BASE)) | {w.pos for w in self.WEAPONS}
+        grid = _terrain(self.WEAPONS, {self.BASE: "station"})
+        grid.update({w.pos: "worker" for w in workers})
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=workers,
+            gold=0,
+            weapons=self.WEAPONS,
+        )
+
+    def test_two_workers_take_different_segments(self):
+        gaps = list(wall_cells(self.BASE, 41))
+        mid = (len(gaps) + 1) // 2
+        occupied = set(base_cells(self.BASE)) | {w.pos for w in self.WEAPONS}
+        a = Worker(10010, self._spot(gaps[0], occupied), {"stone": 5})
+        b = Worker(10012, self._spot(gaps[mid], occupied | {a.pos}), {"stone": 5})
+        cmds = plan(self._turn(a, b))
+
+        builds = {
+            Pos(v["targetPos"][0]["x"], v["targetPos"][0]["y"])
+            for v in cmds.values()
+            if v["action"] == "build"
+        }
+        self.assertEqual(
+            builds,
+            {gaps[0], gaps[mid]},
+            "A 领前段首格、B 领后段首格 —— 旧机制下 B 只会跟着 A 砍 free[1]",
+        )
+
+    def test_a_lone_worker_still_sweeps_the_whole_ring(self):
+        """只有一个工人 ⇒ 整段环都归它 —— 切段按**在场工人数**算，不把环掐掉一半。"""
+        gaps = list(wall_cells(self.BASE, 41))
+        occupied = set(base_cells(self.BASE)) | {w.pos for w in self.WEAPONS}
+        roles = {10010: Worker(10010, self._spot(gaps[0], occupied), {"stone": 30})}
+        entries = _terrain(self.WEAPONS, {self.BASE: "station"})
+        built: list[Pos] = []
+        for rnd in range(1, 13):
+            grid = {**entries, **{r.pos: "worker" for r in roles.values()}}
+            turn = Turn(
+                round_no=rnd, map=Map((41, 32), grid), roles=tuple(roles.values()), gold=0,
+                weapons=self.WEAPONS,
+            )
+            for key, cmd in plan(turn).items():
+                role = roles[int(key)]
+                if cmd["action"] == "build":
+                    cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+                    entries[cell] = WALL
+                    built.append(cell)
+                    roles[int(key)] = Worker(int(key), role.pos, {"stone": role.stone - 1})
+                elif cmd["action"] == "move":
+                    cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+                    roles[int(key)] = Worker(int(key), cell, {"stone": role.stone})
+        self.assertGreaterEqual(
+            len({c for c in built}), 5, "切段把环掐成一半的话，独工砌到半环就停了"
+        )
+        self.assertEqual(len(built), len(set(built)), "同一格砌两遍（石头白花）")
+
+
+class PathReserveTest(unittest.TestCase):
+    """路径预留与**软**避让（第 40 步）：A 认领差事时把 BFS 路径记进黑板，
+    B 选路时当 `avoid` 绕开；**绕不开就退回硬障碍照走** —— 让路的代价不能是原地卡死
+    （双双停住比擦肩而过更亏，§4.5.4 碰撞两败）。"""
+
+    def test_reserve_path_records_the_intermediate_cells(self):
+        turn = Turn(round_no=1, map=Map((41, 32), {Pos(10, 24): "station"}), roles=(), gold=0)
+        walker = Worker(1, Pos(5, 5), {})
+        goal = Pos(9, 5)
+        paths: set[Pos] = set()
+        planner._reserve_path(walker, goal, turn, set(), paths)
+        #: ⚠️ **别钉死具体格**：`step_toward` 的并列最短路会走对角，坐标取决于实现细节。
+        #: 钉**契约**：恰好走 `dist−1` 步、每步把切比雪夫距离缩 1、终点贴着目标。
+        self.assertEqual(len(paths), 3)
+        self.assertEqual({p.dist(goal) for p in paths}, {3, 2, 1})
+
+    def test_step_treats_avoid_as_soft(self):
+        """B 的唯一路线被 A 的路径盖住 ⇒ 退回硬障碍照走（擦肩），而不是不动。"""
+        walls = (
+            {Pos(x, 4): "rock" for x in range(3, 10)}
+            | {Pos(x, 6): "rock" for x in range(3, 10)}
+            | {Pos(3, 5): "rock"}  # 封死左端 —— avoid 盖住走廊中段后**真的无路可绕**
+        )
+        grid = {Pos(10, 24): "station", **walls}
+        walker = Worker(1, Pos(5, 5), {})
+        grid[walker.pos] = "worker"
+        turn = Turn(round_no=1, map=Map((41, 32), grid), roles=(walker,), gold=0)
+        cmds: dict = {}
+        avoid = {Pos(6, 5), Pos(7, 5), Pos(8, 5)}  # 走廊的正中段
+        self.assertTrue(planner._step(walker, Pos(9, 5), turn, cmds, set(), avoid))
+        self.assertEqual(
+            cmds["1"],
+            {"action": "move", "targetPos": [{"x": 6, "y": 5}]},
+            "avoid 只是软的：绕不开就退回硬障碍，绝不原地卡死",
         )
 
 

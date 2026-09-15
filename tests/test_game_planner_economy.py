@@ -622,5 +622,79 @@ class UpgradeLineTest(unittest.TestCase):
                 self.assertLess(step.dist(self.ORE), Pos(15, 24).dist(self.ORE), "照常采矿")
 
 
+class OreClaimTest(unittest.TestCase):
+    """**矿格认领**（第 40 步）：A 这回合认领的矿，B 不会再奔它 —— 就近换一座。
+
+    旧口径"不认领矿"（`_pick_ore` 的注释：两人挤同一座矿的不同邻格都能采）在**两人都
+    要石头**时就是抢资源：B 明明有别的石矿可去，却跟着 A 奔同一座，路上互堵、到了白站。
+    认领只在**回合内**的账本上（`ore_taken`），不跨回合。"""
+
+    BASE = Pos(10, 24)
+    ORE1 = Pos(4, 24)
+    ORE2 = Pos(8, 20)
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+
+    def test_the_second_worker_never_chases_a_claimed_ore(self):
+        grid = _terrain(
+            self.WEAPONS, {self.BASE: "station", self.ORE1: "stone", self.ORE2: "stone"}
+        )
+        a = Worker(10010, Pos(4, 23), {})  # 贴着 ORE1
+        b = Worker(10012, Pos(5, 24), {})  # 也贴着 ORE1 —— 旧口径下它会跟着采同一座
+        grid |= {a.pos: "worker", b.pos: "worker"}
+        turn = Turn(
+            round_no=1, map=Map((41, 32), grid), roles=(a, b), gold=0, weapons=self.WEAPONS
+        )
+        cmds = plan(turn)
+
+        self.assertEqual(cmds["10010"]["action"], "collect")
+        self.assertEqual(
+            Pos(cmds["10010"]["targetPos"][0]["x"], cmds["10010"]["targetPos"][0]["y"]),
+            self.ORE1,
+        )
+        b_cmd = cmds["10012"]
+        self.assertNotEqual(
+            b_cmd["action"], "collect", "B 不该跟着 A 采同一座矿 —— 目标格认领了"
+        )
+        step = Pos(b_cmd["targetPos"][0]["x"], b_cmd["targetPos"][0]["y"])
+        self.assertLess(
+            step.dist(self.ORE2), b.pos.dist(self.ORE2), "B 换奔另一座石矿"
+        )
+
+
+class PioneerErrandTest(unittest.TestCase):
+    """开拓者的**任务空隙差事**（第 40 步）：无可接任务 ⇒ 领"买券 → 用券"。
+
+    第 29 步那条"任务点全空 ⇒ 开拓者卖矿"因开拓者没有矿而从未跑通（结构在、暂时空转）
+    —— 本步退役，换成升级线的跑腿。跑腿者优先级 = **持券者**（券在谁包里谁用，没有转移
+    指令）> **真空闲的开拓者**（无可接任务）> 第一个工人。"""
+
+    BASE = Pos(10, 24)
+    SHOP = Pos(20, 16)
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+
+    def test_an_idle_pioneer_buys_the_voucher(self):
+        grid = _terrain(self.WEAPONS, {self.BASE: "station", self.SHOP: "weaponShop"})
+        worker = Worker(10010, Pos(12, 23), {"stone": 5})
+        pioneer = Pioneer(10011, Pos(20, 15), {})  # 贴着商店
+        grid |= {worker.pos: "worker", pioneer.pos: "worker"}
+        turn = Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(worker, pioneer),
+            gold=150,
+            weapons=self.WEAPONS,
+            shop_prices={"WeaponUpgradeVoucher1": 100},
+        )
+        cmds = plan(turn)
+
+        self.assertEqual(
+            cmds["10011"]["action"],
+            "buy",
+            "开拓者真空闲（无可接任务）⇒ 它去跑腿买券；旧口径下它什么都不发",
+        )
+        others = {v["action"] for k, v in cmds.items() if k != "10011"}
+        self.assertNotIn("buy", others, "跑腿的只有一个 —— 工人不去重复买券")
+
+
 if __name__ == "__main__":
     unittest.main()
