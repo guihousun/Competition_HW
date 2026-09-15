@@ -113,3 +113,26 @@ class ContractPipelineTests(unittest.TestCase):
         self.assertFalse(any(c['action']=='submitAnswer' for c in repair['roleCommandMap'].values()))
         corrected=self.step(llm=self.answer('answer','{"city":"new","total_count":2}'))
         self.assertTrue(any(c['action']=='submitAnswer' for c in corrected['roleCommandMap'].values()))
+
+    def test_issue26_instruction_echo_is_rejected_and_corrected_on_both_sides(self):
+        # Issue 26 quotes this bad answer from source 1831136d. The explicit
+        # format below is an independent fixture, not an unavailable log replay.
+        echo='requirement: 遵守题目原文指定的格式、字段与单位'
+        for side in ('challenger','defender'):
+            for invalid in (echo,json.dumps(echo,ensure_ascii=False)):
+                with self.subTest(side=side,answer=invalid):
+                    self.state=support.planner.PlannerState();self.round=1
+                    self.fixture['files']['/tmp/unseen/work/task_varied.md']='输出格式：{"city":"","total_count":0}'
+                    first=self.step(side=side)
+                    self.step(cmd=local_task_sandbox.execute(first['executeCmd'],self.fixture,active=True),side=side)
+                    rejected=self.step(llm=self.answer('answer',invalid),side=side)
+                    self.assertFalse(any(c['action']=='submitAnswer' for c in rejected['roleCommandMap'].values()))
+                    self.assertIn('answer_contract_rejected',rejected['prompt'])
+                    self.assertEqual(self.state.team_agent.task.answers,0)
+                    exact=' {"city":"合成测试城市","total_count":17}\n'
+                    repaired=self.step(llm=self.answer('answer',exact),side=side)
+                    issued=[c for c in repaired['roleCommandMap'].values() if c['action']=='submitAnswer']
+                    self.assertEqual(issued,[{'action':'submitAnswer','taskAnswer':exact}])
+                    self.assertNotIn('prompt',repaired)
+                    self.assertEqual(self.state.team_agent.task.answers,1)
+                    self.assertLess(self.round,15)
