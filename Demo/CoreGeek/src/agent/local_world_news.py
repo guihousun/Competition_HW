@@ -7,7 +7,7 @@ Future publications and effects remain under _demo and never enter policy input.
 from copy import deepcopy
 
 
-def install(state, *, start_day=1):
+def install(state, *, start_day=1, long_context=False):
     """Install a three-day clue chain and the documented two-day mine outage.
 
     Start at the first round of the chosen day. Existing default scenarios are
@@ -15,6 +15,8 @@ def install(state, *, start_day=1):
     """
     if type(start_day) is not int or not 1 <= start_day <= 8:
         raise ValueError('fixture needs three game days within the ten-day match')
+    if type(long_context) is not bool:
+        raise ValueError('long_context must be boolean')
     if int(state.get('roundNo') or 0) != 1 + (start_day - 1) * 130:
         raise ValueError('install on the first round of the selected day')
     from .treasure import rite_of
@@ -41,6 +43,13 @@ def install(state, *, start_day=1):
         {'day': start_day + 3, 'officialNews': '【本地新闻测试】铁矿今日恢复开采和原收购价。',
          'folkLegends': '【本地传闻测试】此前祭坛的开启时段已经结束。'},
     ]
+    if long_context:
+        excluded = next((name for name in ('AcientTablet', 'AncientScroll', 'IronWhistle') if name not in rite.items), 'FalseToken')
+        # Environment-owned local text, published only on its scheduled day.
+        # The interpreter receives the text, never the private rite or schedule.
+        publications[0]['folkLegends'] += (
+            '市井闲谈与无关风景。' * 250 + f'明确排除用品{excluded}。'
+            '排除条件与前述地点都有效；精确用品和时间仍须等待后续公开消息。')
     base = {str(row['name']): row['price'] for row in state.get('vendorShopList') or []}
     # The example only promises an increase, not its magnitude. Six is a
     # deliberate fixture price, visible to both policy and trade execution.
@@ -51,6 +60,7 @@ def install(state, *, start_day=1):
                      'last_day': start_day + 2, 'price': outage_price}],
         'base_prices': base, 'published_day': None,
         'note': 'Local test schedule; price amount and treasure conditions are not official constants',
+        'long_context': long_context,
     }
     publish(state, [])
     return state

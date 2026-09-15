@@ -177,7 +177,7 @@ def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='
     """One explicit local LLM fixture; never used by ordinary benchmarks."""
     import uuid
     from copy import deepcopy
-    if kind not in ('arithmetic', 'tasks', 'long', 'world', 'mixed') or backend not in ('scripted', 'openrouter'):
+    if kind not in ('arithmetic', 'tasks', 'long', 'world', 'world-long', 'mixed') or backend not in ('scripted', 'openrouter'):
         raise ValueError('unknown Agent demo or backend')
     from .protocol import Pos, distance
     state = scenario(seed, side, 1)
@@ -200,9 +200,9 @@ def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='
             case['sandbox_fixture']['files']['/brief/README.txt'] = (
                 '背景说明。' * 1500 + '\n接口入口：python3 /svc/weather.py --city 城市。\n' + '附录资料。' * 1400)
             meta['task_world']['agent_cases'] = [case]
-    if kind in ('world', 'mixed'):
+    if kind in ('world', 'world-long', 'mixed'):
         from .local_world_news import install
-        install(state)
+        install(state, long_context=kind == 'world-long')
     else:
         state['worldNews'] = {'officialNews': '', 'folkLegends': ''}
     point = next(z for z in state['mapInfo']['zones'] if z['neutralType'] == side + 'TaskPoint1')

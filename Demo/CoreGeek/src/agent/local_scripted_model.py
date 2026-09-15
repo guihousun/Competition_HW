@@ -37,8 +37,8 @@ def complete(prompt):
 
 
 def _world(prompt, token, rows):
-    def proof(row):
-        return [{'sourceId': row['id'], 'quote': row['text']}]
+    def proof(row, quote=None):
+        return [{'sourceId': row['id'], 'quote': row['text'] if quote is None else quote}]
     if '"events":' in prompt:
         first = next((r for r in rows if '明天开始全面停工两天' in r.get('text', '') and not r.get('truncated')), None)
         events = []
@@ -53,24 +53,41 @@ def _world(prompt, token, rows):
                       for start, end, status, direction in ((day, day, 'available', 'unchanged'),
                           (day + 1, day + 2, 'unavailable', 'up'), (day + 3, 10, 'available', 'unchanged'))]
         return json.dumps({'request_id': token, 'events': events}, ensure_ascii=False)
-    h = {'site': None, 'items': None, 'opensAt': None, 'closesAt': None, 'uncertain': True,
-         'evidence': {'site': [], 'items': [], 'window': []}}
-    for row in rows:
-        if row.get('truncated'):
-            continue
+    # Parse only what the public prompt contains. Retained draft constraints
+    # carry facts learned in an earlier chunk/day; no simulator state is read.
+    h = _line_json(prompt, '已验证结构化草稿：') or {
+        'site': None, 'items': None, 'opensAt': None, 'closesAt': None, 'uncertain': True,
+        'evidence': {'site': [], 'items': [], 'window': []}}
+    focus = _line_json(prompt, '最近原文检索：')
+    pieces = list(rows)
+    if isinstance(focus, dict) and isinstance(focus.get('text'), str):
+        pieces.append({'id': focus['source_id'], 'text': focus['text']})
+    for row in pieces:
         text = row.get('text', '')
         site = re.search(r'横坐标(\d+)、纵坐标(\d+)', text)
         items = re.search(r'需要献祭([^，]+)，每种恰好一份', text)
         window = re.search(r'第(\d+)天白昼.*前30个回合', text)
         if site:
-            h['site'] = {'x': int(site[1]), 'y': int(site[2])}; h['evidence']['site'] = proof(row)
+            h['site'] = {'x': int(site[1]), 'y': int(site[2])}; h['evidence']['site'] = proof(row, site[0])
         if items:
-            h['items'] = items[1].split('、'); h['evidence']['items'] = proof(row)
+            h['items'] = items[1].split('、'); h['evidence']['items'] = proof(row, items[0])
         if window:
             h['opensAt'] = (int(window[1]) - 1) * 130 + 1
-            h['closesAt'] = h['opensAt'] + 29; h['evidence']['window'] = proof(row)
+            h['closesAt'] = h['opensAt'] + 29; h['evidence']['window'] = proof(row, window[0])
+        excluded = re.search(r'明确排除用品([^。]+)。', text)
+        if excluded:
+            candidate = {'field': 'items', 'value': [excluded[1]], 'polarity': 'exclude',
+                         'evidence': proof(row, excluded[0])}
+            if candidate not in h.setdefault('candidates', []):
+                h['candidates'].append(candidate)
     h['uncertain'] = any(h[k] is None for k in ('site', 'items', 'opensAt', 'closesAt'))
     h['unknowns'] = [field for field, key in (('site', 'site'), ('items', 'items'), ('window', 'opensAt')) if h[key] is None]
+    unread = next((row for row in rows if row.get('memory', {}).get('next_unread') is not None), None)
+    if unread is not None:
+        h['uncertain'] = True
+        h['unknowns'].append('unread')
+        return json.dumps({'request_id': token, 'inspect': {'source_id': unread['id'],
+            'offset': unread['memory']['next_unread'], 'length': 2000}, 'draft': h}, ensure_ascii=False)
     return json.dumps({'request_id': token, 'hypothesis': h}, ensure_ascii=False)
 
 

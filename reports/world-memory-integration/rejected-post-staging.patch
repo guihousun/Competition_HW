@@ -1,0 +1,125 @@
+diff --git a/Demo/CoreGeek/src/agent/brain.py b/Demo/CoreGeek/src/agent/brain.py
+index b531ca7..2689885 100644
+--- a/Demo/CoreGeek/src/agent/brain.py
++++ b/Demo/CoreGeek/src/agent/brain.py
+@@ -1639,6 +1639,10 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
+     if state is not None:
+         for uid, command in nightwork.plan(turn, state, pairs).items():
+             commands.setdefault(uid, command)
++        staging = _treasure_post_step(turn, state, pairs)
++        if staging is not None:
++            uid, command = staging
++            commands.setdefault(uid, command)
+     # Battlefield reagents first: a bomb or a dizzy on a clustered wave is worth
+     # more than one extra shot, and items resolve before robot movement (R06).
+     if state is not None and _try_battle_items(turn, commands, state):
+@@ -1658,6 +1662,42 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
+             commands[role.unit_id] = move_command(step)
+ 
+ 
++def _treasure_post_step(turn, state, pairs):
++    """Improve the next trip's start without leaving the assigned gun's ring.
++
++    This does not infer an opening date or leave defence to explore. In an
++    observed quiet night an already equipped pioneer can stand on a better
++    adjacent cell of the SAME gun, retaining next-round control distance.
++    """
++    robots = state.get('robot')
++    pioneer, base = turn.pioneer(), turn.station()
++    if (turn.is_day or (turn.round_no - 1) % 130 == 70 or state.get('phaseTask')
++            or pioneer is None or base is None or base.health < 1000
++            or not isinstance(robots, dict) or not isinstance(robots.get('roles'), list)
++            or any(robot.health > 0 for robot in turn.robots)
++            or any(enemy.health > 0 and enemy.kind in ('worker', 'pioneer')
++                   and distance(enemy.pos, pioneer.pos) <= 8 for enemy in turn.enemies)):
++        return None
++    notes = _treasure_notes(state, turn)
++    if (not notes.get('preparable') or notes.get('taken') or not notes.get('site')
++            or not notes.get('items') or Counter(notes['items']) - Counter(pioneer.backpack)):
++        return None
++    post = next((tower for role, tower in pairs if role.unit_id == pioneer.unit_id), None)
++    if post is None or distance(pioneer.pos, post.pos) > 1:
++        return None
++    site = Pos.load(notes['site'])
++    destinations = tuple(_stand_cells(turn, pioneer, site, set()))
++    routes = _RouteCost(turn, pioneer)
++    best = min(((routes(pioneer.pos, cell), cell.x, cell.y, cell) for cell in destinations), default=None)
++    if best is None or not 0 < best[0] < 10 ** 6:
++        return None
++    step = next_step(turn, pioneer, best[3])
++    if (step is None or distance(step, post.pos) > 1
++            or routes(step, best[3]) >= best[0]):
++        return None
++    return pioneer.unit_id, move_command(step)
++
++
+ def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
+                       state: dict[str, Any]) -> bool:
+     """Use a bomb when a 3×3 blast covers several robots and we hold one.
+diff --git a/tests/test_nightwork.py b/tests/test_nightwork.py
+index 351a24c..bb9e5e6 100644
+--- a/tests/test_nightwork.py
++++ b/tests/test_nightwork.py
+@@ -1,10 +1,11 @@
+ """R01/R02/R03/R06: hand-worked quiet-night policy cases."""
+ from copy import deepcopy
+ import unittest
++from unittest.mock import patch
+ from test_baseline import ROOT
+ from test_coordination import unit
+ from agent import brain, nightwork
+-from agent.protocol import Turn
++from agent.protocol import Turn, Pos, distance
+ 
+ 
+ def board():
+@@ -23,6 +24,49 @@ def plan(payload):
+ 
+ 
+ class QuietNightTests(unittest.TestCase):
++    def staging_board(self):
++        payload = board()
++        pioneer = unit(3, 'pioneer', 4, 3)
++        pioneer['backpack'] = ['AcientTablet']
++        payload['teamOur']['roles'] += [pioneer, unit(42, 'rocket', 5, 3, 1000)]
++        return payload
++
++    def staging(self, payload, *, ready=True):
++        turn = Turn.load(payload)
++        post = next(t for t in turn.weapons() if t.unit_id == 42)
++        notes = {'preparable': ready, 'taken': False, 'site': {'x': 10, 'y': 3}, 'items': ['AcientTablet']}
++        with patch.object(brain, '_treasure_notes', return_value=notes):
++            return brain._treasure_post_step(turn, payload, ((turn.pioneer(), post),))
++
++    def test_equipped_pioneer_can_improve_approach_without_leaving_gun_control(self):
++        payload = self.staging_board()
++        result = self.staging(payload)
++        self.assertIsNotNone(result)
++        uid, command = result
++        self.assertEqual(uid, 3)
++        self.assertEqual(command['action'], 'move')
++        target = Pos.load(command['targetPos'][0])
++        self.assertEqual(target.x, 5)
++        self.assertLessEqual(distance(target, Pos(5, 3)), 1)
++        # Once on the outward edge of that gun's control ring, do not depart.
++        next(r for r in payload['teamOur']['roles'] if r['id'] == 3)['pos'] = {'x': 6, 'y': 3}
++        self.assertIsNone(self.staging(payload))
++
++    def test_staging_requires_clear_public_observation_materials_and_no_active_task(self):
++        for mode in ('robot', 'missing', 'task', 'inventory', 'first_night', 'unconfirmed'):
++            payload = self.staging_board()
++            if mode == 'robot':
++                payload['robot']['roles'] = [dict(id=91, pos=dict(x=40, y=0), health=40)]
++            elif mode == 'missing':
++                payload.pop('robot')
++            elif mode == 'task':
++                payload['phaseTask'] = '正在解题'
++            elif mode == 'inventory':
++                next(r for r in payload['teamOur']['roles'] if r['id'] == 3)['backpack'] = []
++            elif mode == 'first_night':
++                payload['roundNo'] = 71
++            self.assertIsNone(self.staging(payload, ready=mode != 'unconfirmed'), mode)
++
+     def test_one_worker_leaves_other_keeps_post(self):
+         result = plan(board())
+         self.assertEqual(result, {2: dict(action='move', targetPos=[dict(x=8, y=4)])})

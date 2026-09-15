@@ -135,6 +135,62 @@ class WorldAgentMemoryTests(unittest.TestCase):
         self.assertIsNone(self.world.focus['treasure'])
         self.assertEqual(self.world.failures['treasure'], 1)
 
+    def test_topic_value_with_inspect_is_a_checked_draft_not_an_action_plan(self):
+        text = '祭坛在(3,4)，尚未公布时间。' + '背景资料。' * 600
+        self.turn(1, text)
+        sid = self.world.sources['treasure'][0]['id']
+        h = self.hypothesis(site={'x': 3, 'y': 4}, unknowns=['items', 'window', 'unread'])
+        h['evidence']['site'] = self.proof('祭坛在(3,4)')
+        self.turn(2, text, {'inspect': {'source_id': sid, 'offset': 2000}, 'hypothesis': h})
+        self.assertEqual(self.world.failures['treasure'], 0)
+        self.assertEqual(self.world.drafts['treasure']['site'], {'x': 3, 'y': 4})
+        self.assertIsNone(self.world.hypothesis)
+        self.assertFalse(self.world.policy_view(2)['treasure'].get('preparable'))
+        # Two competing draft values are ambiguous and must not be selected
+        # arbitrarily, even when their individual schemas are valid.
+        competing = deepcopy(h)
+        competing['site'] = {'x': 7, 'y': 8}
+        self.turn(3, text, {'inspect': {'source_id': sid, 'offset': 2000}, 'hypothesis': h, 'draft': competing})
+        self.assertEqual(self.world.failures['treasure'], 1)
+
+    def test_identical_nested_draft_and_oversized_read_are_canonicalized(self):
+        text = '祭坛在(3,4)。' + '背景资料。' * 1000
+        self.turn(1, text)
+        sid = self.world.sources['treasure'][0]['id']
+        h = self.hypothesis(site={'x': 3, 'y': 4}, unknowns=['items', 'window', 'unread'])
+        h['evidence']['site'] = self.proof('祭坛在(3,4)')
+        self.turn(2, text, {'inspect': {'source_id': sid, 'offset': 2000, 'length': 8000, 'draft': h},
+                            'hypothesis': h})
+        self.assertEqual(self.world.failures['treasure'], 0)
+        self.assertEqual(len(self.world.focus['treasure']['text']), 2000)
+        self.assertFalse(self.world.memories['treasure'].reviewed(sid))
+        self.assertIsNone(self.world.hypothesis)
+
+    def test_news_alias_does_not_allow_cross_topic_drafts(self):
+        text = '游戏第1天，明天铁矿停工。' + '背景资料。' * 600
+        self.turn(1, text, owner='news')
+        sid = self.world.sources['news'][0]['id']
+        event = {'resource': 'iron', 'availability': 'unavailable', 'startDay': 2, 'endDay': 2,
+                 'priceDirection': 'unknown', 'evidence': self.proof('游戏第1天，明天铁矿停工。', 'news')}
+        self.turn(2, text, {'inspect': {'source_id': sid, 'offset': 2000}, 'events': [event]}, owner='news')
+        self.assertEqual(self.world.failures['news'], 0)
+        self.assertEqual(self.world.drafts['news'], [event])
+        self.assertFalse(self.world.news_events)
+        self.turn(3, text, {'inspect': {'source_id': sid, 'offset': 2000}, 'hypothesis': {}}, owner='news')
+        self.assertEqual(self.world.failures['news'], 1)
+
+    def test_excluded_ingredient_cannot_hide_inside_a_larger_offering(self):
+        text = '祭坛(3,4)，游戏第2天白昼，需要AcientTablet；禁止献祭AncientScroll。'
+        self.turn(1, text)
+        h = self.hypothesis(site={'x': 3, 'y': 4}, items=['AcientTablet', 'AncientScroll'],
+                            window=(131, 160), uncertain=False, unknowns=[])
+        h['evidence'] = {field: self.proof(text) for field in ('site', 'items', 'window')}
+        h['candidates'] = [{'field': 'items', 'value': ['AncientScroll'], 'polarity': 'exclude',
+                            'evidence': self.proof('禁止献祭AncientScroll。')}]
+        self.turn(2, text, {'hypothesis': h})
+        self.assertIsNone(self.world.hypothesis)
+        self.assertEqual(self.world.failures['treasure'], 1)
+
     def test_new_day_preserves_partial_constraints_and_no_premature_purchase(self):
         text = '祭坛位置(3,4)，两份AcientTablet或两份IronWhistle，尚有冲突。'
         self.turn(1, text)

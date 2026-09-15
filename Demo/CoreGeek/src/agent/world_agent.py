@@ -4,6 +4,7 @@ R01/R06/R07; no simulator-private facts, future publications or model execution.
 Model interpretations remain labelled inferences with verbatim source evidence.
 """
 from copy import deepcopy
+from collections import Counter
 import hashlib
 import json
 import re
@@ -213,6 +214,8 @@ class WorldAgent:
             '{"source_id":"来源id","offset":0,"length":2000,"query":"可选字面搜索词"}。'
             '这只读取已收到的内存，不是沙盒，不新增官方权限。检索后的下一次模型调用仍占普通日限。'
             'inspect时可附draft，格式与本主题events或hypothesis的值相同，用于保存结构化中间约束。'
+            '检索回复示例：{"request_id":"本次标识","inspect":{"source_id":"来源id","offset":2000,"length":2000},"draft":主题草稿}。'
+            'draft是顶层字段，length最多2000；需要更多字数时继续分段。'
             '未读完来源不批准完整解释；保留数字、否定和矛盾的候选，不能仅记一段自由摘要。\n'
             f'request_id必须为{token}。\n')
         if owner == "news":
@@ -240,7 +243,9 @@ class WorldAgent:
                       '遇到更正或召唤失败应重新审视，而不是沿用旧答案。'
                       f'地图宽{info.get("width", 41)}高{info.get("height", 32)}。'
                       '\n己方公开召唤反馈：' + json.dumps(self.feedback, ensure_ascii=False))
-        return (common + schema + '\n已验证结构化草稿：' + json.dumps(self.drafts[owner], ensure_ascii=False)
+        retry = ('\n上次回复未通过校验：请核对JSON层次、原文逐字引用和未解决的冲突；检索结果不是最终行动计划。'
+                 if self.failures[owner] else '')
+        return (common + schema + retry + '\n已验证结构化草稿：' + json.dumps(self.drafts[owner], ensure_ascii=False)
                 + '\n最近原文检索：' + json.dumps(self.focus[owner], ensure_ascii=False)
                 + '\n公开来源：' + json.dumps(view, ensure_ascii=False))
 
@@ -278,23 +283,35 @@ class WorldAgent:
                 raise ValueError("unavailable or obsolete receipt")
             data = _json_unique(raw)
             if isinstance(data, dict) and 'inspect' in data:
-                if set(data) - {'request_id', 'inspect', 'draft'} or data.get('request_id') != link['token']:
+                field = 'events' if owner == 'news' else 'hypothesis'
+                if (set(data) - {'request_id', 'inspect', 'draft', field}
+                        or data.get('request_id') != link['token']):
                     raise ValueError('invalid inspect envelope')
                 query = data['inspect']
-                if (not isinstance(query, dict) or set(query) - {'source_id', 'offset', 'length', 'query'}
+                if (not isinstance(query, dict) or set(query) - {'source_id', 'offset', 'length', 'query', 'draft'}
                         or not isinstance(query.get('source_id'), str)
                         or query.get('source_id') not in {r['id'] for r in self.sources[owner]}
                         or type(query.get('offset', 0)) is not int or query.get('offset', 0) < 0
-                        or type(query.get('length', 2000)) is not int or not 1 <= query.get('length', 2000) <= 2000
+                        or type(query.get('length', 2000)) is not int or query.get('length', 2000) < 1
                         or not isinstance(query.get('query', ''), str) or len(query.get('query', '')) > 200):
                     raise ValueError('invalid inspect source')
                 draft = self.drafts[owner]
-                if 'draft' in data:
-                    if len(json.dumps(data['draft'], ensure_ascii=False)) > DRAFT_LIMIT:
+                # Accept equivalent placements observed in real replies. If a
+                # model repeats the same value it remains unambiguous; different
+                # draft values are rejected instead of silently picking one.
+                alternatives = [data[k] for k in ('draft', field) if k in data]
+                if 'draft' in query:
+                    alternatives.append(query['draft'])
+                if alternatives:
+                    candidate = alternatives[0]
+                    canonical = json.dumps(candidate, ensure_ascii=False, sort_keys=True)
+                    if any(json.dumps(other, ensure_ascii=False, sort_keys=True) != canonical for other in alternatives[1:]):
+                        raise ValueError('conflicting inspect drafts')
+                    if len(json.dumps(candidate, ensure_ascii=False)) > DRAFT_LIMIT:
                         raise ValueError('draft budget exceeded')
-                    draft = self._validated_draft(owner, data['draft'], link)
+                    draft = self._validated_draft(owner, candidate, link)
                 self.focus[owner] = self.memories[owner].inspect(query['source_id'],
-                    offset=query.get('offset', 0), length=query.get('length', 2000), query=query.get('query', ''))
+                    offset=query.get('offset', 0), length=min(query.get('length', 2000), 2000), query=query.get('query', ''))
                 self.drafts[owner] = draft
                 self.status[owner] = 'inspected'
                 return
@@ -451,6 +468,19 @@ class WorldAgent:
                 canonical = sorted(value) if field == 'items' else value
                 target.setdefault(field, set()).add(json.dumps(canonical, ensure_ascii=False, sort_keys=True))
         conflicts = any(len(values) > 1 or values & excluded.get(field, set()) for field, values in seen.items())
+        # Excluding an ingredient also excludes a larger offering containing
+        # it. Likewise an excluded time interval cannot overlap an approved one.
+        for positive in seen.get('items', set()):
+            counts = Counter(json.loads(positive))
+            for negative in excluded.get('items', set()):
+                if all(counts[name] >= count for name, count in Counter(json.loads(negative)).items()):
+                    conflicts = True
+        for positive in seen.get('window', set()):
+            interval = json.loads(positive)
+            for negative in excluded.get('window', set()):
+                forbidden = json.loads(negative)
+                if interval['opensAt'] <= forbidden['closesAt'] and forbidden['opensAt'] <= interval['closesAt']:
+                    conflicts = True
         if conflicts and ('conflict' not in unknowns or not item['uncertain']):
             raise ValueError('unresolved conflicting candidates')
 
