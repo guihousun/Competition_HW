@@ -309,6 +309,7 @@ game/planner → utils                  ← 第 23 步新增：任务行自己�
 | `docs/任务书.md`、`docs/接口文档.md` | **权威规则与协议**。冲突时以这两份为准 |
 | `docs/design/code-task.md` | **迭代留痕**：每一步的目标/产出/**仍生效的已知不确定性**，加文末一张「当前仍悬着的事」。动手前先看这里知道走到哪了 |
 | `docs/design/task-analysis.md` | 规则整理笔记（标注了"文档明示 / 我的推断 / 矛盾点"三类，以及待实测清单） |
+| `docs/design/worker.md` | **工人策略口径**（第 31 步）：六问（建墙/挖矿/卖矿/卖东西/买东西/升级）的判据 + **口径 vs planner 现状的差距清单**。动经济线/升级线之前先看这里 |
 | `docs/design/code-design.md`、`docs/design/strategy.md` | 上一版重写的设计与策略稿。**正文已在工作区删除**，需要时 `git show HEAD:docs/design/code-design.md` 取。其中 §19「实盘接入踩坑」与策略稿的规则解构仍然有效，值得参考；但**代码架构部分已被本次重写取代** |
 | `docs/request.txt` / `docs/response.txt` | **只能当字段形状参考**。`response.txt` 不是合法 JSON（缺逗号 + 同 id 重复），不能 `json.load`；`request.txt` 是合法 JSON 但几何是手工示意数据（挑战者那两座墙不在环上），**不可用于校准几何**，`lastRoundRoleActionResults` 的值也别当真实信号解读 |
 | `example/CoreGeek/CoreGeek/` | 官方 demo（**双层嵌套目录**）。入口形态照抄；`brain.py` 的 `_wall_order` 等已验证实现可参考，但整体策略是玩具级，不继承 |
@@ -318,7 +319,8 @@ game/planner → utils                  ← 第 23 步新增：任务行自己�
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
 `tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**260 条**。
-进度见 `docs/design/code-task.md`（当前到第 30 步：**工具协议参数泛化**——`tool_of` 返回
+进度见 `docs/design/code-task.md`（当前到第 31 步：**工人策略文档**——`docs/design/worker.md`
+六问口径 + 差距清单，无代码变化；第 30 步：**工具协议参数泛化**——`tool_of` 返回
 `(名, [(参数名|None, 原文), …])`，`<tool_param>` 可零可多、带 `name=` 按名收；注册表加
 **参数表**（一表两用：`tool_desc` 生成参数行、`tool_call` 按声明调度——无名位置填充、
 带名按名对、认不出的忽略、声明参数一个不少且非空才 `impl(**resolved)`）；旧裸形状
