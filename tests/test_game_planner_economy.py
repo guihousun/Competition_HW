@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _records, _terrain  # noqa: E402
+from coregeek.agent import AGENT  # noqa: E402
 from coregeek.app import handle  # noqa: E402
 from coregeek.game.grid import Pos, step_toward, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
@@ -659,6 +660,53 @@ class OreClaimTest(unittest.TestCase):
         self.assertLess(
             step.dist(self.ORE2), b.pos.dist(self.ORE2), "B 换奔另一座石矿"
         )
+
+
+class OreValueTest(unittest.TestCase):
+    """挖矿的**性价比**判据（第 42 步）：单位回合价值 = 价 × 新闻修正 ÷ (到矿+采+回炮位)，
+    不再是"价高优先" —— 远的贵矿可能跑不过近的贱矿。石头刚需支线不变（墙只吃石头）。"""
+
+    BASE = Pos(10, 24)
+    IRON = Pos(14, 8)    # 近：BFS 代价小
+    COPPER = Pos(30, 4)  # 远：BFS 代价大
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+
+    def setUp(self) -> None:
+        #: hint 是 **AGENT 单实例上的跨回合状态** —— 不清就会泄进后面的用例
+        #: （SpareOreTest 的"市场翻转"会拿到本类留下的铜 hint）。
+        AGENT.reset()
+        self.addCleanup(AGENT.reset)
+
+    def _turn(self, worker: Worker) -> Turn:
+        ring = {c: WALL for c in wall_cells(self.BASE, 41)}  # 环砌满 ⇒ 工人走经济线
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station", self.IRON: "iron", self.COPPER: "copper", **ring},
+        )
+        grid[worker.pos] = "worker"
+        return Turn(
+            round_no=1, map=Map((41, 32), grid), roles=(worker,), gold=0,
+            weapons=self.WEAPONS,
+            vendor_prices={"iron": 4, "copper": 5},
+        )
+
+    def test_a_nearby_cheap_ore_beats_a_far_pricy_one(self):
+        """铁 4 近 vs 铜 5 远：性价比上近铁赢 —— 旧口径"价高优先"会奔铜。"""
+        worker = Worker(10010, Pos(20, 6), {})
+        step = Pos(*plan(self._turn(worker))["10010"]["targetPos"][0].values())
+        self.assertLess(step.dist(self.IRON), step.dist(self.COPPER), "朝近铁走")
+
+    def test_a_news_hint_can_flip_the_choice(self):
+        """新闻说铜要涨（hint ×2）⇒ 性价比翻盘，宁可跑远路也采铜。"""
+        AGENT.reset()
+        AGENT.adopt_price_hints({"copper": "up"})
+        worker = Worker(10010, Pos(20, 6), {})
+        step = Pos(*plan(self._turn(worker))["10010"]["targetPos"][0].values())
+        self.assertLess(
+            step.dist(self.COPPER), worker.pos.dist(self.COPPER),
+            "迈步朝远铜（hint ×2 翻盘）",
+        )
+        self.assertGreater(step.dist(self.IRON), worker.pos.dist(self.IRON), "背离近铁")
 
 
 class PioneerErrandTest(unittest.TestCase):

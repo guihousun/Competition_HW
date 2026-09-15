@@ -47,6 +47,9 @@ _ANSWER_MARK_RE = re.compile(r"<answer")
 _SUMMARY_RE = re.compile(r"<summary\b[^>]*>(.*?)</summary>", re.DOTALL)
 #: `looks_like_tool` 那个**宽**判据（见那里）。与上面几个相反，它**故意只认前缀**。
 _TOOL_MARK_RE = re.compile(r"<tool")
+#: **裸 `<prices>` 回复**（第 42 步：新闻查价的产物）——判别与 `<summary>` 同族。
+_PRICES_RE = re.compile(r"<prices\b[^>]*>(.*?)</prices>", re.DOTALL)
+_PRICE_LINE_RE = re.compile(r"(stone|iron|copper)\s*[：:\s]\s*(up|down|flat)", re.IGNORECASE)
 #: **反转义表**（第 37 步）：`prompt.TOOL_PROMPT` 教了 LLM 对 XML 特殊字符转义 ⇒
 #: 参数值里的五个预定义实体要还原。⚠️ `&amp;` **必须最后换**：`&amp;lt;` 只该还原一层
 #: （`&lt;`），先换 `&amp;` 就把它变成了 `<`（两层）。LLM 没转义时这条是空操作 ——
@@ -152,6 +155,21 @@ def is_summary_reply(reply: str) -> str | None:
     if summary and not _SUMMARY_RE.sub("", reply).strip():
         return summary
     return None
+
+
+def is_prices_reply(reply: str) -> dict[str, str] | None:
+    """**裸 `<prices>` 回复**（第 42 步：新闻查价的产物）⇒ `{矿种: 方向}`；否则 `None`。
+
+    判据与 `is_summary_reply` 同构：块取得出内容、挖掉之后一个字不剩。行格式
+    `矿种: 方向`（大小写都认）；解析不出的行直接丢 —— 宁可少认一条，不猜。
+    """
+    block = _PRICES_RE.search(reply)
+    if block is None or _PRICES_RE.sub("", reply).strip():
+        return None
+    return {
+        m.group(1).lower(): m.group(2).lower()
+        for m in _PRICE_LINE_RE.finditer(block.group(1))
+    }
 
 
 def looks_like_tool(reply: str) -> bool:

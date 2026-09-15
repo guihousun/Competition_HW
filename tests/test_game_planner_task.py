@@ -174,6 +174,7 @@ class TaskChannelTest(unittest.TestCase):
         cmd_result: str = "",
         errors: tuple[Error, ...] = (),
         roles: tuple[BaseRole, ...] = (Pioneer(10011, Pos(13, 13)),),
+        news: str = "",
     ) -> Turn:
         return Turn(
             round_no=self.DAY,
@@ -185,6 +186,7 @@ class TaskChannelTest(unittest.TestCase):
             cmd_result=cmd_result,
             errors=errors,
             task_points=(Pos(14, 14),),
+            news=news,
         )
 
     def test_the_question_carries_the_task_text(self):
@@ -206,6 +208,32 @@ class TaskChannelTest(unittest.TestCase):
             "# 【注意事项】",
         ):
             self.assertIn(header, prompt)
+
+    def test_the_news_question_is_asked_when_idle(self):
+        """第 42 步：没任务 + 有官方消息 ⇒ 发**新闻查价** prompt（任务线之外的
+        3 次/日额度）。判据链①的"两个都不发"就此开口子。"""
+        prompt, execute = task_channel(self._turn(news="北部铁矿区塌方，明日停工"))
+        self.assertIn("【市场情报】", prompt)
+        self.assertIn("北部铁矿区塌方", prompt)
+        self.assertEqual(execute, "", "沙盒仅任务期间可用，新闻轮不发命令")
+
+    def test_the_same_news_is_asked_only_once(self):
+        """同一份 news 用**指纹去重** —— 额度 3 次/日，重复问是白烧。"""
+        task_channel(self._turn(news="北部铁矿区塌方"))
+        prompt, _ = task_channel(self._turn(news="北部铁矿区塌方"))
+        self.assertEqual(prompt, "")
+
+    def test_a_prices_reply_is_routed_into_hints(self):
+        """查价回复（裸 `<prices>` 块）⇒ 进价格期望表、**不进会话表**、当轮不再重问。
+        与裸摘要同一条路由纪律。"""
+        AGENT.reset()
+        task_channel(self._turn(news="北部铁矿区塌方"))
+        prompt, _ = task_channel(
+            self._turn(news="北部铁矿区塌方", llm_resp="<prices>iron up\\ncopper flat</prices>")
+        )
+        self.assertEqual(prompt, "", "回复轮不重问（指纹已记）")
+        self.assertEqual(AGENT.price_hint("iron"), 2.0)
+        self.assertEqual(AGENT.price_hint("copper"), 1.0)
 
     def test_nothing_is_sent_without_a_task(self):
         """**不在任务里一次都不发**（`prompt` 也不行、`executeCmd` 更不行）。

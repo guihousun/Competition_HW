@@ -38,12 +38,15 @@ class NightWeaponTest(unittest.TestCase):
         self,
         *roles: BaseRole,
         weapons: tuple[Weapon, ...] | None = None,
-        robots: tuple[Robot, ...] = (),
+        robots: tuple[Robot, ...] | None = None,
         round_no: int | None = None,
     ) -> Turn:
         # `weapons=None` 才是"用默认的两座"；**不能用 `or`** —— 空元组也是假值，
         # 那样 `test_no_weapons_means_nothing_to_do` 会静默拿到两座武器、白测一场。
         weapons = self._guns(self.NEAR, self.FAR) if weapons is None else weapons
+        # ⚠️ `robots=None`（默认）给一台在场机器人：第 42 步起"怪清完的夜里"工人会走
+        # 经济线 —— 本类测的是**防守线**，得让防守分支真的命中（`robots=()` 可显式给空）。
+        robots = (Robot(pos=Pos(16, 26), health=40),) if robots is None else robots
         return Turn(
             round_no=self.NIGHT if round_no is None else round_no,
             map=Map((41, 32), _terrain(weapons, {self.BASE: "station"})),
@@ -269,6 +272,125 @@ class NightWeaponTest(unittest.TestCase):
         """
         turn = self._manned(Robot(Pos(12, 26), 40), round_no=-1)
         self.assertEqual(plan(turn), {})
+
+
+from coregeek.game.grid import Pos  # noqa: E402
+from coregeek.game.map import Map  # noqa: E402
+from coregeek.game.planner import NIGHT_WANDER, plan  # noqa: E402
+from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
+from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
+from coregeek.protocol import model  # noqa: E402
+
+
+class NightEconomyTest(unittest.TestCase):
+    """夜里**怪清完**（视野内无机器人）⇒ 工人出门**近矿**经济（第 42 步）。
+
+    ⚠️ 机器人列表是**视野过滤**的 —— "清完"只是看不见；近矿限制（回炮位 BFS ≤
+    `NIGHT_WANDER`，拍的）让工人出得了事也回得了家。**build/remove 夜里非法**，
+    夜间经济只发 collect / move / sell。"""
+
+    BASE = Pos(10, 24)
+    WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)
+    NEAR = Pos(5, 24)   # 门侧近矿（出盒穿背面那 2 格门，BFS ≤ 8）
+    FAR = Pos(30, 4)    # 远矿（超出门槛 ⇒ 不去）
+
+    def _turn(self, worker: Worker, ore: Pos, robots=(), near_ore: bool = True):
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station", ore: "iron"}
+            | ({self.NEAR: "stone"} if near_ore else {}),
+            {c: "wall" for c in self.ring()},
+        )
+        grid[worker.pos] = "worker"
+        return Turn(
+            round_no=85, map=Map((41, 32), grid), roles=(worker,), gold=0,
+            weapons=self.WEAPONS, robots=robots,
+            vendor_prices={"iron": 4, "stone": 1},
+        )
+
+    def ring(self):
+        from coregeek.game.grid import wall_cells
+
+        return wall_cells(self.BASE, 41)
+
+    def test_a_cleared_night_sends_workers_to_near_ore(self):
+        """怪清完 + 近矿 ⇒ 出门走两步（夜里 collect 合法，§4.4 没给它写昼夜）。"""
+        worker = Worker(10010, Pos(12, 24), {})
+        cmd = plan(self._turn(worker, self.NEAR)).get("10010")
+        self.assertIsNotNone(cmd, "清完的夜里工人不该干等")
+        self.assertIn(cmd["action"], ("move", "collect"))
+
+    def test_the_near_mine_limit_keeps_workers_close(self):
+        """远矿超出门槛 ⇒ 不出门（出得了事回不了家的活不干）。"""
+        worker = Worker(10010, Pos(12, 24), {})
+        self.assertNotIn("10010", plan(self._turn(worker, self.FAR, near_ore=False)))
+
+    def test_night_economy_never_builds(self):
+        """夜里经济线**绝不发 build**（`build` 仅白天，§4.4）—— 环上留多少缺口都一样。"""
+        worker = Worker(10010, Pos(12, 24), {"stone": 5})
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station", self.NEAR: "stone"},  # 环一块没砌
+        )
+        grid[worker.pos] = "worker"
+        turn = Turn(
+            round_no=85, map=Map((41, 32), grid), roles=(worker,), gold=0,
+            weapons=self.WEAPONS,
+        )
+        cmds = plan(turn)
+        self.assertTrue(all(v["action"] != "build" for v in cmds.values()), cmds)
+
+    def test_robots_present_at_night_still_defend(self):
+        """视野里有机器人 ⇒ 照旧回炮位开火，不出门采矿。"""
+        worker = Worker(10010, Pos(12, 24), {})
+        turn = self._turn(
+            worker,
+            self.NEAR,
+            robots=(Robot(pos=Pos(13, 24), health=40),),
+        )
+        cmds = plan(turn)
+        self.assertTrue(
+            all(v["action"] in ("attack", "move") for v in cmds.values()),
+            f"夜里只该有 attack/move：{cmds}",
+        )
+
+
+class StationUpgradeTest(unittest.TestCase):
+    """夜里的**基地升级**（第 42 步，用户拍板）：持基地券 + 基地血量 < 满血 1/4
+    ⇒ 贴基地 `use`（升级 + 回满血一次到位，1500/3000/4500 是任务书表格实证）。
+    就算视野里有机器人也升 —— 基地要塌了这是救命的（升级当回合放弃开火）。"""
+
+    BASE = Pos(10, 24)
+    WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)
+
+    def _turn(self, worker: Worker, health: int, robots=()):
+        grid = _terrain(self.WEAPONS, {self.BASE: "station"})
+        grid[worker.pos] = "worker"
+        return Turn(
+            round_no=85, map=Map((41, 32), grid), roles=(worker,), gold=0,
+            weapons=self.WEAPONS, robots=robots,
+            station_health=health, station_level=1,
+        )
+
+    def test_a_low_base_with_a_voucher_gets_upgraded(self):
+        worker = Worker(10010, Pos(12, 24), {"StationUpgradeVoucher1": 1})
+        cmd = plan(self._turn(worker, 300)).get("10010")
+        self.assertEqual(cmd["action"], "use")
+        self.assertEqual(cmd["name"], "StationUpgradeVoucher1")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.BASE)
+
+    def test_a_healthy_base_is_never_upgraded(self):
+        worker = Worker(10010, Pos(12, 24), {"StationUpgradeVoucher1": 1})
+        cmds = plan(self._turn(worker, 1500))
+        self.assertNotEqual(cmds.get("10010", {}).get("action"), "use")
+
+    def test_upgrade_even_when_robots_are_at_the_gate(self):
+        """基地要塌了就算机器人在门口也先升 —— 贴着基地一格内直接用，不挪窝开炮。"""
+        worker = Worker(10010, Pos(12, 24), {"StationUpgradeVoucher1": 1})
+        cmd = plan(
+            self._turn(worker, 300, robots=(Robot(pos=Pos(14, 24), health=60),))
+        ).get("10010")
+        self.assertEqual(cmd["action"], "use")
 
 
 if __name__ == "__main__":

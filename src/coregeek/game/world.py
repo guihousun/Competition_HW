@@ -60,6 +60,20 @@ class Weapon(NamedTuple):
     （-1 会被升级线当成"还升得动"去买券，白跑一趟）。"""
 
 
+class Wall(NamedTuple):
+    """我方一座围墙实体（第 42 步修墙的判据来源）。
+
+    与武器同住 `teamOur.roles`（`roleType == "wall"`，id 40000 系）。**health 是修墙
+    的判据**（半血 ⇒ 修复包/重建）；**level** 决定满血基准（升级后回满血）。
+    已毁（health == 0）的墙在 `model._walls` 就丢掉 —— 那是一格缺口，归 `_ring` 管。
+    """
+
+    id: int
+    pos: Pos
+    health: int
+    level: int = 1
+
+
 class Error(NamedTuple):
     """判题器本轮报的一条错（`{errorCode, description}`）。
 
@@ -126,6 +140,15 @@ class Turn(NamedTuple):
     #: **执行失败**（撞墙、打空），那类不计异常、`errors` 里什么都没有，只有这里会翻成 `false`。
     #: **原样保留、不剪枝**（含我们不操控的基地格）：少一条就是少一份证词。
     action_results: tuple[tuple[int, bool], ...] = ()
+    #: 我方围墙实体（第 42 步修墙的判据：health 与 level；网格里那份只有类别串）。
+    walls: tuple[Wall, ...] = ()
+    #: 基地当前血量（夜里基地升级券的判据）。缺失 -1 ⇒ 判"不残血"（不轻举妄动）。
+    station_health: int = -1
+    #: 基地等级（查满血基准表用）。缺失按 1。
+    station_level: int = 1
+    #: 官方消息（`worldNews.officialNews`）—— 矿产事件（塌方/停工）的原文（第 42 步）。
+    #: `folkLegends` 是宝藏线索，不读。缺失 ⇒ 空串 ⇒ 不查。
+    news: str = ""
 
     @property
     def within(self) -> int:

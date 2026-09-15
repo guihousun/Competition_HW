@@ -19,7 +19,7 @@ from coregeek.game.map import Map  # noqa: E402
 from coregeek.game import planner  # noqa: E402
 from coregeek.game.planner import HOLE_MIN_LEFT, HOLE_MIN_SAVING, HOLE_PATCH_LEFT, WALL, WEAPONS_BY_SITE, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Weapon  # noqa: E402
+from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
 
 
@@ -1437,6 +1437,103 @@ class PathReserveTest(unittest.TestCase):
             {"action": "move", "targetPos": [{"x": 6, "y": 5}]},
             "avoid 只是软的：绕不开就退回硬障碍，绝不原地卡死",
         )
+
+
+class RepairTest(unittest.TestCase):
+    """半血墙的修复差事（第 42 步，用户拍板"**包优先、重建兜底**"）。
+
+    文档事实：WallFixer 10 金、目标墙**回满血**（任务书消耗品表），站墙一格内 `use`。
+    修复（1 回合 + 10 金、墙不塌）全面占优推倒重建（2 石头 + 2 回合 + 洞开 2 回合），
+    重建只在"没包且买不起"时兜底。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
+    SHOP = Pos(20, 16)
+    HALF = Pos(13, 22)  # 正面列的一格（半血墙）
+    OTHER = Pos(13, 26)  # 另一面墙（第二面半血墙）
+
+    def _turn(self, worker: Worker, *, walls=None, shop=True, gold=0, prices=None, stone=0):
+        grid = _terrain(self.WEAPONS, {self.BASE: "station", self.HALF: "wall"})
+        if shop:
+            grid[self.SHOP] = "weaponShop"
+        grid[worker.pos] = "worker"
+        if walls is None:
+            walls = (Wall(40000, self.HALF, 400, 1),)
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(worker,),
+            gold=gold,
+            weapons=self.WEAPONS,
+            shop_prices=prices if prices is not None else {"WallFixer": 10},
+            walls=walls,
+        )
+
+    def test_a_worker_with_a_pack_repairs_the_half_wall(self):
+        """持包 + 贴着半血墙 ⇒ `use WallFixer`（墙回满血、不塌、1 回合）。"""
+        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        cmd = plan(self._turn(worker))[str(10010)]
+        self.assertEqual(cmd["action"], "use")
+        self.assertEqual(cmd["name"], "WallFixer")
+        self.assertEqual(
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.HALF
+        )
+
+    def test_a_worker_without_a_pack_buys_one_when_affordable(self):
+        """没包 ⇒ 去商店买（贴着就买）；`collect`/挖矿都排在修墙之后。"""
+        worker = Worker(10010, Pos(20, 15), {})
+        cmd = plan(self._turn(worker, gold=10))[str(10010)]
+        self.assertEqual(cmd["action"], "buy")
+        self.assertEqual(cmd["name"], "WallFixer")
+
+    def test_without_pack_or_gold_it_falls_back_to_rebuild(self):
+        """没包且买不起（没钱/没商店）⇒ 贴着半血墙 `remove`（下一回合那格进 `_ring` 重建）。"""
+        worker = Worker(10010, Pos(12, 22), {"stone": 1})
+        cmd = plan(self._turn(worker, shop=False, gold=0, prices={}))[str(10010)]
+        self.assertEqual(cmd["action"], "remove")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.HALF)
+
+    def test_repair_beats_mining(self):
+        """修墙 > 挖矿（用户：优先建墙）—— 贴着半血墙又贴着矿，先用包。"""
+        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        cmd = plan(self._turn(worker))[str(10010)]  # 没摆矿 ⇒ 更没有别的可干
+        self.assertEqual(cmd["action"], "use")
+
+    def test_two_workers_claim_different_half_walls(self):
+        """两面半血墙、两个持包工人 ⇒ 各修各的（认领账本，不挤同一面）。"""
+        walls = (Wall(40000, self.HALF, 400, 1), Wall(40001, self.OTHER, 300, 1))
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station", self.HALF: "wall", self.OTHER: "wall", self.SHOP: "weaponShop"},
+        )
+        a = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        b = Worker(10012, Pos(12, 26), {"WallFixer": 1})
+        grid |= {a.pos: "worker", b.pos: "worker"}
+        cmds = plan(
+            Turn(
+                round_no=1, map=Map((41, 32), grid), roles=(a, b), gold=0,
+                weapons=self.WEAPONS, shop_prices={"WallFixer": 10}, walls=walls,
+            )
+        )
+        targets = {
+            Pos(v["targetPos"][0]["x"], v["targetPos"][0]["y"]) for v in cmds.values()
+        }
+        self.assertEqual(targets, {self.HALF, self.OTHER}, "各修各的，不挤同一面墙")
+
+    def test_a_fully_healthy_wall_is_never_repaired(self):
+        """满血墙（health*2 >= 基准）不在修复名单 —— 别为好墙白花钱。"""
+        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        walls = (Wall(40000, self.HALF, 1000, 1),)
+        grid = _terrain(self.WEAPONS, {self.BASE: "station", self.HALF: "wall"})
+        grid[worker.pos] = "worker"
+        cmds = plan(
+            Turn(
+                round_no=1, map=Map((41, 32), grid), roles=(worker,), gold=0,
+                weapons=self.WEAPONS, walls=walls,
+            )
+        )
+        self.assertNotEqual(cmds.get(str(10010), {}).get("action"), "use")
 
 
 if __name__ == "__main__":

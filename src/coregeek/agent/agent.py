@@ -15,9 +15,9 @@
 
 from collections.abc import Callable
 
-from .chat import is_summary_reply, strip_answers
+from .chat import is_prices_reply, is_summary_reply, strip_answers
 from .context import Context
-from .prompt import gen_compression_prompt, gen_system_prompt
+from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
 from .tools.cmd import executeCmd
 from .tools.sop import store
 
@@ -29,6 +29,10 @@ class Agent:
         #: 「沉淀的 SOP」—— 整场存活的跨回合状态之一，第 37 步起是**流程表**
         #: `{流程名: 正文}`（同名覆盖、异名追加、条数上限）。重启清空。
         self._sop: dict[str, str] = {}
+        #: **价格期望与新闻指纹**（第 42 步）—— 跨回合状态之三。退化路径都想好了：
+        #: 期望错了 = 采矿偏好偏一天，不碰红线；指纹丢了 = 重问一次新闻（额度 3/日）。
+        self._news_digest = ""
+        self._price_hints: dict[str, float] = {}
         #: **任务内**的会话上下文 —— 跨回合状态之二（第 25 步）。题目变了即换新；
         #: 任务结束不清（死会话，下场换题时自然被替）。
         self._context: Context | None = None
@@ -112,6 +116,32 @@ class Agent:
             return ""
         return gen_compression_prompt(self._context.material())
 
+    def news_question(self, news: str) -> str:
+        """没任务时的**新闻查价** prompt（第 42 步）。**同一份 news 只问一次**（指纹
+        去重 —— 任务线之外每游戏日只有 3 次额度）；news 空 / 指纹没变 ⇒ `""`。
+        指纹在**发问时**就记下：判题器不答也只是"不再问了"，不重发同一份。
+        """
+        if not news:
+            return ""
+        digest = f"{len(news)}:{news[:64]}:{news[-32:]}"
+        if digest == self._news_digest:
+            return ""
+        self._news_digest = digest
+        return gen_news_prompt(news)
+
+    def adopt_price_hints(self, hints: dict[str, str]) -> None:
+        """新闻查价回复（裸 `<prices>` 块）→ 价格期望表（第 42 步）。
+
+        粗粒度方向：up ×2 / down ×0.5 / flat ×1 —— 只修正挖矿性价比的**排序**，
+        payload 的实时收购价每回合照读（期望是叠加项，不是替代）。
+        """
+        factor = {"up": 2.0, "down": 0.5, "flat": 1.0}
+        self._price_hints = {kind: factor.get(d, 1.0) for kind, d in hints.items()}
+
+    def price_hint(self, kind: str) -> float:
+        """矿种的新闻期望系数。没问过新闻 ⇒ 1.0（无修正）。"""
+        return self._price_hints.get(kind, 1.0)
+
     def tool_call(self, tool_name: str, params: list[tuple[str, str]]) -> str:
         """**顶层调度入口**：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。
 
@@ -181,4 +211,6 @@ class Agent:
         不复用 `SOP2Prompt("名", "")`：那个会打日志，而用例的 `assertLogs` 正盯着日志。
         """
         self._sop = {}
+        self._news_digest = ""
+        self._price_hints = {}
         self._context = None

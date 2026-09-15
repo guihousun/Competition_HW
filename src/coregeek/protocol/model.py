@@ -14,7 +14,7 @@ from typing import Any
 from ..game.grid import Pos
 from ..game.map import ENEMY_PREFIX, ROBOT_PREFIX, Map
 from ..game.roles import BaseRole, make
-from ..game.world import WEAPON_KINDS, Error, Robot, Turn, Weapon
+from ..game.world import WEAPON_KINDS, Error, Robot, Turn, Wall, Weapon
 
 
 def load(payload: Any) -> Turn | None:
@@ -42,6 +42,10 @@ def load(payload: Any) -> Turn | None:
         action_results=_action_results(payload),
         vendor_prices=_vendor_prices(payload),
         shop_prices=_shop_prices(payload),
+        walls=_walls(payload),
+        station_health=_station_hp(payload)[0],
+        station_level=_station_hp(payload)[1],
+        news=_news(payload),
     )
 
 
@@ -152,6 +156,49 @@ def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
             )
         )
     return tuple(out)
+
+
+def _walls(payload: dict[str, Any]) -> tuple[Wall, ...]:
+    """我方围墙实体（第 42 步修墙的判据）。与武器同住 `teamOur.roles`、靠 `roleType` 认；
+    **已毁（health == 0）⇒ 丢** —— 那是一格缺口，`_ring` 的候选表会接住重建。
+    health 缺失给 -1（判"未知"，修墙线不为一格读不出血量的墙白跑）。
+    """
+    out = []
+    for node in _items(payload, "teamOur", "roles"):
+        if not isinstance(node, dict) or _destroyed(node):
+            continue
+        if node.get("roleType") != "wall":
+            continue
+        pos, wall_id = _pos(node), _int(node.get("id"))
+        if pos is None or wall_id < 0:
+            continue
+        out.append(
+            Wall(
+                id=wall_id,
+                pos=pos,
+                health=_int(node.get("health")),
+                level=max(1, _int(node.get("level"))),
+            )
+        )
+    return tuple(out)
+
+
+def _station_hp(payload: dict[str, Any]) -> tuple[int, int]:
+    """基地 `(health, level)` —— 夜里基地升级券的判据（第 42 步）。找不到 ⇒ (-1, 1)。"""
+    for node in _items(payload, "teamOur", "roles"):
+        if isinstance(node, dict) and node.get("roleType") == "station":
+            return _int(node.get("health")), max(1, _int(node.get("level")))
+    return -1, 1
+
+
+def _news(payload: dict[str, Any]) -> str:
+    """官方消息（`worldNews.officialNews`）—— 矿产事件（塌方/停工）的原文（第 42 步）。
+    `folkLegends` 是宝藏线索（summonTreasure 那条线），不读。"""
+    node = payload.get("worldNews")
+    if not isinstance(node, dict):
+        return ""
+    text = node.get("officialNews")
+    return text if isinstance(text, str) else ""
 
 
 def _robots(payload: dict[str, Any]) -> tuple[Robot, ...]:

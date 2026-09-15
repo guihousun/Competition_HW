@@ -200,3 +200,23 @@ def gen_compression_prompt(material: str) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+#: 新闻查价的指令（第 42 步）：**只进新闻 prompt、不进任务 system** —— 没任务时
+#: 发出去问"官方消息对矿价的影响"，用任务线之外每游戏日 3 次的额度（Agent 指纹去重）。
+#: 回复约定**裸 `<prices>` 块**（每行 `矿种 方向`），结构化才能进价格期望表。
+NEWS_PROMPT = """# 【市场情报】
+读下面的官方消息，判断它对矿产（stone / iron / copper）收购价的影响。只输出一个 <prices> 块，每行一条、格式为 `矿种 方向`（矿种用英文小写；方向只能是 up / down / flat）；消息没提到的矿也要给一行 flat。不要输出任何别的内容。
+"""
+
+
+def gen_news_prompt(news: str) -> str:
+    """新闻查价的整份 prompt（第 42 步）：指令 + 官方消息原文。标准 messages JSON。"""
+    return json.dumps(
+        [
+            {"role": "system", "content": NEWS_PROMPT.strip()},
+            {"role": "user", "content": news},
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )

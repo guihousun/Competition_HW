@@ -272,6 +272,32 @@ class TaskParseTest(unittest.TestCase):
         """`isValid` 为 false = 冷却中**或**这个点的任务已做完（接口文档 L139）。"""
         self.assertEqual(self._load({**self.POINT, "isValid": False}).task_points, ())
 
+    def test_walls_carry_their_health_and_level(self):
+        """第 42 步修墙的判据来源：墙是**实体**（`teamOur.roles` 里 roleType=="wall"，
+        id 40000 系、带 health/level）。**已毁（health==0）⇒ 丢** —— 那是一格缺口，
+        归 `_ring` 的候选表管（重建），不该出现在修复名单里。"""
+        turn = model.load(
+            {
+                "teamOur": {
+                    "roles": [
+                        {"id": 40000, "pos": {"x": 5, "y": 20}, "roleType": "wall", "health": 400, "level": 1},
+                        {"id": 40001, "pos": {"x": 5, "y": 21}, "roleType": "wall", "health": 0, "level": 1},
+                        {"id": 10013, "pos": {"x": 10, "y": 24}, "roleType": "station", "health": 300, "level": 2},
+                    ]
+                }
+            }
+        )
+        self.assertEqual(turn.walls, ((40000, Pos(5, 20), 400, 1),))
+        self.assertEqual(turn.station_health, 300)
+        self.assertEqual(turn.station_level, 2)
+
+    def test_the_official_news_is_carried(self):
+        """第 42 步新闻查价的原料：`worldNews.officialNews`（矿产事件的原文）；
+        `folkLegends` 是宝藏线索、不读。字段缺失 ⇒ 空串。"""
+        turn = model.load({"worldNews": {"officialNews": "北部铁矿区塌方", "folkLegends": "石门三钥"}})
+        self.assertEqual(turn.news, "北部铁矿区塌方")
+        self.assertEqual(model.load({}).news, "")
+
     def test_a_missing_cold_down_rounds_still_offers_the_point(self):
         """缺字段的降级方向**故意不是“少做”**（与 `_gold` / `_size` / `_stone` 相反）。
 

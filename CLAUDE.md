@@ -409,7 +409,18 @@ tests/
 
 ⚠️ **类名与拆分前一字不改** ⇒ 文档与注释里"见 `XxxTest.yyy`"的引用照旧成立；单文件可直跑
 `py tests/test_xxx.py`（文件头 bootstrap 自带 sys.path，`_fixtures` 靠它找到）。
-进度见 `docs/design/code-task.md`（当前到第 41 步：**压缩独立成轮**——命令轮的 prompt 槽
+进度见 `docs/design/code-task.md`（当前到第 42 步：**角色操作大改**——实体解析
+（`Turn.walls`/`station_health/station_level`/`news`，墙 L2/L3 满血 1500/2000 是推断）；
+**修墙线 `_repair_line`**（半血墙 = health×2<WALL_MAX_HP[level]，包优先重建兜底，
+黑板 `repair_taken` 认领，优先级救援>修墙>建墙）；挖矿**性价比** =
+价×新闻修正÷(到矿+采+回炮位)；**新闻查价**（判据①开口：没任务+officialNews 变了
+⇒ 发 NEWS_PROMPT，额度 3/日指纹去重；裸 `<prices>` 回复路由进 `AGENT` 的价格期望表
+——**第三处跨回合状态**）；顺路交易（`_shopping_list`+`_detour_buy`，WallFixer>升级券）；
+**夜间重排**（基地残血<1/4+持券 ⇒ 贴基地 use 升级 > 机器人在场 ⇒ _defend >
+怪清完 ⇒ 工人近矿经济 `near=NIGHT_WANDER=8`，build/remove 夜里非法绝不发）；
+三口径拍板：包优先重建兜底 / 近矿限制 / 期望表+去重；用例 328 → **348** 全绿、
+反向验证 3/3；
+第 41 步：**压缩独立成轮**——命令轮的 prompt 槽
 （本来空着）随 `executeCmd` 同发**压缩请求**（`prompt.COMPRESSION_PROMPT` 四槽指令 +
 `Context.material()` 的**原始上下文全文**——用户拍板"原文永久保留、压缩总从原文重来、
 消息表永不截断"；任务 prompt 卸掉第 39 步的搭车教学，**−681 字节/轮**、专注任务）；

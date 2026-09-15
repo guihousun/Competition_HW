@@ -85,8 +85,12 @@ class HandleTest(unittest.TestCase):
         所以样例这种局面是 **5** 条（**banner** + 摘要 + 动作 + 报错 + 回执），
         而一个干净回合只有 3 条（下面那条用例）。
         """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        #: 第 42 步起"没任务 + 有官方消息"会发**新闻查价** prompt —— 本类测的是日志
+        #: 版面，样例自带的 worldNews 清掉，"没有新闻的回合"才是这几条的本意。
+        raw["worldNews"] = {"officialNews": ""}
         with self.assertLogs("coregeek.app", level="INFO") as caught:
-            self._handle(SAMPLE.read_bytes())
+            self._handle(json.dumps(raw).encode("utf-8"))
         #: 五条：**banner** + 摘要 + 动作 + 报错 + 回执。banner 是 `handle` 打的、
         #: 不归 `_log` 管 —— 数记录数时最容易漏的就是它。
         banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
@@ -124,6 +128,7 @@ class HandleTest(unittest.TestCase):
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {}
+        raw["worldNews"] = {"officialNews": ""}  # 没新闻 ⇒ 查价分支不触发（见第 42 步）
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertEqual(
@@ -146,6 +151,7 @@ class HandleTest(unittest.TestCase):
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {"10030": False, "10011": True, "10010": False}
+        raw["worldNews"] = {"officialNews": ""}  # 没新闻 ⇒ 尾行还是回执（提问行恒在最后）
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertEqual(

@@ -29,12 +29,13 @@ from collections.abc import Iterator, Mapping, Set
 from typing import Any
 
 from ..agent import AGENT  # 与 LLM 说什么不在策略层
-from ..agent.chat import answer_of, is_summary_reply, tool_of
+from ..agent.chat import answer_of, is_prices_reply, is_summary_reply, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .grid import (
     STEPS,
     Pos,
+    base_cells,
     box_cells,
     door_cells,
     step_outside,
@@ -100,6 +101,22 @@ UPGRADE_CHAIN = (
 #: 升级券的商品名（`weaponShopList.name` 那套词；价目逐回合从载荷读，样例实证 100/150）。
 VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
 
+#: 基地升级券（第 42 步夜里基地升级用）。
+STATION_VOUCHERS = ("StationUpgradeVoucher1", "StationUpgradeVoucher2")
+
+#: 围墙修复包（第 42 步）：10 金、目标墙**回满血**（任务书消耗品表实证）。
+WALLFIXER = "WallFixer"
+
+#: 建筑**满血基准**（任务书 §4.5.1 表）：修墙的"半血"判据与夜里基地升级的"残血"判据用。
+#: 基地 1500/3000/4500 是表格实证；**墙 L2/L3 的 1500/2000 按每级 +500 的规律推断**
+#: （表格被图片截断，待实盘校准）—— 推断偏小的方向是"晚修"，安全。
+WALL_MAX_HP = {1: 1000, 2: 1500, 3: 2000}
+STATION_MAX_HP = {1: 1500, 2: 3000, 3: 4500}
+
+#: 夜里怪清完后的出门半径（回炮位 BFS 步数上限，**拍的**）：机器人列表是视野过滤的，
+#: "清完"只是看不见 —— 近矿限制让工人出得了事也回得了家（用户拍板保守方向）。
+NIGHT_WANDER = 8
+
 #: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
 DETOUR_MAX = 2
 
@@ -126,6 +143,8 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     taken: set[Pos] = set()
     #: 本回合各机器人**已被许掉的伤害**（多炮协防的账：先开火的记上，后开的按剩余血挑目标）
     assigned: dict[Pos, int] = {}
+    #: 本回合已认领的**待修墙格**（第 42 步：两个修墙工人不挤同一面墙）
+    repair_taken: set[Pos] = set()
     budget = turn.gold
     slots = _slots(turn)
     #: 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
@@ -171,7 +190,18 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             continue
 
         if not turn.is_day:
-            _defend(role, turn, cmds, claimed, taken, assigned)  # 夜里还没被钉住的角色回炮位
+            # **夜里**（第 42 步重排）：① 持基地券且基地残血（< 满血 1/4）⇒ 贴基地
+            # `use` 升级（升级 + 回满血一次到位；基地要塌了就算机器人在门口也先升，
+            # 当回合放弃开火）；② 视野里有机器人 ⇒ 回炮位开火；③ 怪清完 ⇒ **工人**
+            # 出门近矿经济（近矿限制，build/remove 夜里非法、绝不发）；开拓者待命回炮位。
+            if _upgrade_station(role, turn, cmds, claimed):
+                continue
+            if not turn.robots and isinstance(role, Worker):
+                _mine_spare_ore(
+                    role, turn, cmds, claimed, sites, ore_taken, paths, near=NIGHT_WANDER
+                )
+                continue
+            _defend(role, turn, cmds, claimed, taken, assigned)
             continue
 
         # **白天收工**（第 33 步）：环砌完了 ⇒ 只在"离夜里第一波只剩回程步数"时才回家
@@ -194,6 +224,12 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
 
         if not isinstance(role, Worker):
             continue  # 不该出现的角色（`roles.make` 已挡过一道）
+
+        # **半血墙优先于一切差事（救援之后）**（第 42 步，用户：优先建墙）——
+        # 买包 → 用包，没包买不起才重建兜底。挂在建武器之前：防御面上有洞/薄弱格时，
+        # 别的都排后面。
+        if turn.is_day and _repair_line(role, turn, cmds, claimed, sites, repair_taken):
+            continue
 
         slot = next(slots, None)
         if slot is not None and budget >= WEAPON_COST:
@@ -288,19 +324,30 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         # 回灌给 LLM 是**全文**，这里才截断 —— 一个要正确性，一个要人眼看得下。
         LOGGER.info("【CMD命令执行结果】：「%s」", _clip(turn.cmd_result))
 
-    if not turn.phase_task or not any(isinstance(r, Pioneer) for r in turn.roles):
-        return "", ""
-
     reply = turn.llm_resp.strip()
     summary = is_summary_reply(reply)
+    prices = is_prices_reply(reply)
     if summary is not None:
         # **压缩回复**（第 41 步：命令轮同发的压缩请求的产物）：进摘要、**不进会话表**
         # —— 它不是 LLM 在任务上说过的话，进表会污染窗口、与【历史摘要】双份。
         # 粘住的重复路由一次 = 幂等。任务判据按"没回复"继续走（cmd_result 回灌等）。
         AGENT.adopt_summary(summary)
         reply = ""
+    elif prices is not None:
+        # **查价回复**（第 42 步：新闻查价的产物）：进价格期望表、不进会话表 ——
+        # 与裸摘要同一条路由纪律（内容路由、永不当任务材料）。
+        AGENT.adopt_price_hints(prices)
+        reply = ""
     else:
         AGENT.hear(reply)  # 它自己说过的话得在会话里（发命令/交答案那轮没有 prompt，也得记）
+
+    if not turn.phase_task:
+        # **没任务 ⇒ 新闻查价**（第 42 步，判据①开口子）：同一份 news 指纹去重 ——
+        # 任务线之外每游戏日只有 3 次额度。路由在上面已完成：查价回复到达的回合
+        # 照样采纳、且不再重问（指纹已记）。没有 news / 问过 ⇒ 什么都不发。
+        return AGENT.news_question(turn.news), ""
+    if not any(isinstance(r, Pioneer) for r in turn.roles):
+        return "", ""
     answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
     call = tool_of(reply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
@@ -719,6 +766,80 @@ def _rescue(
     return _step(role, site, turn, cmds, claimed)
 
 
+def _half_walls(turn: Turn) -> tuple[Pos, ...]:
+    """血量不足一半的**已砌墙**（第 42 步修墙差事的目标表），按坐标序（可复现）。
+
+    满血基准按等级查 `WALL_MAX_HP`（升级后回满血）。⚠️ health 缺失（-1）⇒ 未知 ⇒
+    **不修** —— 不为一格读不出血量的墙白跑；已毁（0）的墙在 `model._walls` 就丢了
+    （那是一格缺口，归 `_ring` 管重建）。
+    """
+    return tuple(
+        w.pos
+        for w in sorted(turn.walls, key=lambda w: w.pos)
+        if 0 < w.health and w.health * 2 < WALL_MAX_HP.get(w.level, WALL_MAX_HP[1])
+    )
+
+
+def _repair_line(
+    role: Worker,
+    turn: Turn,
+    cmds: dict[str, dict[str, Any]],
+    claimed: set[Pos],
+    sites: set[Pos],
+    taken: set[Pos],
+) -> bool:
+    """半血墙的修复差事（第 42 步，用户拍板"**包优先、重建兜底**"）。
+    返回 `True` = 这一轮归它了。
+
+    与 `_upgrade_line` 同构的两阶段（拿没拿包看**背包**，跨夜保留）：
+
+    ① **持包**：走到最近的半血墙（**认领在动身之前**，两个修墙工人不挤同一面），
+       贴着就 `use WallFixer`（目标 = 墙坐标；墙回满血、不塌、1 回合 + 10 金 ——
+       全面占优推倒重建的 2 石头 + 2 回合 + 洞开 2 回合）；
+    ② **没包**：商店可达、价目里有它、金币够 ⇒ 走去商店 `Buy`；
+    ③ **没包也买不了** ⇒ **重建兜底**：贴着半血墙且有石头 ⇒ `remove`
+       （下一回合那格自然进 `_ring`、走建造）。⚠️ 天黑前砌不回来的洞等于白开
+       —— 沿用 `_dig` 的时间门（`day_rounds_left > HOLE_PATCH_LEFT` 才拆）。
+
+    **只在白天跑**（挂在白天支路上；修墙是防御工事的一部分，与 build 同一条昼夜口径）。
+    """
+    broken = _half_walls(turn)
+    if not broken:
+        return False
+    walk, size = turn.map.blocked, turn.map.size
+    budget = turn.day_rounds_left - TIME_MARGIN
+    if WALLFIXER not in role.bag:
+        price = turn.shop_prices.get(WALLFIXER, 0)
+        hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
+        hops = [(d, s) for d, s in hops if d >= 0]
+        to_shop, shop = min(hops) if hops else (-1, None)
+        if shop is not None and price > 0 and turn.gold >= price and to_shop + 1 <= budget:
+            if to_shop <= 1:
+                return _emit(cmds, role, actions.Buy, WALLFIXER, 1)
+            return _step(role, shop, turn, cmds, claimed, sites)
+        # 买不了 ⇒ 重建兜底
+        if role.stone >= WALL_COST and turn.day_rounds_left > HOLE_PATCH_LEFT:
+            near = [p for p in broken if role.pos.dist(p) <= 1 and p not in taken]
+            if near:
+                taken.add(near[0])
+                return _emit(cmds, role, actions.Remove, near[0])
+        return False
+    target = min(
+        (p for p in broken if p not in taken),
+        key=lambda p: (role.pos.dist(p), p),
+        default=None,
+    )
+    if target is None:
+        return False
+    taken.add(target)
+    if role.pos.dist(target) <= 1:
+        return _emit(cmds, role, actions.Use, WALLFIXER, target)
+    to_wall = steps_between(role.pos, target, walk, size)
+    if to_wall < 0 or to_wall + 1 > budget:
+        return False  # 来不及 ⇒ 待命，明天接着走
+    return _step(role, target, turn, cmds, claimed, sites)
+
+
 def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, free: int) -> int:
     """这一趟还该采几块石头 —— 按**回合预算**每回合现算。
 
@@ -827,21 +948,21 @@ def _mine_spare_ore(
     sites: set[Pos],
     ore_taken: set[Pos] | None = None,
     paths: set[Pos] | None = None,
+    near: int = 0,
 ) -> None:
     """墙砌完了 ⇒ 白天不再闲着：**就近**采买得动、回得来的矿（第 29 步修闲置）。
 
-    与旧版的差别：**先把"走得动、回得来"的矿筛出来、再按价挑** —— 旧版按价挑了最贵的、
+    与旧版的差别：**先把"走得动、回得来"的矿筛出来、再挑** —— 旧版按价挑了最贵的、
     发现走不回来就整段放弃（"挖好石头就在家里等着"的根源）。回程参照 = **最近的武器位**
     （夜里要在炮前，机器人到进攻范围前必须站回去；没有武器才用基地）。
-    **顺路卖矿**（`_detour_sell`）：手里有货、去矿的路上绕去小贩不超过 `DETOUR_MAX` 格
-    ⇒ 先绕过去（贴上它的那回合 `_sell_ore` 自然出手），之后再继续去矿。
-    **拿不到收购价就哪儿也不去**；一座可行的矿都没有 ⇒ 待命（空指令合法）。
-    ⚠️ 第 40 步起**矿格进认领账本**（`ore_taken`）：别人这回合已认领的矿直接剔出候选，
-    挑中即登记 —— 两个闲下来的工人不再奔同一座最贵的矿。`paths` 同 `_build_walls`。
+    ⚠️ **第 42 步起按"性价比"挑**：`价 × 新闻修正 ÷ (到矿 + 采一块 + 回炮位)` ——
+    单位回合价值最高，**近的贱矿可能跑赢远的贵矿**（旧口径"价高优先"只看分子）。
+    新闻修正是 `AGENT.price_hint`（第三处跨回合状态，退化 = 偏好偏一天，不碰红线）。
+    **顺路交易**：先看`_detour_buy`（修墙缺包 / 升级缺券），再 `_detour_sell`。
+    **夜里**（`near > 0`，第 42 步）：怪清完才出门，`max(到矿, 回炮位) ≤ near` 的
+    **近矿限制** —— 机器人列表是视野过滤的，"清完"只是看不见，出得了事要回得了家。
 
-    **距离一律用 BFS 真实步数**（第 33 步）：回炮位必须绕到背面那道门再横穿盒子，
-    切比雪夫把 10+ 步说成 3 步 ⇒ 工人越采越远、天黑还在墙外（实盘问题 ②）。
-    ⚠️ **-1（走不到）的矿直接作废**：切比雪夫永远给不出这个值，是本步新增的失败态。
+    **距离一律用 BFS 真实步数**（第 33 步）。⚠️ **-1（走不到）的矿直接作废**。
     """
     ore_taken = set() if ore_taken is None else ore_taken
     paths = set() if paths is None else paths
@@ -849,22 +970,37 @@ def _mine_spare_ore(
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
     budget = turn.day_rounds_left - TIME_MARGIN
     walk, size = turn.map.blocked, turn.map.size
-    #: 先筛可行（走过去 + 从矿回得来），再交给 `_pick_ore` 按价挑。
-    #: ⚠️ BFS 是"命中目标即停"的，所以这里的开销跟**距离**相关、不是整张图 ——
-    #: 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒（真服务量过，见 code-task 第 33 步）。
-    feasible: dict[Pos, str] = {}
+    #: 先筛可行（走过去 + 回得来），再按性价比挑。⚠️ BFS 是"命中目标即停"的，开销跟
+    #: **距离**相关、不是整张图 —— 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒。
+    feasible: dict[Pos, tuple[str, int, int]] = {}
     for p, kind in turn.map.ores.items():
         if p in ore_taken:
             continue  # 本回合已被人认领（第 40 步）
         out = steps_between(role.pos, p, walk, size)
         return_home = [steps_between(post, p, walk, size) for post in posts]
-        return_home = [d for d in return_home if d >= 0]
-        if out >= 0 and return_home and out + min(return_home) <= budget:
-            feasible[p] = kind
-    mine = _pick_ore(role.pos, feasible, turn.vendor_prices, want_stone=False)
+        back = min((d for d in return_home if d >= 0), default=-1)
+        if out < 0 or back < 0:
+            continue
+        if near > 0:
+            if max(out, back) > near:
+                continue  # 夜里近矿限制（第 42 步）
+        elif out + back > budget:
+            continue  # 白天：这一趟赶不回来
+        feasible[p] = (kind, out, back)
+    best: tuple[float, int, Pos] | None = None
+    for p, (kind, out, back) in feasible.items():
+        value = turn.vendor_prices.get(kind, 0) * AGENT.price_hint(kind)
+        if value <= 0:
+            continue  # 小贩不收的矿不为它多走一步（与旧口径一致）
+        key = (-(value / (out + back + 1)), out, p)
+        if best is None or key < best:
+            best = key
+    mine = best[2] if best else None
     if station is None or mine is None:
         return
     ore_taken.add(mine)
+    if _detour_buy(role, mine, turn, cmds, claimed):
+        return
     if _detour_sell(role, turn, cmds, claimed, mine):
         return
     if role.pos.dist(mine) <= 1:
@@ -872,6 +1008,56 @@ def _mine_spare_ore(
         return
     if _step(role, mine, turn, cmds, claimed, sites | paths):
         _reserve_path(role, mine, turn, claimed, paths)  # 动身成功才预留（见 `_build_walls`）
+
+
+def _shopping_list(role: Worker, turn: Turn) -> str | None:
+    """这一趟该顺路买什么（第 42 步，用户拍板"优先买武器升级券 + 修墙的"）⇒ 商品名；
+    什么都不缺 ⇒ `None`。只在**买得起**时才列：钱不够绕过去也白绕。
+
+    优先级：**WallFixer**（有半血墙且包里没包 —— 10 金回满血，防御面有薄弱格）>
+    **升级链下一张券**（升级线要用；别人包里已有一张就不再买 —— 券在谁包里谁用，
+    没有转移指令，囤两张是白花金币）。
+    """
+    prices = turn.shop_prices
+    if (
+        _half_walls(turn)
+        and WALLFIXER not in role.bag
+        and 0 < prices.get(WALLFIXER, 0) <= turn.gold
+    ):
+        return WALLFIXER
+    target = _upgrade_target(turn)
+    if target is not None:
+        voucher = target[1]
+        held = any(voucher in r.bag for r in turn.roles)
+        if not held and voucher not in role.bag and 0 < prices.get(voucher, 0) <= turn.gold:
+            return voucher
+    return None
+
+
+def _detour_buy(
+    role: Worker, goal: Pos, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos]
+) -> bool:
+    """去差事的路上**顺路买**：绕 2 格内有商店、且购物单上有东西 ⇒ 先朝商店迈一步。
+
+    贴上商店的那回合 `Buy`（下一回合走 `use`/升级线），之后再继续去差事。
+    与 `_detour_sell` 同一套绕路账（`via + after - direct ≤ DETOUR_MAX`）；
+    ⚠️ -1（走不到）的绕法直接放弃。已经贴着差事目标就别绕了（这一回合该干活）。
+    """
+    want = _shopping_list(role, turn)
+    if want is None or role.pos.dist(goal) <= 1:
+        return False
+    walk, size = turn.map.blocked, turn.map.size
+    direct = steps_between(role.pos, goal, walk, size)
+    if direct < 0:
+        return False
+    for shop in sorted(turn.map.shops):
+        via = steps_between(role.pos, shop, walk, size)
+        after = steps_between(shop, goal, walk, size)
+        if via < 0 or after < 0:
+            continue
+        if via + after - direct <= DETOUR_MAX:
+            return _step(role, shop, turn, cmds, claimed)
+    return False
 
 
 def _detour_sell(
@@ -1114,6 +1300,36 @@ def _defend(
         taken.add(weapon.pos)  # 认领发生在迈步之后：没走成才轮到下一座
         claimed.add(step)
         return
+
+
+def _upgrade_station(
+    role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]], claimed: set[Pos]
+) -> bool:
+    """夜里**基地升级**（第 42 步，用户拍板）：持基地券 + 基地血量 < 满血 1/4
+    （按等级查 `STATION_MAX_HP`：1500/3000/4500 表格实证）⇒ 贴基地 `use`。
+    返回 `True` = 这一轮归它了（走了或用了）。
+
+    **夜里人在盒内炮位、基地就在盒心** —— 站位天然满足"周围一格内"，最多走一两步。
+    升级 + 回满血一次到位（L1→L2 且血回 3000），是要塌的基地最好的救兵；
+    走过去/用券的那个回合放弃开火 —— 只在基地真残血时才值得。
+    ⚠️ station_health 缺失（-1）⇒ 未知 ⇒ 不动（不轻举妄动）。
+    """
+    voucher = next((v for v in STATION_VOUCHERS if v in role.bag), None)
+    if voucher is None or turn.station_health < 0:
+        return False
+    station = turn.map.station
+    if station is None:
+        return False
+    if turn.station_health * 4 >= STATION_MAX_HP.get(turn.station_level, STATION_MAX_HP[1]):
+        return False  # 还不残血
+    if any(role.pos.dist(c) <= 1 for c in base_cells(station)):
+        return _emit(cmds, role, actions.Use, voucher, station)
+    walk, size = turn.map.blocked | claimed, turn.map.size
+    step = step_toward(role.pos, station, walk, size)
+    if step is None:
+        return False
+    claimed.add(step)
+    return _emit(cmds, role, actions.Move, step)
 
 
 def _fire(
