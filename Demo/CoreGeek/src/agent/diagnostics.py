@@ -869,6 +869,14 @@ def response_summary(request: Any, response: Any, **kwargs: Any) -> None:
     except Exception:  # noqa: BLE001
         stream = None
     emit_response_summary(summary, stream=stream)
+    # The compact rollup omits cognitive content; preserve changed task evidence
+    # separately after the official HTTP response, even when disk tracing fails.
+    try:
+        from . import task_journal
+        task_journal.emit(request, response, decision=kwargs.get('decision'),
+                          event_id=summary.get('event'), emitter=_emit)
+    except Exception:  # diagnostics must never affect gameplay
+        pass
 
 
 class Timer:

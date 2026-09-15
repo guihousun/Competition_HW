@@ -260,10 +260,43 @@ def compare(actual_path, predicted_path):
             'note': 'No reconstruction of hidden enemies, random refreshes or future waves'}
 
 
+def tasks(path, output):
+    """Export cognitive exchanges without per-frame maps or executing anything."""
+    from agent.task_journal import TaskJournal
+    from agent.console_digest import stream_token
+    target = Path(output)
+    # Existing capture quality remains authoritative; snippets cannot recover gaps.
+    quality = inspect(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    journal = TaskJournal(text_limit=MAX_LINE)
+    count, turns = 0, 0
+    with target.open('x', encoding='utf-8') as stream:
+        header = {'schema': 'competition-task-export/1', 'event': 'start',
+                  'source': str(path), 'capture': quality,
+                  'note': 'Observed and issued content; no inferred task success. Not a simulator replay; no maps. Credential-filtered.'}
+        stream.write(json.dumps(clean(header), ensure_ascii=False) + '\n')
+        for row in records(path):
+            if row.get('event') != 'turn':
+                continue
+            turns += 1
+            request = row.get('request')
+            response = row.get('response') if row.get('response_sent') is True else {}
+            event_id = row.get('event_id')
+            for item in journal.observe(request, response, decision=row.get('decision'),
+                                        event_id=event_id, stream=stream_token(request, event_id)):
+                stream.write(json.dumps(clean(item), ensure_ascii=False) + '\n')
+                count += 1
+        stream.write(json.dumps({'schema': 'competition-task-export/1', 'event': 'end',
+                                 'turns_read': turns, 'task_events': count}) + '\n')
+    return {'output': str(target), 'turns_read': turns, 'task_events': count,
+            'sha256': hashlib.sha256(target.read_bytes()).hexdigest(),
+            'capture_complete': quality['quality']['capture_complete']}
+
+
 def main(argv=None):
     p=argparse.ArgumentParser(description=__doc__)
     sub=p.add_subparsers(dest='command', required=True)
-    for name in ('inspect', 'export', 'transitions', 'replay'):
+    for name in ('inspect', 'export', 'transitions', 'replay', 'tasks'):
         cmd=sub.add_parser(name)
         cmd.add_argument('input', type=Path)
         if name != 'inspect':
@@ -280,6 +313,7 @@ def main(argv=None):
         elif args.command == 'export': result=export(args.input,args.output,args.from_round,args.to_round)
         elif args.command == 'transitions': result=transitions(args.input,args.output)
         elif args.command == 'replay': result=replay(args.input,args.output)
+        elif args.command == 'tasks': result=tasks(args.input,args.output)
         else: result=compare(args.actual,args.predicted)
         print(json.dumps(clean(result),ensure_ascii=False,indent=2))
         return 0

@@ -1,49 +1,27 @@
 name: 内网实机反馈
-description: 报告指定提交在公司官方测试环境的行为
+description: 描述现象并贴日志；版本和原因由我们一起核对
 title: "[内网测试] "
 body:
   - type: markdown
     attributes:
-      value: "请仅提供可公开的脱敏最小复现。仓库公开；不要粘贴内网地址、账号、令牌或完整公司日志。"
+      value: "写一下遇到了什么，附可公开的日志或截图即可。无需先定位原因或填写规则编号。版本优先从日志 identity 行读取；不要上传凭据或未获允许的数据。"
   - type: input
     id: commit
     attributes:
-      label: 被测提交 SHA
-      description: 完整 40 位 SHA（git rev-parse HEAD），不要只填分支名
-    validations:
-      required: true
+      label: 版本（可选）
+      description: 有启动 identity 日志可以不填；也可填写 git rev-parse HEAD 或参赛包名称
   - type: input
     id: environment
     attributes:
-      label: 官方平台与规则版本
-      description: 提供版本标识及 Python/OS 信息，无需服务器地址
-    validations:
-      required: true
-  - type: dropdown
-    id: result
-    attributes:
-      label: 测试结果
-      options: [FAIL, PASS, BLOCKED, 需求或规则澄清]
-    validations:
-      required: true
+      label: 地图或场景（可选）
+      description: 例如 attack_map；不知道可以留空
   - type: textarea
     id: reproduction
     attributes:
-      label: 最小复现与实际结果
-      description: 场景、回合、角色、操作步骤、实际报错；可附已脱敏请求/响应
+      label: 现象与日志
+      description: 用一句话说明发生了什么，然后粘贴或拖入可公开的日志/截图。不用整理最小复现，启动 identity 和 task_event 行会帮助我们定位。
     validations:
       required: true
-  - type: textarea
-    id: expectation
-    attributes:
-      label: 预期行为与官方依据
-      description: 对应 R01–R08、官方章节或新说明。无法判断时写待确认。
-    validations:
-      required: true
-  - type: textarea
-    id: related
-    attributes:
-      label: 相关 Issue / PR 与补充信息
   - type: checkboxes
     id: public
     attributes:

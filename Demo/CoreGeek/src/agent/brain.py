@@ -343,6 +343,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                              'task':{'phase':'paused_for_defence' if directive.reserve_pioneer else (cycle.phase if cycle else 'idle'),
                                      'cycle_active':bool(cycle),
                                      'plan_kind':getattr(plan,'kind',None),
+                                     'plan_purpose':getattr(plan,'purpose',None),
                                      'acceptance_status':deepcopy(planner_state.tasks.get('acceptance_status') or {}),
                                      'pending_command':getattr(judge_state,'pending_cmd',None) is not None if judge_state is not None else None,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})

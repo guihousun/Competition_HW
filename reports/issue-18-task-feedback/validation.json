@@ -1,0 +1,15 @@
+{
+  "base_sha": "ac0b8cbeca815e2298543852d254d161d1723b94",
+  "scope": "Local 753-test suite including 8 new task journal tests; dirty reviewed candidate bound to exact file hashes, not intranet PASS",
+  "full_suite_tests": 753,
+  "full_suite_seconds": 387.477,
+  "focused_tests": 8,
+  "focused_seconds": 0.552,
+  "files": {
+    "Demo/CoreGeek/src/agent/task_journal.py": "409d38e3d63048a8dfb9ccef6bf0657b48c6c72289a5f899f603cf64ddbd5b37",
+    "Demo/CoreGeek/src/agent/brain.py": "1d862f78ced09b1b7864269e4ed199b14601ad31314f0b93331e5aba1797416d",
+    "Demo/CoreGeek/src/agent/diagnostics.py": "772c39cdb7783f9471f0e379b2364997a0b5977bf5a0e6479cd77f318a374ba7",
+    "tools/trace_tool.py": "a32039b3ee05b89784936260ed6d262d3a7e0cfe63ddbfded3844b0a87943cef",
+    "tests/test_task_journal.py": "4e5591042fabc23930cd203e5c0905b5aa354e53918a74c51d3bd97fd04d69e8"
+  }
+}

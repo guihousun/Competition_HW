@@ -1,0 +1,13 @@
+test_actual_http_bytes_unchanged_when_trace_fails (test_task_journal.TaskJournalTests.test_actual_http_bytes_unchanged_when_trace_fails) ... ok
+test_agent_stop_reason_and_counts_change_without_repeating_idle (test_task_journal.TaskJournalTests.test_agent_stop_reason_and_counts_change_without_repeating_idle) ... ok
+test_bounded_streams_and_long_content_redacted_before_truncation (test_task_journal.TaskJournalTests.test_bounded_streams_and_long_content_redacted_before_truncation) ... ok
+test_console_without_trace_and_off_or_broken_sink_are_safe (test_task_journal.TaskJournalTests.test_console_without_trace_and_off_or_broken_sink_are_safe) ... ok
+test_gap_reset_and_teams_do_not_share_context (test_task_journal.TaskJournalTests.test_gap_reset_and_teams_do_not_share_context) ... ok
+test_offline_export_keeps_full_task_text_and_trace_quality_without_maps (test_task_journal.TaskJournalTests.test_offline_export_keeps_full_task_text_and_trace_quality_without_maps) ... ok
+test_question_model_tool_answer_and_end_are_visible_without_inferred_success (test_task_journal.TaskJournalTests.test_question_model_tool_answer_and_end_are_visible_without_inferred_success) ... ok
+test_repeated_results_are_suppressed_but_new_identical_requests_are_not (test_task_journal.TaskJournalTests.test_repeated_results_are_suppressed_but_new_identical_requests_are_not) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.552s
+
+OK
