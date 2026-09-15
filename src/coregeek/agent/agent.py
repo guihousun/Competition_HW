@@ -15,9 +15,9 @@
 
 from collections.abc import Callable
 
-from .chat import summary_of, strip_answers
+from .chat import is_summary_reply, strip_answers
 from .context import Context
-from .prompt import gen_system_prompt
+from .prompt import gen_compression_prompt, gen_system_prompt
 from .tools.cmd import executeCmd
 from .tools.sop import store
 
@@ -85,17 +85,32 @@ class Agent:
         交答案那两轮没有 prompt，回复照样得进会话，否则回灌时它自己的命令凭空消失）。
 
         还没开过会话（这道题一次都没问过）⇒ 忽略。粘住的重复由 `Context.hear` 去重。
-
-        第 39 步起顺带**被动提取**执行摘要（`chat.summary_of`）：回复里带了
-        `<summary>` 就更新 `Context.summary`，没带就**保留旧值** —— best-effort，
-        绝不因为摘要缺失而重问（那会把搭车品变成每回合的税）。**静默**：prompt 行
-        里本来就有全文，摘要更新再打一行日志是白花 stdout 预算。
+        ⚠️ 第 41 步起**不再从这里提取摘要**（第 39 步的搭车协议作废）：任务回复里的
+        零星 `<summary>` 一律当普通文字记 —— 摘要的唯一来源是 `adopt_summary`。
         """
         if self._context is not None:
             self._context.hear(reply)
-            summary = summary_of(reply)
-            if summary:
-                self._context.summary = summary
+
+    def adopt_summary(self, text: str) -> None:
+        """把**压缩轮**的摘要记进会话上下文（第 41 步）。还没开过会话 ⇒ 忽略。
+
+        调用方是 `task_channel` 的路由（裸 `<summary>` 回复 = 压缩请求的产物）：
+        摘要进 `Context.summary`、回复**不进会话表** —— 它不是 LLM 在任务上说过的话。
+        """
+        if self._context is not None:
+            self._context.summary = text
+
+    def compression_request(self) -> str:
+        """**压缩轮的 prompt**（第 41 步）：独立指令 + **原始上下文全文**。
+
+        它在命令轮随 `executeCmd` 同发 —— 那一轮的 prompt 槽本来空着（互斥判据 ③），
+        判题器的 LLM 闲着，正好拿来压缩（任务期间 prompt 不限量不计数）。
+        没开过会话 ⇒ `""`。原料由 `Context.material()` 给出：**原文永久保留**、
+        压缩总从原文重来（用户拍板）；给任务 LLM 的才是压缩后的（摘要 + 窗口）。
+        """
+        if self._context is None:
+            return ""
+        return gen_compression_prompt(self._context.material())
 
     def tool_call(self, tool_name: str, params: list[tuple[str, str]]) -> str:
         """**顶层调度入口**：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。

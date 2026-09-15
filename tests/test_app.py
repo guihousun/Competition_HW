@@ -436,14 +436,15 @@ class HandleTest(unittest.TestCase):
         self.assertIn("请查询北京天气", body["prompt"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ② LLM 要一条命令（嵌套形状）⇒ 命令进 `executeCmd`，而**不是**当答案交上去
+        # ② LLM 要一条命令（嵌套形状）⇒ 命令进 `executeCmd`，prompt 槽捎上压缩请求
+        #    （第 41 步：那个槽本来空着，正好拿来压缩上下文）
         raw["llmResp"] = (
             '<tool><tool_name>executeCmd</tool_name>'
             '<tool_param><cmd>python -c "print(1+1)"</cmd></tool_param></tool>'
         )
         body = ask()
         self.assertEqual(body["executeCmd"], 'python -c "print(1+1)"')
-        self.assertEqual(body["prompt"], "")
+        self.assertIn("【上下文压缩】", body["prompt"])
 
         # ③ 沙盒交作业 ⇒ 结果**全文**回灌，这一轮绝不重复发命令；它自己上一轮要的那条
         #    命令也在会话里（第 25 步：发命令那轮记下的回复，在这里第一次看得见）

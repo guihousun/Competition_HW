@@ -135,3 +135,17 @@ class Context:
         if len(kept) <= _WINDOW:
             return body
         return body[kept[-_WINDOW]:]
+
+    def material(self) -> str:
+        """压缩原料（第 41 步）：**原始上下文全文** —— 题目 + 全部往来，逐字。
+
+        用户拍板：**原文永久保留、压缩总从原文重来**（不从旧摘要叠 —— 避免多次压缩
+        的失真累积）；消息表**永不截断**，代价是压缩请求随历史线性变大（它只走命令轮
+        那个本来空着的 prompt 槽，任务 prompt 是有界的）。与 `render` 的分工：
+        render 给任务 LLM 的是**压缩后的**（摘要 + 窗口），这里给压缩器的是**原文**。
+        """
+        return json.dumps(
+            [{"role": m.role, "content": m.text} for m in self._messages],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )

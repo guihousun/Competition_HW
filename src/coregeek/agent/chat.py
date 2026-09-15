@@ -141,6 +141,19 @@ def summary_of(reply: str) -> str:
     return block.group(1).strip() if block else ""
 
 
+def is_summary_reply(reply: str) -> str | None:
+    """**裸摘要回复**（第 41 步：压缩轮的产物）⇒ 返回摘要文本；否则 `None`。
+
+    判据：`<summary>` 块取得出内容，**且挖掉摘要块之后一个字都不剩** —— 任务回复
+    （带工具调用 / 答案 / 正文）不算。任务 prompt 不再教摘要 ⇒ "裸摘要"几乎必属
+    压缩回复，判别是干净的；粘住的压缩回复同文再判一次 = 幂等。
+    """
+    summary = summary_of(reply)
+    if summary and not _SUMMARY_RE.sub("", reply).strip():
+        return summary
+    return None
+
+
 def looks_like_tool(reply: str) -> bool:
     """这条回复**像是**工具调用吗？只认开标签前缀出现（故意判宽）。
 

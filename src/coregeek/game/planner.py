@@ -29,7 +29,7 @@ from collections.abc import Iterator, Mapping, Set
 from typing import Any
 
 from ..agent import AGENT  # 与 LLM 说什么不在策略层
-from ..agent.chat import answer_of, tool_of
+from ..agent.chat import answer_of, is_summary_reply, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .grid import (
@@ -292,7 +292,15 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         return "", ""
 
     reply = turn.llm_resp.strip()
-    AGENT.hear(reply)  # 它自己说过的话得在会话里（发命令/交答案那轮没有 prompt，也得记）
+    summary = is_summary_reply(reply)
+    if summary is not None:
+        # **压缩回复**（第 41 步：命令轮同发的压缩请求的产物）：进摘要、**不进会话表**
+        # —— 它不是 LLM 在任务上说过的话，进表会污染窗口、与【历史摘要】双份。
+        # 粘住的重复路由一次 = 幂等。任务判据按"没回复"继续走（cmd_result 回灌等）。
+        AGENT.adopt_summary(summary)
+        reply = ""
+    else:
+        AGENT.hear(reply)  # 它自己说过的话得在会话里（发命令/交答案那轮没有 prompt，也得记）
     answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是**同一份**
     call = tool_of(reply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
@@ -310,8 +318,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（**必须压在 ③ 前**）
         return AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
-    if command:  # ③ 工具给了命令 ⇒ 交给沙盒
-        return "", command
+    if command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽本来空着，捎上**压缩请求**（第 41 步）
+        return AGENT.compression_request(), command
     if retry:  # ④ 判题器说答案错了 ⇒ 带上"上次答错了"重问
         return AGENT.chat(turn.phase_task, retry=retry), ""
     if answer:  # ⑤ 我们已经拿到了答案 ⇒ 都不发

@@ -453,9 +453,9 @@ class TaskChannelTest(unittest.TestCase):
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
         task_channel(self._turn(self.TASK))  # ⑥ 首问（会话从这道题开始）
-        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令（无提问）
+        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令（prompt=压缩请求）
         self.assertEqual(execute, "ls")
-        self.assertEqual(prompt, "")
+        self.assertIn("【上下文压缩】", prompt, "命令轮的 prompt 槽捎上压缩请求（第 41 步）")
         prompt, execute = task_channel(
             self._turn(self.TASK, call, cmd_result="[exitCode:0]\n2")  # ② 回灌（llmResp 粘住）
         )
@@ -467,6 +467,55 @@ class TaskChannelTest(unittest.TestCase):
                 ("assistant", call),
                 ("tool", "【上一条命令的执行结果（原文）】\n[exitCode:0]\n2"),
             ],
+        )
+
+    def test_the_compression_material_is_the_original_context(self):
+        """压缩原料 = **原始上下文全文**（用户拍板）：窗口外的旧回合原文仍在压缩请求里
+        —— 压缩总从原文重来、不从旧摘要叠（避免多次压缩的失真累积）。给任务 LLM 的
+        才是压缩后的（摘要 + 窗口）。"""
+        call = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
+        )
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        task_channel(self._turn(self.TASK, call))  # ③ 命令轮 a1
+        task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ② 回灌
+        task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ③ a2（粘住）
+        task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ② 回灌
+        prompt, execute = task_channel(
+            self._turn(
+                self.TASK,
+                "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>pwd</cmd></tool_param></tool>",
+                # ⚠️ `lastCmdResult` 已清（上一轮是回灌、没发命令）—— 否则判据 ② 先命中
+            )
+        )
+        self.assertEqual(execute, "pwd")
+        self.assertIn("【上下文压缩】", prompt)
+        self.assertIn("pwd", prompt, "最近一条工具调用在原料里")
+        # 此刻窗口只盖最近 2 轮 assistant —— 但原料是原文，更早的往来照样在
+        self.assertIn("ls", prompt, "窗口外的旧回合原文仍在压缩原料里（原文永久保留）")
+
+    def test_a_bare_summary_reply_is_routed_not_heard(self):
+        """**裸 `<summary>` 回复 = 压缩轮的产物**：进 `Context.summary`、**不进会话表**
+        （它不是 LLM 在任务上说过的话，进表会污染窗口、与【历史摘要】双份），
+        任务判据按"没回复"走 —— 下一轮判据 ② 照常回灌结果。"""
+        AGENT.reset()
+        call = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
+        )
+        task_channel(self._turn(self.TASK))
+        task_channel(self._turn(self.TASK, call))  # ③：命令 + 压缩请求同发
+        prompt, execute = task_channel(
+            self._turn(
+                self.TASK,
+                "<summary>【总目标】交 token</summary>",  # 压缩回复（随 cmd_result 一起到）
+                cmd_result="[exitCode:0]\n2",
+            )
+        )
+        self.assertEqual(execute, "")
+        self.assertIn("【总目标】交 token", prompt, "摘要已就位")
+        contents = [m["content"] for m in json.loads(prompt)]
+        self.assertNotIn(
+            True, ["<summary>" in c for c in contents], "裸摘要不进会话表"
         )
 
     def test_a_result_already_in_hand_blocks_the_next_command(self):
@@ -654,12 +703,13 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertIn(output, messages[-1]["content"])
                 self.assertEqual(execute, "")
 
-    def test_prompt_and_command_are_never_both_set(self):
-        """**两条通道互斥** —— 这是整个状态机唯一的不变量，遍历所有分支钉一遍。
+    def test_a_command_never_rides_with_a_task_question(self):
+        """**任务提问不与命令同轮**（第 41 步修订的互斥契约）。
 
-        "同一轮既提问又发命令"会让 LLM 在没看到结果的情况下作答 ⇒ 又要一遍同一条命令
-        ⇒ 活锁。它也是 `task_channel` 之所以合成一个函数、而不是 `prompt_for` +
-        `execute_for` 的全部理由（拆开就要把这条链写两遍）。
+        命令轮的 prompt 若是**任务提问**，LLM 会拿着过期结果作答 ⇒ 又要一遍同一条命令
+        ⇒ 活锁 —— 这一半原封不动。第 41 步起命令轮允许携带**压缩请求**（它的回复内容
+        路由进摘要、永不当任务材料，活锁的成因对它不成立）；所以契约钉成：
+        `executeCmd` 非空 ⇒ `prompt` 为空**或**是压缩请求（带指令标记）。
         """
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
@@ -684,7 +734,15 @@ class TaskChannelTest(unittest.TestCase):
         for i, turn in enumerate(turns):
             with self.subTest(i=i):
                 prompt, execute = task_channel(turn)
-                self.assertFalse(prompt and execute, (prompt, execute))
+                if execute:
+                    self.assertTrue(
+                        prompt == "" or "【上下文压缩】" in prompt,
+                        f"命令轮的 prompt 只能是空或压缩请求：{prompt[:80]}",
+                    )
+                self.assertTrue(
+                    prompt == "" or execute == "" or "【上下文压缩】" in prompt,
+                    (prompt[:60], execute[:60]),
+                )
 
     def test_the_answer_is_submitted_verbatim(self):
         """裸文本答案**原文进、原文出**（逐字对 `docs/response.txt` L54）：

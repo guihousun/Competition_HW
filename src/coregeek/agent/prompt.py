@@ -2,11 +2,16 @@
 构建system prompt的地方
 调试只用调这个，分为六段：role定位、工具描述、输出格式、示例、沉淀的SOP、注意事项
 
+⚠️ **任务 prompt 专注任务**（第 41 步）：压缩教学的搭车协议已作废 —— 摘要由
+**命令轮同发的压缩请求**产出（`COMPRESSION_PROMPT`，只进压缩 prompt、不进 system）。
+
 ⚠️ **两个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT` 的 `{sop}`）正文里
 不许出现别的裸 `{}`**：`str.format` 会把它当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成
 空指令（第 35 步传下来的规矩）。替换值（工具描述、流程正文）里的 `{}` 不会被二次扫描
 —— python 片段太常见了。命令范式用 `$(...)`，安全。
 """
+
+import json
 
 # 1. role定位
 ROLE_PROMPT = """
@@ -14,7 +19,7 @@ ROLE_PROMPT = """
 你是一个自主任务执行Agent，能根据用户的任务基于现有的工具了解任务并理解任务，理解任务后严格按照任务要求完成任务；当认为解题流程值得沉淀时，用 SOP2Prompt 把方法沉淀下来
 
 当手上的信息不足时，就调用工具去取；认定完成任务后，就直接作答。
-一回合只输出一样东西：一次工具调用，或者一个答案。两个搭车的例外：SOP2Prompt 不产出命令，调用它的那一回合照样是你的作答回合（工具块后面再跟一个 `<answer>`）；`<summary>` 执行摘要**每条回复都要附上**（见输出约定）。
+一回合只输出一样东西：一次工具调用，或者一个答案。唯一的例外是 SOP2Prompt —— 它不产出命令，所以调用它的那一回合照样是你的作答回合：工具块后面再跟一个 `<answer>`。
 """
 
 # 2. 工具描述
@@ -64,15 +69,6 @@ OUTPUT_PROMPT = """
     </tool>
     <answer>答案本身</answer>
 `sop` 的正文里**不要出现 `<answer>` 与 `</answer>` 这对标签**（讲答案格式时换个说法，比如"把答案用 answer 标签包起来"）。
-4. **每条回复都附一个执行摘要**（它与答案/工具调用并列，不受"只输出一样东西"限制）：
-<summary>
-【总目标】要交什么、什么格式（照抄任务书原文）
-【关键数据】后续作答要用到的原文（token、数字、文件内容要点），宁全勿缺
-【已完成】【未完成】各一行
-【下一步】只写一条
-</summary>
-摘要在命令结果回来之前写：你上一条命令的结果**不在**摘要里，以最近的消息为准。
-漏写不算错，下一轮补上即可；但工具调用与答案的格式一个字都不能变。
 """
 
 # 4. 沉淀的SOP
@@ -173,3 +169,34 @@ def gen_sop_prompt(sop) -> str:
         return SOP_PROMPT.format(sop="（暂无沉淀）")
     flows = "\n\n".join(f"## SopName - {name}\n{text}" for name, text in sop.items())
     return SOP_PROMPT.format(sop=flows)
+
+
+#: 压缩轮的指令（第 41 步）：**只进压缩 prompt、不进任务 system** —— 任务 prompt
+#: 专注任务（卸掉了第 39 步搭车的 881 字节教学），压缩 prompt 专注压缩。
+#: 四槽照第 39 步的口径（总目标/关键数据/已完成未完成/下一步），加两条输出纪律：
+#: 只输出摘要块；摘要里不带 `<answer>` 对（`answer_of` 挖块之外的又一道保险）。
+COMPRESSION_PROMPT = """# 【上下文压缩】
+你是上下文压缩器。把接下来的对话压成一份摘要，供后续回合替代完整历史使用。摘要必须包含：
+【总目标】要交什么、什么格式（照抄任务书原文）
+【关键数据】对话中出现过的、后续作答要用到的原文（token、数字、文件内容要点），宁全勿缺
+【已完成】【未完成】各一行
+【下一步】只写一条
+只输出一个 <summary>…</summary> 块，不要输出任何别的内容；摘要里不要出现 <answer> 与 </answer> 这对标签。
+"""
+
+
+def gen_compression_prompt(material: str) -> str:
+    """压缩轮的整份 prompt（第 41 步）：**独立指令 + 原始上下文全文**。
+
+    形状与任务 prompt 同构（标准 messages JSON）—— 判题器的 LLM 按同一种读法处理两者。
+    `material` 由 `Context.material()` 给出：题目 + 全部往来逐字（**原文永久保留**，
+    压缩总从原文重来、不从旧摘要叠；给任务 LLM 的才是压缩后的）。
+    """
+    return json.dumps(
+        [
+            {"role": "system", "content": COMPRESSION_PROMPT.strip()},
+            {"role": "user", "content": material},
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )

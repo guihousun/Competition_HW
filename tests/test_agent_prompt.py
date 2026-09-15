@@ -210,21 +210,26 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("SOP 里有 {sop} 和 {0}", messages[0]["content"])
 
 
-    def test_the_summary_ride_along_is_taught(self):
-        """第 39 步压缩：输出约定教 `<summary>` 搭车块 —— 四槽结构 + 时序提醒 +
-        "漏写不算错"。这是压缩机制唯一能让 LLM 配合的杠杆（与第 32 步"同轮沉淀"
-        同一条经验：代码侧支持了，prompt 不教就等于没有）。
-        ⚠️ 措辞是拍的，效果只能靠实盘（`code-task.md` 第 39 步的不确定性）。"""
+    def test_the_task_prompt_carries_no_compression_teaching(self):
+        """第 41 步：任务 prompt 卸掉压缩教学 —— 压缩有自己的 prompt（在命令轮随
+        `executeCmd` 同发，那个槽本来空着）。任务 prompt 专注任务，压缩 prompt 专注压缩。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("<summary>", system)
-        self.assertIn("【总目标】", system)
-        self.assertIn("【关键数据】", system)
-        #: 时序提醒（第 39 步设计的第 ④ 点）：摘要写在命令结果回来之前，
-        #: 不讲清楚这条，LLM 会拿一步旧的摘要当现状。
-        self.assertIn("不在", system)
-        self.assertIn("最近的消息", system)
-        #: 缺失容忍（第 39 步设计的第 ① 点）：摘要缺失绝不重问。
-        self.assertIn("漏写", system)
+        self.assertNotIn("<summary>", system)
+        self.assertNotIn("【总目标】", system)
+
+    def test_the_compression_request_carries_the_instruction_and_material(self):
+        """压缩请求 = **独立指令**（四槽 + 只输出摘要块）+ **原始上下文全文**。
+
+        原料永远是原文（用户拍板）：压缩从原文重来、不从旧摘要叠 —— 避免多次压缩的
+        失真累积；给任务 LLM 的才是压缩后的。"""
+        self.agent.chat("题目")
+        self.agent.hear("回复1")
+        req = self.agent.compression_request()
+        self.assertIn("【上下文压缩】", req)
+        self.assertIn("【总目标】", req)
+        self.assertIn("【关键数据】", req)
+        self.assertIn("回复1", req)
+        self.assertIn("题目", req)
 
 
 if __name__ == "__main__":

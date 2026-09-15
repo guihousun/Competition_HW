@@ -219,40 +219,36 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertNotIn("测试用工具", gen_all_tool_prompt(Agent()._tools))
 
 
-class HearSummaryTest(unittest.TestCase):
-    """`Agent.hear` 对执行摘要的**被动提取**（第 39 步压缩的接线）。
+class AdoptSummaryTest(unittest.TestCase):
+    """压缩轮摘要的落库（第 41 步）：**`adopt_summary` 是唯一入口**。
 
-    **best-effort**：回复里带了 `<summary>` 就更新、没带就原样保留旧摘要 ——
-    摘要缺失绝不重问、绝不报错（那会把"免费的搭车品"变成"每回合的税"）。
-    提取在 `Agent` 这一层做（`chat.summary_of` 是谓词、`Context` 只管存与渲染），
-    `context.py` 保持零包内 import 的叶子身份。
+    第 39 步的"每条回复搭 `<summary>`、`hear` 顺手提取"已作废 —— 任务 prompt 不再教
+    摘要，摘要由**命令轮同发的压缩请求**产出（裸 `<summary>` 回复），经 `adopt_summary`
+    进 `Context.summary`。任务回复里若出现零星 `<summary>`（LLM 的习惯残留）一律**忽略**
+    —— 那不是我们请求的东西。
     """
 
     def setUp(self) -> None:
         self.agent = Agent()
 
-    def test_a_summary_in_the_reply_is_carried_into_the_next_prompt(self):
+    def test_adopt_summary_lands_in_the_next_prompt(self):
         self.agent.chat("题")
-        self.agent.hear("<summary>【总目标】交 token</summary><tool>ls</tool>")
+        self.agent.adopt_summary("【总目标】交 token")
         prompt = json.loads(self.agent.chat("题"))
         self.assertIn("【历史摘要】\n【总目标】交 token", [m["content"] for m in prompt])
 
-    def test_a_reply_without_a_summary_keeps_the_old_one(self):
-        """没带摘要的回复**不动**旧摘要 —— 摘要是一步一步滚出来的，
-        某一轮忘了写不该把它清掉。"""
+    def test_hear_no_longer_extracts_summaries(self):
+        """任务回复里搭的 `<summary>` 不再被提取（第 41 步作废第 39 步的搭车协议）——
+        摘要的唯一来源是压缩轮。"""
         self.agent.chat("题")
-        self.agent.hear("<summary>旧摘要</summary>")
-        self.agent.hear("没有摘要的回复")
+        self.agent.hear("<summary>不该被提取</summary><tool>ls</tool>")
         prompt = json.loads(self.agent.chat("题"))
-        self.assertIn("【历史摘要】\n旧摘要", [m["content"] for m in prompt])
+        contents = [m["content"] for m in prompt]
+        self.assertNotIn("【历史摘要】\n不该被提取", contents)
 
-    def test_a_new_summary_replaces_the_old_one(self):
-        self.agent.chat("题")
-        self.agent.hear("<summary>旧的</summary>")
-        self.agent.hear("<summary>新的</summary>")
-        prompt = json.loads(self.agent.chat("题"))
-        self.assertIn("【历史摘要】\n新的", [m["content"] for m in prompt])
-        self.assertNotIn("旧的", [m["content"] for m in prompt])
+    def test_adopt_summary_is_a_noop_without_a_context(self):
+        """还没开过会话（这道题一次都没问过）⇒ 忽略，绝不抛（它跑在 task_channel 里）。"""
+        self.agent.adopt_summary("孤儿摘要")
 
 
 if __name__ == "__main__":
