@@ -138,7 +138,7 @@
   }
 
   let sourceKey = '';
-  function updateWorldEvidence(state, worldState) {
+  function updateWorldEvidence(state, worldState, saleSignals = {}) {
     const sources = worldState.sources || {};
     const current = state.worldNews || {};
     const labels = {stone:'石头', iron:'铁', copper:'铜', silver:'银', gold:'金'};
@@ -160,14 +160,85 @@
       }).join('\n\n');
       setText($(`agent-${owner}-sources`), text || (typeof current[field] === 'string' && current[field] ? `本轮公开原文\n${current[field]}` : '尚未收到本类消息。'));
     }
-    const events = Array.isArray(worldState.news_events) ? worldState.news_events.filter(e => e && typeof e === 'object') : [];
+    const newsView = worldState.news_view && typeof worldState.news_view === 'object' ? worldState.news_view : null;
     const availability = {available:'可开采', unavailable:'停止开采', unknown:'可采状态未知'};
     const direction = {up:'涨价', down:'降价', unchanged:'价格不变', unknown:'价格方向未知'};
-    setText($('agent-news-inferences'), events.map(e => `${name(e.resource)}：${e.startDay == null || e.endDay == null ? '日期未确定（不据此禁止采矿）' : `第 ${e.startDay}—${e.endDay} 天`}，${availability[e.availability] || '状态未知'}，${direction[e.priceDirection] || '价格方向未知'}`).join('\n') || '尚未形成可用解释。');
+    const basisLabel = {absolute:'绝对价', delta:'涨跌额', percent:'百分比'};
+    const statusLabel = {corrected:'已被更正', cancelled:'已被撤回'};
+    const dimensionLabel = {availability:'状态', price:'价格', direction:'方向'};
+    const day = Math.floor((Number(state.roundNo || 1) - 1) / 130) + 1;
+    const shortId = value => String(value || '').slice(0, 8);
+    const priceText = e => {
+      const label = direction[e.priceDirection] || '价格方向未知';
+      if (typeof e.priceAmount !== 'number' || !Number.isFinite(e.priceAmount)) return `${label}，金额未知`;
+      const unit = e.priceBasis === 'percent' ? '%' : ' 金币';
+      return `${label} ${e.priceAmount}${unit}（${basisLabel[e.priceBasis] || '单位未知'}）`;
+    };
+    const rangeText = e => {
+      const resume = e.resumeDay == null ? '' : `，第 ${e.resumeDay} 天恢复`;
+      return (e.startDay == null || e.endDay == null)
+        ? `日期未确定（不据此禁止采矿）${resume}`
+        : `第 ${e.startDay}—${e.endDay} 天${resume}`;
+    };
+    // The unresolved-conflict view is computed by the backend; the page must
+    // not re-judge historical opposites on its own.
+    const backendConflicts = newsView && Array.isArray(newsView.conflicts) ? newsView.conflicts : [];
+    const conflictByResource = new Map();
+    const conflictIds = new Set();
+    for (const entry of backendConflicts) {
+      if (!entry || typeof entry !== 'object') continue;
+      const dims = (Array.isArray(entry.dimensions) ? entry.dimensions : [])
+        .map(d => dimensionLabel[d] || d).join('/');
+      conflictByResource.set(entry.resource, `${entry.definite ? '与其他消息冲突' : '可能冲突'}（${dims}）`);
+      for (const id of (Array.isArray(entry.ids) ? entry.ids : [])) conflictIds.add(id);
+    }
+    let lines;
+    if (newsView && Array.isArray(newsView.facts)) {
+      lines = newsView.facts.filter(f => f && typeof f === 'object').map(e => {
+        const marks = [];
+        if (statusLabel[e.status]) marks.push(statusLabel[e.status]);
+        if (e.resolution && e.resolution.targetId) marks.push(`替代 ${shortId(e.resolution.targetId)}`);
+        if (e.partial) marks.push('日期部分未知');
+        const uncertainDays = Array.isArray(e.effectiveDays) && Array.isArray(e.possibleDays)
+          ? e.possibleDays.filter(d => !e.effectiveDays.includes(d)) : [];
+        if (uncertainDays.length) marks.push(`待确认日期 ${uncertainDays.join('、')}`);
+        if (conflictIds.has(e.id) && conflictByResource.has(e.resource)) marks.push(conflictByResource.get(e.resource));
+        const effective = Array.isArray(e.effectiveDays)
+          ? (e.effectiveDays.length ? `有效日 ${e.effectiveDays.join('、')}` : uncertainDays.length ? '无确定有效日期' : '无有效日期（已失效）')
+          : '有效日未知（不据此禁止采矿）';
+        const refs = (e.sources || []).map(shortId).join(', ');
+        return `模型推断${marks.length ? `（${marks.join('，')}）` : ''} ${name(e.resource)}：${effective}；原称${rangeText(e)}，${availability[e.availability] || '状态未知'}，${priceText(e)} [${refs}]`;
+      }).join('\n');
+    } else {
+      const events = Array.isArray(worldState.news_events) ? worldState.news_events.filter(e => e && typeof e === 'object') : [];
+      lines = events.map(e => {
+        const marks = [];
+        if (statusLabel[e.status]) marks.push(statusLabel[e.status]);
+        if (e.resolution && e.resolution.targetId) marks.push(`替代 ${shortId(e.resolution.targetId)}`);
+        const refs = (e.evidence || []).map(x => shortId(x.sourceId)).join(', ');
+        return `模型推断${marks.length ? `（${marks.join('，')}）` : ''} ${name(e.resource)}：${rangeText(e)}，${availability[e.availability] || '状态未知'}，${priceText(e)} [${refs}]`;
+      }).join('\n');
+    }
+    const saleAdvice = Object.entries(saleSignals).filter(([_, signal]) => signal && Number.isInteger(signal.due_day))
+      .map(([resource, signal]) => `交易建议：在第 ${signal.due_day} 天降价前优先出售${name(resource)}；仍需满足建设、路径与回防安排。`).join('\n');
+    setText($('agent-news-inferences'), [lines, saleAdvice].filter(Boolean).join('\n') || '尚未形成可用解释。');
     const prices = Array.isArray(state.vendorShopList) ? state.vendorShopList.filter(r => r && typeof r.price === 'number' && Number.isFinite(r.price)) : [];
     setText($('agent-news-prices'), prices.map(r => `${name(r.name)} ${r.price} 金币/个`).join(' · ') || '尚未收到收购价。');
     const newsReady = (worldState.status || {}).news === 'interpreted';
-    setText($('agent-news-unknown'), `${newsReady ? '以上为模型解释。' : '最新消息尚未解释成功；已有推断可能来自此前资料。'}价格涨跌幅未给出时保持未知，成交使用当前观测价。`);
+    const gaps = newsView && Array.isArray(newsView.gaps)
+      ? newsView.gaps
+      : (Array.isArray(worldState.news_gaps) ? worldState.news_gaps : []);
+    const gapOverflow = Boolean((newsView && newsView.gapOverflow) || worldState.news_gap_overflow);
+    const gapText = gaps.filter(g => g && typeof g === 'object').map(g => {
+      const lost = Array.isArray(g.lostIds) ? g.lostIds.length : 0;
+      const note = g.overflow ? '，不可恢复' : (lost ? `，待逐字恢复 ${lost} 条` : '');
+      return `${name(g.resource)} 第 ${g.startDay}—${g.endDay} 天${note}`;
+    }).join('、');
+    const gap = gapOverflow
+      ? '范围缺口元数据溢出：无法逐一恢复，全部新闻结论保守化（不单方禁采）。'
+      : (gapText ? `范围缺口（容量淘汰，未单方禁采）：${gapText}。` : '');
+    const conflictNote = backendConflicts.length ? `未解决冲突 ${backendConflicts.length} 项（含可能冲突）。` : '';
+    setText($('agent-news-unknown'), `${newsReady ? '以上为模型推断；公开原文与当前观测价才是已观测事实。' : '最新消息尚未解释成功；已有推断可能来自此前资料。'}价格涨跌幅未给出时保持未知，成交使用当前观测价。${conflictNote}${gap}`);
     const draft = (worldState.drafts || {}).treasure;
     const h = worldState.direct || draft || worldState.hypothesis || {};
     const interpreted = worldState.direct || (worldState.status || {}).treasure === 'interpreted';
@@ -212,7 +283,7 @@
     const counts = `${ended ? '最近一题' : '本题'} ${task.prompts || 0} 次模型 · ${task.commands || 0} 次沙盒 · ${task.inspections || 0} 次原文检索`;
     setText($('agent-operation'), counts + (task.stop_reason ? ` · ${task.stop_reason}` : ''));
     const worldState = coordinator.world || {};
-    updateWorldEvidence(state, worldState);
+    updateWorldEvidence(state, worldState, ((planner.tasks || {}).supervisor || {}).news_economy || {});
     const status = worldState.status || {};
     const labels = {idle: '暂无资料', queued: '等待通道', waiting_model: '等待模型', interpreted: '已解释',
       retry_limit: '分析步数或重试上限', invalid_reply: '回复未通过检查', expired: '等待超时', rejected: '请求被拒绝',

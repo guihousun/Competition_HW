@@ -20,6 +20,8 @@ def main():
     parser.add_argument('--seed', required=True, type=int)
     parser.add_argument('--side', choices=['challenger', 'defender'], required=True)
     parser.add_argument('--short-world', action='store_true')
+    parser.add_argument('--price-drop-news', action='store_true', help='Explicit local one-day copper price-drop fixture')
+    parser.add_argument('--disable-news-economy', action='store_true', help='Evaluation-only sale-advice ablation')
     parser.add_argument('--disable-night-staging', action='store_true', help='Explicit evaluation-only ablation')
     parser.add_argument('--legacy-route-estimate', action='store_true', help='Evaluation-only old projected-occupancy estimate')
     args = parser.parse_args()
@@ -33,6 +35,9 @@ def main():
     os.environ[brain.WORLD_AGENT_ENV] = 'on'
     os.environ[brain.TASK_AGENT_ENV] = 'on'
     overrides = []
+    if args.disable_news_economy:
+        brain.news_economy.sale_signals = lambda *unused, **kwargs: {}
+        overrides.append('news_economy_disabled')
     if args.disable_night_staging:
         brain._treasure_night_staging = lambda *unused: None
         overrides.append('night_staging_disabled')
@@ -49,14 +54,17 @@ def main():
         (out / name).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
 
     initial = hashes()
-    state = local_world_news.install(local_task_cases.install(scenarios.scenario(args.seed, args.side)),
-                                      long_context=not args.short_world)
+    fixture_options = {'long_context': not args.short_world}
+    if args.price_drop_news:
+        fixture_options['price_drop'] = True
+    state = local_world_news.install(local_task_cases.install(scenarios.scenario(args.seed, args.side)), **fixture_options)
     counts = {'prompts': 0, 'news': 0, 'treasure': 0, 'task': 0, 'legacy': 0, 'commands': 0,
               'tasks_completed': 0, 'attacks': 0, 'summons': 0, 'summon_successes': 0,
               'channel_conflicts': 0, 'invalid_agent_states': 0}
     elapsed, events, days, errors = [], [], {}, []
     started = time.monotonic()
     min_base_hp = 1500
+    sales = []
     for _ in range(1300):
         tick = time.perf_counter()
         result = simulator.step(state)
@@ -89,6 +97,8 @@ def main():
         counts['summon_successes'] += bool(summons and state.get('lastSummonTreasureResult') == 1)
         report = state['_demo'].get('task_report') or {}
         counts['tasks_completed'] += report.get('ended') == 'completed'
+        sales.extend({'round': n, **sale} for sale in result['frame'].get('actions', [])
+                     if sale.get('a') == 'sell')
         if report.get('ended') or summons:
             events.append({'round': n, 'task': report, 'summon_result': state.get('lastSummonTreasureResult')})
         if state.get('errors'):
@@ -104,7 +114,7 @@ def main():
     summary = {'scope': 'Full local simulator game; prompt-only scripted model and virtual sandbox; not intranet PASS',
         'source_sha': source_sha, 'files': initial, 'stable_source': hashes() == initial,
         'python': sys.version.split()[0], 'seed': args.seed, 'side': args.side, 'long_world': not args.short_world,
-        'runtime_overrides': overrides,
+        'runtime_overrides': overrides, 'price_drop_news': args.price_drop_news,
         'rounds': len(elapsed), 'score': state['teamOur']['totalScore'], 'base_hp': base['health'],
         'min_base_hp': min_base_hp, 'daily_calls': days, 'counts': counts,
         'simulation_step_p99_ms': ordered[int((len(ordered) - 1) * .99)], 'simulation_step_max_ms': max(ordered),
@@ -112,6 +122,7 @@ def main():
     save('report.json', summary)
     save('events.json', events)
     save('errors.json', errors)
+    save('sales.json', sales)
     print(json.dumps({k: v for k, v in summary.items() if k != 'files'}, ensure_ascii=False), flush=True)
     return 0 if summary['stable_source'] and counts['invalid_agent_states'] == 0 and all(v <= 3 for v in days.values()) else 1
 

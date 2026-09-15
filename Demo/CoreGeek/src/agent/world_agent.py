@@ -9,20 +9,80 @@ import hashlib
 import json
 import re
 
+from . import news_ledger
 from .world_memory import WorldMemory
 from .task_agent import _json_unique
 from .treasure import notes_from_news, _RUMOUR
 
-SCHEMA = "competition-world-agent/2"
+SCHEMA = "competition-world-agent/5"
+# /2 is the six-field archive (migrated without inventing a witness).  /4 is the
+# previous ledger; it is migrated, while the interim /3 format degrades.
+PREV_SCHEMAS = ("competition-world-agent/2", "competition-world-agent/4")
 MAX_STEPS = 8  # engineering cap; the shared ordinary daily limit remains three
 DRAFT_LIMIT = 5000
 OWNERS = ("news", "treasure")
 SOURCE_LIMIT = 12
 TEXT_LIMIT = 3000
+EVIDENCE_LIMIT = 8
+MAX_NEWS_EVENTS = 24
+MAX_NEWS_GAPS = 8
+GAP_LOST_LIMIT = 64
+LEDGER_PROMPT_LIMIT = 12
+LEDGER_CONFLICT_LIMIT = 12
+NEWS_VIEW_SCHEMA = "competition-news-view/1"
+
+_NEWS_BASE_KEYS = frozenset({"resource", "availability", "startDay", "endDay",
+                             "priceDirection", "evidence"})
+_NEWS_OPTIONAL_KEYS = frozenset({"resumeDay", "priceAmount", "priceBasis", "resolution"})
+_NEWS_LEDGER_KEYS = (_NEWS_BASE_KEYS | _NEWS_OPTIONAL_KEYS
+                     | frozenset({"id", "sourceRound", "kind", "status", "witness"}))
+_GAP_KEYS = frozenset({"resource", "startDay", "endDay", "count", "lostIds", "overflow"})
+_NEWS_ID_RE = re.compile(r'n[0-9a-f]{16}\Z')
+_KNOWN_DIRECTIONS = ("up", "down", "unchanged")
 
 
 def sha(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _news_witness(record):
+    """Bind the recorded evidence (and its resolution evidence) to one digest."""
+    return news_ledger.witness({"evidence": record.get("evidence"),
+                                "resolution": record.get("resolution")})
+
+
+def _canonical_news_event(event, origins, fallback_round=1, bind_witness=True):
+    """Canonical ledger record from a validated (or legacy) interpretation.
+
+    The program assigns the stable id, the inferred label and the initial active
+    status.  A model reply can never set them itself.  `bind_witness` is False
+    only for a migrated archive: computing a digest would claim a verification
+    history the old format never had, so those records stay unverifiable until
+    a retained source can be checked or a live reply re-establishes them.
+    """
+    amount, ok = news_ledger.normalize_amount(event.get("priceAmount"))
+    if not ok:
+        raise ValueError("invalid price amount")
+    basis = event.get("priceBasis", "unknown")
+    evidence = deepcopy(event.get("evidence", []))
+    source_ids = [item.get("sourceId") for item in evidence
+                  if isinstance(item, dict) and isinstance(item.get("sourceId"), str)]
+    rounds = [origins.get(source, {}).get("first_round") for source in source_ids]
+    rounds = [value for value in rounds if type(value) is int]
+    record = {
+        "id": news_ledger.news_id(resource=event.get("resource"), availability=event.get("availability"),
+                                  start_day=event.get("startDay"), end_day=event.get("endDay"),
+                                  resume_day=event.get("resumeDay"), price_direction=event.get("priceDirection"),
+                                  price_amount=amount, price_basis=basis, source_ids=source_ids),
+        "resource": event.get("resource"), "availability": event.get("availability"),
+        "startDay": event.get("startDay"), "endDay": event.get("endDay"),
+        "resumeDay": event.get("resumeDay"), "priceDirection": event.get("priceDirection"),
+        "priceAmount": amount, "priceBasis": basis, "evidence": evidence,
+        "sourceRound": min(rounds) if rounds else fallback_round, "kind": "inferred",
+        "status": "active", "resolution": None,
+        "witness": news_ledger.witness({"evidence": evidence, "resolution": None}) if bind_witness else None,
+    }
+    return record
 
 
 def exact_notes(text, width=41, height=32, round_no=1):
@@ -48,6 +108,8 @@ class WorldAgent:
         self.resolved = {owner: "" for owner in OWNERS}
         self.status = {owner: "idle" for owner in OWNERS}
         self.news_events = []
+        self.news_gaps = []
+        self.news_gap_overflow = False
         self.hypothesis = None
         self.direct = None
         self.feedback = []
@@ -175,6 +237,45 @@ class WorldAgent:
     def _reviewed(self, owner):
         return all(self.memories[owner].reviewed(r['id']) for r in self.sources[owner])
 
+    def _ledger_view(self):
+        """Bounded ledger shipped to the model so it can cite/correct it.
+
+        Only records with currently verifiable provenance are sent, with the
+        per-day effectiveness the consumer actually uses, and the caller also
+        sends the unresolved-conflict summary plus the omitted/unverifiable
+        counts, so a truncated tail never looks like a settled history.
+        """
+        rows = []
+        for fact in self.news_view()["facts"][-LEDGER_PROMPT_LIMIT:]:
+            row = {key: fact[key] for key in ("id", "resource", "availability", "startDay",
+                                              "endDay", "resumeDay", "priceDirection",
+                                              "priceAmount", "priceBasis", "status")}
+            row["effectiveDays"] = fact["effectiveDays"] if fact["effectiveDays"] is not None else "unknown"
+            if fact["resolution"]:
+                row["resolvesTarget"] = fact["resolution"]["targetId"]
+            rows.append(row)
+        return rows
+
+    def _ledger_conflicts(self):
+        """Unified unresolved-conflict summary, including possible overlaps."""
+        return [{"resource": entry["resource"], "ids": entry["ids"],
+                 "dimensions": entry["dimensions"], "days": entry["days"],
+                 "possible": not entry["definite"]}
+                for entry in self.news_view()["conflicts"]]
+
+    def _ledger_context(self):
+        """Prompt-side summary that keeps omitted history and gaps visible."""
+        view = self.news_view()
+        conflicts = self._ledger_conflicts()
+        return {
+            "conflicts": conflicts[:LEDGER_CONFLICT_LIMIT],
+            "conflictCount": len(conflicts),
+            "gaps": deepcopy(view["gaps"]),
+            "gapOverflow": view["gapOverflow"],
+            "omitted": max(0, len(view["facts"]) - LEDGER_PROMPT_LIMIT),
+            "unverifiable": view["unverifiable"],
+        }
+
     def _sent_views(self, owner, prompt):
         """Derive coverage from the actual wire text, never a saved range claim."""
         try:
@@ -221,11 +322,32 @@ class WorldAgent:
         if owner == "news":
             schema = ('返回{"request_id":"' + token + '","events":[{'
                       '"resource":"公开矿名","availability":"available|unavailable|unknown",'
-                      '"startDay":1,"endDay":2,"priceDirection":"up|down|unchanged|unknown",'
-                      '"evidence":[{"sourceId":"来源id","quote":"原文"}]}]}。'
-                      '最多8条事件，日期在1..10且含首尾；日期未知时startDay/endDay同时null。普通价格涨幅未知就不能生成价格数字。'
-                      '综合更正消息，不把互相矛盾的事件当成确定结论。允许空events。'
-                      '\n公开矿名：' + json.dumps(resources, ensure_ascii=False))
+                      '"startDay":1,"endDay":2,"resumeDay":3,'
+                      '"priceDirection":"up|down|unchanged|unknown",'
+                      '"priceAmount":2,"priceBasis":"absolute|delta|percent|unknown",'
+                      '"evidence":[{"sourceId":"来源id","quote":"原文"}],'
+                      '"resolution":null}]}。'
+                      '最多8条事件，日期在1..10且含首尾；startDay/endDay/resumeDay各自可未知，'
+                      '已知端点必须有公开日期依据；resumeDay可空且不能早于/等于已知的endDay或startDay。'
+                      'priceAmount只在逐字引文明确写出金额且未被否定时填写：'
+                      '"上涨到6金币"/"下降到6金币"→absolute 6，"上涨2金币"/"下降2金币"→delta 2，'
+                      '"上涨20%"/"下降20%"→percent 20；'
+                      '引文只有日期数字、写的是"个百分点"、有否定词或未给幅度时必须为null且priceBasis=unknown，'
+                      '不得换算或猜测。金额必须与引文完全相等（6与6.0等价，6不等于6.1）。'
+                      '更正/撤回旧事件时在resolution填{"kind":"corrected|cancelled","targetId":"账本id",'
+                      '"evidence":[{"sourceId":"来源id","quote":"含更正/撤回字样的原文"}]}；'
+                      '更正只覆盖它自身有日期证据的区间，旧事件在未覆盖日期仍然有效'
+                      '（账本的effectiveDays就是消费端采用的有效日）；'
+                      '同一旧事件可被多个不同时间范围的更正分别覆盖，再次更正可以指向此前的更正事件；'
+                      '重复同一更正可幂等重发。更正必须与目标同资源、有可能日期交集，禁止自指和环，'
+                      '不得给同一事实换targetId。'
+                      '没有明确更正关系的相反消息（含不同价格/方向）各自保留证据，不得用最后一句覆盖；'
+                      '未知日期的矛盾要在账本状态里保留possible冲突，不能当作已解决。允许空events。'
+                      '\n新闻事件账本（id可被resolution.targetId引用）：'
+                      + json.dumps(self._ledger_view(), ensure_ascii=False)
+                      + '\n账本状态（未解决冲突、范围缺口、省略条数）：'
+                      + json.dumps(self._ledger_context(), ensure_ascii=False)
+                      + '\n公开矿名：' + json.dumps(resources, ensure_ascii=False))
         else:
             schema = ('返回{"request_id":"' + token + '","hypothesis":{'
                       '"site":null,"items":null,"opensAt":null,"closesAt":null,'
@@ -250,7 +372,7 @@ class WorldAgent:
                 + '\n公开来源：' + json.dumps(view, ensure_ascii=False))
 
     def _evidence(self, owner, evidence):
-        if not isinstance(evidence, list) or not 1 <= len(evidence) <= 8:
+        if not isinstance(evidence, list) or not 1 <= len(evidence) <= EVIDENCE_LIMIT:
             return False
         records = {r["id"]: r for r in self.sources[owner]}
         for item in evidence:
@@ -261,6 +383,407 @@ class WorldAgent:
             if (record is None or not self.memories[owner].quote_visible(item.get('sourceId'), quote)):
                 return False
         return True
+
+    @staticmethod
+    def _ledger_evidence_syntax(evidence):
+        """Structural check: a bounded list of {sourceId, quote} with sane types."""
+        if not isinstance(evidence, list) or not 1 <= len(evidence) <= EVIDENCE_LIMIT:
+            return False
+        for item in evidence:
+            if not isinstance(item, dict) or set(item) != {"sourceId", "quote"}:
+                return False
+            source, quote = item.get("sourceId"), item.get("quote")
+            if (not isinstance(source, str) or len(source) != 64
+                    or any(c not in "0123456789abcdef" for c in source)
+                    or not isinstance(quote, str) or not 0 < len(quote) <= 500):
+                return False
+        return True
+
+    def _news_record_usable(self, record):
+        """Trust only evidence that is still visible or bound by its witness.
+
+        Retained sources must expose the quote verbatim; a source that has since
+        scrolled out of the bounded window is trusted only through the digest
+        captured when the quote was verified.  A migrated record that never had
+        such a binding is explicitly unusable instead of silently trusted.
+        """
+        witness = record.get("witness")
+        if witness is not None and witness != _news_witness(record):
+            return False
+        retained = {item["id"] for item in self.sources["news"]}
+        groups = [record.get("evidence")]
+        if record.get("resolution"):
+            groups.append(record["resolution"].get("evidence"))
+        evicted = False
+        for group in groups:
+            if group is None:
+                continue
+            if not self._ledger_evidence_syntax(group):
+                return False
+            for item in group:
+                if item["sourceId"] in retained:
+                    if not self.memories["news"].quote_visible(item["sourceId"], item["quote"]):
+                        return False
+                else:
+                    evicted = True
+        return not (evicted and witness is None)
+
+    def _usable_ledger(self):
+        return [record for record in self.news_events if self._news_record_usable(record)]
+
+    def _news_record_verified(self, record):
+        """Stricter than usable: every citation is retained and verbatim visible."""
+        retained = {item["id"] for item in self.sources["news"]}
+        groups = [record.get("evidence")]
+        if record.get("resolution"):
+            groups.append(record["resolution"].get("evidence"))
+        for group in groups:
+            if group is None:
+                continue
+            if not self._ledger_evidence_syntax(group):
+                return False
+            for item in group:
+                if item["sourceId"] not in retained:
+                    return False
+                if not self.memories["news"].quote_visible(item["sourceId"], item["quote"]):
+                    return False
+        return True
+
+    # ---- unified per-day validity and dimensional conflicts -----------------
+
+    @staticmethod
+    def _asserted_days(record):
+        start, end = record["startDay"], record["endDay"]
+        if type(start) is not int or type(end) is not int:
+            return None
+        return set(range(start, end + 1))
+
+    @staticmethod
+    def _possible_days(record):
+        start = record["startDay"] if type(record["startDay"]) is int else 1
+        end = record["endDay"] if type(record["endDay"]) is int else 10
+        return set(range(start, end + 1))
+
+    @staticmethod
+    def _news_incoming(index):
+        incoming = {}
+        for record in index.values():
+            resolution = record.get("resolution")
+            if resolution and resolution["targetId"] in index:
+                incoming.setdefault(resolution["targetId"], []).append(record)
+        return incoming
+
+    def _news_effective(self, record, incoming):
+        """Definite days exclude every direct corrector's possible interval.
+
+        The subtraction uses each corrector's own bounded interval, never its
+        reduced effective set: a later correction only edits that correction, so
+        it can never silently revive a date an explicit correction retracted.
+        """
+        asserted = self._asserted_days(record)
+        if asserted is None:
+            return None
+        days = set(asserted)
+        for corrector in incoming.get(record["id"], ()):
+            # An uncertain correction does not establish a replacement fact,
+            # but its possible interval cannot leave the old claim certain.
+            # The possible view below still retains those uncertain old days.
+            days -= self._possible_days(corrector)
+        return days
+
+    def _news_possible_effective(self, record, incoming):
+        days = self._possible_days(record)
+        for corrector in incoming.get(record["id"], ()):
+            covered = self._asserted_days(corrector)
+            if covered:
+                days -= covered
+        return days
+
+    @staticmethod
+    def _news_dimensions(left, right):
+        dimensions = []
+        if {left["availability"], right["availability"]} == {"available", "unavailable"}:
+            dimensions.append("availability")
+        if (left["priceAmount"] is not None and right["priceAmount"] is not None
+                and left["priceBasis"] == right["priceBasis"]
+                and left["priceAmount"] != right["priceAmount"]):
+            dimensions.append("price")
+        if (left["priceDirection"] in _KNOWN_DIRECTIONS and right["priceDirection"] in _KNOWN_DIRECTIONS
+                and left["priceDirection"] != right["priceDirection"]):
+            dimensions.append("direction")
+        return dimensions
+
+    @staticmethod
+    def _news_reaches(index, start_id, goal_id):
+        seen = set()
+        current = start_id
+        while current is not None and current not in seen:
+            if current == goal_id:
+                return True
+            seen.add(current)
+            record = index.get(current)
+            resolution = record.get("resolution") if isinstance(record, dict) else None
+            current = resolution["targetId"] if resolution else None
+        return False
+
+    @staticmethod
+    def _derive_status(kinds):
+        """status is an audit marker derived only from the incoming edges."""
+        if not kinds:
+            return "active"
+        return "cancelled" if "cancelled" in kinds else "corrected"
+
+    def _refresh_status(self, index, target_id):
+        target = index.get(target_id)
+        if target is None:
+            return
+        kinds = [other["resolution"]["kind"] for other in index.values()
+                 if other.get("resolution") and other["resolution"]["targetId"] == target_id]
+        target["status"] = self._derive_status(kinds)
+
+    def news_view(self):
+        """One bounded validity/conflict view shared by policy, prompt and page."""
+        usable = [] if self.degraded else self._usable_ledger()
+        index = {record["id"]: record for record in usable}
+        incoming = self._news_incoming(index)
+        definite = {record["id"]: self._news_effective(record, incoming) for record in usable}
+        possible = {record["id"]: self._news_possible_effective(record, incoming) for record in usable}
+        facts = []
+        for record in usable:
+            facts.append({
+                "id": record["id"], "resource": record["resource"],
+                "availability": record["availability"], "status": record["status"],
+                "kind": record["kind"], "inferred": True,
+                "startDay": record["startDay"], "endDay": record["endDay"],
+                "resumeDay": record["resumeDay"], "priceDirection": record["priceDirection"],
+                "priceAmount": record["priceAmount"], "priceBasis": record["priceBasis"],
+                "partial": record["startDay"] is None or record["endDay"] is None,
+                "possibleDays": sorted(possible[record["id"]]),
+                "effectiveDays": (sorted(definite[record["id"]])
+                                  if definite[record["id"]] is not None else None),
+                "sources": sorted({entry["sourceId"] for entry in record["evidence"]}),
+                "resolution": ({"kind": record["resolution"]["kind"],
+                                "targetId": record["resolution"]["targetId"]}
+                               if record["resolution"] else None),
+            })
+        conflicts = []
+        for position, left in enumerate(usable):
+            for right in usable[position + 1:]:
+                if left["resource"] != right["resource"]:
+                    continue
+                dimensions = self._news_dimensions(left, right)
+                if not dimensions:
+                    continue
+                shared = possible[left["id"]] & possible[right["id"]]
+                if not shared:
+                    continue
+                left_days, right_days = definite[left["id"]], definite[right["id"]]
+                overlap = (left_days & right_days
+                           if left_days is not None and right_days is not None else set())
+                conflicts.append({
+                    "resource": left["resource"],
+                    "ids": sorted((left["id"], right["id"])),
+                    "dimensions": sorted(dimensions),
+                    "days": sorted(overlap),
+                    "possibleDays": sorted(shared),
+                    "definite": bool(overlap),
+                    "availability": sorted({left["availability"], right["availability"]}),
+                    "directions": sorted({left["priceDirection"], right["priceDirection"]}),
+                    "prices": sorted(f"{item['priceBasis']}:{item['priceAmount']}"
+                                     for item in (left, right) if item["priceAmount"] is not None),
+                    "sources": [sorted({entry["sourceId"] for entry in left["evidence"]}),
+                                sorted({entry["sourceId"] for entry in right["evidence"]})],
+                })
+        conflicts.sort(key=lambda entry: (entry["resource"], entry["ids"], entry["dimensions"]))
+        return {
+            "schema": NEWS_VIEW_SCHEMA,
+            "facts": facts,
+            "conflicts": conflicts,
+            "gaps": deepcopy(self.news_gaps),
+            "gapOverflow": self.news_gap_overflow,
+            "unverifiable": len(self.news_events) - len(usable),
+        }
+
+    def _merge_news(self, events):
+        """Add or correct facts; a new reply never erases still-valid dates."""
+        records = deepcopy(self.news_events)
+        index = {record["id"]: record for record in records}
+        origins = self.memories["news"].origins
+        fallback = self.memories["news"].last_round or 1
+        for event in events:
+            record = _canonical_news_event(event, origins, fallback)
+            existing = index.get(record["id"])
+            if existing is None:
+                records.append(record)
+                existing = record
+                index[record["id"]] = record
+            else:
+                merged = list(existing["evidence"])
+                for item in record["evidence"]:
+                    if item not in merged:
+                        merged.append(item)
+                existing["evidence"] = merged[:EVIDENCE_LIMIT]
+                existing["sourceRound"] = min(existing["sourceRound"], record["sourceRound"])
+                existing["witness"] = _news_witness(existing)
+            resolution = event.get("resolution")
+            if resolution is not None:
+                self._bind_resolution(index, existing, resolution)
+            elif existing.get("resolution") is None:
+                self._associate_correction(index, existing)
+        records, lost = self._bound_news(records)
+        if lost:
+            self._merge_gaps(lost)
+        self._recover_gaps(records)
+        return records
+
+    def _bind_resolution(self, index, record, resolution):
+        """Bind (or idempotently re-bind) one provenance-checked correction edge."""
+        target = index.get(resolution["targetId"])
+        if target is None or target["id"] == record["id"]:
+            raise ValueError("invalid resolution target")
+        if target["resource"] != record["resource"] or not self._news_overlap(target, record):
+            raise ValueError("unrelated resolution target")
+        previous = record.get("resolution")
+        if previous is not None:
+            if previous["targetId"] != target["id"] or previous["kind"] != resolution["kind"]:
+                raise ValueError("resolution target swap")
+            merged = list(previous["evidence"])
+            for item in resolution["evidence"]:
+                if item not in merged:
+                    merged.append(item)
+            record["resolution"] = {"kind": previous["kind"], "targetId": target["id"],
+                                    "evidence": merged[:EVIDENCE_LIMIT]}
+        else:
+            # An edge may be added to an already-corrected fact (several bounded
+            # corrections are allowed) but never so as to close a cycle.
+            if self._news_reaches(index, target["id"], record["id"]):
+                raise ValueError("cyclic resolution")
+            record["resolution"] = {"kind": resolution["kind"], "targetId": target["id"],
+                                    "evidence": deepcopy(resolution["evidence"])}
+        record["witness"] = _news_witness(record)
+        self._refresh_status(index, target["id"])
+
+    def _associate_correction(self, index, record):
+        """Deterministic target for a legacy "更正：已恢复" reply.
+
+        The correction wording plus exactly one clearly matching fact of the
+        same resource with a possible date overlap binds the target.  Anything
+        ambiguous stays as two records, and the same cycle/idempotency rules as
+        the explicit branch apply.
+        """
+        if not any(news_ledger.has_correction_marker(item.get("quote")) for item in record["evidence"]):
+            return
+        candidates = [other for other in index.values()
+                      if other["id"] != record["id"]
+                      and other["resource"] == record["resource"]
+                      and other["availability"] != record["availability"]
+                      and self._news_overlap(other, record)
+                      and not self._news_reaches(index, other["id"], record["id"])]
+        if len(candidates) != 1:
+            return
+        target = candidates[0]
+        evidence = [deepcopy(item) for item in record["evidence"]
+                    if news_ledger.has_correction_marker(item.get("quote"))]
+        self._bind_resolution(index, record, {"kind": "corrected", "targetId": target["id"],
+                                              "evidence": evidence})
+
+    @staticmethod
+    def _news_overlap(left, right):
+        # Unknown endpoints allow possible overlap, never a TypeError or an
+        # invented infinite collection ban. All game dates lie inside 1..10.
+        def bounds(item):
+            return (item["startDay"] if type(item["startDay"]) is int else 1,
+                    item["endDay"] if type(item["endDay"]) is int else 10)
+        lstart, lend = bounds(left)
+        rstart, rend = bounds(right)
+        return lstart <= rend and rstart <= lend
+
+    def _bound_news(self, records):
+        """Keep the ledger bounded; every evicted component leaves a lost-id gap."""
+        lost = []
+        while len(records) > MAX_NEWS_EVENTS:
+            components = self._news_components(records)
+            victim = next((members for members in components
+                           if all(record["status"] != "active" for record in members)), None)
+            if victim is None:
+                victim = components[0] if components else None
+            if not victim:
+                break
+            for record in victim:
+                records.remove(record)
+                start = record["startDay"] if type(record["startDay"]) is int else 1
+                end = record["endDay"] if type(record["endDay"]) is int else 10
+                lost.append((record["resource"], start, end, record["id"]))
+        return records, lost
+
+    def _merge_gaps(self, lost):
+        """Fold evicted ids into bounded gaps; overflowing metadata stays opaque."""
+        for resource, start, end, identity in lost:
+            found = next((gap for gap in self.news_gaps if gap["resource"] == resource), None)
+            if found is None:
+                if len(self.news_gaps) >= MAX_NEWS_GAPS:
+                    self.news_gap_overflow = True
+                    continue
+                found = {"resource": resource, "startDay": start, "endDay": end, "count": 1,
+                         "lostIds": [], "overflow": False}
+                self.news_gaps.append(found)
+            found["startDay"] = min(found["startDay"], start)
+            found["endDay"] = max(found["endDay"], end)
+            found["count"] = min(found["count"] + 1, MAX_NEWS_EVENTS)
+            if identity not in found["lostIds"]:
+                if len(found["lostIds"]) >= GAP_LOST_LIMIT:
+                    found["overflow"] = True
+                else:
+                    found["lostIds"].append(identity)
+
+    def _recover_gaps(self, records):
+        """Clear a gap only when every lost id is verified again in the ledger.
+
+        Runs after eviction, so restoring one side of an evicted conflict while
+        losing the other cannot clear the gap.  Overflowed gaps stay opaque.
+        """
+        if not self.news_gaps:
+            return
+        verified = {record["id"] for record in records if self._news_record_verified(record)}
+        self.news_gaps = [gap for gap in self.news_gaps
+                          if gap["overflow"] or not gap["lostIds"]
+                          or not all(identity in verified for identity in gap["lostIds"])]
+
+    @classmethod
+    def _news_components(cls, records):
+        """Correction edges and definite conflicts evict together as one group."""
+        parent = {record["id"]: record["id"] for record in records}
+
+        def find(node):
+            while parent[node] != node:
+                parent[node] = parent[parent[node]]
+                node = parent[node]
+            return node
+
+        def union(left, right):
+            lroot, rroot = find(left), find(right)
+            if lroot != rroot:
+                parent[lroot] = rroot
+
+        for record in records:
+            resolution = record.get("resolution")
+            if resolution and resolution["targetId"] in parent:
+                union(record["id"], resolution["targetId"])
+        for position, left in enumerate(records):
+            for right in records[position + 1:]:
+                if left["resource"] != right["resource"] or not cls._news_dimensions(left, right):
+                    continue
+                ldays, rdays = cls._asserted_days(left), cls._asserted_days(right)
+                if ldays is not None and rdays is not None and ldays & rdays:
+                    union(left["id"], right["id"])
+        groups, order = {}, []
+        for record in records:
+            root = find(record["id"])
+            if root not in groups:
+                groups[root] = []
+                order.append(root)
+            groups[root].append(record)
+        return [groups[root] for root in order]
 
     def consume(self, request, receipt, raw):
         owner = request.owner if request else ""
@@ -321,13 +844,16 @@ class WorldAgent:
             value = self._validated_draft(owner, data[field], link)
             if len(json.dumps(value, ensure_ascii=False)) > DRAFT_LIMIT:
                 raise ValueError('draft budget exceeded')
-            self.drafts[owner] = value
             if not self._reviewed(owner):
+                self.drafts[owner] = value
                 self.status[owner] = 'needs_reading'
                 return
             if owner == 'news':
-                self.news_events = value
+                merged = self._merge_news(value)
+                self.drafts[owner] = value
+                self.news_events = merged
             else:
+                self.drafts[owner] = value
                 self.hypothesis = value
             self.resolved[owner] = link["version"]
             self.status[owner] = "interpreted"
@@ -391,25 +917,130 @@ class WorldAgent:
             raise ValueError('draft budget exceeded')
         return value
 
+    def _validate_news_events(self, events, link):
+        if not isinstance(events, list) or len(events) > 8:
+            raise ValueError("invalid events")
+        for event in events:
+            self._validate_news_event(event, link, ledger=False)
+        return deepcopy(events)
+
+    def _validate_news_event(self, event, link, *, ledger):
+        """Typed event gate shared by live replies, drafts and canonical records."""
+        allowed = _NEWS_LEDGER_KEYS if ledger else (_NEWS_BASE_KEYS | _NEWS_OPTIONAL_KEYS)
+        if (not isinstance(event, dict) or not _NEWS_BASE_KEYS <= set(event) or set(event) - allowed
+                or not isinstance(event["resource"], str) or not 0 < len(event["resource"]) <= 80
+                or (not ledger and event["resource"] not in link["resources"])
+                or event["availability"] not in ("available", "unavailable", "unknown")
+                or event["priceDirection"] not in ("up", "down", "unchanged", "unknown")):
+            raise ValueError("invalid event")
+        amount, ok = news_ledger.normalize_amount(event.get("priceAmount"))
+        basis = event.get("priceBasis", "unknown")
+        if (not ok or basis not in news_ledger.PRICE_BASES
+                or (amount is None) != (basis == "unknown")
+                or not news_ledger.dates_consistent(event["startDay"], event["endDay"], event.get("resumeDay"))):
+            raise ValueError("invalid event fields")
+        # Every known endpoint needs public date evidence; a lone resumeDay is a
+        # known endpoint too and must not slip through because startDay is null.
+        if (any(event.get(key) is not None for key in ("startDay", "endDay", "resumeDay"))
+                and not self._dated("news", event["evidence"])):
+            raise ValueError("undated event")
+        evidence = event["evidence"]
+        quotes = [item.get("quote") for item in evidence if isinstance(item, dict)] if isinstance(evidence, list) else []
+        if not news_ledger.verify_price(quotes, amount, basis):
+            raise ValueError("unverified price amount")
+        if ledger:
+            if not self._ledger_evidence_syntax(evidence):
+                raise ValueError("invalid ledger evidence")
+        elif not self._evidence("news", evidence):
+            raise ValueError("invalid evidence")
+        resolution = event.get("resolution")
+        if resolution is not None:
+            if (not isinstance(resolution, dict) or set(resolution) != {"kind", "targetId", "evidence"}
+                    or resolution["kind"] not in ("corrected", "cancelled")
+                    or not isinstance(resolution["targetId"], str)
+                    or not _NEWS_ID_RE.match(resolution["targetId"])
+                    or not isinstance(resolution["evidence"], list)):
+                raise ValueError("invalid resolution")
+            # A resolution must cite correction/retraction wording; an arbitrary
+            # targetId with unrelated evidence cannot retire a public fact.
+            if not any(isinstance(item, dict) and news_ledger.has_correction_marker(item.get("quote"))
+                       for item in resolution["evidence"]):
+                raise ValueError("resolution lacks correction evidence")
+            if ledger:
+                if not self._ledger_evidence_syntax(resolution["evidence"]):
+                    raise ValueError("invalid resolution evidence")
+            elif not self._evidence("news", resolution["evidence"]):
+                raise ValueError("invalid resolution evidence")
+
+    def _validate_news_ledger(self, records):
+        """Symmetric dump/load validation of the bounded acyclic correction graph."""
+        if not isinstance(records, list) or len(records) > MAX_NEWS_EVENTS:
+            raise ValueError("invalid news ledger")
+        index = {}
+        for record in records:
+            if (not isinstance(record, dict) or set(record) != _NEWS_LEDGER_KEYS
+                    or not isinstance(record["id"], str) or not _NEWS_ID_RE.match(record["id"])
+                    or record["id"] in index):
+                raise ValueError("invalid ledger record")
+            index[record["id"]] = record
+            if record["kind"] != "inferred" or record["status"] not in ("active", "corrected", "cancelled"):
+                raise ValueError("invalid news provenance")
+            witness = record["witness"]
+            if witness is not None and (not isinstance(witness, str) or len(witness) != 64
+                                        or any(c not in "0123456789abcdef" for c in witness)):
+                raise ValueError("invalid news witness")
+            self._validate_news_event(record, {"resources": [record.get("resource")],
+                                               "width": 41, "height": 32}, ledger=True)
+            if news_ledger.record_id(record) != record["id"]:
+                raise ValueError("unstable news identity")
+            if witness is not None and witness != _news_witness(record):
+                raise ValueError("tampered news evidence")
+            rounds = [self.memories["news"].origins.get(item["sourceId"], {}).get("first_round")
+                      for item in record["evidence"]]
+            if any(type(value) is not int for value in rounds) or record["sourceRound"] != min(rounds):
+                raise ValueError("invalid news source round")
+        incoming = {record["id"]: [] for record in records}
+        for record in records:
+            resolution = record["resolution"]
+            if resolution is None:
+                continue
+            target = index.get(resolution["targetId"])
+            if target is None or target["id"] == record["id"]:
+                raise ValueError("dangling news resolution")
+            if target["resource"] != record["resource"] or not self._news_overlap(target, record):
+                raise ValueError("unrelated news resolution")
+            if self._news_reaches(index, target["id"], record["id"]):
+                raise ValueError("cyclic news resolution")
+            incoming[target["id"]].append(resolution["kind"])
+        for record in records:
+            # Several bounded corrections may point at one fact; status is only
+            # the audit label those incoming edges imply.  A resolver need not
+            # itself stay active (a later correction may cover it).
+            if record["status"] != self._derive_status(incoming[record["id"]]):
+                raise ValueError("inconsistent news status")
+
+    def _validate_news_gaps(self, gaps):
+        if not isinstance(gaps, list) or len(gaps) > MAX_NEWS_GAPS:
+            raise ValueError("invalid news gaps")
+        seen = set()
+        for gap in gaps:
+            if (not isinstance(gap, dict) or set(gap) != _GAP_KEYS
+                    or not isinstance(gap["resource"], str) or not 0 < len(gap["resource"]) <= 80
+                    or type(gap["startDay"]) is not int or type(gap["endDay"]) is not int
+                    or not 1 <= gap["startDay"] <= gap["endDay"] <= 10
+                    or isinstance(gap["count"], bool) or type(gap["count"]) is not int
+                    or not 1 <= gap["count"] <= MAX_NEWS_EVENTS or gap["resource"] in seen
+                    or not isinstance(gap["overflow"], bool)
+                    or not isinstance(gap["lostIds"], list) or len(gap["lostIds"]) > GAP_LOST_LIMIT
+                    or any(not isinstance(identity, str) or not _NEWS_ID_RE.match(identity)
+                           for identity in gap["lostIds"])
+                    or len(set(gap["lostIds"])) != len(gap["lostIds"])):
+                raise ValueError("invalid news gap")
+            seen.add(gap["resource"])
+
     def _validate_value(self, owner, value, link):
         if owner == "news":
-            events = value
-            if not isinstance(events, list) or len(events) > 8:
-                raise ValueError("invalid events")
-            for event in events:
-                if (not isinstance(event, dict) or set(event) != {
-                        "resource", "availability", "startDay", "endDay", "priceDirection", "evidence"}
-                        or not isinstance(event["resource"], str) or not 0 < len(event["resource"]) <= 80
-                        or event["resource"] not in link["resources"]
-                        or event["availability"] not in ("available", "unavailable", "unknown")
-                        or event["priceDirection"] not in ("up", "down", "unchanged", "unknown")
-                        or not ((event['startDay'] is None and event['endDay'] is None)
-                            or (type(event['startDay']) is int and type(event['endDay']) is int
-                                and 1 <= event['startDay'] <= event['endDay'] <= 10
-                                and self._dated(owner, event['evidence'])))
-                        or not self._evidence(owner, event["evidence"])):
-                    raise ValueError("invalid event")
-            return deepcopy(events)
+            return self._validate_news_events(value, link)
         else:
             item = value
             if (not isinstance(item, dict) or not {'site', 'items', 'opensAt', 'closesAt', 'uncertain', 'evidence'} <= set(item)
@@ -515,17 +1146,48 @@ class WorldAgent:
                 self.last_attempt = {"round": round_no, "site": deepcopy(command.get("targetPos")),
                                      "items": deepcopy(command.get("item")), "received": False}
 
+    def economic_view(self, round_no):
+        """Project the shared ledger onto a trade day, without another resolver."""
+        day = (round_no - 1) // 130 + 1
+        view = self.news_view()
+        active = {fact['id'] for fact in view['facts']
+                  if fact['effectiveDays'] is not None and day in fact['effectiveDays']}
+        gaps = deepcopy(view['gaps'])
+        if view['gapOverflow'] or self.degraded:
+            gaps.append({'resource': '*', 'startDay': 1, 'endDay': 10})
+        return {'events': [deepcopy(record) for record in self.news_events if record['id'] in active],
+                'conflicts': [deepcopy(entry) for entry in view['conflicts'] if day in entry['possibleDays']],
+                'gaps': gaps}
+
     def policy_view(self, round_no):
         day = (round_no - 1) // 130 + 1
-        current = [e for e in self.news_events if type(e['startDay']) is int and type(e['endDay']) is int
-                   and e["startDay"] <= day <= e["endDay"]
-                   and self.resolved['news'] == self.version('news')]
-        resources = {e["resource"] for e in current}
+        # One unified view drives the ban, the conflict summary and the page: a
+        # bounded gap (or an opaque overflow) keeps uncertainty instead of a
+        # one-sided ban, and only the availability dimension can block a ban.
+        view = self.news_view()
+        if self.degraded:
+            view = {"facts": [], "conflicts": [], "gaps": [], "gapOverflow": True}
+        # An opaque overflow means we cannot tell which resources lost facts, so
+        # every ban is withheld rather than manufacturing certainty.
+        gapped = {gap["resource"] for gap in view["gaps"]
+                  if gap["startDay"] <= day <= gap["endDay"]}
+        # Only the availability dimension suppresses a ban -- definite or merely
+        # possible, so a shown possible contradiction is never consumed as a
+        # one-sided ban.  Price/direction conflicts leave an agreed outage.
+        suppressed = {(entry["resource"], conflict_day)
+                      for entry in view["conflicts"] if "availability" in entry["dimensions"]
+                      for conflict_day in entry["possibleDays"]}
         unavailable = []
-        for resource in resources:
-            states = {e["availability"] for e in current if e["resource"] == resource}
-            if states == {"unavailable"}:
-                unavailable.append(resource)  # conflicts/unknowns do not become bans
+        if not view["gapOverflow"]:
+            for resource in sorted({fact["resource"] for fact in view["facts"]}):
+                facts = [fact for fact in view["facts"] if fact["resource"] == resource
+                         and fact["effectiveDays"] is not None and day in fact["effectiveDays"]]
+                if not facts or resource in gapped or (resource, day) in suppressed:
+                    continue
+                if all(fact["availability"] == "unavailable" for fact in facts):
+                    unavailable.append(resource)  # price/direction conflicts never cancel this
+        conflicts = [{**entry, "day": day} for entry in view["conflicts"]
+                     if day in entry["possibleDays"]]
         notes = {"known": False, "taken": self.taken, "source": "public_world_agent"}
         if not self.degraded and self.direct:
             notes.update(deepcopy(self.direct))
@@ -540,16 +1202,25 @@ class WorldAgent:
         notes["taken"] = self.taken
         notes["open"] = bool(notes["known"] and notes["opensAt"] <= round_no <= notes["closesAt"])
         return {"unavailable": sorted(unavailable) if not self.degraded else [],
+                "conflicts": conflicts if not self.degraded else [],
                 "treasure": notes, "interpretation": "model_inference_with_public_evidence"}
 
     def dump(self):
-        return {'schema': SCHEMA, **{k: deepcopy(v) for k, v in self.__dict__.items() if k != 'memories'},
-                'memories': {owner: memory.dump() for owner, memory in self.memories.items()}}
+        raw = {'schema': SCHEMA, **{k: deepcopy(v) for k, v in self.__dict__.items() if k != 'memories'},
+               'memories': {owner: memory.dump() for owner, memory in self.memories.items()}}
+        # Derived, non-input view so the page and the prompt read exactly the
+        # validity/conflict computation the policy consumer uses.
+        raw['news_view'] = self.news_view()
+        return raw
 
     @classmethod
     def load(cls, raw):
         result = cls()
+        migrated = False
         try:
+            if isinstance(raw, dict) and raw.get("schema") in PREV_SCHEMAS:
+                raw = cls._migrate(raw)
+                migrated = True
             if (not isinstance(raw, dict) or set(raw) != set(result.dump()) or raw["schema"] != SCHEMA
                     or len(json.dumps(raw, ensure_ascii=False)) > 800000
                     or type(raw["degraded"]) is not bool or type(raw["taken"]) is not bool):
@@ -595,10 +1266,51 @@ class WorldAgent:
                             or (original['text'] is not None and not original['text'].startswith(record['text']))):
                         raise ValueError('unassociated retained source')
             result._validate_restored()
+            if not migrated and raw["news_view"] != result.news_view():
+                raise ValueError("inconsistent news view")
         except (ValueError, TypeError, KeyError, RecursionError, AttributeError):
             result = cls()
             result.degraded = True
         return result
+
+    @staticmethod
+    def _migrate(raw):
+        """Upgrade a v2 six-field archive or a v4 ledger into this schema.
+
+        Ids, inferred labels and statuses are recomputed from typed fields.  A
+        v2 archive never had a witness, so none is invented; a migrated gap
+        keeps unverifiable loss metadata opaque instead of pretending it can be
+        recovered.  A rejected upgrade still degrades instead of refreshing the
+        shared ordinary quota.
+        """
+        upgraded = deepcopy(raw)
+        previous = upgraded.get("schema")
+        upgraded["schema"] = SCHEMA
+        upgraded["news_gap_overflow"] = False
+        upgraded["news_view"] = None
+        if previous == "competition-world-agent/2":
+            upgraded["news_gaps"] = []
+            memories = upgraded.get("memories")
+            origins = {}
+            if isinstance(memories, dict) and isinstance(memories.get("news"), dict):
+                candidate = memories["news"].get("origins")
+                if isinstance(candidate, dict):
+                    origins = candidate
+            events = upgraded.get("news_events")
+            if isinstance(events, list):
+                upgraded["news_events"] = [
+                    _canonical_news_event(event, origins, bind_witness=False)
+                    if isinstance(event, dict) else event
+                    for event in events]
+        else:
+            gaps = upgraded.get("news_gaps")
+            if isinstance(gaps, list):
+                # A v4 gap did not record which ids were lost; mark it opaque so
+                # recovery cannot clear it and manufacture certainty.
+                upgraded["news_gaps"] = [
+                    {**gap, "lostIds": [], "overflow": True} if isinstance(gap, dict) else gap
+                    for gap in gaps]
+        return upgraded
 
     def _validate_restored(self):
         for mapping in (self.focus, self.drafts, self.failures):
@@ -642,22 +1354,24 @@ class WorldAgent:
                     memory = deepcopy(self.memories[owner])
                     if not memory.expose(view['id'], view['start'], view['end']):
                         raise ValueError('unavailable pending view')
-        # Stored candidates must not bypass validation merely by being JSON.
-        for owner, value in (("news", self.news_events), ("treasure", self.hypothesis)):
-            if owner == "treasure" and value is None:
-                continue
-            probe = WorldAgent()
-            probe.sources = deepcopy(self.sources)
-            probe.feedback = deepcopy(self.feedback)
-            probe.memories = deepcopy(self.memories)
-            resources = [e.get("resource") for e in value if isinstance(e, dict)] if owner == "news" and isinstance(value, list) else []
-            probe._validate_value(owner, value, {"resources": resources, "width": 41, "height": 32})
+        self._validate_news_gaps(self.news_gaps)
+        if type(self.news_gap_overflow) is not bool:
+            raise ValueError('invalid news gap overflow marker')
+        # Stored facts must not bypass validation merely by being JSON: ledger
+        # ids, sources and correction pairs are re-derived and cross-checked.
+        self._validate_news_ledger(self.news_events)
+        if self.hypothesis is not None:
+            self._validate_value("treasure", self.hypothesis, {"resources": [], "width": 41, "height": 32})
         for owner, draft in self.drafts.items():
-            if draft is not None:
-                if len(json.dumps(draft, ensure_ascii=False)) > DRAFT_LIMIT:
-                    raise ValueError('draft too large')
-                resources = [e.get('resource') for e in draft] if owner == 'news' and isinstance(draft, list) else []
-                self._validate_value(owner, draft, {'resources': resources, 'width': 41, 'height': 32})
+            if draft is None:
+                continue
+            if len(json.dumps(draft, ensure_ascii=False)) > DRAFT_LIMIT:
+                raise ValueError('draft too large')
+            if owner == 'news':
+                resources = [e.get('resource') for e in draft if isinstance(e, dict)] if isinstance(draft, list) else []
+                self._validate_news_events(draft, {'resources': resources, 'width': 41, 'height': 32})
+            else:
+                self._validate_value(owner, draft, {'resources': [], 'width': 41, 'height': 32})
         if self.direct is not None:
             # Rebuild exact-parser notes from an actual retained public source.
             candidates = [exact_notes(r["text"])

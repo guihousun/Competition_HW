@@ -761,6 +761,69 @@ function stubPost() {
     source.scrollTop = 83;
     HW.experience.updateAgent(world);
     assert(source.scrollTop === 83, 'same source does not reset scroll');
+
+    const correctedId = 'nfedcba9876543210';
+    const correctingId = 'n0123456789abcdef';
+    const conflictingId = 'n1111111111111111';
+    const priceA = 'n2222222222222222';
+    const priceB = 'n3333333333333333';
+    world.state._demo.planner.teamAgent.world.status = {news:'interpreted', treasure:'waiting_model'};
+    world.state._demo.planner.teamAgent.world.news_gap_overflow = false;
+    world.state._demo.planner.teamAgent.world.news_view = {
+      schema:'competition-news-view/1',
+      facts:[
+        {id:correctedId, resource:'iron', availability:'unavailable', status:'corrected',
+         effectiveDays:[2], possibleDays:[2,3], partial:false, startDay:2, endDay:3, resumeDay:null,
+         priceDirection:'up', priceAmount:null, priceBasis:'unknown', sources:['abcdef123456'], resolution:null},
+        {id:correctingId, resource:'iron', availability:'available', status:'active',
+         effectiveDays:[3], possibleDays:[3,4,5,6,7,8,9,10], partial:false, startDay:3, endDay:10,
+         resumeDay:null, priceDirection:'up', priceAmount:20, priceBasis:'percent', sources:['abcdef123456'],
+         resolution:{kind:'corrected', targetId:correctedId}},
+        {id:conflictingId, resource:'iron', availability:'unavailable', status:'active',
+         effectiveDays:null, possibleDays:[2,3,4], partial:true, startDay:2, endDay:null, resumeDay:5,
+         priceDirection:'unknown', priceAmount:null, priceBasis:'unknown', sources:['abcdef123456'], resolution:null},
+        {id:priceA, resource:'copper', availability:'available', status:'active',
+         effectiveDays:[2], possibleDays:[2], partial:false, startDay:2, endDay:2, resumeDay:null,
+         priceDirection:'up', priceAmount:6, priceBasis:'absolute', sources:['abcdef123456'], resolution:null},
+        {id:priceB, resource:'copper', availability:'available', status:'active',
+         effectiveDays:[2], possibleDays:[2], partial:false, startDay:2, endDay:2, resumeDay:null,
+         priceDirection:'up', priceAmount:7, priceBasis:'absolute', sources:['abcdef123456'], resolution:null}
+      ],
+      conflicts:[
+        {resource:'copper', ids:[priceA, priceB], dimensions:['price'], days:[2], possibleDays:[2],
+         definite:true, availability:['available'], directions:['up'], prices:['absolute:6', 'absolute:7'],
+         sources:[['abcdef123456'], ['abcdef123456']]},
+        {resource:'iron', ids:[correctedId, conflictingId], dimensions:['availability'], days:[],
+         possibleDays:[2], definite:false, availability:['unavailable'], directions:['unknown'], prices:[],
+         sources:[['abcdef123456'], ['abcdef123456']]}
+      ],
+      gaps:[{resource:'iron', startDay:1, endDay:10, count:2, lostIds:['n1111111111111111', 'n2222222222222222'],
+             overflow:false}],
+      gapOverflow:false,
+      unverifiable:0
+    };
+    HW.experience.updateAgent(world);
+    const ledger = document.getElementById('agent-news-inferences').textContent;
+    assert(ledger.includes('模型推断'), 'every ledger line is labelled a model inference');
+    assert(ledger.includes('已被更正') && ledger.includes('替代'), 'a correction points at the replaced event id');
+    assert(ledger.includes('20%%'), 'a percent amount keeps its own unit');
+    assert(ledger.includes('第 5 天恢复'), 'an explicit resume day is shown');
+    assert(ledger.includes('有效日 2'), 'backend effective days are shown, not recomputed');
+    assert(ledger.includes('与其他消息冲突（价格）'), 'a backend price conflict keeps its dimension');
+    assert(ledger.includes('可能冲突（状态）'), 'a possible conflict is not presented as settled');
+    assert(document.getElementById('agent-news-unknown').textContent.includes('已观测事实'), 'observed prices stay separate from inference');
+    assert(document.getElementById('agent-news-unknown').textContent.includes('待逐字恢复'), 'bounded lost ids are shown');
+    assert(document.getElementById('agent-news-unknown').textContent.includes('未解决冲突 2 项'), 'the backend conflict count is shown');
+    world.state._demo.planner.teamAgent.world.news_view.gapOverflow = true;
+    HW.experience.updateAgent(world);
+    assert(document.getElementById('agent-news-unknown').textContent.includes('溢出'), 'an opaque overflow is stated, not hidden');
+    world.state._demo.planner.tasks = {supervisor: {news_economy: {copper: {due_day: 2}}}};
+    HW.experience.updateAgent(world);
+    const saleAdvice = document.getElementById('agent-news-inferences').textContent;
+    assert(saleAdvice.includes('第 2 天降价前优先出售铜') && saleAdvice.includes('回防安排'), 'economic advice explains the action and its constraints');
+    delete world.state._demo.planner.tasks.supervisor.news_economy;
+    HW.experience.updateAgent(world);
+    assert(!document.getElementById('agent-news-inferences').textContent.includes('交易建议'), 'expired advice disappears');
   });
 
   process.stdout.write(JSON.stringify(checks));

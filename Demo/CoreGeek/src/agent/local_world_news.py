@@ -7,7 +7,7 @@ Future publications and effects remain under _demo and never enter policy input.
 from copy import deepcopy
 
 
-def install(state, *, start_day=1, long_context=False):
+def install(state, *, start_day=1, long_context=False, price_drop=False):
     """Install a three-day clue chain and the documented two-day mine outage.
 
     Start at the first round of the chosen day. Existing default scenarios are
@@ -17,6 +17,8 @@ def install(state, *, start_day=1, long_context=False):
         raise ValueError('fixture needs three game days within the ten-day match')
     if type(long_context) is not bool:
         raise ValueError('long_context must be boolean')
+    if type(price_drop) is not bool:
+        raise ValueError('price_drop must be boolean')
     if int(state.get('roundNo') or 0) != 1 + (start_day - 1) * 130:
         raise ValueError('install on the first round of the selected day')
     from .treasure import rite_of
@@ -51,6 +53,12 @@ def install(state, *, start_day=1, long_context=False):
             '市井闲谈与无关风景。' * 250 + f'明确排除用品{excluded}。'
             '排除条件与前述地点都有效；精确用品和时间仍须等待后续公开消息。')
     base = {str(row['name']): row['price'] for row in state.get('vendorShopList') or []}
+    if price_drop:
+        if base.get('copper', 0) <= 1:
+            raise ValueError('price-drop fixture requires a current copper quote above one')
+        publications[0]['officialNews'] += (
+            f'【本地新闻测试·降价】游戏第{start_day}天公布：第{start_day + 1}天铜价下降到1金币（仅当天），'
+            '铜矿照常开采，之后恢复此前收购价。')
     # The example only promises an increase, not its magnitude. Six is a
     # deliberate fixture price, visible to both policy and trade execution.
     outage_price = max(6, base.get('iron', 3) + 1)
@@ -62,6 +70,9 @@ def install(state, *, start_day=1, long_context=False):
         'note': 'Local test schedule; price amount and treasure conditions are not official constants',
         'long_context': long_context,
     }
+    if price_drop:
+        state['_demo']['news_fixture']['price_events'] = [
+            {'resource': 'copper', 'first_day': start_day + 1, 'last_day': start_day + 1, 'price': 1}]
     publish(state, [])
     return state
 
@@ -81,6 +92,9 @@ def publish(state, events):
     for outage in fixture['outages']:
         if outage['first_day'] <= day <= outage['last_day']:
             prices[outage['resource']] = outage['price']
+    for change in fixture.get('price_events', []):
+        if change['first_day'] <= day <= change['last_day']:
+            prices[change['resource']] = change['price']
     for row in state.get('vendorShopList') or []:
         if row.get('name') in prices:
             row['price'] = prices[row['name']]

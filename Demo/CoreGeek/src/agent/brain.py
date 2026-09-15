@@ -5,7 +5,7 @@ from copy import deepcopy
 from itertools import combinations, permutations
 import os
 
-from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context
+from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy
 from .grid import _cost_to_goal, next_step
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -111,6 +111,11 @@ def _mine_available(turn, material):
     return view is None or view[0] is not turn or material not in view[1]["unavailable"]
 
 
+def _sale_signals(turn):
+    view = _WORLD_VIEW.get()
+    return view[1].get('sale_signals', {}) if view is not None and view[0] is turn else {}
+
+
 def decision_report():
     """Current request's local explanation; never part of official response JSON."""
     return deepcopy(_DECISION_REPORT.get())
@@ -199,7 +204,13 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     if world_agent_enabled():
         world = planner_state.ensure_team_agent(payload).world
         world.observe(payload, planner_state.ensure_llm_router())
-        _WORLD_VIEW.set((turn, world.policy_view(turn.round_no)))
+        world_view = world.policy_view(turn.round_no)
+        day = (turn.round_no - 1) // 130 + 1
+        forecast = world.economic_view(day * 130 + 1) if day < 10 else {}
+        world_view['sale_signals'] = news_economy.sale_signals(
+            vendor_prices(payload), day, forecast.get('events', []),
+            forecast.get('conflicts', []), forecast.get('gaps', []))
+        _WORLD_VIEW.set((turn, world_view))
     commands: dict[int, dict[str, Any]] = {}
     pioneer = turn.pioneer()
     tower_pairs = _tower_pairs(turn)
@@ -349,6 +360,14 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
         if getattr(planner_state, "team_agent", None) is not None:
             _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
+        if _sale_signals(turn):
+            _DECISION_REPORT.get()['news_economy'] = deepcopy(_sale_signals(turn))
+        supervisor_notes = planner_state.tasks.get('supervisor')
+        if isinstance(supervisor_notes, dict):
+            if _sale_signals(turn):
+                supervisor_notes['news_economy'] = deepcopy(_sale_signals(turn))
+            else:
+                supervisor_notes.pop('news_economy', None)
         if night_staging is not None:
             preparation = {
                 'phase': 'waiting_guards' if not night_staging['hold'] else
@@ -1483,7 +1502,37 @@ def _should_sell(turn: Turn, role: Unit, state: dict[str, Any]) -> bool:
             surplus += max(0, amount - keep)
         else:
             surplus += amount
-    return surplus >= ECONOMY_MIN_SURPLUS
+    if surplus >= ECONOMY_MIN_SURPLUS:
+        return True
+    # A verified next-day drop can justify selling a small metal holding now.
+    # The existing threshold remains unchanged for all ordinary sale decisions.
+    return (any(amount > 0 and material in _sale_signals(turn)
+                for material, amount in sellable.items())
+            and _forecast_sale_trip_fits(turn, role))
+
+
+def _forecast_sale_trip_fits(turn: Turn, role: Unit) -> bool:
+    """Do not accelerate a speculative errand at the expense of construction or return."""
+    if (not _economy_open(turn) or not _towers_done(turn)
+            or len(turn.walls()) < len(_wall_order(turn))
+            or any(robot.health > 0 for robot in turn.robots)
+            or any(enemy.health > 0 for enemy in turn.enemies)):
+        return False
+    station = turn.station()
+    if station is None:
+        return False
+    cost = _RouteCost(turn, role)
+    vendor = _vendor_route(turn, role, cost)
+    if vendor is None:
+        return False
+    stand, outward = vendor
+    homes = [cell for cell in _stand_cells(turn, role, station.pos, set())
+             if _free_cell(turn, role, cell)]
+    if not homes:
+        return False
+    home_cost = min(cost(stand, home) for home in homes)
+    budget = RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
+    return outward + 1 + home_cost + 1 <= budget
 
 
 def _should_buy(turn: Turn, state: dict[str, Any]) -> bool:
@@ -1547,7 +1596,9 @@ def _try_trade(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
     if _adjacent_zone(state, role.pos, "vendor"):
         prices = vendor_prices(state)
         stones_needed = max(0, len(_wall_order(turn)) - len(turn.walls()))
-        for material, amount in sorted(sellable_inventory(role_state, state).items()):
+        signals = _sale_signals(turn)
+        for material, amount in sorted(sellable_inventory(role_state, state).items(),
+                                       key=lambda entry: (entry[0] not in signals, entry[0])):
             if material == WALL_MATERIAL:
                 keep = STONE_BATCH if stones_needed else WALL_RESERVE
                 surplus = max(0, amount - keep)

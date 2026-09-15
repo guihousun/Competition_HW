@@ -45,13 +45,35 @@ def _world(prompt, token, rows):
         if first:
             day = first.get('memory', {}).get('anchor_day')
             if day is None:
+                published = re.search(r'游戏第(\d+)天公布', first.get('text', ''))
+                if published and 1 <= int(published[1]) <= 10:
+                    day = int(published[1])
+            if day is None:
                 return json.dumps({'request_id': token, 'events': [{'resource': 'iron',
-                    'availability': 'unavailable', 'startDay': None, 'endDay': None,
-                    'priceDirection': 'up', 'evidence': proof(first)}]}, ensure_ascii=False)
+                    'availability': 'unavailable', 'startDay': None, 'endDay': None, 'resumeDay': None,
+                    'priceDirection': 'up', 'priceAmount': None, 'priceBasis': 'unknown',
+                    'evidence': proof(first)}]}, ensure_ascii=False)
+            # The quote promises a price rise but no magnitude, so the amount
+            # stays null.  Resume day is stated as "修复结束后恢复开采".
             events = [{'resource': 'iron', 'availability': status, 'startDay': start,
-                       'endDay': end, 'priceDirection': direction, 'evidence': proof(first)}
-                      for start, end, status, direction in ((day, day, 'available', 'unchanged'),
-                          (day + 1, day + 2, 'unavailable', 'up'), (day + 3, 10, 'available', 'unchanged'))]
+                       'endDay': end, 'resumeDay': resume, 'priceDirection': direction,
+                       'priceAmount': None, 'priceBasis': 'unknown', 'evidence': proof(first)}
+                      for start, end, resume, status, direction in (
+                          (day, day, None, 'available', 'unchanged'),
+                          (day + 1, day + 2, day + 3, 'unavailable', 'up'),
+                          (day + 3, 10, None, 'available', 'unchanged'))]
+        # Optional economic test: derive every value from the actual public text.
+        # No private price schedule or game state is passed to this adapter.
+        names = {'铁': 'iron', '铜': 'copper', '银': 'silver', '金': 'gold'}
+        for row in rows:
+            if row.get('truncated'):
+                continue
+            for match in re.finditer(r'游戏第(\d+)天公布：第(\d+)天([铁铜银金])价下降到(\d+)金币（仅当天）', row.get('text', '')):
+                day = int(match[2])
+                events.append({'resource': names[match[3]], 'availability': 'unknown',
+                               'startDay': day, 'endDay': day, 'resumeDay': None,
+                               'priceDirection': 'down', 'priceAmount': int(match[4]), 'priceBasis': 'absolute',
+                               'evidence': proof(row, match[0])})
         return json.dumps({'request_id': token, 'events': events}, ensure_ascii=False)
     # Parse only what the public prompt contains. Retained draft constraints
     # carry facts learned in an earlier chunk/day; no simulator state is read.
