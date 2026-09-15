@@ -1,0 +1,92 @@
+[
+  {
+    "round": 1,
+    "response": {
+      "roleCommandMap": {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 8
+            }
+          ]
+        },
+        "20012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 10
+            }
+          ],
+          "name": "rocket"
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 9
+            }
+          ]
+        }
+      },
+      "prompt": "根据公开资料做游戏决策辅助，只返回JSON，不返回角色动作、Shell或隐藏思维链。所有结论均是推断，证据必须引用sourceId和该来源中逐字连续的quote。每130回合一天，白天前70回合；第d天第一回合=(d-1)*130+1。firstRound是首次看到的回合，不等于发布日期；memory.anchor_day为空时相对日期起点未知。只能用明确游戏日期/回合或有anchor_day的证据确定日期，否则日期填null。资料截断、冲突或缺失时保留未知，不能猜测未提供条件。memory.next_unread表示本提示词附带原文之后的未读位置；reviewed_after_this_prompt表示本次是否已覆盖全文。需要更多原文时返回request_id和inspect对象：{\"source_id\":\"来源id\",\"offset\":0,\"length\":2000,\"query\":\"可选字面搜索词\"}。这只读取已收到的内存，不是沙盒，不新增官方权限。检索后的下一次模型调用仍占普通日限。inspect时可附draft，格式与本主题events或hypothesis的值相同，用于保存结构化中间约束。检索回复示例：{\"request_id\":\"本次标识\",\"inspect\":{\"source_id\":\"来源id\",\"offset\":2000,\"length\":2000},\"draft\":主题草稿}。draft是顶层字段，length最多2000；需要更多字数时继续分段。未读完来源不批准完整解释；保留数字、否定和矛盾的候选，不能仅记一段自由摘要。\nrequest_id必须为c93f9ee1e5fe03644fd6adcb。\n返回{\"request_id\":\"c93f9ee1e5fe03644fd6adcb\",\"events\":[{\"resource\":\"公开矿名\",\"availability\":\"available|unavailable|unknown\",\"startDay\":1,\"endDay\":2,\"resumeDay\":3,\"priceDirection\":\"up|down|unchanged|unknown\",\"priceAmount\":2,\"priceBasis\":\"absolute|delta|percent|unknown\",\"evidence\":[{\"sourceId\":\"来源id\",\"quote\":\"原文\"}],\"resolution\":null}]}。最多8条事件，日期在1..10且含首尾；startDay/endDay/resumeDay各自可未知，已知端点必须有公开日期依据；resumeDay可空且不能早于/等于已知的endDay或startDay。priceAmount只在逐字引文明确写出金额且未被否定时填写：\"上涨到6金币\"/\"下降到6金币\"→absolute 6，\"上涨2金币\"/\"下降2金币\"→delta 2，\"上涨20%\"/\"下降20%\"→percent 20；引文只有日期数字、写的是\"个百分点\"、有否定词或未给幅度时必须为null且priceBasis=unknown，不得换算或猜测。金额必须与引文完全相等（6与6.0等价，6不等于6.1）。更正/撤回旧事件时在resolution填{\"kind\":\"corrected|cancelled\",\"targetId\":\"账本id\",\"evidence\":[{\"sourceId\":\"来源id\",\"quote\":\"含更正/撤回字样的原文\"}]}；更正只覆盖它自身有日期证据的区间，旧事件在未覆盖日期仍然有效（账本的effectiveDays就是消费端采用的有效日）；同一旧事件可被多个不同时间范围的更正分别覆盖，再次更正可以指向此前的更正事件；重复同一更正可幂等重发。更正必须与目标同资源、有可能日期交集，禁止自指和环，不得给同一事实换targetId。没有明确更正关系的相反消息（含不同价格/方向）各自保留证据，不得用最后一句覆盖；未知日期的矛盾要在账本状态里保留possible冲突，不能当作已解决。允许空events。\n新闻事件账本（id可被resolution.targetId引用）：[]\n账本状态（未解决冲突、范围缺口、省略条数）：{\"conflicts\": [], \"conflictCount\": 0, \"gaps\": [], \"gapOverflow\": false, \"omitted\": 0, \"unverifiable\": 0}\n公开矿名：[\"copper\", \"iron\", \"stone\"]\n已验证结构化草稿：null\n最近原文检索：null\n公开来源：[{\"id\": \"0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9\", \"firstRound\": 1, \"text\": \"游戏第1天官方消息：小贩公告，铜矿照常开采，第2天铜收购价下降到1金币，仅当天，之后恢复此前价格。另：铁矿第2天至第3天因维修停止开采，第4天恢复开采。维修期间铁价会上涨，具体幅度未公布。\", \"truncated\": false, \"memory\": {\"received_chars\": 94, \"stored_chars\": 94, \"available\": true, \"complete\": true, \"date_basis\": \"first_game_day\", \"anchor_day\": 1, \"reviewed\": false, \"next_unread\": null, \"reviewed_after_this_prompt\": true}}]"
+    },
+    "status": {
+      "news": "waiting_model",
+      "treasure": "idle"
+    },
+    "quota": 1,
+    "provider_result": {
+      "answer": "{\"request_id\":\"c93f9ee1e5fe03644fd6adcb\",\"events\":[{\"resource\":\"copper\",\"availability\":\"available\",\"startDay\":1,\"endDay\":null,\"resumeDay\":null,\"priceDirection\":\"unknown\",\"priceAmount\":null,\"priceBasis\":\"unknown\",\"evidence\":[{\"sourceId\":\"0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9\",\"quote\":\"铜矿照常开采\"}],\"resolution\":null},{\"resource\":\"copper\",\"availability\":\"unknown\",\"startDay\":2,\"endDay\":2,\"resumeDay\":3,\"priceDirection\":\"down\",\"priceAmount\":1,\"priceBasis\":\"absolute\",\"evidence\":[{\"sourceId\":\"0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9\",\"quote\":\"第2天铜收购价下降到1金币，仅当天，之后恢复此前价格。\"}],\"resolution\":null},{\"resource\":\"iron\",\"availability\":\"unavailable\",\"startDay\":2,\"endDay\":3,\"resumeDay\":4,\"priceDirection\":\"up\",\"priceAmount\":null,\"priceBasis\":\"unknown\",\"evidence\":[{\"sourceId\":\"0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9\",\"quote\":\"另：铁矿第2天至第3天因维修停止开采，第4天恢复开采。\"},{\"sourceId\":\"0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9\",\"quote\":\"维修期间铁价会上涨，具体幅度未公布。\"}],\"resolution\":null}]}",
+      "usage": {
+        "prompt_tokens": 1120,
+        "completion_tokens": 4250,
+        "total_tokens": 5370
+      },
+      "reported_model": "deepseek/deepseek-v4.1-flash"
+    }
+  },
+  {
+    "round": 2,
+    "response": {
+      "roleCommandMap": {
+        "20010": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 8
+            }
+          ]
+        },
+        "20012": {
+          "action": "build",
+          "targetPos": [
+            {
+              "x": 30,
+              "y": 10
+            }
+          ],
+          "name": "rocket"
+        },
+        "20011": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 9
+            }
+          ]
+        }
+      }
+    },
+    "status": {
+      "news": "interpreted",
+      "treasure": "idle"
+    },
+    "quota": 1
+  }
+]

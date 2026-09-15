@@ -1,0 +1,9 @@
+{
+  "scope": "isolated copied module with proposed availability-dimension patch; production untouched",
+  "source_commit": "45557d7501ff644f65b82367293f19ef6bc8e85b",
+  "module_sha256": "e3b130e36d3ae09569492aa2c52b1efb50109c78bf3eeac715c6c2066b7cb865",
+  "tests": 102,
+  "failures": 0,
+  "errors": 0,
+  "passed": true
+}

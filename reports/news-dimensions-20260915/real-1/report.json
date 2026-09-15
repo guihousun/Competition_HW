@@ -1,0 +1,179 @@
+{
+  "scope": "Real model through planner/router/JSON on public news, no simulator rewards or intranet PASS",
+  "source_sha": "45557d7501ff644f65b82367293f19ef6bc8e85b",
+  "files": {
+    "__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "actions.py": "de79664cdf173f777a77beed6845513a0e2c50fbb0f40dc5332c3b16db8cde6e",
+    "ballistics.py": "b8593587c4eec6f8518bf945591a16ff051fbecd26a7d8a582bdd97987c6bc62",
+    "brain.py": "1124543616e9b5186f3e2a0efb75dd17e6a8f6c472d74dd6b6d3993dfe82e3eb",
+    "console_digest.py": "f5024f3fab15049be2393cd3d155d39e74a296ded01f2e1b68cd9280eca65d83",
+    "coordination.py": "48abac2a5f7a22cbaa4e9079a0ba4fd1f0b35e1faa37e236dd67d00a7f06d92e",
+    "debug.py": "24dc604fa0ab253c3830d6d23affacd878cd3b93961e59e5832fdcb00386c7ae",
+    "deepseek_client.py": "e6afbac59daa9ec89f233494a4505e0974f689fc909ff1c31d50529e133163a5",
+    "defense_layout.py": "9ab3947faa79375c5472dac7573a9e5a888e73b1f2d22dde76c8c1a8d71098be",
+    "diagnostics.py": "a5ecacb758edd5ddf25a9d5293e192c6d9ac04dc98d39aa76ae9a6540b174cb7",
+    "evidence_memory.py": "361cb20c809804a62fde9598d8bf3a6881a5688925d973f442511e7fd33d7f97",
+    "grid.py": "c22201882dae0f93fb8206e85daf72b9facfc539ce133a4f8cceacd1cf60dcea",
+    "llm_router.py": "82da401637b6d0c60f5926e0034d916c0b788c033bf5714f715ca02fb3f6249f",
+    "local_llm.py": "7cc4c7af6caf3b8e94fc7eb858e607fd61662f9dd51843e04fef2a1a63644899",
+    "local_scripted_model.py": "327c980a3cb112a06f8ac0a3da55dff6befd8b80254ce13da1cf86a07a7b394c",
+    "local_task_cases.py": "8f3f1f41c15a65fb370fa39d24aa3d2527bf35a2a83ef284068f0ae738c3c5c2",
+    "local_task_sandbox.py": "95c4a310ee8cf055289667f3b7a2f3b9d549ffeae5aa79a8d009663e99a2a5f8",
+    "local_world_news.py": "15eca5e8054f6b5f7e248b25854557ce858fcdd3c5db864597d3189bf54513dc",
+    "market.py": "6a2b8b5aca57dbb21a0407c118deb9b472d8dfa272d25747a2fd8d3cfd550e39",
+    "match.py": "07460f5d044212b04a13e6b2d0eb5a7e27e41f77fc8a5b2b92ba3d5e7c909f76",
+    "news_economy.py": "51ff62079621b3f2ddec00c0c481f420f4756aa6f8ad84356a4cb2c960431071",
+    "news_ledger.py": "cc78baea87a26b3eb2c03e59d475201aaa11d162eec9eaf612ba05ad184c1510",
+    "nightwork.py": "d21459e5bcecd4dcf30df1e9c1a77cafbdc9badc1f3fd2d132e5781aec235bf2",
+    "planner.py": "03910eed09c99050268675e78e58e3f4bb584713bc9af0bf5ea924b220cb32dd",
+    "policy_supervisor.py": "7280e55a03b0c99ec44869be453e27828be2a75b65c167291d54e8d667833463",
+    "protocol.py": "9d2ad1a53416b0a78b3267562edf1599fb214117ccfb7738aba6c0adbb804417",
+    "recordings.py": "fa5139023cd554c366ee515a74275f683afe1586346cd1c2524adda768edc2f1",
+    "sandbox.py": "78f9a2c240795f59e390041ecd05b3e7a59811e608a2da8921e5e06a762d248b",
+    "scenarios.py": "691aabb8dcc5dc28f59362a6fb1ea2b7bec7e2a2bcaf96c85fe75ff3bc538ac7",
+    "server.py": "6dfe9090dc195d75b443cfe119f628562039a7d8667debb0e186ef3404baacde",
+    "simulator.py": "4bd12b7ee2c82e7b291d1382b5fc009f7ecf43385381880f4f6b66a57357373c",
+    "task_agent.py": "bff4ba6c2f0590b5c962798258fd748556fbd80b93896003c9bd6d6d3cdac4f8",
+    "task_context.py": "f776f34deded999c8e03712a7ec8e8c6b36198003a5886ed9e36a983512e3c12",
+    "task_journal.py": "1724455a0290217ca688b9aacd8518b2a3d972f15d960ba081352211a89867de",
+    "task_lifecycle.py": "fc2c79ee3239f952c453f4469b09261d87cf239c0b1a32bfe0532d9d6a009c7d",
+    "task_skills.py": "2887edc85088f04c0937c7df114d284b7fc5e4db9639f7c426ddf67bd5de32c1",
+    "tasks.py": "7a8b4eeafbad393678954f1b980fc3da0d59cd04f23df0cc0d95b5f0e3a69a99",
+    "taskworld.py": "64ba9e586dd10b9e2c8c713a720b6a18c6cc29e78d4e6ce9616004a0fc2254e9",
+    "team_agent.py": "d8fdc0536fc996bf4913faf2a93d011004d98cc43c30328fcf49b686ed0be5ea",
+    "telemetry.py": "5b512c0122214181a73803d70419a50b96a326992702b78c295461250f450d70",
+    "treasure.py": "76828a5d58eef2f09def72ef9e80cc63a8b523414634cc428a1a915ab6501da4",
+    "turnactions.py": "00b2a86fce4ac015480d67241664e363edf95be4e33ee262990998e92272bc78",
+    "twomatch.py": "9d3e0218adf190673f50a23cb2cc20e9185dbd38ef80b4b83bab5dc4776b06c3",
+    "vision.py": "0bbc60474257caaabf8c50eab82bd9621b3cd7668870ba303ed4f86640102491",
+    "wave_data.py": "0415267c69ff21fd26153664a077d4722dc6989071d1208075f13404d05d942f",
+    "world_agent.py": "d755f67919de0d862c20b32e4b6144f15ae610c906913db28fdc4d57f4f12dca",
+    "world_memory.py": "d72aa3daa971cfae05c6e8a978a71288f2b9c876be95743e4c6fbdf5f078a44f"
+  },
+  "model": "deepseek/deepseek-v4.1-flash",
+  "effort": "max",
+  "python": "3.11.10",
+  "calls": 1,
+  "elapsed_seconds": 152.28099999998813,
+  "checks": {
+    "interpreted": true,
+    "iron_closed_day2": true,
+    "iron_closed_day3": true,
+    "iron_open_day4": true,
+    "copper_sale_signal": true,
+    "no_invented_iron_amount": true,
+    "quota": true,
+    "no_execute": true,
+    "not_degraded": true,
+    "source_stable": true
+  },
+  "passed": true,
+  "signals": {
+    "copper": {
+      "reason": "public_next_day_price_drop",
+      "due_day": 2,
+      "price_direction": "down",
+      "source_ids": [
+        "0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9"
+      ],
+      "event_ids": [
+        "n99e2f98b6d1436a4"
+      ],
+      "observed_price": 5,
+      "inferred_price": 1
+    }
+  },
+  "news_view": {
+    "schema": "competition-news-view/1",
+    "facts": [
+      {
+        "id": "nc6dc0e21065d9610",
+        "resource": "copper",
+        "availability": "available",
+        "status": "active",
+        "kind": "inferred",
+        "inferred": true,
+        "startDay": 1,
+        "endDay": null,
+        "resumeDay": null,
+        "priceDirection": "unknown",
+        "priceAmount": null,
+        "priceBasis": "unknown",
+        "partial": true,
+        "possibleDays": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "effectiveDays": null,
+        "sources": [
+          "0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9"
+        ],
+        "resolution": null
+      },
+      {
+        "id": "n99e2f98b6d1436a4",
+        "resource": "copper",
+        "availability": "unknown",
+        "status": "active",
+        "kind": "inferred",
+        "inferred": true,
+        "startDay": 2,
+        "endDay": 2,
+        "resumeDay": 3,
+        "priceDirection": "down",
+        "priceAmount": 1,
+        "priceBasis": "absolute",
+        "partial": false,
+        "possibleDays": [
+          2
+        ],
+        "effectiveDays": [
+          2
+        ],
+        "sources": [
+          "0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9"
+        ],
+        "resolution": null
+      },
+      {
+        "id": "n8cb0bee124a1abc9",
+        "resource": "iron",
+        "availability": "unavailable",
+        "status": "active",
+        "kind": "inferred",
+        "inferred": true,
+        "startDay": 2,
+        "endDay": 3,
+        "resumeDay": 4,
+        "priceDirection": "up",
+        "priceAmount": null,
+        "priceBasis": "unknown",
+        "partial": false,
+        "possibleDays": [
+          2,
+          3
+        ],
+        "effectiveDays": [
+          2,
+          3
+        ],
+        "sources": [
+          "0d3a9df4703748e54bab1f7cf6621a03558b8300c5335ceb57235e2dd61e02f9"
+        ],
+        "resolution": null
+      }
+    ],
+    "conflicts": [],
+    "gaps": [],
+    "gapOverflow": false,
+    "unverifiable": 0
+  }
+}

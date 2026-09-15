@@ -1,0 +1,33 @@
+test_a_copper_correction_cannot_retire_an_iron_event (test_news_ledger_review.NewsLedgerReviewTests.test_a_copper_correction_cannot_retire_an_iron_event) ... ok
+test_day3_recovery_does_not_erase_day2_outage (test_news_ledger_review.NewsLedgerReviewTests.test_day3_recovery_does_not_erase_day2_outage) ... ok
+test_evicted_original_does_not_make_forged_quote_trusted (test_news_ledger_review.NewsLedgerReviewTests.test_evicted_original_does_not_make_forged_quote_trusted) ... ok
+test_eviction_cannot_turn_a_conflict_into_a_certain_ban (test_news_ledger_review.NewsLedgerReviewTests.test_eviction_cannot_turn_a_conflict_into_a_certain_ban) ... ok
+test_explicit_resolution_still_requires_public_correction_evidence (test_news_ledger_review.NewsLedgerReviewTests.test_explicit_resolution_still_requires_public_correction_evidence) ... ok
+test_known_resume_day_can_be_kept_when_other_endpoints_are_unknown (test_news_ledger_review.NewsLedgerReviewTests.test_known_resume_day_can_be_kept_when_other_endpoints_are_unknown) ... ok
+test_large_integer_is_not_silently_rounded_or_an_exception (test_news_ledger_review.NewsLedgerReviewTests.test_large_integer_is_not_silently_rounded_or_an_exception) ... ok
+test_percentage_points_are_not_percent_and_negation_is_not_positive_evidence (test_news_ledger_review.NewsLedgerReviewTests.test_percentage_points_are_not_percent_and_negation_is_not_positive_evidence) ... ok
+test_price_conflict_is_retained_even_when_availability_agrees (test_news_ledger_review.NewsLedgerReviewTests.test_price_conflict_is_retained_even_when_availability_agrees) ... ok
+test_price_only_clause_cannot_create_an_outage (test_news_ledger_review.NewsLedgerReviewTests.test_price_only_clause_cannot_create_an_outage) ... ok
+test_price_only_clause_cannot_hide_a_real_availability_conflict (test_news_ledger_review.NewsLedgerReviewTests.test_price_only_clause_cannot_hide_a_real_availability_conflict) ... ok
+test_price_only_clause_does_not_cancel_a_known_outage (test_news_ledger_review.NewsLedgerReviewTests.test_price_only_clause_does_not_cancel_a_known_outage) ... FAIL
+test_price_requires_exact_amount_not_relative_tolerance (test_news_ledger_review.NewsLedgerReviewTests.test_price_requires_exact_amount_not_relative_tolerance) ... ok
+
+======================================================================
+FAIL: test_price_only_clause_does_not_cancel_a_known_outage (test_news_ledger_review.NewsLedgerReviewTests.test_price_only_clause_does_not_cancel_a_known_outage)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\codex-news-review\tests\test_news_ledger_review.py", line 22, in test_price_only_clause_does_not_cancel_a_known_outage
+    self.assertEqual(current.policy_view(131)['unavailable'], ['iron'])
+AssertionError: Lists differ: [] != ['iron']
+
+Second list contains 1 additional elements.
+First extra element 0:
+'iron'
+
+- []
++ ['iron']
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.014s
+
+FAILED (failures=1)
