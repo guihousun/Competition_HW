@@ -25,7 +25,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - 响应三个顶层字段必须**永远都在**（官方 demo 只发了 `roleCommandMap`，别照抄这个）。
 3. **动作有角色权限**（任务书 §4.4 表的**最右一列**）：`build` / `remove` / `collect` 仅**工人**；`acceptTask` / `submitAnswer` / `summonTreasure` 仅**开拓者**；其余动作全部角色可用。
    - 闸门在 **Action 的构造函数**里（`protocol/actions.py`）：`roleType` 不对就抛 `PermissionError`，**非法动作根本造不出来**。planner 侧接住它、丢那一条并告警，不连坐同回合其他角色（抛出去会变成"每回合空指令 → 全队冻结一整局"，现象与 `main3.py` 改名事故一样难排查）。
-   - 这类 bug 的特征是**本地全绿**（格式完全合法，只有判题器会说"不"），而 `collect` 被误发给开拓者会每天吃一个异常——**红线只有 5 次**。所以每加一个受限动作，都要在 `tests/test_actions.py` 补一条对应用例。
+   - 这类 bug 的特征是**本地全绿**（格式完全合法，只有判题器会说"不"），而 `collect` 被误发给开拓者会每天吃一个异常——**红线只有 5 次**。所以每加一个受限动作，都要在 `tests/test_protocol_actions.py` 补一条对应用例。
 4. 判题器侧超时：建连 > 10s 或响应 > 5s。
 5. **每回合的复盘日志（`app._log`）写在 `try` 里面，别挪出去。** 日志代码再不起眼也是代码，
    `web/server.py` 的 `do_POST` **不接异常**（`server.py:22` 直接 `handler(...)`）—— 逃出去连接就断了，
@@ -39,18 +39,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    |---|---|---|
    | 干净回合 | 7 | 593 |
    | 有回执 | 9 | 741 |
-   | 提问那轮（题目 400 字） | 9 | **6955** |
-   | **顶格（题目/回复/沙盒各 40000 字）** | 10 | **≈604530** |
+   | 提问那轮（题目 400 字） | 9 | **7501** |
+   | **顶格（题目/回复/沙盒各 40000 字）** | 10 | **≈605076** |
 
-   ⚠️ **第 37 步（prompt.py 接管 system 模板 + 协议换嵌套形状 + SOP 流程表）把提问那轮从
-   6488 抬到 6955、顶格从 604063 抬到 604530**（两行同为 **+467** = system 段模板长大一次；
-   同一脚本在 `git worktree` 的 HEAD 旧版上对照量出）。第 36 步那次（6164 → 6497 /
-   603814 → 604147，同为 +333）与第 35 步那次（5733 → 6020 / 603375 → 603662，同为 +287）
+   ⚠️ **第 38 步（用户启用 `EXAMPLE_PROMPT` 示例段）把提问那轮从 6955 抬到 7501、顶格从
+   604530 抬到 605076**（两行同为 **+546** = system 段模板长大一次）。第 37 步那次
+   （6488 → 6955 / 604063 → 604530，同为 +467）、第 36 步（+333）、第 35 步（+287）
    抬的是同一原因。提问行没到 `LOG_PROMPT_MAX`=100000 **字**的裁剪线上，长多少就多多少字节。
-   ⚠️ **只有带 prompt 的那两行会动**（干净回合 593 与有回执 741 在改动前后**逐字节相同** ——
-   它们没有 prompt 行 ⇒ 模板改不到）；**表里的绝对值是第 37 步用"同一脚本跑新旧两版"重量的**，
-   与第 36 步记的差 −9/−84（构造与 `request.txt` 漂移）⇒ **跨步骤比绝对值没意义，
-   同一次测量的增量才是信号**（"有回执"从记过的 795 变 741 而同版本同值，就是这条的实例）。
+   ⚠️ **只有带 prompt 的那两行会动**（干净回合 593 与有回执 741 在历步改动前后**逐字节相同** ——
+   它们没有 prompt 行 ⇒ 模板改不到）；**跨步骤比绝对值没意义，同一次测量的增量才是信号**
+   （"有回执"从记过的 795 变 741 而同版本同值，就是这条的实例）。
    **量法与三个坑写在 `app._log` 的 docstring 里**（顶格那行的 `llmResp` 必须是工具形状，
    写成答案形状会多出一个 120KB 的 `submitAnswer` 动作行；要量真 stdout 的形状、每格先
    `AGENT.reset()`）。
@@ -376,8 +374,36 @@ game/planner → utils                  ← 第 23 步新增：任务行自己�
 
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
 `tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
-`tests/` 只有 `test_actions.py` 一个文件（权限 / 报文 / 几何 / 决策 / 解析五类），**不建自研测试框架**：标准库 `unittest` 够用。**306 条**。
-进度见 `docs/design/code-task.md`（当前到第 37 步：**`prompt.py` 接管 system 模板 + 工具协议换
+`tests/` **按 src 拆分**（第 38 步，TDD 最小读取——改哪个模块只读/只跑对应文件），**不建自研测试框架**：标准库 `unittest` 够用。**306 条**：
+
+```
+tests/
+├── _fixtures.py                 SAMPLE / _records / _terrain（**≥2 个文件共用**的夹具才进这里；
+│                                discover 的 test*.py 不收它，也不会当用例跑）
+├── test_protocol_actions.py     GateTest MoveWireTest ← protocol/actions.py
+├── test_protocol_model.py       Parse TaskParse JudgeReceipt ← protocol/model.py
+├── test_app.py                  HandleTest（红线退化 / 日志版面与预算 / 任务线端到端）← app.py
+├── test_game_grid.py            Grid BuildGeometry StepOutside StepsBetween Path ← game/grid.py
+├── test_game_world.py           TurnSummary DayNight ← game/world.py
+├── test_game_planner_wall.py    建造线 11 类（BuildWeapon / WallRing / BuildWall / WallGate /
+│                                DayEndGate / Dig / Door / Rescue / HoleLifecycle /
+│                                TwoWallBuilders / StandingOnTheTarget）← planner.py
+├── test_game_planner_economy.py 经济线 4 类（MineApproach / SpareOre / SellOre / UpgradeLine）
+├── test_game_planner_night.py   夜战线（NightWeapon）
+├── test_game_planner_task.py    任务线 3 类（TaskAccept / TaskHold / TaskChannel）
+├── test_agent.py                AgentToolCall ← agent/agent.py
+├── test_agent_chat.py           ToolReplyParse AnswerParse ← agent/chat.py
+├── test_agent_prompt.py         ChatPrompt ← agent/prompt.py
+├── test_agent_context.py        Context ← agent/context.py
+└── test_agent_sop.py            SopState ← agent/tools/sop.py
+```
+
+⚠️ **类名与拆分前一字不改** ⇒ 文档与注释里"见 `XxxTest.yyy`"的引用照旧成立；单文件可直跑
+`py tests/test_xxx.py`（文件头 bootstrap 自带 sys.path，`_fixtures` 靠它找到）。
+进度见 `docs/design/code-task.md`（当前到第 38 步：**tests 按 src 拆分 + 用户启用 `EXAMPLE_PROMPT`**——
+用例 306 条与拆分前**逐一比对一致**、反向验证"删一个类 ⇒ 少 13 条"可察；顺手删了死常量 `TASK_LINE`、
+重钉 maxdepth 断言；**示例段进 sections 让提问那轮 +546**（6955 → 7501 / 604530 → 605076，字节表已同步）；
+第 37 步：**`prompt.py` 接管 system 模板 + 工具协议换
 嵌套形状（严格模式）+ SOP 流程表**（用户带来 `agent/prompt.py` 新文件、四口径逐条拍板）——
 ① **prompt.py**：六段模板（role定位 / 工具描述 / 输出格式 / 示例（**占位未启用**）/ 沉淀的SOP /
 注意事项）+ `gen_system_prompt` / `gen_all_tool_prompt`（工具块 `## ToolName - 名`，由注册表生成）/

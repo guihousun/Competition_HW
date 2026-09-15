@@ -73,8 +73,8 @@ SOP_PROMPT = """
 {sop}
 """
 
-# 5. 示例 —— **占位、未启用**：现在示例都内联在工具段 / 输出段里，空段头只会白花
-#    prompt 字节；要加 few-shot 示例段时把它加进 `gen_system_prompt` 的 sections。
+# 5. 示例（第 38 步用户启用：一段"从 problem.txt 到 token"的四步范式）——
+#    它进 `gen_system_prompt` 的 sections，代价是每回合 prompt 多这一段字节（记在字节表里）
 EXAMPLE_PROMPT = """
 # 【输出示例】
 用于需求：解决promble.txt的任务

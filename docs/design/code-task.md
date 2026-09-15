@@ -1721,6 +1721,66 @@ XML 预定义实体，**`&amp;` 最后换**（`&amp;lt;` 只还原一层）；LL
 
 ---
 
+## 第 38 步：tests 按 src 拆分 + 用户启用 `EXAMPLE_PROMPT`
+
+**目标** 用户的原话：`test_actions.py` 全部写在一个文件里，**每次 TDD 都特别慢**，要拆成
+**与 src 对应**、修改时最小读取。方案 B（planner 按主题分四个）用户拍板。顺手收两件：
+**用户手改 `prompt.py`**（`EXAMPLE_PROMPT` 填了一段"从 problem.txt 到 token"的四步范式并
+**接进 `gen_system_prompt` 的 sections**、命令范式 `maxdepth 4 → 6`）——它的两条陈旧断言
+本步重钉。
+
+**产出**
+
+① **`tests/` 从 1 个文件拆成 15 个**，与 src 一一对应：`test_protocol_actions` /
+`test_protocol_model` / `test_app` / `test_game_grid` / `test_game_world` /
+`test_game_planner_{wall,economy,night,task}`（planner 单独一个大文件的方案 A 被否——
+那达不成"最小读取"）/ `test_agent` / `test_agent_chat` / `test_agent_prompt` /
+`test_agent_context` / `test_agent_sop` + **`_fixtures.py`**（SAMPLE / `_records` /
+`_terrain` 三个 ≥2 文件共用的夹具；discover 的 `test*.py` 不收它）。单文件用的夹具内联
+（`EXPECTED_MOVES`/`ASK`/`SANDBOX` → test_app；`_blocks` → test_game_world；
+`_day2`/`_left` → test_game_planner_wall）。**类名一字不改** ⇒ 全部文档里
+"见 `XxxTest.yyy`"的引用不动。每个文件头部自带 sys.path bootstrap（**两条**：`tests/`
+给 `_fixtures` —— 本地 3.14 的 discover 不再把 start dir 放进 sys.path，第一版在这里
+`ModuleNotFoundError`；`src/` 给 coregeek）。
+**拆法是脚本切片不是手抄**（`.tmp-logs/split_tests.py`，一次性不入库）：ast 定位顶层块边界
+逐字节搬、import 按词边界扫描分配（多 import 无害、少 import 会挂 —— 全绿即证明没漏）。
+顺手处理：死常量 `TASK_LINE`（定义了没人用，HandleTest 里全是硬编码字面量）按编码规则 1
+**不搬**，它头上的"按标记取行"注释并给 `ASK`。
+
+② **`prompt.py`**：`EXAMPLE_PROMPT` 的注释从"占位未启用"改成实话（用户已启用并接线，
+代价是每回合 prompt 多这一段，记在字节表）。
+
+③ **测试两处重钉**（追认用户手改）：`ChatPromptTest.test_the_attention_says_how_to_find_the_file`
+的 `maxdepth 4 → 6`；`test_the_placeholders_are_all_filled` 补 `# 【输出示例】` 段头
+（六段里最后两段从此也有守卫）。
+
+**验证**
+
+- 全量 **306 条全绿**（用例总数与拆分前一致）。
+- **用例清单逐条比对**：拆分前 `discover -v` 的 306 条（归一化模块限定名后）与拆分后
+  **逐一相同** —— 类不可能被静默丢掉。
+- **反向验证**：从 `test_agent_sop.py` 整块删掉 `SopStateTest` ⇒ `Ran 293`（−13 = 该类
+  用例数），还原 ⇒ 306。⚠️ 教训：先试的是**改类名**，306 纹丝不动 —— unittest 的 loader
+  收集**所有** `TestCase` 子类、不看类名；"漏类可察"必须用**整块删除**来验。
+- 单文件直跑抽查两条 OK（`test_agent_sop.py` 13 条、`test_game_grid.py` 23 条）。
+- **字节预算重测**（`logs/measure37.py`）：示例段进 sections ⇒ 提问那轮 **6955 → 7501**、
+  顶格 **604530 → 605076**（两行同为 **+546** = 示例段的体量）；干净回合 593 与有回执 741
+  **逐字节不动**。`app._log` docstring 与 `CLAUDE.md` 硬约束 5 两张表已同步。
+
+**仍生效的已知不确定性**
+
+1. **`_fixtures` 的 import 靠文件头 bootstrap 里的 `tests/` 路径**，不是包结构（没有
+   `__init__.py`）：哪天有人用 `python -m pytest` 或别的方式收集，路径假设可能不成立 ——
+   症状是 `ModuleNotFoundError: _fixtures`，把 bootstrap 那两行抄进新入口即可。
+2. **import 按词边界扫描是"多认无害"的方向**：类 docstring 里提到的名字（如 ToolReplyParse
+   的测试数据里有 `<sop>` 标签）会带来一两个多余 import —— 可读性小疵，不是正确性问题，
+   不值得为此建精确的依赖分析。
+3. **`EXAMPLE_PROMPT` 那段四步范式与真实沙盒的目录结构是否相符没有任何数据**（与第 35 步
+   那段 find 范式同一条账，悬置表 #2）：`problem.txt` / `spec.md` / `check.sh` / token 是
+   用户给的示例设定；首场实盘看任务行里 LLM 有没有照这个节奏走。
+
+---
+
 ## 当前仍悬着的事
 
 跨步重复、或不归属某一步的未了结项。**已实现的下一步不在此列。**
