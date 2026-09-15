@@ -1,0 +1,13 @@
+test_duplicate_names_do_not_read_an_arbitrary_task (test_task_workspace.WorkspaceTests.test_duplicate_names_do_not_read_an_arbitrary_task) ... ok
+test_explicit_absolute_file_beats_same_name_elsewhere (test_task_workspace.WorkspaceTests.test_explicit_absolute_file_beats_same_name_elsewhere) ... ok
+test_literal_spaces_quotes_unicode_and_shell_metacharacters (test_task_workspace.WorkspaceTests.test_literal_spaces_quotes_unicode_and_shell_metacharacters) ... ok
+test_missing_is_explicit_and_large_source_is_marked (test_task_workspace.WorkspaceTests.test_missing_is_explicit_and_large_source_is_marked) ... ok
+test_nested_task_and_sibling_document_in_one_operation (test_task_workspace.WorkspaceTests.test_nested_task_and_sibling_document_in_one_operation) ... ok
+test_reference_is_data_and_multiple_references_fall_back (test_task_workspace.WorkspaceTests.test_reference_is_data_and_multiple_references_fall_back) ... ok
+test_symbolic_file_is_not_read (test_task_workspace.WorkspaceTests.test_symbolic_file_is_not_read) ... ok
+test_virtual_fixture_parity_and_no_arbitrary_execution (test_task_workspace.WorkspaceTests.test_virtual_fixture_parity_and_no_arbitrary_execution) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 1.588s
+
+OK

@@ -1,0 +1,138 @@
+{
+  "source_ref": "35bfe0eef8bc6e4410179b3d3ed0e6f6475a2a68",
+  "tested_runtime": "66a4d9a6c704aa0425d995cff29ab812ba6cc98e",
+  "issued_submissions": 10,
+  "token_objects": 6,
+  "matches": [
+    {
+      "match": "598595_20260915_2028",
+      "source": "logs\\attack_map\\match_598595_20260915_2028\\teamA.log",
+      "log_sha256": "627b15a3498f1e23bab4998145871477ad140b027c42a61679f78cd49a0f2cda",
+      "submissions": [
+        {
+          "round": 22,
+          "line": 66,
+          "kind": "invalid_json",
+          "answer_sha256": "52dd6313fee6d987ba8f8c256b8117b1c5a5d575cb84285e0141c4c54fdcee1a"
+        },
+        {
+          "round": 145,
+          "line": 218,
+          "kind": "invalid_json",
+          "answer_sha256": "9279773af77573f025727725399ed368cfc4edee2403071c99c832e0fccd9f51"
+        },
+        {
+          "round": 158,
+          "line": 258,
+          "kind": "token_object",
+          "answer_sha256": "d4278cf9733c9fbc6d86ea57568569f1b1fba487131194c153d62495f47e4e91"
+        }
+      ],
+      "fenced_replies": [
+        {
+          "round": 17,
+          "line": 52,
+          "strict_original_parser_accepts": false,
+          "new_task_parser_accepts": true
+        },
+        {
+          "round": 61,
+          "line": 151,
+          "strict_original_parser_accepts": false,
+          "new_task_parser_accepts": true
+        }
+      ],
+      "heredoc_commands": []
+    },
+    {
+      "match": "598290_20260915_1949",
+      "source": "logs\\attack_map\\match_598290_20260915_1949\\teamB.log",
+      "log_sha256": "b0320cf0147d564f847f6efaa859a2c0ad1d5c5334d35c05999f6add890ebe0d",
+      "submissions": [
+        {
+          "round": 20,
+          "line": 53,
+          "kind": "other_json",
+          "answer_sha256": "e629fa6598d732768f7c726b4b621285f9c3b85303900aa912017db7617d8bdb"
+        },
+        {
+          "round": 69,
+          "line": 161,
+          "kind": "other_json",
+          "answer_sha256": "15dbfa81d77c6ee5bc3354c9081c53c76b0abd17994858d2280b69a9bd38621c"
+        },
+        {
+          "round": 153,
+          "line": 221,
+          "kind": "token_object",
+          "answer_sha256": "17bed870a65802271dd74b18ae2065ba65185a2c6e932dcb4712f4201cd97791"
+        },
+        {
+          "round": 195,
+          "line": 301,
+          "kind": "token_object",
+          "answer_sha256": "d4278cf9733c9fbc6d86ea57568569f1b1fba487131194c153d62495f47e4e91"
+        }
+      ],
+      "fenced_replies": [],
+      "heredoc_commands": [
+        {
+          "round": 37,
+          "line": 99,
+          "sha256": "9d2e2301e3420eba04a3219d8d7c3322f6096756b1b99789c670a6a7c700df9e",
+          "chars": 337,
+          "new_guard_rejects": true
+        },
+        {
+          "round": 39,
+          "line": 105,
+          "sha256": "95fc5fa7c88f516a0326ed8b8f714020f10cefbd8a8d5900534501cf8598114c",
+          "chars": 251,
+          "new_guard_rejects": true
+        },
+        {
+          "round": 41,
+          "line": 112,
+          "sha256": "06ff5f7994f39df46bc18ed5c153e418147b716f58ffdc15d6a7d23958020209",
+          "chars": 333,
+          "new_guard_rejects": true
+        }
+      ]
+    },
+    {
+      "match": "598291_20260915_1955",
+      "source": "logs\\attack_map\\match_598291_20260915_1955\\teamA.log",
+      "log_sha256": "e90798f452368073d569ff23e112bdb09b98524a063e669c421e8de821076806",
+      "submissions": [
+        {
+          "round": 15,
+          "line": 46,
+          "kind": "token_object",
+          "answer_sha256": "4dd0648d64c0c6721846aa315b129b61d6e01d06374cc727c4ad871d17eb4f3c"
+        },
+        {
+          "round": 55,
+          "line": 133,
+          "kind": "token_object",
+          "answer_sha256": "17bed870a65802271dd74b18ae2065ba65185a2c6e932dcb4712f4201cd97791"
+        },
+        {
+          "round": 158,
+          "line": 272,
+          "kind": "token_object",
+          "answer_sha256": "d4278cf9733c9fbc6d86ea57568569f1b1fba487131194c153d62495f47e4e91"
+        }
+      ],
+      "fenced_replies": [
+        {
+          "round": 144,
+          "line": 232,
+          "strict_original_parser_accepts": false,
+          "new_task_parser_accepts": true
+        }
+      ],
+      "heredoc_commands": []
+    }
+  ],
+  "scope": "Parsed all instrumented own-team log lines, replayed only complete model wrappers and command syntax checks; no shell execution, complete match replay or grading inference"
+}

@@ -1,0 +1,14 @@
+test_fenced_command_and_bare_verified_token_submit_without_extra_round (test_task_answer_contract.ContractPipelineTests.test_fenced_command_and_bare_verified_token_submit_without_extra_round) ... ok
+test_wrong_shape_replans_locally_without_emitting_invalid_submission (test_task_answer_contract.ContractPipelineTests.test_wrong_shape_replans_locally_without_emitting_invalid_submission) ... ok
+test_api_contract_prevents_scalar_and_missing_fields_not_wrong_numbers (test_task_answer_contract.ContractTests.test_api_contract_prevents_scalar_and_missing_fields_not_wrong_numbers) ... ok
+test_exact_confirmed_syntax_failure_is_not_reissued (test_task_answer_contract.ContractTests.test_exact_confirmed_syntax_failure_is_not_reissued) ... ok
+test_observed_heredoc_family_and_valid_literal_content (test_task_answer_contract.ContractTests.test_observed_heredoc_family_and_valid_literal_content) ... ok
+test_only_named_task_file_not_api_response_examples_defines_contract (test_task_answer_contract.ContractTests.test_only_named_task_file_not_api_response_examples_defines_contract) ... ok
+test_strict_single_fence_keeps_nonce_and_duplicate_key_checks (test_task_answer_contract.ContractTests.test_strict_single_fence_keeps_nonce_and_duplicate_key_checks) ... ok
+test_token_format_repair_requires_actual_successful_check (test_task_answer_contract.ContractTests.test_token_format_repair_requires_actual_successful_check) ... ok
+test_unknown_numeric_and_conflicting_contracts_are_not_invented (test_task_answer_contract.ContractTests.test_unknown_numeric_and_conflicting_contracts_are_not_invented) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 0.210s
+
+OK
