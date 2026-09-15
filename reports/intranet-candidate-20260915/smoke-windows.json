@@ -1,0 +1,37 @@
+{
+  "scope": "Actual archive entry and logging fallback probes; not full-game or intranet PASS",
+  "archive_sha256": "f185f5f2f69642f53d5d715ff840524d8d2e592f08910b1e9bfd43195af46586",
+  "python": "3.11.10",
+  "os": "nt",
+  "cases": [
+    {
+      "case": "main3",
+      "passed": true,
+      "requests": 5,
+      "startup_seconds": 1.125,
+      "max_ms": 94.00000001187436
+    },
+    {
+      "case": "main",
+      "passed": true,
+      "requests": 5,
+      "startup_seconds": 1.125,
+      "max_ms": 92.99999999348074
+    },
+    {
+      "case": "blocked_trace",
+      "passed": true,
+      "requests": 5,
+      "startup_seconds": 1.125,
+      "max_ms": 140.00000001396984
+    },
+    {
+      "case": "absent_manifest",
+      "passed": true,
+      "requests": 5,
+      "startup_seconds": 1.125,
+      "max_ms": 110.00000001513399
+    }
+  ],
+  "passed": true
+}

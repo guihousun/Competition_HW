@@ -1,0 +1,17 @@
+{
+  "scope": "User-requested intranet test candidate, not intranet PASS or goal completion",
+  "source_commit": "1831136d5a30f89caba3cb5ec1d2b91838684c2a",
+  "tested_runtime_commit": "be8e5a2e4461d36659d015531963b2e47bb7551e",
+  "runtime_git_diff_empty": true,
+  "full_tests": 895,
+  "full_tests_seconds": 362.312,
+  "entry_posts": 45,
+  "archive_sha256": "f185f5f2f69642f53d5d715ff840524d8d2e592f08910b1e9bfd43195af46586",
+  "bytes": 243756,
+  "not_included": [
+    "DSH upgrade itinerary",
+    "DSH summon recipient/day cap and dizzy fixes"
+  ],
+  "fresh_real_treasure_repeats": "pending",
+  "intranet": "not tested"
+}
