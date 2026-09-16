@@ -270,6 +270,7 @@ def _plan_robot_actions(state):
     robots = (state.get('robot') or {}).get('roles') or []
     hard_blocked = _hard_movement_cells(turn)
     robot_moves, robot_attacks = {}, []
+    walkers = []
     if not turn.is_day:
         for robot in robots:
             if robot['health'] <= 0 or robot.get('abnormalState') == 'dizzy':
@@ -328,13 +329,23 @@ def _plan_robot_actions(state):
                                       'buildingKind': building_unit['roleType'],
                                       'from': p.dump(), 'to': blocked_by.dump()})
                 continue
-            options = [Pos(p.x + dx, p.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
-            options = [q for q in options if turn.land(q) and q not in hard_blocked
-                       and (goal is None or distance(q, goal) < distance(p, goal))]
-            if options:
-                q = min(options, key=lambda c: (distance(c, goal) if goal is not None else 0,
-                                                c.x, c.y))
-                robot_moves[str(robot['id'])] = q
+            walkers.append((robot, p, goal))
+    # First classify actions for the entire unchanged snapshot. Attacking,
+    # stunned and inactive robots are known not to vacate; route around them.
+    # Other walkers may vacate, so leave their origins available for the joint
+    # resolver. No position is written and no collision triggers a second choice.
+    walker_ids = {robot['id'] for robot, _, _ in walkers}
+    known_stationary = {Pos.load(robot['pos']) for robot in robots
+                        if robot['health'] > 0 and robot['id'] not in walker_ids}
+    obstacles = hard_blocked | known_stationary
+    for robot, p, goal in walkers:
+        options = [Pos(p.x + dx, p.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
+        options = [q for q in options if turn.land(q) and q not in obstacles
+                   and (goal is None or distance(q, goal) < distance(p, goal))]
+        if options:
+            q = min(options, key=lambda c: (distance(c, goal) if goal is not None else 0,
+                                            c.x, c.y))
+            robot_moves[str(robot['id'])] = q
     return robot_moves, robot_attacks
 
 

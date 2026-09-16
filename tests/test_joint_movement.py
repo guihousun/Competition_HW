@@ -127,13 +127,49 @@ class RealRobotStepTests(unittest.TestCase):
             self.assertEqual(positions(result['state']), {901:(6,4),902:(7,3),903:(8,2)})
             self.assertEqual(len(result['frame']['robotMoves']), 3)
 
-    def test_dizzy_robot_blocks_entire_following_chain(self):
+    def test_known_dizzy_robot_is_routed_around_before_intent(self):
         state = board()
         state['robot']['roles'] = [robot(901,5,5),robot(902,6,4),
                                   robot(903,7,3,abnormalState='dizzy',dizzyRounds=2)]
         result = advance(state)
-        self.assertEqual(positions(result['state']), {901:(5,5),902:(6,4),903:(7,3)})
-        self.assertEqual(result['frame']['robotMoves'], [])
+        self.assertEqual(positions(result['state']), {901:(6,4),902:(7,4),903:(7,3)})
+        self.assertEqual(len(result['frame']['robotMoves']), 2)
+
+    def test_dizzy_obstacle_three_step_public_detour(self):
+        for reverse in (False,True):
+            state = board()
+            state['robot']['roles'] = [robot(901,6,5),
+                                      robot(902,7,4,abnormalState='dizzy',dizzyRounds=5)]
+            if reverse:
+                state['robot']['roles'].reverse()
+            # Empty (7,5) is one step closer to base. Then (8,4),(9,3)
+            # follow the unchanged (distance,x,y) greedy tie-break.
+            for expected, remaining in [((7,5),4),((8,4),3),((9,3),2)]:
+                state = advance(state)['state']
+                self.assertEqual(positions(state)[901], expected)
+                self.assertEqual(positions(state)[902], (7,4))
+                stunned = next(r for r in state['robot']['roles'] if r['id']==902)
+                self.assertEqual(stunned['dizzyRounds'], remaining)
+
+    def test_attacking_robot_is_known_stationary_when_other_robot_routes(self):
+        for reverse in (False,True):
+            state = board()
+            state['teamOur']['roles'].append(unit(601,'worker',8,1))
+            # Worker distance: 4 from901 (moves), 3 from902 (attacks).
+            state['robot']['roles'] = [robot(901,6,5),robot(902,7,4)]
+            if reverse:
+                state['robot']['roles'].reverse()
+            result = advance(state)
+            self.assertEqual(positions(result['state']), {901:(7,5),902:(7,4)})
+            self.assertEqual([a['robot'] for a in result['frame']['robotAttacks']], [902])
+            worker = next(r for r in result['state']['teamOur']['roles'] if r['id']==601)
+            self.assertEqual(worker['health'], 215)
+
+    def test_other_team_inactive_robot_does_not_hide_legal_detour(self):
+        state = board()
+        state['robot']['roles'] = [robot(901,6,5),robot(902,7,4,targetTeam='defender')]
+        result = advance(state)
+        self.assertEqual(positions(result['state']), {901:(7,5),902:(7,4)})
 
     def test_shot_uses_original_robot_position_before_joint_move(self):
         state = board(robot_pos=(4,5))
