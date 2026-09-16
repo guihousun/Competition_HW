@@ -11,6 +11,7 @@ import re
 
 from . import news_ledger
 from .world_memory import WorldMemory
+from .world_context import item_context, prefix_limits
 from .task_agent import _json_unique
 from .treasure import notes_from_news, _RUMOUR
 
@@ -186,7 +187,8 @@ class WorldAgent:
                 self.status[owner] = "retry_limit"
                 continue
             token = sha(owner + version + str(count))[:24]
-            prompt = self._prompt(owner, token, resources, info)
+            prompt = self._prompt(owner, token, resources, info,
+                                  shop=payload.get('weaponShopList'))
             if len(prompt) > 12000:
                 self.status[owner] = "context_budget_exceeded"
                 continue
@@ -204,10 +206,10 @@ class WorldAgent:
 
     def _source_view(self, owner):
         index = {r['id']: r for r in self.memories[owner].index()}
-        cap = min(TEXT_LIMIT, 2000 // max(1, len(self.sources[owner])))
+        limits = prefix_limits([r['text'] for r in self.sources[owner]])
         view = [{**r, 'text': r['text'][:cap], 'truncated': r['truncated'] or len(r['text']) > cap,
                  'memory': {k: v for k, v in index.get(r['id'], {}).items() if k not in ('id', 'label', 'first_round')}}
-                for r in self.sources[owner]]
+                for r, cap in zip(self.sources[owner], limits)]
         # Prompt metadata describes the text included in THIS request. Do not
         # mutate delivered coverage here: previews and queued prompts are not
         # acknowledgements. Otherwise a model following next_unread literally
@@ -301,7 +303,7 @@ class WorldAgent:
         except (ValueError, TypeError, KeyError, AttributeError):
             return []
 
-    def _prompt(self, owner, token, resources, info):
+    def _prompt(self, owner, token, resources, info, *, shop=None):
         view = self._source_view(owner)
         common = (
             '根据公开资料做游戏决策辅助，只返回JSON，不返回角色动作、Shell或隐藏思维链。'
@@ -334,6 +336,8 @@ class WorldAgent:
                       '"上涨20%"/"下降20%"→percent 20；'
                       '引文只有日期数字、写的是"个百分点"、有否定词或未给幅度时必须为null且priceBasis=unknown，'
                       '不得换算或猜测。金额必须与引文完全相等（6与6.0等价，6不等于6.1）。'
+                      '区分预告日、生效日、恢复日；明天相对该来源的可靠发布日期计算，不相对读到消息的日期。'
+                      '“通常/左右”是估计，不能单独证明精确恢复日；后续仍在修复或明确恢复的消息也要纳入时间线。'
                       '更正/撤回旧事件时在resolution填{"kind":"corrected|cancelled","targetId":"账本id",'
                       '"evidence":[{"sourceId":"来源id","quote":"含更正/撤回字样的原文"}]}；'
                       '更正只覆盖它自身有日期证据的区间，旧事件在未覆盖日期仍然有效'
@@ -368,6 +372,12 @@ class WorldAgent:
                       'window候选value含opensAt/closesAt；prerequisite为条件原文字符串，未核验时必须保留unknowns。'
                       '只有所有条件完整且无冲突才设uncertain=false。合并此前各日同一祭坛的资料，'
                       '遇到更正或召唤失败应重新审视，而不是沿用旧答案。'
+                      '无关日的新闻不是撤回旧线索；缺少新传闻时不凭空补齐地点、材料或时间。'
+                      '日与天均可表达游戏日期；若只公布开放起点，不能假造截止日或默认永远开放。'
+                      '地图原点在左下，向东为x增加、向北为y增加；公里等距离缺少到格子的比例时，地点保留未知。'
+                      '下方外观参考只用于将描述与协议商品名比较，不是固定配方或本局库存。'
+                      '用品可能随地图变化；未知别名不要生造英文枚举，材料组合仍须逐字引用当局传闻。'
+                      '\n任务用品背景与本轮商店观测：' + json.dumps(item_context(shop), ensure_ascii=False) +
                       f'地图宽{info.get("width", 41)}高{info.get("height", 32)}。'
                       '\n己方公开召唤反馈：' + json.dumps(self.feedback, ensure_ascii=False))
         retry = ('\n上次回复未通过校验：请核对JSON层次、原文逐字引用和未解决的冲突；检索结果不是最终行动计划。'
@@ -873,8 +883,8 @@ class WorldAgent:
             if origin.get('anchor_day') is not None:
                 return True
             if isinstance(quote, str) and re.search(
-                    r'(?:游戏|比赛|今天|今日)(?:是|为)?第?[0-9一二三四五六七八九十]+天|'
-                    r'第[0-9一二三四五六七八九十]+天(?:白昼|白天|夜晚)|第\s*\d+\s*[-—至]\s*\d+\s*回合', quote):
+                    r'(?:游戏|比赛|今天|今日)(?:是|为)?第?[0-9一二三四五六七八九十]+[天日]|'
+                    r'第[0-9一二三四五六七八九十]+[天日](?:白昼|白天|夜晚)|第\s*\d+\s*[-—至]\s*\d+\s*回合', quote):
                 return True
         return False
 
