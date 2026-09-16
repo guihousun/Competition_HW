@@ -1410,11 +1410,11 @@ class PathReserveTest(unittest.TestCase):
         walker = Worker(1, Pos(5, 5), {})
         grid[walker.pos] = "worker"
         turn = Turn(round_no=1, map=Map((41, 32), grid), roles=(walker,), gold=0)
-        cmds: dict = {}
-        avoid = {Pos(6, 5), Pos(7, 5), Pos(8, 5)}  # 走廊的正中段
-        self.assertTrue(planner._step(walker, Pos(9, 5), turn, cmds, set(), avoid))
+        q = planner._Queue(turn)
+        self.assertTrue(q.step(walker, Pos(9, 5), avoid={Pos(6, 5), Pos(7, 5), Pos(8, 5)}))
+        planner._walk_out(turn, q, set())
         self.assertEqual(
-            cmds["1"],
+            q.cmds["1"],
             {"action": "move", "targetPos": [{"x": 6, "y": 5}]},
             "avoid 只是软的：绕不开就退回硬障碍，绝不原地卡死",
         )
