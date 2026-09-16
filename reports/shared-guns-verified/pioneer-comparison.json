@@ -1,0 +1,56 @@
+{
+  "scope": "First 130 rounds; both AI model and strategy changed, not an isolated efficacy comparison or official PASS",
+  "old_source": "96e4b4bd0473234fce63f8fc72fa090e218fa637",
+  "new_source": "f4919cc05ceab658507e5cc412d55e411f56edf4",
+  "subsequent_change": "3632d37 only adds the daytime fire guard; the comparison itself was measured on f4919cc",
+  "cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "old_death_round": null,
+      "new_death_round": null,
+      "shared_shots": 19,
+      "safety_overrides": 0
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "old_death_round": null,
+      "new_death_round": null,
+      "shared_shots": 18,
+      "safety_overrides": 0
+    },
+    {
+      "seed": 19,
+      "side": "challenger",
+      "old_death_round": null,
+      "new_death_round": null,
+      "shared_shots": 19,
+      "safety_overrides": 0
+    },
+    {
+      "seed": 19,
+      "side": "defender",
+      "old_death_round": 98,
+      "new_death_round": null,
+      "shared_shots": 16,
+      "safety_overrides": 5
+    },
+    {
+      "seed": 90601,
+      "side": "challenger",
+      "old_death_round": 94,
+      "new_death_round": null,
+      "shared_shots": 16,
+      "safety_overrides": 9
+    },
+    {
+      "seed": 90601,
+      "side": "defender",
+      "old_death_round": null,
+      "new_death_round": null,
+      "shared_shots": 17,
+      "safety_overrides": 3
+    }
+  ]
+}

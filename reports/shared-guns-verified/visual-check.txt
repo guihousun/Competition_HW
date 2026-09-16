@@ -1,0 +1,1 @@
+PASS: real levels, rewind, distinct shot types, impact timing, no fake laser, 3 visual tiers, bounded effects.
