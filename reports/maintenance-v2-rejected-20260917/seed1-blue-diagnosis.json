@@ -1,0 +1,862 @@
+{
+  "scope": "Read-only existing seed1 challenger traces. No counterfactual or rerun.",
+  "arms": {
+    "baseline": {
+      "successful_actions": {
+        "build:railgun": 1,
+        "move:": 692,
+        "build:rocket": 2,
+        "collect:": 31,
+        "acceptTask:": 6,
+        "build:wall": 27,
+        "submitAnswer:": 78,
+        "attack:": 704,
+        "buy:AcientTablet": 1,
+        "buy:StarSand": 1,
+        "summonTreasure:": 1,
+        "buy:WeaponUpgradeVoucher1": 3,
+        "use:WeaponUpgradeVoucher1": 3
+      },
+      "purchase_spend": {
+        "AcientTablet": 15,
+        "StarSand": 15,
+        "WeaponUpgradeVoucher1": 300
+      },
+      "final_gold": 60,
+      "purchase_episodes": [
+        {
+          "operation": "upgrade",
+          "owner": 10012,
+          "issued_round": 261,
+          "observed_rounds": 50,
+          "phases": {
+            "acquire": 50
+          },
+          "last_observed": 311
+        },
+        {
+          "operation": "upgrade",
+          "owner": 10012,
+          "issued_round": 391,
+          "observed_rounds": 51,
+          "phases": {
+            "acquire": 51
+          },
+          "last_observed": 442
+        },
+        {
+          "operation": "upgrade",
+          "owner": 10012,
+          "issued_round": 541,
+          "observed_rounds": 43,
+          "phases": {
+            "acquire": 42,
+            "return": 1
+          },
+          "last_observed": 584
+        }
+      ],
+      "deaths": {
+        "wall": [
+          {
+            "round": 490,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          },
+          {
+            "round": 499,
+            "id": 40000,
+            "pos": {
+              "x": 10,
+              "y": 24
+            }
+          },
+          {
+            "round": 512,
+            "id": 40001,
+            "pos": {
+              "x": 10,
+              "y": 25
+            }
+          },
+          {
+            "round": 750,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          },
+          {
+            "round": 756,
+            "id": 40002,
+            "pos": {
+              "x": 10,
+              "y": 26
+            }
+          },
+          {
+            "round": 906,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          },
+          {
+            "round": 1015,
+            "id": 40001,
+            "pos": {
+              "x": 10,
+              "y": 25
+            }
+          },
+          {
+            "round": 1037,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          },
+          {
+            "round": 1167,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          },
+          {
+            "round": 1290,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          }
+        ],
+        "worker": [
+          {
+            "round": 510,
+            "id": 10010,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 518,
+            "id": 10012,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 777,
+            "id": 10010,
+            "pos": {
+              "x": 8,
+              "y": 24
+            }
+          },
+          {
+            "round": 1293,
+            "id": 10012,
+            "pos": {
+              "x": 8,
+              "y": 24
+            }
+          }
+        ],
+        "pioneer": []
+      },
+      "base_damage": [
+        {
+          "round": 519,
+          "damage": 20
+        },
+        {
+          "round": 520,
+          "damage": 20
+        }
+      ],
+      "r334_before_guns_and_workers": [
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone",
+            "stone",
+            "stone"
+          ],
+          "health": 220,
+          "id": 10010,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 26
+          },
+          "roleType": "worker"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [],
+          "health": 220,
+          "id": 10012,
+          "level": 1,
+          "pos": {
+            "x": 7,
+            "y": 27
+          },
+          "roleType": "worker"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10030,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 27
+          },
+          "roleType": "railgun"
+        },
+        {
+          "cooldown": 0,
+          "health": 1500,
+          "id": 10040,
+          "level": 2,
+          "pos": {
+            "x": 9,
+            "y": 27
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10041,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 25
+          },
+          "roleType": "rocket"
+        }
+      ],
+      "r334_response": {
+        "roleCommandMap": {
+          "10011": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 28,
+                "y": 13
+              }
+            ]
+          },
+          "10040": {
+            "action": "attack",
+            "controllerId": "10010",
+            "targetPos": [
+              {
+                "x": 24,
+                "y": 23
+              },
+              {
+                "x": 24,
+                "y": 22
+              }
+            ]
+          }
+        }
+      }
+    },
+    "candidate": {
+      "successful_actions": {
+        "build:railgun": 1,
+        "move:": 860,
+        "build:rocket": 2,
+        "collect:": 23,
+        "acceptTask:": 6,
+        "build:wall": 22,
+        "submitAnswer:": 78,
+        "attack:": 580,
+        "buy:AcientTablet": 1,
+        "buy:StarSand": 1,
+        "summonTreasure:": 1,
+        "buy:WallFixer": 9,
+        "use:WallFixer": 9
+      },
+      "purchase_spend": {
+        "AcientTablet": 15,
+        "StarSand": 15,
+        "WallFixer": 90
+      },
+      "final_gold": 270,
+      "purchase_episodes": [
+        {
+          "operation": "repair",
+          "owner": 10012,
+          "issued_round": 261,
+          "observed_rounds": 49,
+          "phases": {
+            "acquire": 38,
+            "return": 11
+          },
+          "last_observed": 310
+        },
+        {
+          "operation": "repair",
+          "owner": 10012,
+          "issued_round": 391,
+          "observed_rounds": 48,
+          "phases": {
+            "acquire": 38,
+            "return": 10
+          },
+          "last_observed": 439
+        },
+        {
+          "operation": "repair",
+          "owner": 10012,
+          "issued_round": 521,
+          "observed_rounds": 50,
+          "phases": {
+            "acquire": 39,
+            "return": 11
+          },
+          "last_observed": 571
+        },
+        {
+          "operation": "repair",
+          "owner": 10012,
+          "issued_round": 651,
+          "observed_rounds": 44,
+          "phases": {
+            "acquire": 34,
+            "return": 10
+          },
+          "last_observed": 695
+        },
+        {
+          "operation": "repair",
+          "owner": 10010,
+          "issued_round": 781,
+          "observed_rounds": 32,
+          "phases": {
+            "acquire": 30,
+            "return": 2
+          },
+          "last_observed": 813
+        },
+        {
+          "operation": "repair",
+          "owner": 10010,
+          "issued_round": 813,
+          "observed_rounds": 33,
+          "phases": {
+            "acquire": 30,
+            "return": 3
+          },
+          "last_observed": 846
+        },
+        {
+          "operation": "repair",
+          "owner": 10010,
+          "issued_round": 931,
+          "observed_rounds": 35,
+          "phases": {
+            "acquire": 33,
+            "return": 2
+          },
+          "last_observed": 966
+        },
+        {
+          "operation": "repair",
+          "owner": 10012,
+          "issued_round": 1061,
+          "observed_rounds": 34,
+          "phases": {
+            "acquire": 32,
+            "return": 2
+          },
+          "last_observed": 1095
+        },
+        {
+          "operation": "repair",
+          "owner": 10012,
+          "issued_round": 1191,
+          "observed_rounds": 34,
+          "phases": {
+            "acquire": 32,
+            "return": 2
+          },
+          "last_observed": 1225
+        }
+      ],
+      "deaths": {
+        "wall": [
+          {
+            "round": 623,
+            "id": 40001,
+            "pos": {
+              "x": 10,
+              "y": 25
+            }
+          },
+          {
+            "round": 633,
+            "id": 40000,
+            "pos": {
+              "x": 10,
+              "y": 24
+            }
+          },
+          {
+            "round": 775,
+            "id": 40009,
+            "pos": {
+              "x": 10,
+              "y": 23
+            }
+          },
+          {
+            "round": 779,
+            "id": 40000,
+            "pos": {
+              "x": 10,
+              "y": 24
+            }
+          },
+          {
+            "round": 1029,
+            "id": 40002,
+            "pos": {
+              "x": 10,
+              "y": 26
+            }
+          },
+          {
+            "round": 1030,
+            "id": 40000,
+            "pos": {
+              "x": 10,
+              "y": 24
+            }
+          }
+        ],
+        "worker": [
+          {
+            "round": 641,
+            "id": 10010,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 878,
+            "id": 10010,
+            "pos": {
+              "x": 9,
+              "y": 24
+            }
+          },
+          {
+            "round": 895,
+            "id": 10012,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 1006,
+            "id": 10010,
+            "pos": {
+              "x": 9,
+              "y": 24
+            }
+          },
+          {
+            "round": 1034,
+            "id": 10012,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 1141,
+            "id": 10012,
+            "pos": {
+              "x": 9,
+              "y": 24
+            }
+          },
+          {
+            "round": 1142,
+            "id": 10010,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 1271,
+            "id": 10010,
+            "pos": {
+              "x": 9,
+              "y": 26
+            }
+          },
+          {
+            "round": 1272,
+            "id": 10012,
+            "pos": {
+              "x": 9,
+              "y": 24
+            }
+          }
+        ],
+        "pioneer": [
+          {
+            "round": 883,
+            "id": 10011,
+            "pos": {
+              "x": 8,
+              "y": 27
+            }
+          },
+          {
+            "round": 1149,
+            "id": 10011,
+            "pos": {
+              "x": 6,
+              "y": 26
+            }
+          },
+          {
+            "round": 1283,
+            "id": 10011,
+            "pos": {
+              "x": 6,
+              "y": 26
+            }
+          }
+        ]
+      },
+      "base_damage": [
+        {
+          "round": 896,
+          "damage": 20
+        },
+        {
+          "round": 897,
+          "damage": 20
+        },
+        {
+          "round": 898,
+          "damage": 20
+        },
+        {
+          "round": 899,
+          "damage": 20
+        },
+        {
+          "round": 900,
+          "damage": 20
+        },
+        {
+          "round": 901,
+          "damage": 20
+        },
+        {
+          "round": 902,
+          "damage": 20
+        },
+        {
+          "round": 903,
+          "damage": 20
+        },
+        {
+          "round": 904,
+          "damage": 20
+        },
+        {
+          "round": 905,
+          "damage": 20
+        },
+        {
+          "round": 906,
+          "damage": 20
+        },
+        {
+          "round": 907,
+          "damage": 20
+        },
+        {
+          "round": 908,
+          "damage": 20
+        },
+        {
+          "round": 909,
+          "damage": 20
+        },
+        {
+          "round": 910,
+          "damage": 20
+        },
+        {
+          "round": 1150,
+          "damage": 25
+        },
+        {
+          "round": 1151,
+          "damage": 25
+        },
+        {
+          "round": 1152,
+          "damage": 25
+        },
+        {
+          "round": 1153,
+          "damage": 25
+        },
+        {
+          "round": 1154,
+          "damage": 25
+        },
+        {
+          "round": 1155,
+          "damage": 25
+        },
+        {
+          "round": 1156,
+          "damage": 25
+        },
+        {
+          "round": 1157,
+          "damage": 25
+        },
+        {
+          "round": 1158,
+          "damage": 25
+        },
+        {
+          "round": 1159,
+          "damage": 25
+        },
+        {
+          "round": 1160,
+          "damage": 25
+        },
+        {
+          "round": 1161,
+          "damage": 25
+        },
+        {
+          "round": 1162,
+          "damage": 25
+        },
+        {
+          "round": 1163,
+          "damage": 25
+        },
+        {
+          "round": 1164,
+          "damage": 25
+        },
+        {
+          "round": 1165,
+          "damage": 25
+        },
+        {
+          "round": 1166,
+          "damage": 25
+        },
+        {
+          "round": 1167,
+          "damage": 25
+        },
+        {
+          "round": 1168,
+          "damage": 25
+        },
+        {
+          "round": 1169,
+          "damage": 25
+        },
+        {
+          "round": 1170,
+          "damage": 25
+        },
+        {
+          "round": 1284,
+          "damage": 25
+        },
+        {
+          "round": 1285,
+          "damage": 25
+        },
+        {
+          "round": 1286,
+          "damage": 25
+        },
+        {
+          "round": 1287,
+          "damage": 25
+        },
+        {
+          "round": 1288,
+          "damage": 25
+        },
+        {
+          "round": 1289,
+          "damage": 25
+        },
+        {
+          "round": 1290,
+          "damage": 25
+        },
+        {
+          "round": 1291,
+          "damage": 25
+        },
+        {
+          "round": 1292,
+          "damage": 25
+        },
+        {
+          "round": 1293,
+          "damage": 25
+        },
+        {
+          "round": 1294,
+          "damage": 25
+        },
+        {
+          "round": 1295,
+          "damage": 25
+        },
+        {
+          "round": 1296,
+          "damage": 25
+        },
+        {
+          "round": 1297,
+          "damage": 25
+        },
+        {
+          "round": 1298,
+          "damage": 25
+        },
+        {
+          "round": 1299,
+          "damage": 25
+        },
+        {
+          "round": 1300,
+          "damage": 25
+        }
+      ],
+      "r334_before_guns_and_workers": [
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone",
+            "stone",
+            "stone"
+          ],
+          "health": 220,
+          "id": 10010,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 26
+          },
+          "roleType": "worker"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [],
+          "health": 220,
+          "id": 10012,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 26
+          },
+          "roleType": "worker"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10030,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 27
+          },
+          "roleType": "railgun"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10040,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 27
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10041,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 25
+          },
+          "roleType": "rocket"
+        }
+      ],
+      "r334_response": {
+        "roleCommandMap": {
+          "10011": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 28,
+                "y": 13
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "first_divergences": {
+    "maintenance_proposal_report": 261,
+    "different_response_with_identical_public_input": 284,
+    "courier_position": 289,
+    "wall_hp": 298,
+    "weapon_level": 310,
+    "actual_weapon_attack": 334,
+    "worker_health": 500,
+    "base_hp": 519
+  },
+  "interpretation": [
+    "Same r284 public input/gold200: baseline buys WeaponUpgradeVoucher1, candidate buys WallFixer. Earlier report r261 assigns repair trip, so this is new-trip priority, not theft of an already issued upgrade contract.",
+    "Candidate buys/uses9 repair kits for90 gold, buys zero weapon vouchers, ends with270 gold. Baseline buys/uses3 weapon vouchers for300 gold, ends with60 gold.",
+    "Repair has genuine earlier benefit: first wall death490->623 and first base damage519->896. Late losses dominate the outcome; do not call all repairs harmful.",
+    "More travel860vs692, fewer walls built22vs27 and attacks580vs704 are descriptive effects. No controlled causal isolation of construction pressure or amount of damage."
+  ]
+}

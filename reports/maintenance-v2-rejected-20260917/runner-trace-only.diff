@@ -1,0 +1,20 @@
+--- old/evaluate_issue32.py
++++ new/evaluate_issue32.py
+@@ -29,7 +29,7 @@
+ os.environ[brain.TASK_AGENT_ENV]='on';os.environ[brain.WORLD_AGENT_ENV]='on'
+ commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip()
+ source_hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in (root/'Demo/CoreGeek/src/agent').glob('*.py')}
+-metadata={'wall_sustain':a.wall_sustain,'source_commit':commit,'source_hashes':source_hashes,'python':sys.version,'candidate':a.candidate,'early_economy':a.early_economy,'repair_supply':a.repair_supply,
++metadata={'maintenance_v2':os.environ.get('COMPETITION_HW_MAINTENANCE_V2','off'),'wall_sustain':a.wall_sustain,'source_commit':commit,'source_hashes':source_hashes,'python':sys.version,'candidate':a.candidate,'early_economy':a.early_economy,'repair_supply':a.repair_supply,
+           'failure_rate':a.failure_rate,'construction_trip':a.construction_trip,'task_gold':a.task_gold,'tasks_per_point':a.tasks_per_point,'runner_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'reward_profile_sha256':hashlib.sha256(Path(__file__).with_name('reward_profile.py').read_bytes()).hexdigest(),'failure_profile_sha256':hashlib.sha256(Path(__file__).with_name('failure_profile.py').read_bytes()).hexdigest(),'scope':'Local injected unsolved tasks until timeout; not official judging or measured LLM accuracy. Paired failure assignment; successful reward unchanged',
+           'evaluation_seeds':list(map(int,a.seeds.split(','))),'evaluation_sides':a.sides.split(','),'suite':a.suite,'heldouts_used':a.suite=='holdout','bench_support_sha256':hashlib.sha256(Path(__file__).with_name('bench_support.py').read_bytes()).hexdigest(),'profile':'observed-seven-days','limit':1300,'pid':os.getpid()}
+ save(out/'config.json',metadata);summaries=[]
+@@ -75,7 +75,7 @@
+      actions[command['action']]+=1
+      if command['action'] in ('sell','buy','use'):
+       cash.append({'round':obs['roundNo'],'role':uid,**command})
+-   trace.append({'policy_ms':elapsed*1000,'shop_quote':obs.get('weaponShopList') if any(c.get('action')=='buy' for c in response['roleCommandMap'].values()) else None,'vendor_quote':obs.get('vendorShopList') if any(c.get('action')=='sell' for c in response['roleCommandMap'].values()) else None,'units_before':obs['teamOur']['roles'],'units_after':state['teamOur']['roles'],'gold_before':obs['teamOur']['goldNum'],'upgrade_report':json.loads(json.dumps((brain.decision_report() or {}).get('upgrade_itinerary') or {})),'round':obs['roundNo'],'observation_hash':digest(obs),'response':response,'feedback':feedback,
++   trace.append({'defense_sustain':json.loads(json.dumps(sustain)),'purchase_before':before_memory.get('teamTrips',{}).get('purchase'),'night_lease_before':before_memory.get('sustainMemory',{}).get('lease'),'policy_ms':elapsed*1000,'shop_quote':obs.get('weaponShopList') if any(c.get('action')=='buy' for c in response['roleCommandMap'].values()) else None,'vendor_quote':obs.get('vendorShopList') if any(c.get('action')=='sell' for c in response['roleCommandMap'].values()) else None,'units_before':obs['teamOur']['roles'],'units_after':state['teamOur']['roles'],'gold_before':obs['teamOur']['goldNum'],'upgrade_report':json.loads(json.dumps((brain.decision_report() or {}).get('upgrade_itinerary') or {})),'round':obs['roundNo'],'observation_hash':digest(obs),'response':response,'feedback':feedback,
+                  'gold':state['teamOur']['goldNum'],'score':state['teamOur']['totalScore'],'after_hash':digest(public_state(state))})
+    if len(trace)%20==0:save(out/'status.json',{'status':'running','pid':os.getpid(),'heartbeat':time.time(),'seed':seed,'side':side,'round':len(trace)})
+    if result['done']:break

@@ -1,0 +1,43 @@
+{
+  "locked_at": 1789585184.9962513,
+  "seeds": [
+    1,
+    19
+  ],
+  "sides": [
+    "challenger",
+    "defender"
+  ],
+  "failure_rate": 0.5,
+  "task_gold": 80,
+  "tasks_per_point": 3,
+  "profile": "observed-seven-days",
+  "limit": 1300,
+  "source_refs": {
+    "baseline": "9c6ed09adc90f0b2b670456349cfb96c4efad495",
+    "candidate": "fa74d5ab760da601bd644e72962776989ce99303"
+  },
+  "feature_environment": {
+    "baseline": "off",
+    "candidate": "on"
+  },
+  "all_legacy_flags": "off",
+  "new_matches": 8,
+  "previously_seen_development_seeds": true,
+  "heldout": false,
+  "gates": [
+    "no_earlier_base_destruction_per_pair",
+    "no_added_protocol_execution_errors"
+  ],
+  "descriptive": [
+    "score",
+    "base_hp",
+    "repair_buy_use_return_counts",
+    "ownership_failures",
+    "unspent_gold",
+    "completed_upgrades",
+    "max_policy_ms_round_and_public_context"
+  ],
+  "no_autotuning_or_default_enable": true,
+  "runner": "06c68e9e73f5e01b288ea5f46ed063e5f4fd8f228037f44be78cb0245ecc957e"
+}

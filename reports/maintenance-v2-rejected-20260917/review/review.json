@@ -1,0 +1,541 @@
+{
+  "scope": "independent read-only exact prior synthetic r415 variant, no expectation changes or simulator/native calls",
+  "origin_fixture": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\react-lab\\distillation-audit\\native-v5-late-fixtures\\greedy-day-repair-return.json",
+  "origin_fixture_sha256": "895cf87aa7ef4d8f683b2d8b812a91b654dfb238126a11dcd782fd2dfbdefdf9",
+  "modifications": [
+    "retain only damaged wall40000; remove other wall roles and all wall map zones",
+    "10012 backpack becomes already-held WeaponUpgradeVoucher1",
+    "phaseTask empty and playerTasks empty",
+    "fresh PlannerState, no purchase memory"
+  ],
+  "observation": {
+    "errors": [],
+    "lastCmdResult": "",
+    "lastRoundRoleActionResults": {
+      "10011": true,
+      "10012": true
+    },
+    "lastSummonTreasureResult": 0,
+    "llmResp": "",
+    "mapInfo": {
+      "height": 32,
+      "width": 41,
+      "zones": [
+        {
+          "neutralType": "vendor",
+          "pos": {
+            "x": 20,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "weaponShop",
+          "pos": {
+            "x": 25,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint1",
+          "pos": {
+            "x": 8,
+            "y": 3
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint2",
+          "pos": {
+            "x": 33,
+            "y": 18
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint1",
+          "pos": {
+            "x": 29,
+            "y": 28
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint2",
+          "pos": {
+            "x": 31,
+            "y": 23
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 25,
+            "y": 13
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 14,
+            "y": 17
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 6,
+            "y": 6
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 32,
+            "y": 29
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 1,
+            "y": 26
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 26,
+            "y": 2
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 28,
+            "y": 26
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 0,
+            "y": 4
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 29,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 18,
+            "y": 5
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 15,
+            "y": 24
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 40,
+            "y": 2
+          }
+        }
+      ]
+    },
+    "phaseTask": "",
+    "robot": {
+      "roles": []
+    },
+    "roundNo": 415,
+    "teamEnemy": {
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 20013,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 6
+          },
+          "roleType": "station"
+        }
+      ]
+    },
+    "teamOur": {
+      "goldNum": 10,
+      "playerTasks": [
+        {
+          "coldDownRounds": 0,
+          "goldReward": 80,
+          "isValid": false,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 8,
+            "y": 3
+          },
+          "taskType": "自进化类1",
+          "timeoutRounds": 25
+        },
+        {
+          "coldDownRounds": 0,
+          "goldReward": 80,
+          "isValid": true,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 33,
+            "y": 18
+          },
+          "taskType": "自进化类2",
+          "timeoutRounds": 25
+        }
+      ],
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 10013,
+          "level": 1,
+          "pos": {
+            "x": 7,
+            "y": 26
+          },
+          "roleType": "station"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [],
+          "health": 220,
+          "id": 10010,
+          "level": 1,
+          "pos": {
+            "x": 8,
+            "y": 24
+          },
+          "roleType": "worker"
+        },
+        {
+          "backPackCapability": 40,
+          "backpack": [],
+          "health": 200,
+          "id": 10011,
+          "level": 1,
+          "pos": {
+            "x": 29,
+            "y": 18
+          },
+          "roleType": "pioneer"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "WeaponUpgradeVoucher1"
+          ],
+          "health": 220,
+          "id": 10012,
+          "level": 1,
+          "pos": {
+            "x": 24,
+            "y": 21
+          },
+          "roleType": "worker"
+        },
+        {
+          "cooldown": 0,
+          "health": 1500,
+          "id": 10040,
+          "level": 2,
+          "pos": {
+            "x": 8,
+            "y": 27
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10030,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 24
+          },
+          "roleType": "railgun"
+        },
+        {
+          "cooldown": 0,
+          "health": 1500,
+          "id": 10041,
+          "level": 2,
+          "pos": {
+            "x": 9,
+            "y": 26
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 640,
+          "id": 40000,
+          "level": 2,
+          "pos": {
+            "x": 10,
+            "y": 23
+          },
+          "roleType": "wall"
+        }
+      ],
+      "totalScore": 570,
+      "type": "challenger"
+    },
+    "vendorShopList": [
+      {
+        "name": "stone",
+        "price": 1
+      },
+      {
+        "name": "iron",
+        "price": 3
+      },
+      {
+        "name": "copper",
+        "price": 5
+      }
+    ],
+    "weaponShopList": [
+      {
+        "name": "WeaponUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "WeaponUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallUpgradeVoucher1",
+        "price": 20
+      },
+      {
+        "name": "WallUpgradeVoucher2",
+        "price": 30
+      },
+      {
+        "name": "StationUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "StationUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallFixer",
+        "price": 10
+      },
+      {
+        "name": "Medicine",
+        "price": 10
+      },
+      {
+        "name": "DizzyWeapon",
+        "price": 100
+      },
+      {
+        "name": "Bomb",
+        "price": 100
+      },
+      {
+        "name": "SmallRobotSummonOrder",
+        "price": 20
+      },
+      {
+        "name": "MiddleRobotSummonOrder",
+        "price": 30
+      },
+      {
+        "name": "LargeRobotSummonOrder",
+        "price": 100
+      },
+      {
+        "name": "BossRobotSummonOrder",
+        "price": 200
+      },
+      {
+        "name": "AcientTablet",
+        "price": 15
+      },
+      {
+        "name": "StarSand",
+        "price": 15
+      },
+      {
+        "name": "FlameBreath",
+        "price": 15
+      },
+      {
+        "name": "FrostPotion",
+        "price": 15
+      },
+      {
+        "name": "ThornAmulet",
+        "price": 15
+      },
+      {
+        "name": "IronWhistle",
+        "price": 15
+      }
+    ],
+    "worldNews": {
+      "folkLegends": "民间传闻（本地夹具）：祭坛在 (27, 22) 附近，需献祭 AcientTablet、StarSand，第 184-224 回合有效",
+      "officialNews": ""
+    },
+    "playerTasks": []
+  },
+  "observation_hash": "b8f0821083512875be7999c508f3e1f8c37d33cd3374bfbffdaa0716baf8705b",
+  "expected_owner_command": {
+    "action": "move",
+    "targetPos": [
+      {
+        "x": 23,
+        "y": 20
+      }
+    ]
+  },
+  "expected_remaining_actions": 16,
+  "direct_upgrade_result": [
+    [
+      10012,
+      {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 23,
+            "y": 20
+          }
+        ]
+      }
+    ],
+    {
+      "phase": "return_with_voucher",
+      "reason": "return_with_voucher",
+      "gold_available": 10,
+      "weapon_reserve": {
+        "building": 10030,
+        "voucher": "WeaponUpgradeVoucher1",
+        "gold": 100,
+        "level": 1
+      },
+      "shop_count": 1,
+      "vendor_count": 1,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 16,
+        "budget": 44,
+        "slack": 28,
+        "reason": "delivery"
+      },
+      "worker": 10012,
+      "building": 10030,
+      "voucher": "WeaponUpgradeVoucher1",
+      "target": {
+        "x": 9,
+        "y": 24
+      },
+      "price": null
+    }
+  ],
+  "pipeline_commands": {
+    "10012": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 23,
+          "y": 20
+        }
+      ]
+    },
+    "10010": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 7,
+          "y": 23
+        }
+      ]
+    },
+    "10011": {
+      "action": "move",
+      "targetPos": [
+        {
+          "x": 30,
+          "y": 17
+        }
+      ]
+    }
+  },
+  "pipeline_upgrade_report": {
+    "phase": "return_with_voucher",
+    "reason": "return_with_voucher",
+    "gold_available": 10,
+    "weapon_reserve": {
+      "building": 10030,
+      "voucher": "WeaponUpgradeVoucher1",
+      "gold": 100,
+      "level": 1
+    },
+    "shop_count": 1,
+    "vendor_count": 1,
+    "route": {
+      "feasible": true,
+      "remaining_actions": 16,
+      "budget": 43,
+      "slack": 27,
+      "reason": "delivery"
+    },
+    "worker": 10012,
+    "building": 10030,
+    "voucher": "WeaponUpgradeVoucher1",
+    "target": {
+      "x": 9,
+      "y": 24
+    },
+    "price": null,
+    "team_trip_events": [
+      {
+        "kind": "purchase",
+        "event": "issued",
+        "owner": 10012
+      }
+    ]
+  },
+  "persisted_team_trips": {
+    "purchase": {
+      "owner": 10012,
+      "issued_round": 415,
+      "last_round": 415,
+      "deadline": 458,
+      "target": 10030,
+      "level": 1,
+      "count": 1,
+      "item": "WeaponUpgradeVoucher1",
+      "phase": "acquire",
+      "last_action": "move"
+    }
+  },
+  "pass": true,
+  "source_files": {
+    "Demo/CoreGeek/src/agent/brain.py": "0ca1e85b959b367702532c65b12a1ac179e54e038302e95add2a4e3f17e57e42",
+    "Demo/CoreGeek/src/agent/planner.py": "ff73c41e6cdd4bdc8a32f0360c8e31bc3088ad0dfc0274d37d7b2e6758b1c835",
+    "Demo/CoreGeek/src/agent/maintenance_supply.py": "5431afd4587924ae5ed54a85973225579d83639160f3abb26768dcb0def11e34",
+    "Demo/CoreGeek/src/agent/defense_sustain.py": "c6c6dd11490a2c0313ac2d4f83653090b5a37dce5675f4fe0884f3e88b29188c",
+    "Demo/CoreGeek/src/agent/team_trip.py": "341f6fcedd846d4d052fcf504539f80af606abf3ceb3e077f5283e08fdf0b60a"
+  }
+}

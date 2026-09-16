@@ -1,0 +1,52 @@
+{
+  "mixed-night-shop-death": {
+    "file": ".workflow\\react-lab\\distillation-audit\\native-v5-late-fixtures\\mixed-night-shop-death.json",
+    "sha256": "8a3baf9deafd59120906192ffb2fc35b7de7daf9876c2d32e38a66dffcb4a6ee",
+    "rounds": [
+      331,
+      332,
+      333,
+      334,
+      335,
+      411,
+      418,
+      419,
+      420
+    ]
+  },
+  "greedy-day-repair-return": {
+    "file": ".workflow\\react-lab\\distillation-audit\\native-v5-late-fixtures\\greedy-day-repair-return.json",
+    "sha256": "895cf87aa7ef4d8f683b2d8b812a91b654dfb238126a11dcd782fd2dfbdefdf9",
+    "rounds": [
+      415,
+      437,
+      438,
+      446,
+      447,
+      448,
+      464
+    ]
+  },
+  "mixed-night-repair-compatible-fire": {
+    "file": ".workflow\\react-lab\\distillation-audit\\native-v5-late-fixtures\\mixed-night-repair-compatible-fire.json",
+    "sha256": "141f37c4d5dd7c0a96b7651dc3f3da379438b26999ad1b946cd342da243b699d",
+    "rounds": [
+      767
+    ]
+  },
+  "greedy-operator-move-attack-conflict": {
+    "file": ".workflow\\react-lab\\distillation-audit\\native-v5-late-fixtures\\greedy-operator-move-attack-conflict.json",
+    "sha256": "e8b22497f57ea9fe6057d8c3a76164fad4cf515d268cfac44445d03979e2965a",
+    "rounds": [
+      910
+    ]
+  },
+  "mixed-stock-exhaustion-wall-loss": {
+    "file": ".workflow\\react-lab\\distillation-audit\\native-v5-late-fixtures\\mixed-stock-exhaustion-wall-loss.json",
+    "sha256": "d12420268c964fed2dc5b14eaffee468b471e0adaed6c57451d00afe02468b6f",
+    "rounds": [
+      904,
+      905
+    ]
+  }
+}
