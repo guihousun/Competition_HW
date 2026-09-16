@@ -1,5 +1,5 @@
 {
-  "commit": "a230a1c0aa4d3550952ed4b57cac1f3d6f738795",
+  "commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 117981,
+      "bytes": 122904,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "f0a6d6049fb4805608ca2e351a3309a42606874bac8b01c47d17e75e8b2758a8",
+      "sha256": "5c9ffb3c88480867b7bbe6d1f2d06067e3665fca5fe4814b080bed660d5bac0e",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -80,10 +80,16 @@
       "source": "Demo/CoreGeek/src/agent/combat_geometry.py"
     },
     {
-      "bytes": 32355,
+      "bytes": 32510,
       "path": "CoreGeek/src/agent/console_digest.py",
-      "sha256": "b6851a6b5a7779d29bcf57e20d28e57dc759bc8d72d888e23469907bef3ccd37",
+      "sha256": "30435063f5676aa44e5e16f449af10da94cd78a3bf82e6b504c1e1df4947236e",
       "source": "Demo/CoreGeek/src/agent/console_digest.py"
+    },
+    {
+      "bytes": 11123,
+      "path": "CoreGeek/src/agent/construction_trip.py",
+      "sha256": "e19481a19315abda7e9f56b468dc9665d22427d26718901f27106a0034a26c16",
+      "source": "Demo/CoreGeek/src/agent/construction_trip.py"
     },
     {
       "bytes": 9027,
@@ -110,9 +116,9 @@
       "source": "Demo/CoreGeek/src/agent/defense_layout.py"
     },
     {
-      "bytes": 37540,
+      "bytes": 37949,
       "path": "CoreGeek/src/agent/diagnostics.py",
-      "sha256": "bdc1c2e69bf161780ac17ca434c9be460176ec2dfb8c0b99fc8f5201b03092a1",
+      "sha256": "4f4f9242b234fd2cd31acd59520a037b192aa641c38f1912504ff4fcab42902e",
       "source": "Demo/CoreGeek/src/agent/diagnostics.py"
     },
     {
@@ -224,9 +230,9 @@
       "source": "Demo/CoreGeek/src/agent/pioneer_safety.py"
     },
     {
-      "bytes": 22254,
+      "bytes": 22507,
       "path": "CoreGeek/src/agent/planner.py",
-      "sha256": "59e6ec9600ee3971750ce536eb9bceaab9de11af070ae309d95ddb9c111257ee",
+      "sha256": "63274f2bc9332b2a61e4aaa6f955408224ab396ebbae6b700d697f666fecf9e2",
       "source": "Demo/CoreGeek/src/agent/planner.py"
     },
     {
@@ -248,6 +254,12 @@
       "source": "Demo/CoreGeek/src/agent/recordings.py"
     },
     {
+      "bytes": 5838,
+      "path": "CoreGeek/src/agent/robot_occupancy.py",
+      "sha256": "69da329f285bf383cde015dec44afc9b670bda89b5a4a6d312578c65346b3b4e",
+      "source": "Demo/CoreGeek/src/agent/robot_occupancy.py"
+    },
+    {
       "bytes": 6722,
       "path": "CoreGeek/src/agent/sandbox.py",
       "sha256": "4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321",
@@ -266,9 +278,9 @@
       "source": "submission/server.py"
     },
     {
-      "bytes": 43836,
+      "bytes": 45039,
       "path": "CoreGeek/src/agent/simulator.py",
-      "sha256": "ebf889ce2830ff7614c2c0fd54373835e885dfd62c0fb07adfa5ffe5fda5bc43",
+      "sha256": "a69f86d26a046f732e518f77734a267489b7e7c57aaafdc1d419f7a524f63241",
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
@@ -356,6 +368,12 @@
       "source": "Demo/CoreGeek/src/agent/team_agent.py"
     },
     {
+      "bytes": 23875,
+      "path": "CoreGeek/src/agent/team_trip.py",
+      "sha256": "abc86af084fe594e7ceea98c694773a8114eadfa5e5fd6498fb0a6feec136113",
+      "source": "Demo/CoreGeek/src/agent/team_trip.py"
+    },
+    {
       "bytes": 19036,
       "path": "CoreGeek/src/agent/telemetry.py",
       "sha256": "ba33d27b3c0addd88a569bb4edceb2778ebb6c068bf2e472d2883beedbca8fa1",
@@ -380,9 +398,9 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 8324,
+      "bytes": 8715,
       "path": "CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "2e4c841eeaa997826aba7b73b3f3feb746557c9fb696f4ec1f66ca8bec99eb13",
+      "sha256": "583b4d5466bd89478e4fb55c8d855edb7f96209f96cfc46725606261fea53957",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -435,5 +453,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "7ebae0bcf68d9d7dff6123a34dc5a0ab11186e33b5a03740a1dc469251b7da3a"
+  "source_digest": "cd66f7f7a68134f62ebdb4db01992a30bf0b4c698bbd3b3b8257870f89e5970b"
 }

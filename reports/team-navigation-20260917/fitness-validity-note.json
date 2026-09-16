@@ -1,0 +1,11 @@
+{
+  "at": "2026-09-16T17:44:06.538985+00:00",
+  "candidate": "e9ab8e871cc7382c3cf0b327d798d989065b33d9",
+  "numeric_gate_recorded_pass": true,
+  "defensive_fitness_evidence_sufficient": false,
+  "official_pass": false,
+  "reason": "Shared published18/v4 robot planner can repeat conflicting destinations indefinitely. Corrected native first-night r100..130 has26live targetOur robots unchanged; r100 recomputation yields13contests+13blocked dependencies andzero moves. Four1300/base1500 outcomes cannot establish robust defence under real navigation. Functional contract tests remain separate evidence.",
+  "source_audit": ".workflow/react-lab/distillation-audit/corrected-solo-rockets-night1.json",
+  "raw_comparison_sha256": "299ead585faa8779cb7976e067a4c5c7d000c6a4ec849c17f442b8d1f670e66a",
+  "policy_source_unchanged": true
+}

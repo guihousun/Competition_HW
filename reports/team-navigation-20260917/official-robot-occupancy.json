@@ -1,0 +1,466 @@
+{
+  "scope": "read-only cached official-evidence audit through Issue32; no network, native changes or simulated waves",
+  "rule": {
+    "section": "任务书4.5.4第5条",
+    "lines": [
+      255,
+      256,
+      258
+    ],
+    "explicit": "player role movement collision with another role or a robot; two player roles swap",
+    "not_explicit": "robot-robot co-location, same-target contest, queue order or swaps",
+    "conclusion": "Do not extend the player-role subject into a robot-robot prohibition without independent evidence."
+  },
+  "cache": {
+    "path": ".workflow/issue-poller/snapshot.json",
+    "sha256": "3d3f730922b7e480adc57d1b0e0727fd9a1d03f0a72e54b8a1f6f6f955b3033b",
+    "bytes": 838625
+  },
+  "cache_generated_at": "2026-09-16T17:49:34Z",
+  "cached_issues_reviewed": [
+    {
+      "issue": 5,
+      "body_and_comments": 2,
+      "chars": 15476,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 6,
+      "body_and_comments": 4,
+      "chars": 2465,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 7,
+      "body_and_comments": 2,
+      "chars": 21672,
+      "literal_robot_keys": 1,
+      "roundNo_mentions": 2,
+      "qualification": "official protocol sample, not match frame"
+    },
+    {
+      "issue": 8,
+      "body_and_comments": 2,
+      "chars": 1072,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 9,
+      "body_and_comments": 2,
+      "chars": 18101,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 10,
+      "body_and_comments": 6,
+      "chars": 27721,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 12,
+      "body_and_comments": 5,
+      "chars": 27193,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 14,
+      "body_and_comments": 3,
+      "chars": 67491,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 15,
+      "body_and_comments": 1,
+      "chars": 63578,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 16,
+      "body_and_comments": 1,
+      "chars": 53922,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 17,
+      "body_and_comments": 1,
+      "chars": 65381,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 18,
+      "body_and_comments": 3,
+      "chars": 19440,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 19,
+      "body_and_comments": 5,
+      "chars": 2482,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 20,
+      "body_and_comments": 2,
+      "chars": 17841,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 21,
+      "body_and_comments": 3,
+      "chars": 24328,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 22,
+      "body_and_comments": 3,
+      "chars": 1943,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 23,
+      "body_and_comments": 2,
+      "chars": 23085,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 24,
+      "body_and_comments": 3,
+      "chars": 10401,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 25,
+      "body_and_comments": 3,
+      "chars": 10436,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 26,
+      "body_and_comments": 13,
+      "chars": 111886,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 27,
+      "body_and_comments": 7,
+      "chars": 34031,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 28,
+      "body_and_comments": 2,
+      "chars": 6535,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 29,
+      "body_and_comments": 2,
+      "chars": 3413,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 30,
+      "body_and_comments": 3,
+      "chars": 8310,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 31,
+      "body_and_comments": 2,
+      "chars": 6463,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    },
+    {
+      "issue": 32,
+      "body_and_comments": 4,
+      "chars": 2491,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "no complete robot observation object in cached issue text"
+    }
+  ],
+  "real_console_logs": [
+    {
+      "path": "logs/attack_map/match_598290_20260915_1949/teamA.log",
+      "sha256": "e013232d76ab8926e572de80efbc245e98935e8d166d00701d4dcf24163ddb6d",
+      "bytes": 320149,
+      "issue": 25,
+      "match": 598290,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "real company console/task log; no complete public robot observation",
+      "package_sha256": null,
+      "frame_round": null,
+      "robot_ids": null
+    },
+    {
+      "path": "logs/attack_map/match_598290_20260915_1949/teamB.log",
+      "sha256": "b0320cf0147d564f847f6efaa859a2c0ad1d5c5334d35c05999f6add890ebe0d",
+      "bytes": 289416,
+      "issue": 25,
+      "match": 598290,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "real company console/task log; no complete public robot observation",
+      "package_sha256": null,
+      "frame_round": null,
+      "robot_ids": null
+    },
+    {
+      "path": "logs/attack_map/match_598291_20260915_1955/teamA.log",
+      "sha256": "e90798f452368073d569ff23e112bdb09b98524a063e669c421e8de821076806",
+      "bytes": 263505,
+      "issue": 25,
+      "match": 598291,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "real company console/task log; no complete public robot observation",
+      "package_sha256": null,
+      "frame_round": null,
+      "robot_ids": null
+    },
+    {
+      "path": "logs/attack_map/match_598291_20260915_1955/teamB.log",
+      "sha256": "eeea4ff94e2d7366bc59e8a54335276bf7450e923e011c9f6eaa419fa81072ce",
+      "bytes": 90755,
+      "issue": 25,
+      "match": 598291,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "real company console/task log; no complete public robot observation",
+      "package_sha256": null,
+      "frame_round": null,
+      "robot_ids": null
+    },
+    {
+      "path": "logs/attack_map/match_598595_20260915_2028/teamA.log",
+      "sha256": "627b15a3498f1e23bab4998145871477ad140b027c42a61679f78cd49a0f2cda",
+      "bytes": 281663,
+      "issue": 25,
+      "match": 598595,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "real company console/task log; no complete public robot observation",
+      "package_sha256": null,
+      "frame_round": null,
+      "robot_ids": null
+    },
+    {
+      "path": "logs/attack_map/match_598595_20260915_2028/teamB.log",
+      "sha256": "26684aaecb2e12f91ed9febd3b462ea9ac2dc2e94b933d01ed29ed44d06fd136",
+      "bytes": 711431,
+      "issue": 25,
+      "match": 598595,
+      "literal_robot_keys": 0,
+      "roundNo_mentions": 0,
+      "qualification": "real company console/task log; no complete public robot observation",
+      "package_sha256": null,
+      "frame_round": null,
+      "robot_ids": null
+    }
+  ],
+  "excluded_local_telemetry": [
+    {
+      "path": "logs/20260914T111421Z-0830b6d0/events-00001.jsonl",
+      "sha256": "f0b4a4b3cf0290963d3eb359a2623771e5114327f7bc4effd4ab4f450e44127e",
+      "bytes": 3465,
+      "turns": 0,
+      "rounds": [],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T111424Z-5ca37423/events-00001.jsonl",
+      "sha256": "18b0ea7d528fe406e729187dbfefb97ac99e313281b62f209bcfaff639cf38a3",
+      "bytes": 7432,
+      "turns": 1,
+      "rounds": [
+        1
+      ],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T111425Z-cfeef8a8/events-00001.jsonl",
+      "sha256": "098465111b710ff0af175a6c0567560c117e92e22f255e72fc2833cc1c0ed29c",
+      "bytes": 3465,
+      "turns": 0,
+      "rounds": [],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T121813Z-275fce71/events-00001.jsonl",
+      "sha256": "403bbb1e8c2ea90931eb33749e9cd8ae1ce1c7afa9b7e4679a2840e84f6d0fd4",
+      "bytes": 3488,
+      "turns": 0,
+      "rounds": [],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T133846Z-fc29594c/events-00001.jsonl",
+      "sha256": "3d2276206d4f41d283b81ec2c10b578aeab18387f21a7aba32c78544a4df44e5",
+      "bytes": 3752,
+      "turns": 0,
+      "rounds": [],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T173422Z-9a54bb47/events-00001.jsonl",
+      "sha256": "c65d06aa6ad6c20bf840fce85da601914fbbbeb32de3ed2f07eb1737f6977bc1",
+      "bytes": 57326,
+      "turns": 4,
+      "rounds": [
+        1
+      ],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T225834Z-1dcb0f0e/events-00001.jsonl",
+      "sha256": "18ff44d15b5a0758d89c84fdd38fbacfdcd46083e3265004b6fc1fc1db31bdfe",
+      "bytes": 4704,
+      "turns": 0,
+      "rounds": [],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260914T234124Z-3b8d31d7/events-00001.jsonl",
+      "sha256": "7af7e34585ccd7ed637d1bd4b1354e4e41246be6d7f5a8b12b6750be8afe38e3",
+      "bytes": 4704,
+      "turns": 0,
+      "rounds": [],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260916T045716Z-0c72fb9d/events-00001.jsonl",
+      "sha256": "aa56929b7c2f524ddb1a41bd0fb35b7e3c042c5728ae586ee0f92ba0dd1f4188",
+      "bytes": 25836,
+      "turns": 1,
+      "rounds": [
+        1
+      ],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260916T051824Z-3153f49e/events-00001.jsonl",
+      "sha256": "0d896c0a3c9034db1339faae020dde2825f44ea577d0287ac6902edc698512a4",
+      "bytes": 127113,
+      "turns": 6,
+      "rounds": [
+        1
+      ],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260916T061147Z-6e184d9b/events-00001.jsonl",
+      "sha256": "3d79fbcc92945807611ba1a96b876b7867f22d591a8cad626836267d1f5f1ab2",
+      "bytes": 107183,
+      "turns": 5,
+      "rounds": [
+        1
+      ],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    },
+    {
+      "path": "logs/20260916T065201Z-0eedcb6b/events-00001.jsonl",
+      "sha256": "0481a510accca215eca787d699fdba095e34feab336c5682ed5cd0fe653b1a5e",
+      "bytes": 66854,
+      "turns": 3,
+      "rounds": [
+        1
+      ],
+      "excluded_reason": "local checkout HTTP telemetry, no authenticated company match/Issue provenance"
+    }
+  ],
+  "additional_exclusions": [
+    {
+      "path": ".workflow/issue19/defence-snapshots.json",
+      "reason": "defence snapshot summary/local experiment, not source-qualified complete official frame"
+    },
+    {
+      "path": ".workflow/issue32/egress-audit.*.request.json",
+      "reason": "known synthetic egress fixtures"
+    },
+    {
+      "path": ".workflow/react-lab/**",
+      "reason": "native local simulator games, never official engine evidence"
+    },
+    {
+      "path": "reports/issue-27-implementation/paired-local/**",
+      "reason": "explicit local paired simulation"
+    }
+  ],
+  "source_documents": [
+    {
+      "path": "docs/任务书.md",
+      "sha256": "40fde8a4d8dd73f4083ad5d531d12b1d168ad139dd17f68a4b8ec5e69a3fd182",
+      "bytes": 28624
+    },
+    {
+      "path": "docs/DEVELOPMENT_RULES.md",
+      "sha256": "3bc2afff864df276370304d3db5ebfa4c68545d1ca024ddacc6a3fb22212248e",
+      "bytes": 13643
+    },
+    {
+      "path": "reports/issue-26-historical-batch/README.md",
+      "sha256": "b945cf7cc8ae092cc7782845edd722f40d0ba2bd1382acedb8c3859e2dcd5362",
+      "bytes": 2769
+    },
+    {
+      "path": "reports/issue-27-implementation/README.md",
+      "sha256": "ecd48d29b81f7b8665e0308ecb5b56f4a4d2bcdd7b8fdb76de0d0c87f395b713",
+      "bytes": 6528
+    }
+  ],
+  "qualified_official_public_robot_frames": 0,
+  "verified_alive_robot_overlap_examples": [],
+  "verified_queue_or_overlap_attack_examples": [],
+  "overlap_frequency": null,
+  "missing_evidence": "Complete untransformed official public frames with match/Issue/package identity.",
+  "interpretation": "No qualified frames, so neither co-location nor its prohibition is empirically confirmed; absence is not negative evidence."
+}

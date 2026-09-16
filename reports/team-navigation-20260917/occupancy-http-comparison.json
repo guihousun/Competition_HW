@@ -1,0 +1,1453 @@
+{
+  "scope": "two frozen packages, identical hand-written HTTP sequences; no simulator or model",
+  "runs": {
+    "baseline": {
+      "archive_sha256": "5ffef0147fbc991db0aff72283ee559f935a8ac3750663c8d24d10c567bcd209",
+      "log_sha256": "96586b2bb1f7de943b1d7bbef4efd6f39280e19af166ded3e3d6ca13f608313c",
+      "source_commit": "0ce3f81186a7016b8801c85acf7e703bdb82405b",
+      "responses": [
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "collect",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 24
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 11,
+                  "y": 11
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "collect",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 24
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 11,
+                  "y": 11
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "post_count": 16,
+      "max_ms": 29.582499992102385,
+      "occupancy_records": [],
+      "max_occupancy_line_bytes": 0
+    },
+    "candidate": {
+      "archive_sha256": "1bf5e1536186024a2315e7ace0e2fb6902bdc7f32bdd4a5da6751ba4afde8a28",
+      "log_sha256": "8edf8665bc1e9804e98566d8f50d162ee0caa08625f7595fd4d4c9be06592011",
+      "source_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+      "responses": [
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "collect",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 24
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 11,
+                  "y": 11
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 6,
+                  "y": 22
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 13
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            }
+          }
+        },
+        {
+          "roleCommandMap": {
+            "10010": {
+              "action": "collect",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 24
+                }
+              ]
+            },
+            "10012": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 9,
+                  "y": 17
+                }
+              ]
+            },
+            "10011": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 11,
+                  "y": 11
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "post_count": 16,
+      "max_ms": 40.27400002814829,
+      "occupancy_records": [
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 1,
+          "overlap_group_count": 1,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [
+            {
+              "pos": {
+                "x": 5,
+                "y": 5
+              },
+              "count": 2,
+              "robots": [
+                {
+                  "id": 30001,
+                  "health": 40,
+                  "roleType": "smallRobot",
+                  "targetTeam": "challenger"
+                },
+                {
+                  "id": 30002,
+                  "health": 40,
+                  "roleType": "middleRobot",
+                  "targetTeam": "challenger"
+                }
+              ]
+            }
+          ],
+          "round": 71,
+          "side": "challenger",
+          "stream": "?/31abae",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 2,
+          "overlap_group_count": 0,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [],
+          "round": 73,
+          "side": "challenger",
+          "stream": "?/31abae",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 0,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 0,
+          "overlap_group_count": 0,
+          "invalid_entries": 2,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [],
+          "round": 74,
+          "side": "challenger",
+          "stream": "?/31abae",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 2,
+          "overlap_group_count": 0,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [],
+          "round": 75,
+          "side": "challenger",
+          "stream": "?/31abae",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 1,
+          "overlap_group_count": 1,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [
+            {
+              "pos": {
+                "x": 5,
+                "y": 5
+              },
+              "count": 2,
+              "robots": [
+                {
+                  "id": 30001,
+                  "health": 40,
+                  "roleType": "smallRobot",
+                  "targetTeam": "challenger"
+                },
+                {
+                  "id": 30002,
+                  "health": 40,
+                  "roleType": "middleRobot",
+                  "targetTeam": "challenger"
+                }
+              ]
+            }
+          ],
+          "round": 201,
+          "side": "challenger",
+          "stream": "?/31abae",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 1,
+          "overlap_group_count": 1,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [
+            {
+              "pos": {
+                "x": 5,
+                "y": 5
+              },
+              "count": 2,
+              "robots": [
+                {
+                  "id": 30001,
+                  "health": 40,
+                  "roleType": "smallRobot",
+                  "targetTeam": "challenger"
+                },
+                {
+                  "id": 30002,
+                  "health": 40,
+                  "roleType": "middleRobot",
+                  "targetTeam": "challenger"
+                }
+              ]
+            }
+          ],
+          "round": 1,
+          "side": "challenger",
+          "stream": "?/31abae",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 1,
+          "overlap_group_count": 1,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [
+            {
+              "pos": {
+                "x": 5,
+                "y": 5
+              },
+              "count": 2,
+              "robots": [
+                {
+                  "id": 30001,
+                  "health": 40,
+                  "roleType": "smallRobot",
+                  "targetTeam": "defender"
+                },
+                {
+                  "id": 30002,
+                  "health": 40,
+                  "roleType": "middleRobot",
+                  "targetTeam": "defender"
+                }
+              ]
+            }
+          ],
+          "round": 71,
+          "side": "defender",
+          "stream": "?/ed5cde",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 2,
+          "overlap_group_count": 0,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [],
+          "round": 73,
+          "side": "defender",
+          "stream": "?/ed5cde",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 0,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 0,
+          "overlap_group_count": 0,
+          "invalid_entries": 2,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [],
+          "round": 74,
+          "side": "defender",
+          "stream": "?/ed5cde",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 2,
+          "overlap_group_count": 0,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [],
+          "round": 75,
+          "side": "defender",
+          "stream": "?/ed5cde",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 1,
+          "overlap_group_count": 1,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [
+            {
+              "pos": {
+                "x": 5,
+                "y": 5
+              },
+              "count": 2,
+              "robots": [
+                {
+                  "id": 30001,
+                  "health": 40,
+                  "roleType": "smallRobot",
+                  "targetTeam": "defender"
+                },
+                {
+                  "id": 30002,
+                  "health": 40,
+                  "roleType": "middleRobot",
+                  "targetTeam": "defender"
+                }
+              ]
+            }
+          ],
+          "round": 201,
+          "side": "defender",
+          "stream": "?/ed5cde",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        },
+        {
+          "available": true,
+          "valid_live_count": 2,
+          "input_entries": 2,
+          "scanned_entries": 2,
+          "unique_cell_count": 1,
+          "overlap_group_count": 1,
+          "invalid_entries": 0,
+          "dead_entries": 0,
+          "duplicate_id_entries": 0,
+          "input_truncated": 0,
+          "metadata_truncated": 0,
+          "groups_truncated": 0,
+          "members_truncated": 0,
+          "groups": [
+            {
+              "pos": {
+                "x": 5,
+                "y": 5
+              },
+              "count": 2,
+              "robots": [
+                {
+                  "id": 30001,
+                  "health": 40,
+                  "roleType": "smallRobot",
+                  "targetTeam": "defender"
+                },
+                {
+                  "id": 30002,
+                  "health": 40,
+                  "roleType": "middleRobot",
+                  "targetTeam": "defender"
+                }
+              ]
+            }
+          ],
+          "round": 1,
+          "side": "defender",
+          "stream": "?/ed5cde",
+          "event": null,
+          "version": {
+            "code_commit": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+            "source_digest": "449f71a88e7da9d30de70ba6416989ff7a8203d39d2d0589b82371f7e11f5328"
+          },
+          "scope": "observed_same_frame_not_collision_rule"
+        }
+      ],
+      "max_occupancy_line_bytes": 758
+    }
+  },
+  "identical_responses": true
+}
