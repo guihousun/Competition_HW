@@ -82,6 +82,8 @@ def audit(payload, commands):
     day = (payload['roundNo'] - 1) % 130 < 70
     budget = payload['teamOur']['goldNum']
     builds = 0
+    tower_cells = {(r['pos']['x'], r['pos']['y']) for r in roles.values()
+                   if r['health'] > 0 and r['roleType'] in TOWER_KINDS}
     vendor_prices = {z['name']: z['price'] for z in payload.get('vendorShopList') or []}
     shop_prices = {z['name']: z['price'] for z in payload.get('weaponShopList') or []}
     vendor_cells = [z['pos'] for z in payload['mapInfo']['zones'] if z['neutralType'] == 'vendor']
@@ -151,7 +153,10 @@ def audit(payload, commands):
             ring = min(dist(targets[0], p) for p in footprint)
             if ring != (2 if c.get('name') == 'wall' else 1): errors.append('local build ring')
             if c.get('name') != 'wall':
-                budget -= 25; builds += 1
+                budget -= 25
+                cell = (targets[0]['x'], targets[0]['y'])
+                builds += int(cell not in tower_cells)
+                tower_cells.add(cell)
             elif 'stone' not in u.get('backpack', []): errors.append('missing stone')
         if action == 'sell':
             amount = int(c.get('num') or 1)

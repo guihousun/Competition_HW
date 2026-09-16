@@ -387,6 +387,7 @@ def step(payload, commands=None, *, external_response=None):
     spent_controllers = set()
     fired = set()
     collected = Counter()
+    built_sites = set()
     # Deferred work: battle items resolve before robot movement, summon orders
     # land in the next wave, so both are queued instead of applied inline.
     effects = {'battle_items': [], 'summons': [], 'summons_used_today': 0}
@@ -424,12 +425,22 @@ def step(payload, commands=None, *, external_response=None):
             kind = command.get('name')
             station = turn.station()
             radius = min(distance(target, p) for p in station_footprint(station.pos)) if station else -1
-            if target in blocked or not turn.land(target) or distance(pos, target) != 1:
+            # Task book 4.5.1: a new level-1 weapon covers the existing weapon
+            # at that cell. Replacement still costs 25 gold but no extra slot.
+            previous = next((u for u in roles if u['health'] > 0 and u['roleType'] in TOWER_TYPES
+                             and Pos.load(u['pos']) == target), None) if kind in TOWER_TYPES else None
+            replaceable = False
+            if previous is not None and target not in terrain:
+                others = [u for u in turn.ours + turn.enemies if u.health > 0 and u.unit_id != previous['id']]
+                replaceable = not any(target in (station_footprint(u.pos) if u.kind == 'station' else (u.pos,))
+                                      for u in others)
+            if (target in built_sites or (target in blocked and not replaceable)
+                    or not turn.land(target) or distance(pos, target) != 1):
                 continue
             bag = unit.setdefault('backpack', [])
             if kind == 'wall' and radius == 2 and 'stone' in bag:
                 bag.remove('stone')
-            elif kind in TOWER_TYPES and radius == 1 and state['teamOur']['goldNum'] >= 25 and sum(u['health'] > 0 and u['roleType'] in TOWER_TYPES for u in roles) < 3:
+            elif kind in TOWER_TYPES and radius == 1 and state['teamOur']['goldNum'] >= 25 and sum(u['health'] > 0 and u['roleType'] in TOWER_TYPES for u in roles) - int(previous is not None) < 3:
                 state['teamOur']['goldNum'] -= 25
             else:
                 continue
@@ -437,13 +448,16 @@ def step(payload, commands=None, *, external_response=None):
             start = prefix + {'gatling':20, 'railgun':30, 'rocket':40}.get(kind, 0)
             if kind == 'wall':
                 start = 40000 if prefix == 10000 else 41000
+            replaced = [previous['id']] if previous is not None else []
+            if previous is not None:
+                roles[:] = [u for u in roles if u['id'] != previous['id']]
             used_ids = {u['id'] for u in roles if u['health'] > 0}
             new_id = next(i for i in range(start, start+(1000 if kind=='wall' else 3)) if i not in used_ids)
-            replaced = [u['id'] for u in roles if u['id'] == new_id and u['health'] > 0]
             roles[:] = [u for u in roles if u['id'] != new_id]
             roles.append({'id': new_id, 'roleType': kind, 'pos': target.dump(),
                           'health': 1000, 'level': 1, 'cooldown': 0})
             blocked.add(target)
+            built_sites.add(target)
             outcomes[uid] = True
             events.append(f'{uid} 建造 {kind} @ ({target.x}, {target.y})')
             actions.append({'a': 'build', 'id': unit['id'], 'kind': kind,
