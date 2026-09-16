@@ -191,13 +191,22 @@ class AgentToolCallTest(unittest.TestCase):
         desc = gen_all_tool_prompt(self.agent._tools)
         self.assertIn("- Params:\n    - cmd: 命令原文", desc)
         self.assertIn("- Params:\n    - name: ", desc)
-        self.assertIn("    - sop: 该流程的做法总结", desc)
+        self.assertIn("    - sop: 做法总结或知识本身", desc)
         self.assertNotIn("- answer:", desc)
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
         self.assertIn(
             "## ToolName - 查询状态\n- Description: 测试用\n- Params: （无参数）",
             gen_all_tool_prompt(self.agent._tools),
         )
+
+    def test_the_sop_tool_describes_knowledge_deposits_too(self):
+        """第 46 步（用户口径）：SOP2Prompt 的描述要教 LLM 沉淀**环境知识**（接口
+        描述等），不只是解题流程 —— "SOP 增加一种类型"的落地：同一张表、类型由
+        `name` 约定区分（流程「找任务书」/ 知识「接口-XX」），零新机制。"""
+        desc = gen_all_tool_prompt(self.agent._tools)
+        block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
+        self.assertIn("环境知识", block)
+        self.assertIn("接口", block)
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """**加一个工具只改一处**（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。

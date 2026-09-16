@@ -52,6 +52,18 @@ class ChatPromptTest(unittest.TestCase):
         for name in self.agent._tools:
             self.assertIn(name, prompt)
 
+    def test_the_role_section_teaches_depositing_environment_knowledge(self):
+        """第 46 步（用户口径）：**探索到的环境知识（接口描述等）也要沉淀成 SOP**。
+
+        会话窗口只留最近两轮、摘要是 best-effort ⇒ SOP 是跨回合**唯一保证还在**的
+        记忆——不沉淀的发现过了窗口就丢。这条提示钉在 ROLE 段（沉淀的两个动词
+        "流程 / 环境知识"都在），措辞就是产品，别改成同义词。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        role = system.split("# 【工具描述】")[0]
+        self.assertIn("环境知识", role)
+        self.assertIn("接口", role)
+        self.assertIn("SOP2Prompt", role)
+
     def test_both_output_shapes_are_shown_verbatim(self):
         """两个形状（工具调用 / `<answer>`）**逐字**出现在模板里。
 
