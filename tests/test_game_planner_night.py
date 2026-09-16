@@ -252,6 +252,41 @@ class NightWeaponTest(unittest.TestCase):
         """
         self.assertEqual(self._only_cmd(self._manned(Robot(Pos(12, 26), 40), cooldown=-1))["action"], "attack")
 
+    def test_the_rocket_pair_alternates_without_cooldown_data(self):
+        """双火箭组的交替开火不依赖 payload 的 `cooldown` 字段（样例不带 ⇒ -1）：
+        就绪的炮按回合号轮转。只按 id 挑的话，两座都"就绪"时永远只发 id 小的那座，
+        第二座整晚哑火。"""
+        rockets = (
+            Weapon(id=200, kind="rocket", pos=Pos(12, 24), attack_range=10, cooldown=-1),
+            Weapon(id=201, kind="rocket", pos=Pos(12, 25), attack_range=10, cooldown=-1),
+        )
+        fired = []
+        for round_no in (85, 86):
+            turn = self._turn(
+                Worker(1, Pos(11, 25)),  # 双火箭的操作位：同时贴着两座
+                weapons=rockets,
+                robots=(Robot(Pos(15, 24), 40),),
+                round_no=round_no,
+            )
+            cmds = plan(turn)
+            self.assertEqual(len(cmds), 1, cmds)
+            fired.append(int(next(iter(cmds))))
+        self.assertEqual(fired, [201, 200], "两回合各发一座（round 85 奇 ⇒ 先发 id 大的，偶 ⇒ 先发 id 小的）")
+
+    def test_a_cooling_rocket_defers_to_its_partner(self):
+        """组内一座冷却中 ⇒ 发另一座（cooldown 字段在场时，它优先于轮转）。"""
+        rockets = (
+            Weapon(id=200, kind="rocket", pos=Pos(12, 24), attack_range=10, cooldown=3),
+            Weapon(id=201, kind="rocket", pos=Pos(12, 25), attack_range=10, cooldown=0),
+        )
+        turn = self._turn(
+            Worker(1, Pos(11, 25)),
+            weapons=rockets,
+            robots=(Robot(Pos(15, 24), 40),),
+        )
+        cmds = plan(turn)
+        self.assertEqual(list(cmds), ["201"], "冷却中的那座让位给就绪的")
+
     def test_a_dead_robot_is_not_worth_a_shot(self):
         """`health == 0` 的机器人（尸体）不占目标 —— 打空处白耗一次冷却。"""
         self.assertEqual(plan(self._manned(Robot(Pos(12, 26), 0))), {})

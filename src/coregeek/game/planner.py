@@ -1283,12 +1283,19 @@ def _defend(
         spots = _operator_spots(group, turn.map.blocked, turn.map.size)
         if not spots:
             continue
-        # 已经贴着组内某座 ⇒ 认领整组，挑冷却好了的那座开火
+        # 已经贴着组内某座 ⇒ 认领整组开火。就绪的炮按回合号轮转：payload 不带
+        # cooldown 时组内两座都算就绪，只按 id 挑会永远只发一座、另一座整晚哑火；
+        # 冷却中的殿后 —— cooldown 字段在场时它优先（`_fire` 里还有一道同样的闸）。
         adjacent = [w for w in group if role.pos.dist(w.pos) <= 1]
         if adjacent:
             for w in group:
                 taken.add(w.pos)
-            for w in sorted(adjacent, key=lambda w: (w.cooldown > 0, w.id)):
+            ready = sorted((w for w in adjacent if w.cooldown <= 0), key=lambda w: w.id)
+            cooling = sorted((w for w in adjacent if w.cooldown > 0), key=lambda w: w.id)
+            if ready:
+                k = turn.round_no % len(ready)
+                ready = ready[k:] + ready[:k]
+            for w in ready + cooling:
                 if _fire(role, w, turn, cmds, assigned):
                     break
             return
