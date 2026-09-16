@@ -18,6 +18,15 @@ class WeaponBudgetTests(unittest.TestCase):
         self.assertEqual(report['phase'],'to_shop')
         self.assertEqual(report['voucher'],WV)
 
+    def test_day_trip_does_not_cancel_when_other_worker_is_off_post(self):
+        p=self.wall_board(100)
+        for r in p['teamOur']['roles']:
+            if r['id']==12:r['pos']={'x':2,'y':15}
+        proposal,report=upgrade.plan(Turn.load(p),p,{},start=0,deadline=67)
+        self.assertIsNotNone(proposal);self.assertEqual(report['voucher'],WV)
+        commands={};brain._day(Turn.load(p),commands,p)
+        self.assertEqual(commands[12]['action'],'move')
+
     def test_carried_voucher_delivery_survives_generic_dusk_return(self):
         p=self.wall_board(0);p['roundNo']=56
         worker=next(r for r in p['teamOur']['roles'] if r['id']==11)

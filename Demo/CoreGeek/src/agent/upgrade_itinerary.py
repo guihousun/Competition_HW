@@ -134,9 +134,9 @@ def plan(turn, payload, commands, *, start=12, deadline=55):
         options=[]
         for worker in workers:
             if worker.backpack_full:continue
-            if not any(other.unit_id!=worker.unit_id and
-                       any(distance(other.pos,tower.pos)<=4 for tower in turn.weapons())
-                       for other in turn.workers()):continue
+            # Daytime has no visible robots (checked above). The day planner
+            # explicitly returns/retains the other worker instead of cancelling
+            # a funded trip whenever that worker briefly leaves a four-cell radius.
             dist,first=route(worker,worker.pos)
             destinations=stands(turn,worker,building.pos)
             for shop in shops:

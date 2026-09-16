@@ -737,10 +737,20 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     for role in turn.workers():
         if role.unit_id in busy:
             continue
+        if upgrade and not any(distance(role.pos,g.pos)<=4 for g in turn.weapons()):
+            step = home_defense.step_inside(turn,role,claimed=claimed)
+            if step is not None:
+                commands[role.unit_id]=move_command(step);claimed.add(step)
+            continue
         _worker_day(
             turn, role, sites, free_towers, free_walls, claimed, commands, state, busy,
             other_errand=bool(errand_owners - {role.unit_id}), routes=routes,
         )
+        if upgrade and commands.get(role.unit_id,{}).get('action') == 'move':
+            destination=Pos.load(commands[role.unit_id]['targetPos'][0])
+            if not any(distance(destination,g.pos)<=4 for g in turn.weapons()):
+                commands.pop(role.unit_id,None)
+                claimed.discard(destination)
     # Tasks come last so a task command always wins the pioneer: the task frame
     # is turn-sensitive (timeout, hold range) while defence positioning is not.
     for role, tower in _tower_pairs(turn):
