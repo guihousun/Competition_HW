@@ -274,6 +274,8 @@ class TeamAgent:
             return Plan("wait", purpose="Agent: " + (self.task.stop_reason or self.task.stage))
         if proposal["kind"] == "submit":
             accepted, answer, reason = task_answer_contract.validate(proposal['payload'], contract, contract_documents)
+            if accepted and self.task.answer_rejected(answer):
+                accepted, reason = False, '规范化后仍是本任务已明确判错的答案，需重新取证'
             if accepted:
                 if answer != proposal['payload']:
                     self.task.proposal['payload'] = answer

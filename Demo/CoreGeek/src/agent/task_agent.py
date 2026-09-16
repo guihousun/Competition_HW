@@ -16,8 +16,9 @@ from .task_context import PROMPT_LIMIT, COMMAND_LIMIT
 from . import task_tools
 from .model_json import unwrap_json
 from .task_answer_contract import bad_heredoc_chain
+from . import task_feedback
 
-SCHEMA = 'competition-task-agent/2'
+SCHEMA = 'competition-task-agent/3'
 MAX_PROMPTS = 8  # engineering limits for one task, not official LLM allowances
 MAX_COMMANDS = 8
 MAX_CONTEXT = 12000
@@ -62,6 +63,8 @@ class TaskAgent:
         self.last_feedback_round = 0
         self.last_emit_round = 0
         self.stop_reason = ''
+        self.last_submission = None
+        self.rejected_answers = []
 
     def begin(self, generation: str, source: str):
         if self.stop_reason == 'state_restore_rejected':
@@ -123,6 +126,8 @@ class TaskAgent:
             'run用于读取文档、查询、计算或按任务要求修改工作区并运行check；查看退出码和结果后决定下一步。'
             'answer必须符合题目指定格式，不能默认改成键值对。'
             '遇到答案错误应检查数据和格式，修正后重新提交；不能声称已经通过判题。\n'
+            '明确判错的答案不能仅换空白或键顺序重交；不要在已错的值之间循环。错误字段不等于其他字段都通过。'
+            '改答案必须有题文/数据依据；无新依据时读字段定义或做可复现计算，不凭错误提示猜标准答案。\n'
             '文件名不代表当前目录存在该文件。优先使用已找到的绝对路径；只允许在任务工作区修改文件。'
             'API题先从实际文档获取接口、鉴权、字段和分页规则；工程题先读spec和check，再按要求修改并验证。'
             '运行check返回的有效答案应立即answer，不要再查找或为确认而重复运行。不要读取验证服务内存或伪造校验。'
@@ -141,7 +146,18 @@ class TaskAgent:
         events = json.dumps([{**item, 'text': item['text'][:200],
                               'truncated': item['truncated'] or len(item['text']) > 200}
                              for item in self.history[-4:]], ensure_ascii=False)
-        self.proposal['payload'] = header + '\n可引用证据ID：' + json.dumps(evidence_ids, ensure_ascii=False) + '\n' + context + '\n近期操作摘要：' + events
+        body = '\n可引用证据ID：' + json.dumps(evidence_ids, ensure_ascii=False) + '\n' + context + '\n近期操作摘要：' + events
+        label = '\n本任务已明确判错（同答案禁止重交；未展示旧项仍自动拦截）：'
+        rows = [{'round': row['round'], 'error': row['error'][:100],
+                 'fields': {k: v[:50] for k, v in list(row['fields'].items())[:2]}}
+                for row in self.rejected_answers]
+        budget = min(1500, PROMPT_LIMIT - len(header + body + label))
+        while True:
+            rejected = json.dumps({'count': len(self.rejected_answers), 'recent': rows}, ensure_ascii=False)
+            if len(rejected) <= budget or not rows:
+                break
+            rows.pop(0)
+        self.proposal['payload'] = header + label + rejected + body
         if len(self.proposal['payload']) > PROMPT_LIMIT:
             self.proposal = None
             self.stop_reason = 'assembled_prompt_over_limit'
@@ -159,6 +175,7 @@ class TaskAgent:
         self._event('emitted_' + action['kind'], action['payload'], round_no)
         if action['kind'] == 'submit':
             self.answers += 1
+            self.last_submission = {'answer': action['payload'], 'round': round_no}
             self.stage = 'awaiting_judgement'
             return True
         self.pending = {**action, 'sent_round': round_no}
@@ -187,9 +204,17 @@ class TaskAgent:
             return False
         self._event('received_' + kind, text, round_no)
         if kind == 'cmd':
+            quality = task_feedback.http_quality(pending['payload'], text)
+            if quality:
+                self._event('http_data_quality', json.dumps(quality, ensure_ascii=False), round_no)
             if (re.match(r'\[exitCode:[1-9][0-9]*\]', text)
                     and re.search(r'syntax error|SyntaxError|unexpected EOF|bad interpreter', text, re.I)):
                 self._event('shell_syntax_failed', _digest(pending['payload']), round_no)
+            recovery = task_tools.failed_check_recovery(pending['payload'], text)
+            if (recovery and self.commands < MAX_COMMANDS
+                    and self.command_attempts.get(_digest(recovery), 0) < 2):
+                self._event('check_only_recovery', '已确认末尾check的CRLF126；仅重试check，不重放修改前缀', round_no)
+                self._propose('cmd', recovery, '已确认CRLF失败后仅重新执行兼容check')
             return True  # next prompt incorporates the actual result/exit status
         try:
             envelope = _json_unique(unwrap_json(text))
@@ -277,6 +302,9 @@ class TaskAgent:
                     return False
                 self._propose('cmd', value, reason)
             else:
+                if self.answer_rejected(value):
+                    self._event('repeated_answer_rejected', '相邻官方回执已拒绝同一答案；请重新检查题文和数据，禁止轮流猜测旧值', round_no)
+                    return False
                 self._propose('submit', value, reason)
             return True
         except (ValueError, TypeError, RecursionError):
@@ -293,8 +321,16 @@ class TaskAgent:
         if 1 in codes:
             self.finish('official_task_timeout')
         elif 2 in codes or 4 in codes:
+            if (2 in codes and self.last_submission
+                    and round_no == self.last_submission['round'] + 1):
+                row = task_feedback.rejection(self.last_submission['answer'], errors, round_no)
+                if not any(x['sha256'] == row['sha256'] for x in self.rejected_answers):
+                    self.rejected_answers = (self.rejected_answers + [row])[-MAX_PROMPTS:]
             self._event('answer_feedback', json.dumps(errors, ensure_ascii=False)[:2400], round_no)
             self.stage = 'ready'
+
+    def answer_rejected(self, value):
+        return any(row['sha256'] == task_feedback.answer_digest(value) for row in self.rejected_answers)
 
     def failed(self, token: str, reason: str, *, round_no: int):
         """Router rejection/expiry is an event, not a fabricated model reply."""
@@ -331,10 +367,34 @@ class TaskAgent:
     def load(cls, raw: Any):
         result = cls()
         try:
+            if isinstance(raw, dict) and raw.get('schema') == 'competition-task-agent/2':
+                raw = deepcopy(raw)
+                raw['schema'] = SCHEMA
+                # No reconstructed submissions or guessed historical judgements.
+                if 'last_submission' in raw or 'rejected_answers' in raw:
+                    raise ValueError('invalid legacy state')
+                raw.update(last_submission=None, rejected_answers=[])
             if not isinstance(raw, dict) or raw.get('schema') != SCHEMA or set(raw) != set(result.dump()):
                 raise ValueError('unknown schema or fields')
             if len(json.dumps(raw, ensure_ascii=False, allow_nan=False)) > 120000:
                 raise ValueError('oversized state')
+            submission = raw['last_submission']
+            if submission is not None and (not isinstance(submission, dict)
+                    or set(submission) != {'answer', 'round'}
+                    or not isinstance(submission['answer'], str) or not 0 < len(submission['answer']) <= ANSWER_LIMIT
+                    or type(submission['round']) is not int or not 0 < submission['round'] <= raw['last_emit_round']):
+                raise ValueError('invalid last submission')
+            if not isinstance(raw['rejected_answers'], list) or len(raw['rejected_answers']) > MAX_PROMPTS:
+                raise ValueError('invalid rejection memory')
+            for row in raw['rejected_answers']:
+                if (not isinstance(row, dict) or set(row) != {'sha256', 'round', 'error', 'fields'}
+                        or not isinstance(row['sha256'], str) or not re.fullmatch('[0-9a-f]{64}', row['sha256'])
+                        or type(row['round']) is not int or not 0 <= row['round'] <= 100000
+                        or not isinstance(row['error'], str) or len(row['error']) > 350
+                        or not isinstance(row['fields'], dict) or len(row['fields']) > 4
+                        or any(not isinstance(k, str) or len(k) > 80 or not isinstance(v, str) or len(v) > 100
+                               for k, v in row['fields'].items())):
+                    raise ValueError('invalid rejection entry')
             for key in ('sequence', 'prompts', 'commands', 'answers', 'inspections', 'last_feedback_round', 'last_emit_round'):
                 if type(raw[key]) is not int or not 0 <= raw[key] <= 100000:
                     raise ValueError('invalid counter')

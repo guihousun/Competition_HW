@@ -166,3 +166,41 @@ def clean_profile(raw):
         not isinstance(v,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',v) for pair in aliases.items() for v in pair):
         raise ValueError('invalid parameter name mapping')
     return {'endpoint':url,'auth':raw['auth'],'aliases':dict(aliases)}
+
+
+def failed_check_recovery(command_text, result):
+    """After a verified 126, recover ONLY a final check in a narrow simple chain.
+
+    Never rewrite/replay the mutation prefix or infer cwd from arbitrary shell.
+    """
+    import posixpath
+    if not re.match(r'\[exitCode:126\]\n', result) or not re.search(
+            r'\./check: /bin/(?:sh|bash)\^M: bad interpreter', result):
+        return None
+    if any(c in command_text for c in '$`\r\n\0'):
+        return None
+    try:
+        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=True)
+        lexer.whitespace_split = True
+        lexer.commenters = ''
+        words = list(lexer)
+        segments = [[]]
+        for word in words:
+            if word == '&&':
+                segments.append([])
+            elif word in (';', '|', '||', '&', '(', ')', '<<', '<<-', ';;'):
+                return None
+            else:
+                segments[-1].append(word)
+        if (len(segments) < 3 or len(segments[0]) != 2 or segments[0][0] != 'cd'
+                or segments[-1] != ['./check']):
+            return None
+        cwd = segments[0][1]
+        if (not cwd.startswith('/') or '..' in cwd.split('/')
+                or any(c in cwd for c in ';|<>()*?[]{}~!')):
+            return None
+        if any(not row or row[0] not in ('mkdir', 'chmod', 'echo', 'printf') for row in segments[1:-1]):
+            return None
+        return command('check', {'path': posixpath.join(cwd, 'check')})
+    except ValueError:
+        return None
