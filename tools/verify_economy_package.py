@@ -74,8 +74,9 @@ def main():
                       if 'task_event ' in line and '"kind":"trading_catalog"' in line]
             assert len(catalogs)==1
             catalog=json.loads(catalogs[0]['content']['text'])
-            assert catalog['vendorShopList']['items']==board(side)['vendorShopList']
-            assert catalog['weaponShopList']['items']==board(side)['weaponShopList']
+            for key in ('vendorShopList','weaponShopList'):
+                assert [{k:item[k] for k in ('name','price')} for item in catalog[key]['items']]==board(side)[key]
+                assert all(item['effect_status']=='official_baseline' and item['effect'] for item in catalog[key]['items'])
             assert catalog['weaponShopList']['positions']==[board(side)['mapInfo']['zones'][0]['pos']]
             rows[-1]['trading_catalog']=catalog
     report={'source_commit':source,'archive_sha256':sha,'passed':True,'cases':rows,

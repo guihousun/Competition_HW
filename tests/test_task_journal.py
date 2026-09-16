@@ -32,7 +32,9 @@ class TaskJournalTests(unittest.TestCase):
         rows=journal.observe(req,{})
         event=next(e for e in rows if e['kind']=='trading_catalog')
         data=json.loads(event['content']['text'])
-        self.assertEqual(data['vendorShopList']['items'],[{'name':'iron','price':3}])
+        self.assertEqual(data['vendorShopList']['items'][0]['name'],'iron')
+        self.assertEqual(data['vendorShopList']['items'][0]['price'],3)
+        self.assertEqual(data['vendorShopList']['items'][0]['effect_status'],'official_baseline')
         self.assertEqual(data['weaponShopList']['positions'],[{'x':22,'y':17}])
         self.assertEqual(req,before)
         req['roundNo']=2;self.assertEqual(journal.observe(req,{}),[])
@@ -68,6 +70,21 @@ class TaskJournalTests(unittest.TestCase):
         self.assertEqual(journal.observe({**req,'roundNo':3},{},stream='a'),[])
         self.assertTrue(journal.observe(req,{},stream='b'))
         self.assertTrue(journal.observe({**req,'roundNo':1},{},stream='a'))
+
+    def test_catalog_effects_are_sourced_without_inventing_unknown_items(self):
+        from agent import item_reference
+        self.assertIn('3000',item_reference.describe('StationUpgradeVoucher1')['effect'])
+        self.assertIn('一次回满血',item_reference.describe('WallFixer')['effect'])
+        self.assertIn('100伤害',item_reference.describe('Bomb')['effect'])
+        self.assertIn('5回合',item_reference.describe('DizzyWeapon')['effect'])
+        self.assertIn('最多使用10张',item_reference.describe('BossRobotSummonOrder')['effect'])
+        self.assertEqual(item_reference.describe('FutureUpgradeVoucher')['effect_status'],'unknown')
+        names=list(item_reference.EFFECTS)+list(item_reference.TASK_ITEMS)+['FutureUpgradeVoucher']
+        event=TaskJournal().observe(request(1,weaponShopList=[{'name':name,'price':777} for name in names]),{})[0]
+        self.assertFalse(event['content']['truncated'])
+        data=json.loads(event['content']['text'])
+        self.assertIn('v1.0',data['effect_source'])
+        self.assertTrue(all(item['price']==777 for item in data['weaponShopList']['items']))
 
     def test_question_model_tool_answer_and_end_are_visible_without_inferred_success(self):
         journal = TaskJournal()

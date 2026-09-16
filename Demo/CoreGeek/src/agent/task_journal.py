@@ -11,6 +11,7 @@ import threading
 
 from .telemetry import clean
 from . import task_progress
+from . import item_reference
 
 TEXT_LIMIT = 1200
 MAX_STREAMS = 8
@@ -25,7 +26,9 @@ def trading_catalog(request, include_missing=False):
     if not include_missing and not any(key in request for key in ('vendorShopList','weaponShopList')) and not any(
             isinstance(z,dict) and z.get('neutralType') in ('vendor','weaponShop') for z in zones):
         return None
-    result={'currency':'gold','location_source':'mapInfo.zones','locations_observed':zones_observed}
+    result={'currency':'gold','location_source':'mapInfo.zones','locations_observed':zones_observed,
+            'price_source':'本轮平台商品列表','effect_source':item_reference.SOURCE,
+            'shop_constraints':'按平台当前商品与报价购买；金币或背包空间不足会失败；商店物品不可退卖。升级最高Lv3，非法升级失败不消耗券。'}
     for kind,key,label in [('vendor','vendorShopList','小贩：收购矿石'),
                            ('weaponShop','weaponShopList','武器商店：出售商品')]:
         raw=request.get(key);items=[]
@@ -35,6 +38,9 @@ def trading_catalog(request, include_missing=False):
             name=item.get('name');price=item.get('price')
             entry={'name':name[:120] if isinstance(name,str) else None,
                    'price':price if type(price) is int else None}
+            entry.update(item_reference.describe(name) if isinstance(name,str) else item_reference.describe(None))
+            details={key:item[key][:240] for key in ('effect','description') if isinstance(item.get(key),str)}
+            if details:entry['observed_details']=details
             if isinstance(name,str) and len(name)>120:entry['name_truncated']=True
             if type(price) is not int:
                 entry['invalid_price_type']=type(price).__name__

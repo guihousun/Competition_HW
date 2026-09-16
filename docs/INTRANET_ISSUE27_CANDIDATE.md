@@ -22,6 +22,10 @@
 
 `trading_catalog` 行额外记录两类中立单位的实际坐标，以及 `vendorShopList`、`weaponShopList` 的商品名称、报价、商品总数。首次有观测和内容改变时输出；列表缺失、非法类型、空列表分别标记，不用内置价格替代平台报价。单类保留前64种商品、16个坐标，超过上限明确标记截断；控制台该事件最多8192字符，正常官方商品数量可完整显示。
 
+每件已知商品还带中文名称、具体效果与 `effect_status=official_baseline`：升级前后等级/血量/武器属性、修复或治疗对象、炸弹/眩晕范围与数值、召唤令目标及每日上限、任务用品用途。效果来源单独标为任务书v1.0，价格始终来自本轮平台；未知名称显示 `unknown/效果待确认`，平台若另给description/effect则单独存为observed_details，不悄悄覆盖规则。
+
+注意：WallFixer使目标墙**一次回满血**，不是逐轮修一点，也不是通用炮台维修包。机动维修策略的动作应是到位→使用→回防；本版尚未加入交战中的机动维修调度。
+
 可用 `Select-String -Path .\teamA.log -Pattern 'trading_catalog|upgrade_itinerary'` 提取交易信息。目录快照不代表已经成交，实际购买仍看buy动作、金币及下一轮背包。
 
 | reason/phase | 含义 |
