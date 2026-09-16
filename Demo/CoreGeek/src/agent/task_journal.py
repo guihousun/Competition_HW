@@ -175,9 +175,15 @@ class TaskJournal:
                 if not value:continue
                 # Route progress does not need another line on every move.
                 signature_value=deepcopy(value)
-                if field=='upgrade_itinerary':signature_value.pop('gold_available',None)
-                else:
-                    for weapon in signature_value:weapon.pop('cooldown',None)
+                if field=='upgrade_itinerary' and isinstance(signature_value,dict):
+                    signature_value.pop('gold_available',None)
+                elif field=='weapon_readiness' and isinstance(signature_value,list):
+                    for weapon in signature_value:
+                        if isinstance(weapon,dict):
+                            weapon.pop('cooldown',None)
+                # Other reports may be dictionaries (not lists of weapons).
+                # Iterating their string keys used to throw here, discarding
+                # every task event accumulated in this round via emit's guard.
                 signature=excerpt(signature_value)['sha256']
                 if signature!=previous['fields'].get(field):add(field,value)
                 previous['fields'][field]=signature
