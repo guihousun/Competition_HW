@@ -1,0 +1,40 @@
+{
+  "upstream_runner": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\issue32\\team-validation-e9ab8e8\\runner\\evaluate_issue32.py",
+  "upstream_sha256": "5194bc9da02cc7350819d46617bf5cb84ee35afd3fb7296cb255d246245ecab3",
+  "instrumented_sha256": "6f0f275acdf05491a4c6556d41a89b6827bb752ecfb6876440e967089d779107",
+  "change": "Trace-only elapsed policy_ms each round, argmax round, slowest full public request/planner-before/context saved. Timing excludes snapshot/serialization; same flags and fixtures, corrected navigation engine.",
+  "cases": [
+    {
+      "seed": 1,
+      "side": "challenger"
+    },
+    {
+      "seed": 1,
+      "side": "defender"
+    },
+    {
+      "seed": 19,
+      "side": "challenger"
+    },
+    {
+      "seed": 19,
+      "side": "defender"
+    }
+  ],
+  "failure_rate": 0,
+  "task_gold": 80,
+  "tasks_per_point": 3,
+  "seeds_previously_viewed": true,
+  "heldout": false,
+  "gates": {
+    "no_earlier_base_loss_each_pair": true,
+    "total_score_not_lower": true,
+    "full_survival_count_not_lower": true,
+    "no_new_protocol_or_execution_errors": true,
+    "response_limit_ms": 5000
+  },
+  "source_refs": {
+    "baseline": "63f24d6797038b25299abcc20358aa84d695078b",
+    "candidate": "1b8da86aaf83e71904b4a6b213cac3634781d051"
+  }
+}
