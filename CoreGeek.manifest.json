@@ -1,5 +1,5 @@
 {
-  "commit": "1edb4979c206c0bf655e6bf07227fd653c8ed3e3",
+  "commit": "1f071d6296e90bb680e4241c34a82137efb4497b",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -272,15 +272,15 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 28751,
+      "bytes": 29159,
       "path": "CoreGeek/src/agent/task_agent.py",
-      "sha256": "6314c6e2658abcceea453b892978b34253e692370a2f80e779b3f6c8ac171b8f",
+      "sha256": "f55637fe77368646692fe55036d3bc77925789d34c6ec223fbc3656219e65f2c",
       "source": "Demo/CoreGeek/src/agent/task_agent.py"
     },
     {
-      "bytes": 7949,
+      "bytes": 9101,
       "path": "CoreGeek/src/agent/task_answer_contract.py",
-      "sha256": "5e3fd39c85c42bf51d75e11116683a838d32f153272825e1403146a9692fd564",
+      "sha256": "65264c4d761a256f05250011d8ec85dfdf4dcc471aa4fc0201bec12781aa88f5",
       "source": "Demo/CoreGeek/src/agent/task_answer_contract.py"
     },
     {
@@ -294,6 +294,12 @@
       "path": "CoreGeek/src/agent/task_feedback.py",
       "sha256": "32bc84de84542f5929668104147a4c00d89f82934920010ebd8972c633b99914",
       "source": "Demo/CoreGeek/src/agent/task_feedback.py"
+    },
+    {
+      "bytes": 4611,
+      "path": "CoreGeek/src/agent/task_field_semantics.py",
+      "sha256": "9fb0798bd8d9cd045091a91f0665bc93cb4ace4f1bee693b96304b4fa0b9d675",
+      "source": "Demo/CoreGeek/src/agent/task_field_semantics.py"
     },
     {
       "bytes": 12916,
@@ -423,5 +429,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "99d3e6efaebdd0ffac2b8c7ba42e85d05087a9ecaf9502de0d4a17e131aa8f6f"
+  "source_digest": "09db0a064be58fa0acdf0fd3be97dea10910cf4e16654c338e1c896792fe5f48"
 }

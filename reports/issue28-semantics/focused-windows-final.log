@@ -1,0 +1,15 @@
+test_both_sides_block_wrong_period_then_submit_current_record_name (test_issue28_task_semantics.TaskSemanticsPipelineTests.test_both_sides_block_wrong_period_then_submit_current_record_name) ... ok
+test_both_sides_prompt_pins_semantics_from_actual_task_file (test_issue28_task_semantics.TaskSemanticsPipelineTests.test_both_sides_prompt_pins_semantics_from_actual_task_file) ... ok
+test_conflicting_descriptions_are_not_silently_resolved (test_issue28_task_semantics.TaskSemanticsTests.test_conflicting_descriptions_are_not_silently_resolved) ... ok
+test_current_check_token_required_only_for_check_contract (test_issue28_task_semantics.TaskSemanticsTests.test_current_check_token_required_only_for_check_contract) ... ok
+test_field_renaming_and_changed_records_do_not_use_historical_answers (test_issue28_task_semantics.TaskSemanticsTests.test_field_renaming_and_changed_records_do_not_use_historical_answers) ... ok
+test_literal_comments_and_quoted_url_are_not_confused (test_issue28_task_semantics.TaskSemanticsTests.test_literal_comments_and_quoted_url_are_not_confused) ... ok
+test_name_requirement_rejects_observed_period_but_never_fabricates_correct_name (test_issue28_task_semantics.TaskSemanticsTests.test_name_requirement_rejects_observed_period_but_never_fabricates_correct_name) ... ok
+test_only_current_named_task_document_can_supply_meanings (test_issue28_task_semantics.TaskSemanticsTests.test_only_current_named_task_document_can_supply_meanings) ... ok
+test_partial_failed_truncated_and_unverified_data_do_not_become_oracles (test_issue28_task_semantics.TaskSemanticsTests.test_partial_failed_truncated_and_unverified_data_do_not_become_oracles) ... ok
+test_placeholder_template_retains_shape_and_meaning_not_sample_answer (test_issue28_task_semantics.TaskSemanticsTests.test_placeholder_template_retains_shape_and_meaning_not_sample_answer) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.212s
+
+OK

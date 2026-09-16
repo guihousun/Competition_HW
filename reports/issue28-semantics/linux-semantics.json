@@ -1,0 +1,221 @@
+{
+  "scope": "Actual tar.gz POSTs with synthetic model/API fixtures; not intranet PASS",
+  "source_commit": "1f071d6296e90bb680e4241c34a82137efb4497b",
+  "archive_sha256": "00387437a264356cde50f08ec85bd8fca895a8ba5deba343c22b0c25003fd152",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 99.76771200001622,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": false
+        },
+        {
+          "round": 2,
+          "ms": 21.320825000032073,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": true
+        },
+        {
+          "round": 3,
+          "ms": 10.894774000007601,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": false
+        },
+        {
+          "round": 4,
+          "ms": 16.413462999992134,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": true
+        },
+        {
+          "round": 5,
+          "ms": 10.477094000009401,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": true
+        },
+        {
+          "round": 6,
+          "ms": 7.529468000029738,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            },
+            "10011": {
+              "action": "submitAnswer",
+              "taskAnswer": "{\"city\": \"雾城\", \"total_count\": 2, \"types\": [\"遗址\", \"园林\"], \"oldest_era\": \"遗址甲\"}"
+            }
+          },
+          "has_prompt": false
+        }
+      ]
+    },
+    {
+      "side": "defender",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 38.184057000023586,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": false
+        },
+        {
+          "round": 2,
+          "ms": 8.002605000001495,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": true
+        },
+        {
+          "round": 3,
+          "ms": 8.087221000039335,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": false
+        },
+        {
+          "round": 4,
+          "ms": 9.200677999956497,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": true
+        },
+        {
+          "round": 5,
+          "ms": 9.010073000013108,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          "has_prompt": true
+        },
+        {
+          "round": 6,
+          "ms": 7.889519000002565,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            },
+            "10011": {
+              "action": "submitAnswer",
+              "taskAnswer": "{\"city\": \"雾城\", \"total_count\": 2, \"types\": [\"遗址\", \"园林\"], \"oldest_era\": \"遗址甲\"}"
+            }
+          },
+          "has_prompt": false
+        }
+      ]
+    }
+  ]
+}

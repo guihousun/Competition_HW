@@ -1,0 +1,52 @@
+{
+  "source_commit": "1f071d6296e90bb680e4241c34a82137efb4497b",
+  "archive_sha256": "00387437a264356cde50f08ec85bd8fca895a8ba5deba343c22b0c25003fd152",
+  "official_pass": false,
+  "full_suite": {
+    "python": "3.12.3",
+    "platform": "WSL Ubuntu Linux",
+    "tests": 1030,
+    "seconds": 301.26,
+    "skipped": 0,
+    "passed": true
+  },
+  "windows_focused": {
+    "python": "3.11.10",
+    "tests": 10,
+    "passed": true
+  },
+  "package_probes": [
+    {
+      "file": "windows-semantics.json",
+      "requests": 12,
+      "max_ms": 114.16430003009737
+    },
+    {
+      "file": "windows-check.json",
+      "requests": 12,
+      "max_ms": 123.67559998529032
+    },
+    {
+      "file": "linux-semantics.json",
+      "requests": 12,
+      "max_ms": 99.76771200001622
+    },
+    {
+      "file": "linux-check.json",
+      "requests": 12,
+      "max_ms": 92.86981299999297
+    }
+  ],
+  "total_package_requests": 48,
+  "scope": "Synthetic model/API replies and independent local regression expectations; no intranet or model accuracy claim",
+  "evidence_hash_basis": "Committed Git blob bytes, canonical text line endings",
+  "files": {
+    "full-linux-reviewed.log": "38144d2edf081f3fe1156e3605db6db416620d4e67fb0242f39b3b5fa4f35823",
+    "focused-windows-final.log": "969c58c92646329e9ff2df92333731aafe46e4cdae969a6ba3c342046fffad2c",
+    "windows-semantics.json": "0617442dcbdd47d782b34de98c61376aa260466382ad7e18e6a5876b25f5e44b",
+    "windows-check.json": "5b6747b576bb3b834e80a124f2387e0ac4b4b7a69f476581e029e6e544e730fd",
+    "linux-semantics.json": "c9691be79eb5877ddd734fa752b67ea54941b717b0e1f5bd6b85e74416c1642e",
+    "linux-check.json": "cdc55172712c12e6a6d2c12c78d588ea2a86f5cfb56c3d81bd73eb603862cd3a",
+    "verify_package_semantics.py": "db3c0a7b52978eb0cc31861886905cbb0b3de9ff19bff55be468fff43173835e"
+  }
+}
