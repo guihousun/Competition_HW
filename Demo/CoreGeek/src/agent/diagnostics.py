@@ -52,6 +52,7 @@ DECISION_TEXT_LIMIT = 80
 
 _summary_emitter = None
 _identity_emitted = False
+_identity_ref = None
 _start_root: Path | None = None
 
 
@@ -308,13 +309,15 @@ def startup_identity(entry: str | None = None, root: Path | None = None,
 
 def emit_startup_identity(entry: str | None = None, root: Path | None = None) -> dict[str, Any] | None:
     """Print the identity line once. Never raises."""
-    global _identity_emitted
+    global _identity_emitted, _identity_ref
     try:
         if root is not None:
             set_start_root(root)
         if _identity_emitted:
             return None
         record = startup_identity(entry=entry, root=root)
+        _identity_ref = {'code_commit': record.get('code_commit'),
+                         'source_digest': (record.get('source') or {}).get('source_digest')}
         _emit("identity " + json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
         _identity_emitted = True
         return record
@@ -747,6 +750,10 @@ def build_summary(request: Any, response: Any, *, plan_ms: float | None = None,
         "phase": _phase(round_no),
         "commands": tally[0],
     }
+    from .robot_occupancy import summarize
+    summary['robot_occupancy'] = summarize(request)
+    summary['side'] = _team_type(request)
+    summary['version_ref'] = dict(_identity_ref) if _identity_ref else None
     if event_id:
         summary["event"] = event_id
     summary.update({

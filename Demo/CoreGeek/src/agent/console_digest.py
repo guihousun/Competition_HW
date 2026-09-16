@@ -449,6 +449,8 @@ class ConsoleDigest:
                                       ("robots", _as_int(summary.get("robots_visible")))]))
         if not late:
             lines.extend(self._absorb_decision(key, window, summary))
+            from .robot_occupancy import digest_line
+            lines.extend(digest_line(summary, window.setdefault('robot_occupancy', {}), _label(key)))
         lines.extend(self._absorb_anomalies(key, window, summary, round_no))
         if window["since_rollup"] >= self.rollup_rounds:
             lines.append(self._rollup(key, window, final=False))
