@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\issue30\verify_journal_package.py", line 48, in <module>
+    assert [r['round'] for r in rows if r['kind']=='task_text_observed']==[71,73], [(r['kind'],r['round']) for r in rows]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: []

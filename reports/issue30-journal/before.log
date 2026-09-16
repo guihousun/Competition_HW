@@ -1,0 +1,89 @@
+test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) ...
+  test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) (field='pioneer_safety') ... FAIL
+  test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) (field='shared_rocket_control') ... FAIL
+  test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) (field='worker_shelter') ... FAIL
+test_non_dictionary_optional_entries_do_not_break_task_logging (test_issue30_journal_reports.JournalShapeTests.test_non_dictionary_optional_entries_do_not_break_task_logging) ... ERROR
+test_only_targeted_volatile_fields_are_suppressed (test_issue30_journal_reports.JournalShapeTests.test_only_targeted_volatile_fields_are_suppressed) ... ERROR
+test_real_planner_report_reaches_emit_without_mutating_actions (test_issue30_journal_reports.JournalShapeTests.test_real_planner_report_reaches_emit_without_mutating_actions) ... FAIL
+test_submission_end_and_new_task_after_round43_both_teams (test_issue30_journal_reports.JournalShapeTests.test_submission_end_and_new_task_after_round43_both_teams) ... ERROR
+
+======================================================================
+ERROR: test_non_dictionary_optional_entries_do_not_break_task_logging (test_issue30_journal_reports.JournalShapeTests.test_non_dictionary_optional_entries_do_not_break_task_logging)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 68, in test_non_dictionary_optional_entries_do_not_break_task_logging
+    rows=TaskJournal().observe(observation(round_no=1,phase_task='A'),{},decision={field:value})
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\Demo\CoreGeek\src\agent\task_journal.py", line 78, in observe
+    return self._observe(request, response, decision, event_id, stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\Demo\CoreGeek\src\agent\task_journal.py", line 180, in _observe
+    for weapon in signature_value:weapon.pop('cooldown',None)
+                                  ^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'pop'
+
+======================================================================
+ERROR: test_only_targeted_volatile_fields_are_suppressed (test_issue30_journal_reports.JournalShapeTests.test_only_targeted_volatile_fields_are_suppressed)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 57, in test_only_targeted_volatile_fields_are_suppressed
+    j.observe(observation(round_no=1),{},decision=decision)
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\Demo\CoreGeek\src\agent\task_journal.py", line 78, in observe
+    return self._observe(request, response, decision, event_id, stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\Demo\CoreGeek\src\agent\task_journal.py", line 180, in _observe
+    for weapon in signature_value:weapon.pop('cooldown',None)
+                                  ^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'pop'
+
+======================================================================
+ERROR: test_submission_end_and_new_task_after_round43_both_teams (test_issue30_journal_reports.JournalShapeTests.test_submission_end_and_new_task_after_round43_both_teams)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 42, in test_submission_end_and_new_task_after_round43_both_teams
+    events += j.observe(req,response,decision=decision,stream=side)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\Demo\CoreGeek\src\agent\task_journal.py", line 78, in observe
+    return self._observe(request, response, decision, event_id, stream)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\Demo\CoreGeek\src\agent\task_journal.py", line 180, in _observe
+    for weapon in signature_value:weapon.pop('cooldown',None)
+                                  ^^^^^^^^^^
+AttributeError: 'str' object has no attribute 'pop'
+
+======================================================================
+FAIL: test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) (field='pioneer_safety')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 26, in test_dictionary_reports_do_not_swallow_task_events
+    self.assertIn('task_text_observed', [r['kind'] for r in rows])
+AssertionError: 'task_text_observed' not found in []
+
+======================================================================
+FAIL: test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) (field='shared_rocket_control')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 26, in test_dictionary_reports_do_not_swallow_task_events
+    self.assertIn('task_text_observed', [r['kind'] for r in rows])
+AssertionError: 'task_text_observed' not found in []
+
+======================================================================
+FAIL: test_dictionary_reports_do_not_swallow_task_events (test_issue30_journal_reports.JournalShapeTests.test_dictionary_reports_do_not_swallow_task_events) (field='worker_shelter')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 26, in test_dictionary_reports_do_not_swallow_task_events
+    self.assertIn('task_text_observed', [r['kind'] for r in rows])
+AssertionError: 'task_text_observed' not found in []
+
+======================================================================
+FAIL: test_real_planner_report_reaches_emit_without_mutating_actions (test_issue30_journal_reports.JournalShapeTests.test_real_planner_report_reaches_emit_without_mutating_actions)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "D:\Research_vault\work\projects\Code_HW\.workflow\worktrees\issue30-journal\tests\test_issue30_journal_reports.py", line 83, in test_real_planner_report_reaches_emit_without_mutating_actions
+    self.assertIn('pioneer_safety',[r['kind'] for r in rows])
+AssertionError: 'pioneer_safety' not found in []
+
+----------------------------------------------------------------------
+Ran 5 tests in 0.016s
+
+FAILED (failures=4, errors=3)

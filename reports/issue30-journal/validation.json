@@ -1,0 +1,23 @@
+{
+  "source_commit": "ff322c72807a522f1764f2253737872b2a76278c",
+  "archive_sha256": "1641e573d2f5a2fab194e348ffeab04c1c85138c1f6774776be23a0a669199fe",
+  "category": "diagnostics tool only",
+  "windows_python": "3.11.10",
+  "targeted_tests": 99,
+  "passed": true,
+  "actual_package_posts": 24,
+  "scope": "12 defense/journal POSTs across Windows3.11/Linux3.12 +12 check/task POSTs Windows3.11",
+  "old_package_regression": {
+    "source_commit": "7c41f182e0870cfa13ded850158d7dabdfe34662",
+    "result": "reproduced missing events",
+    "same_bug_present_in_reported_source": "1edb4979"
+  },
+  "full_suite_rerun": false,
+  "full_suite_reason": "only post-response diagnostic signature handling changed; strategy, protocol and settlement untouched",
+  "official_pass": false,
+  "limitations": [
+    "Original battle logs/replay not attached to the Issues",
+    "Missing event bug reproduced independently, not a complete battle causal diagnosis",
+    "Survival score reconciliation is a hypothesis, not a replay schema change"
+  ]
+}

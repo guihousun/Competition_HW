@@ -1,0 +1,237 @@
+{
+  "scope": "Real tar main3/brain/journal; synthetic diagnostic requests; no official PASS",
+  "source_commit": "ff322c72807a522f1764f2253737872b2a76278c",
+  "archive_sha256": "1641e573d2f5a2fab194e348ffeab04c1c85138c1f6774776be23a0a669199fe",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "cases": [
+    {
+      "side": "challenger",
+      "passed": true,
+      "trace": [
+        {
+          "round": 71,
+          "ms": 14.348915999999434,
+          "response": {
+            "roleCommandMap": {
+              "10010": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 4,
+                    "y": 3
+                  }
+                ]
+              },
+              "10011": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 1,
+                    "y": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "round": 72,
+          "ms": 6.594268999998931,
+          "response": {
+            "roleCommandMap": {
+              "10010": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 4,
+                    "y": 3
+                  }
+                ]
+              },
+              "10011": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 1,
+                    "y": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "round": 73,
+          "ms": 16.89064900000048,
+          "response": {
+            "roleCommandMap": {
+              "10010": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 4,
+                    "y": 3
+                  }
+                ]
+              },
+              "10011": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 1,
+                    "y": 1
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "kind": "trading_catalog",
+          "round": 71
+        },
+        {
+          "kind": "task_text_observed",
+          "round": 71
+        },
+        {
+          "kind": "worker_shelter",
+          "round": 71
+        },
+        {
+          "kind": "pioneer_safety",
+          "round": 71
+        },
+        {
+          "kind": "task_outcome_summary",
+          "round": 72
+        },
+        {
+          "kind": "task_text_ended",
+          "round": 72
+        },
+        {
+          "kind": "task_text_observed",
+          "round": 73
+        }
+      ]
+    },
+    {
+      "side": "defender",
+      "passed": true,
+      "trace": [
+        {
+          "round": 71,
+          "ms": 6.154188000000005,
+          "response": {
+            "roleCommandMap": {
+              "10010": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 4,
+                    "y": 3
+                  }
+                ]
+              },
+              "10011": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 1,
+                    "y": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "round": 72,
+          "ms": 5.643366999999344,
+          "response": {
+            "roleCommandMap": {
+              "10010": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 4,
+                    "y": 3
+                  }
+                ]
+              },
+              "10011": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 1,
+                    "y": 1
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "round": 73,
+          "ms": 9.252892000001012,
+          "response": {
+            "roleCommandMap": {
+              "10010": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 4,
+                    "y": 3
+                  }
+                ]
+              },
+              "10011": {
+                "action": "move",
+                "targetPos": [
+                  {
+                    "x": 1,
+                    "y": 1
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "events": [
+        {
+          "kind": "trading_catalog",
+          "round": 71
+        },
+        {
+          "kind": "task_text_observed",
+          "round": 71
+        },
+        {
+          "kind": "worker_shelter",
+          "round": 71
+        },
+        {
+          "kind": "pioneer_safety",
+          "round": 71
+        },
+        {
+          "kind": "task_outcome_summary",
+          "round": 72
+        },
+        {
+          "kind": "task_text_ended",
+          "round": 72
+        },
+        {
+          "kind": "task_text_observed",
+          "round": 73
+        }
+      ]
+    }
+  ],
+  "passed": true
+}
