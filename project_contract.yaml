@@ -33,6 +33,11 @@ market_geometry_review:
   date: "2026-09-16"
   items: [V-026]
   note: "仅更新中央商贩几何；不把其他历史条目视为已复核"
+movement_review:
+  date: "2026-09-17"
+  items: [V-006, V-011, V-012, V-027]
+  implementation_commit: 63f24d6797038b25299abcc20358aa84d695078b
+  note: "仅复核移动修复与机器人占格的官方适用范围；其他历史条目/旧实现快照不冒充本次核验。本地修复不等于内网确认。"
 
 provenance:
   # 官方基线来源（本地镜像，不宣称上游今日未更新）
@@ -265,16 +270,17 @@ verification_items:
     confirmation: null
 
   - id: V-006
-    title: 已知的互换位置规则 vs 本地结算实现
+    title: 角色互换位置的已修实现与真实回归证据
     priority: P0
     category: implementation_gap
     status: needs_trace
+    implementation_state: locally_fixed
     official:
       requirement: "任务书 §4.5.4 第5点：③位置互换（两名角色预期互相移动到对方当前位置）触发碰撞；碰撞结果：双方均中断移动，停留在碰撞前位置"
       refs: [taskbook]
     local:
-      behavior: "resolve_moves 显式把直线互换当作合法并成对执行（注释写明'straight swap is officially legal'），并有测试断言其通过；与官方原文冲突"
-      code: "simulator.resolve_moves（pair 分支）"
+      behavior: "旧版错误放行两角色互换；18cdb9e已修为双方停止，保留合法腾空跟随与三角轮换。独立手工回归通过，仍缺平台三元组；机器人相关互换的保守拒绝是本地假设。"
+      code: "simulator.resolve_moves；specs/SIM_STATIC_OCCUPANCY.md"
     question: "（不询问互换是否合法——官方已明确禁止。）需要的是真实回归证据：官方一次包含互换意图的回合中，双方 roleCommandMap 结果与 lastRoundRoleActionResults 是否为 false、位置是否不变"
     evidence_needed: "官方回放中一次互换意图的请求-响应-再请求三元组"
     confirmation: null
@@ -341,16 +347,17 @@ verification_items:
     confirmation: null
 
   - id: V-011
-    title: 移动占用的集成缺陷：静止单位未进入占用集合
+    title: 已修静态占格集成缺陷的真实回归核验
     priority: P1
     category: implementation_gap
     status: needs_trace
+    implementation_state: locally_fixed
     official:
       requirement: "任务书 §4.5.4 第5点：①目标点被本回合未移动的其他角色/机器人占据 → 受阻；②多方争抢同一目标 → 碰撞；③位置互换 → 双方中断（其余碰撞与互换规则已明确，不需要再问合法性）"
       refs: [taskbook]
     local:
-      behavior: "**已知集成缺陷**：simulator.step 调用 resolve_moves(moves, origins, terrain) 时，origins 只含本回合提交了 move 的角色，blocked 也只传 terrain（occupied 已与 terrain 取并集后未传入占位集合）。于是静止角色/建筑所在格不出现在 resolve_moves 的 occupied_by 中，移动到静止单位格不会被判为'被未移动者占据'；此外本地不允许临时重叠，因此'离开集合'不动点只能靠依赖顺序，链式前进的可行组合与官方同时结算未做对照"
-      code: "simulator.step（origins = {uid: ... for uid in moves}；resolve_moves(moves, origins, terrain)）；simulator.resolve_moves（occupied_by 仅来自 origins）"
+      behavior: "18cdb9e已补齐静止角色、存活建筑完整足迹、中立矿点和现有TaskPoint2第二格约定，存活建筑不会因同格死亡条目被擦除；链式腾空按同时意图结算。真实原生r742穿入炮格已独立复现并拒绝；这是本地实验证据，平台回归仍待提供。"
+      code: "simulator._hard_movement_cells / _settle_joint_moves / resolve_moves；specs/SIM_STATIC_OCCUPANCY.md"
     question: "（缺陷已定位，不需要再问规则合法性。）需要官方真实轨迹来固定修复后的期望：一次'目标格被静止角色占据'、一次同回合链式前进（A→B、B→C 均空）的 lastRoundRoleActionResults 与坐标变化"
     evidence_needed: "官方两段移动轨迹的请求-响应-再请求三元组（静止占据、链式前进各一段）"
     confirmation: null
@@ -364,8 +371,8 @@ verification_items:
       requirement: "任务书 §4.5.4：结算顺序武器攻击 > 机器人移动；§4.5.4 第5点已规定角色与机器人争抢同格时双方停止；§4.7.3：机器人攻击阻挡其移动的单位（角色/建筑）"
       refs: [taskbook]
     local:
-      behavior: "分阶段求解而非联合结算：先收集我方角色 move 意图并单独解析角色移动（resolve_moves），再进入机器人阶段——机器人按用户 S06 主要朝基地推进，仅选择当前距离不超过3格的角色交战（具体寻敌半径为本地假设）、逐只朝目标走一格并即时更新 obstacles。因此同回合内角色与机器人不是一次联合同时结算，也不处理两者互相争抢同一格"
-      code: "simulator.step（角色阶段与机器人阶段分段）"
+      behavior: "18cdb9e已统一角色/机器人移动意图结算。63f24d6在明确本地AI假设下先给机器人分配不冲突意图，再统一结算，避免有合法通路却整波重复自卡；近角色3格优先、移动前锁定攻击、机器人彼此单格独占均未获官方确认，后者另见V-027。"
+      code: "simulator._plan_robot_actions / _allocate_robot_moves / _settle_joint_moves；specs/SIM_JOINT_MOVEMENT.md / SIM_ROBOT_INTENT_PROGRESS.md"
     question: "机器人每回合是否只移动一格、是否排队/互相阻挡？需要一次角色与机器人争抢同格、双方停止的真实回归轨迹；用户已确认主要进攻基地、只打附近角色；准确寻敌半径和目标优先级仍待核验。"
     evidence_needed: "官方一夜回放中的机器人坐标序列（相邻回合对比），以及角色与机器人争抢同格的换回合请求"
     confirmation: null
@@ -582,6 +589,21 @@ verification_items:
     evidence_needed: "一次脱敏 mapInfo.zones 中两条中立点记录及地图版本；如换图会变，再附另一个地图的这两条记录"
     confirmation: null
 
+  - id: V-027
+    title: 机器人彼此能否共格、穿行及导航协调方式
+    priority: P0
+    category: ambiguity
+    status: pending_official
+    official:
+      requirement: "任务书§4.5.4第5条以角色移动为主语，明确角色与角色/机器人争抢同格；未据此确认机器人彼此也禁止共格、互换或穿行。"
+      refs: [taskbook]
+    local:
+      behavior: "当前采用单格单存活机器人、机器人彼此争抢也停止的本地模型；导航用前排优先及同距离轮转预约意图缓解自卡。二者是本地假设，不能等同官方AI；旧自卡下的全场存活不作为可靠防御收益证据。"
+      code: "simulator.resolve_moves / _allocate_robot_moves；specs/SIM_ROBOT_INTENT_PROGRESS.md"
+    question: "真实机器人之间是否允许同格、互相穿行/互换？争抢目标是否会都停止、是否会主动绕路或统一选不同落点？"
+    evidence_needed: "同一场连续少量完整robot.roles（id、health、pos、状态、targetTeam）及轮号/版本；若官方有一句机器人彼此碰撞说明也可。不需要猜测或补造坐标。"
+    confirmation: null
+
 # 需在官方材料更新后复核的历史登记（避免把已知实现进展误报为"仍未实现"）
 recheck_source:
   - id: RC-001
@@ -592,7 +614,8 @@ recheck_source:
 # 已知的实现缺陷跟踪（官方规则明确，本地实现不一致）
 known_implementation_defects:
   - id: KD-001
-    summary: "resolve_moves 允许位置互换；任务书 §4.5.4 第5点明确互换触发碰撞、双方停在原地"
+    status: locally_fixed
+    summary: "历史两角色互换放行已于18cdb9e修复；内网回归仍见V-006，不宣称平台PASS。"
     tracking: V-006
   - id: KD-002
     summary: "_check_end 缺少'双方基地同回合被毁'分支，且单方基地归零即结束（早于官方'半场结束/按积分比较'口径）；result() 的积分相同时平局处理符合已知规则，不列为缺陷"
@@ -604,11 +627,13 @@ known_implementation_defects:
     summary: "生成地图的任务点2只登记一个 zone 格，第二格既不出现在 mapInfo.zones 也不进入阻挡集合；两格本身是官方明确的，缺的是编码/朝向确认（V-002）与登记一致性（V-023 范围条目之外的修复项）"
     tracking: V-002
   - id: KD-005
-    summary: "simulator.step 传给 resolve_moves 的 origins 只含本回合的移动者，静止角色/建筑不进入占用集合，移动到静止单位格不会被判受阻"
+    status: locally_fixed
+    summary: "历史静止角色/建筑漏占格已于18cdb9e修复；真实原生r742已作本地回归，平台证据仍待提供。"
     tracking: V-011
   - id: KD-006
     summary: "召唤令目标队丢失：simulator.step 只取 summon_load 的 load、丢弃 team 键，单队路径把自家召唤令加到自己身上；两队路径也未注入对手 meta"
     tracking: V-024
   - id: KD-007
-    summary: "角色与机器人分阶段求解而非联合同时结算，不处理两者互相争抢同一格"
+    status: locally_fixed
+    summary: "角色与机器人联合移动结算已于18cdb9e实现；机器人彼此碰撞范围及AI细节仍见V-012/V-027假设。"
     tracking: V-012
