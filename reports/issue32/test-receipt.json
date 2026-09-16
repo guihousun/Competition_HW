@@ -1,0 +1,11 @@
+{
+  "source_commit": "9f6ea52ff860c60f453cc660a8b318caedd1f124",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "status": "completed",
+  "started": 1789574257.272686,
+  "exit_code": 0,
+  "elapsed_seconds": 384.539649082,
+  "source_tracked_clean": true,
+  "test_count": 1049,
+  "log_sha256": "1897d9cc89d5a815bfde854664dce70a66b15f11404fd39c4b54f41f606b3d67"
+}

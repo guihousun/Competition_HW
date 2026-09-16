@@ -1,0 +1,434 @@
+{
+  "scope": "Completed original rich-task native exploration; not paired causal policy ranking, not strict single-operator compliance, not official validation",
+  "summary": [
+    {
+      "arm": "survival",
+      "cases": 4,
+      "mean_rounds": 939.25,
+      "mean_score": 2772.75,
+      "full_survival_cases": 2,
+      "execution_failures": 35,
+      "audit_records": 24
+    },
+    {
+      "arm": "greedy",
+      "cases": 4,
+      "mean_rounds": 1263,
+      "mean_score": 5881.25,
+      "full_survival_cases": 3,
+      "execution_failures": 64,
+      "audit_records": 43
+    },
+    {
+      "arm": "balanced",
+      "cases": 4,
+      "mean_rounds": 1137,
+      "mean_score": 5025.75,
+      "full_survival_cases": 3,
+      "execution_failures": 47,
+      "audit_records": 35
+    },
+    {
+      "arm": "solo_rockets",
+      "cases": 4,
+      "mean_rounds": 1036,
+      "mean_score": 3271.25,
+      "full_survival_cases": 0,
+      "execution_failures": 55,
+      "audit_records": 40
+    },
+    {
+      "arm": "solo_mixed",
+      "cases": 4,
+      "mean_rounds": 906.75,
+      "mean_score": 3089,
+      "full_survival_cases": 2,
+      "execution_failures": 42,
+      "audit_records": 41
+    }
+  ],
+  "cases": [
+    {
+      "arm": "survival",
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 379,
+      "score": 345,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 8,
+      "role_deaths": 3,
+      "initial_hash": "6c8630d10b58b259adf224e9cf165b66266cd2fd0b7d88323d960cb683abbf8c",
+      "audit_error_records": 5
+    },
+    {
+      "arm": "survival",
+      "seed": 1,
+      "side": "defender",
+      "rounds": 778,
+      "score": 2815,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 6,
+      "role_deaths": 2,
+      "initial_hash": "92bb6a7f5e5ff101c485aaed630d5ee5fd67f06e4d44f2d476027288e9e334df",
+      "audit_error_records": 3
+    },
+    {
+      "arm": "survival",
+      "seed": 19,
+      "side": "challenger",
+      "rounds": 1300,
+      "score": 3146,
+      "base_hp": 2060,
+      "full_survival": true,
+      "execution_failures": 11,
+      "role_deaths": 2,
+      "initial_hash": "119c175c0e239bfece64bd6d336ec34a0daba765f7b8cd01467299acbe7b2a4a",
+      "audit_error_records": 9
+    },
+    {
+      "arm": "survival",
+      "seed": 19,
+      "side": "defender",
+      "rounds": 1300,
+      "score": 4785,
+      "base_hp": 1300,
+      "full_survival": true,
+      "execution_failures": 10,
+      "role_deaths": 3,
+      "initial_hash": "6acee7a904ff60757467e169d5a5a46ecc61a1dca36897fa8a9c0c5b7dc3ea5c",
+      "audit_error_records": 7
+    },
+    {
+      "arm": "greedy",
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 1152,
+      "score": 4190,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 22,
+      "role_deaths": 5,
+      "initial_hash": "6c8630d10b58b259adf224e9cf165b66266cd2fd0b7d88323d960cb683abbf8c",
+      "audit_error_records": 21
+    },
+    {
+      "arm": "greedy",
+      "seed": 1,
+      "side": "defender",
+      "rounds": 1300,
+      "score": 7540,
+      "base_hp": 3000,
+      "full_survival": true,
+      "execution_failures": 12,
+      "role_deaths": 0,
+      "initial_hash": "92bb6a7f5e5ff101c485aaed630d5ee5fd67f06e4d44f2d476027288e9e334df",
+      "audit_error_records": 5
+    },
+    {
+      "arm": "greedy",
+      "seed": 19,
+      "side": "challenger",
+      "rounds": 1300,
+      "score": 5232,
+      "base_hp": 1200,
+      "full_survival": true,
+      "execution_failures": 19,
+      "role_deaths": 1,
+      "initial_hash": "119c175c0e239bfece64bd6d336ec34a0daba765f7b8cd01467299acbe7b2a4a",
+      "audit_error_records": 11
+    },
+    {
+      "arm": "greedy",
+      "seed": 19,
+      "side": "defender",
+      "rounds": 1300,
+      "score": 6563,
+      "base_hp": 2040,
+      "full_survival": true,
+      "execution_failures": 11,
+      "role_deaths": 0,
+      "initial_hash": "6acee7a904ff60757467e169d5a5a46ecc61a1dca36897fa8a9c0c5b7dc3ea5c",
+      "audit_error_records": 6
+    },
+    {
+      "arm": "balanced",
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 1300,
+      "score": 5380,
+      "base_hp": 1500,
+      "full_survival": true,
+      "execution_failures": 10,
+      "role_deaths": 0,
+      "initial_hash": "6c8630d10b58b259adf224e9cf165b66266cd2fd0b7d88323d960cb683abbf8c",
+      "audit_error_records": 9
+    },
+    {
+      "arm": "balanced",
+      "seed": 1,
+      "side": "defender",
+      "rounds": 1300,
+      "score": 7513,
+      "base_hp": 1500,
+      "full_survival": true,
+      "execution_failures": 6,
+      "role_deaths": 0,
+      "initial_hash": "92bb6a7f5e5ff101c485aaed630d5ee5fd67f06e4d44f2d476027288e9e334df",
+      "audit_error_records": 3
+    },
+    {
+      "arm": "balanced",
+      "seed": 19,
+      "side": "challenger",
+      "rounds": 648,
+      "score": 1365,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 11,
+      "role_deaths": 2,
+      "initial_hash": "119c175c0e239bfece64bd6d336ec34a0daba765f7b8cd01467299acbe7b2a4a",
+      "audit_error_records": 8
+    },
+    {
+      "arm": "balanced",
+      "seed": 19,
+      "side": "defender",
+      "rounds": 1300,
+      "score": 5845,
+      "base_hp": 2810,
+      "full_survival": true,
+      "execution_failures": 20,
+      "role_deaths": 0,
+      "initial_hash": "6acee7a904ff60757467e169d5a5a46ecc61a1dca36897fa8a9c0c5b7dc3ea5c",
+      "audit_error_records": 15
+    },
+    {
+      "arm": "solo_rockets",
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 903,
+      "score": 2532,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 8,
+      "role_deaths": 3,
+      "initial_hash": "6c8630d10b58b259adf224e9cf165b66266cd2fd0b7d88323d960cb683abbf8c",
+      "audit_error_records": 5
+    },
+    {
+      "arm": "solo_rockets",
+      "seed": 1,
+      "side": "defender",
+      "rounds": 1167,
+      "score": 4194,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 12,
+      "role_deaths": 7,
+      "initial_hash": "92bb6a7f5e5ff101c485aaed630d5ee5fd67f06e4d44f2d476027288e9e334df",
+      "audit_error_records": 9
+    },
+    {
+      "arm": "solo_rockets",
+      "seed": 19,
+      "side": "challenger",
+      "rounds": 777,
+      "score": 2565,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 17,
+      "role_deaths": 0,
+      "initial_hash": "119c175c0e239bfece64bd6d336ec34a0daba765f7b8cd01467299acbe7b2a4a",
+      "audit_error_records": 14
+    },
+    {
+      "arm": "solo_rockets",
+      "seed": 19,
+      "side": "defender",
+      "rounds": 1297,
+      "score": 3794,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 18,
+      "role_deaths": 14,
+      "initial_hash": "6acee7a904ff60757467e169d5a5a46ecc61a1dca36897fa8a9c0c5b7dc3ea5c",
+      "audit_error_records": 12
+    },
+    {
+      "arm": "solo_mixed",
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 1300,
+      "score": 4836,
+      "base_hp": 100,
+      "full_survival": true,
+      "execution_failures": 9,
+      "role_deaths": 2,
+      "initial_hash": "6c8630d10b58b259adf224e9cf165b66266cd2fd0b7d88323d960cb683abbf8c",
+      "audit_error_records": 14
+    },
+    {
+      "arm": "solo_mixed",
+      "seed": 1,
+      "side": "defender",
+      "rounds": 385,
+      "score": 2436,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 6,
+      "role_deaths": 2,
+      "initial_hash": "92bb6a7f5e5ff101c485aaed630d5ee5fd67f06e4d44f2d476027288e9e334df",
+      "audit_error_records": 4
+    },
+    {
+      "arm": "solo_mixed",
+      "seed": 19,
+      "side": "challenger",
+      "rounds": 642,
+      "score": 520,
+      "base_hp": 0,
+      "full_survival": false,
+      "execution_failures": 7,
+      "role_deaths": 8,
+      "initial_hash": "119c175c0e239bfece64bd6d336ec34a0daba765f7b8cd01467299acbe7b2a4a",
+      "audit_error_records": 7
+    },
+    {
+      "arm": "solo_mixed",
+      "seed": 19,
+      "side": "defender",
+      "rounds": 1300,
+      "score": 4564,
+      "base_hp": 1700,
+      "full_survival": true,
+      "execution_failures": 20,
+      "role_deaths": 3,
+      "initial_hash": "6acee7a904ff60757467e169d5a5a46ecc61a1dca36897fa8a9c0c5b7dc3ea5c",
+      "audit_error_records": 16
+    }
+  ],
+  "evidence": [
+    {
+      "case": "training-fast-2/survival/train-1-challenger",
+      "summary_sha256": "dab95ba029ad29d45395e2c50eca77440f80edd9df8751729b484b8887a9a5a6",
+      "review_sha256": "aeacd295088f3e05215f2bd6133574f1f7815ef32bfb00d00b743abc3bdf9aed",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/survival/train-1-defender",
+      "summary_sha256": "27f9856248eff94f75a68ef69db251589aa02d4dbd4b8f56b9c9c0cb538f9788",
+      "review_sha256": "184cadb14fd0502fc77287d14b5ead7c9166052a530b6fcbe2ae0cb1788bf28f",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/survival/train-19-challenger",
+      "summary_sha256": "c833c1f2c534ec110d419b4d8eff53d51962eea7dbce9af2249eed315126a833",
+      "review_sha256": "8cdbf49cb7f90be09afa08c95f3ec0870fa1e96d9c4b9b2fcf85362fd2624832",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/survival/train-19-defender",
+      "summary_sha256": "8712827f1d6ea4f80a48bef1459d2da0e0652a0a3155cfdeefd73506006e6821",
+      "review_sha256": "951b993eb08795ab7bdfa1f70e03998c304217ae697bc47eaebc6168d9bbc0ec",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/greedy/train-1-challenger",
+      "summary_sha256": "b0c115d3084d92ee8e2a01dcba69b0fad7493d14e97b0487f0f2d72849d4f3c7",
+      "review_sha256": "049a258bd814eaef386b32fe537079821ac1f59d724ae41657a899faef1e6205",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/greedy/train-1-defender",
+      "summary_sha256": "d7ba8c000acd605fcf3b99fd2ad6791acd3506347aeea254c180604cde2737cf",
+      "review_sha256": "bf02364041810a322bc1dbe40616743a6583a4e8147f2d2157a6d1d7c1c7418e",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/greedy/train-19-challenger",
+      "summary_sha256": "5abdad4996c0a312281d81b7682a88372962eee4529fee31e44b5f502c7abaa6",
+      "review_sha256": "1b532bb64be04bbdb2979b23a1c2fa067bc51c85c6aca944e2f4259ab9af3bd9",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/greedy/train-19-defender",
+      "summary_sha256": "a3838bc2357cbdf3cd864f698bac55d642186dee7d3c1a00b7aa51d63d52dd76",
+      "review_sha256": "53f7da750bc59cfd59bc866a6b889b731e72c3f8839f27ab50a44b1c67f20986",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/balanced/train-1-challenger",
+      "summary_sha256": "9ce7dc314aab8ecbeef772af8ae46d1828b03a3fe1d9f68e1640923a676b8177",
+      "review_sha256": "4c85e1ec6b3af38f4116eddce63bd68dfe4291af0c1b11a59d8bb502c1d7b437",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/balanced/train-1-defender",
+      "summary_sha256": "0ddba159709fb2e811c5566909e48ac77367838d01c3fa2694d99cf3d6393c61",
+      "review_sha256": "576c9ba307c5a29305a72534b81c8b93f7ae14fb3b01d45d34b73937e4d9378b",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/balanced/train-19-challenger",
+      "summary_sha256": "693468407f66df29d96d30fbc660144ad3f3d25e9259797b013432971d7d9a2b",
+      "review_sha256": "88669469a9be1810f2722164d358bc3979dbe1d04568b60f5f99898a8b56efe6",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "training-fast-2/balanced/train-19-defender",
+      "summary_sha256": "b128248ce280aea3f096e1d59b856b2800af82139cf2195ce4ed8b68186dd198",
+      "review_sha256": "b77bfaf5683907a654e2787214fc1198159298ee08b6f11274a1c3eb87736d62",
+      "source_fingerprint": "148170654f3c06ccbc4e2812d5de4050203ec0a03feddbdc132e5290f28f59ad"
+    },
+    {
+      "case": "solo-fast-2/solo_rockets/train-1-challenger",
+      "summary_sha256": "220d6dabdcf9c381ff01bc46f2af4e0e5b054bf245cb611463c07cc2b65b755c",
+      "review_sha256": "6f1aacf9aa8fff26ecb8d8611d8226d4f0777c56c5542d6908cabc8859b92780",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_rockets/train-1-defender",
+      "summary_sha256": "13e27442c815c14a74d9502e02e647a9fe0d1f00fffc0ac97fefc6fc5920553e",
+      "review_sha256": "631516d975922c3d7eddf197c0e8d6580d0d2125a7eacda613acb5f09d87329e",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_rockets/train-19-challenger",
+      "summary_sha256": "14f79b89b0eb4a693b10bfd156e558c2289231902700f4bc136792ea6f849e56",
+      "review_sha256": "6da9b1f1f96d22b429bb55ea03a24bd0d632c58bf0d545d75ccb47f18bc795e8",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_rockets/train-19-defender",
+      "summary_sha256": "d9ac4d7158425295e4297e7cd2af53694977ca18545c5f797c8e0cec1f979db3",
+      "review_sha256": "610e25611a8782cf2db5ffff8f04fbffbb5bb76f944baa64b32484ce4be5ec33",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_mixed/train-1-challenger",
+      "summary_sha256": "cb49d8cbb6338816718c3de9b037e4af03e7c3dc538572c80c70c5be67a28f18",
+      "review_sha256": "e8a5a49eeaa595de16fb4a18be1ca4bba4240d566fcaab26471ed64501988640",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_mixed/train-1-defender",
+      "summary_sha256": "3a443dc80c4d0b54fdcc34c3a0d59ee4582c14373c197ef7d01fea22a87c21e8",
+      "review_sha256": "abefe2a159092ef3840fa04b55de78978ef3e0e1f4571fb5edb144a6bc79af7b",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_mixed/train-19-challenger",
+      "summary_sha256": "e4d26f6071d476c1df46e811ee3650f653572bd0b10aaad1ccb44b30207e628e",
+      "review_sha256": "c2ce58bf8a74dd51b7421b0f9d8a9abe6e1b2d300475b9a5a555b06d018e38c1",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    },
+    {
+      "case": "solo-fast-2/solo_mixed/train-19-defender",
+      "summary_sha256": "010a218259f6f0e917ce905dc0d2b81e97748e655b73ec1373b372674d422dc2",
+      "review_sha256": "a3bdd175a3050f7dd721c251040058a2e5f4b347be89309887d210e84cd0b1c1",
+      "source_fingerprint": "375e1a950235534ada7223fe930ee832c40c5e730ebdca1840b92b6114cf5384"
+    }
+  ]
+}
