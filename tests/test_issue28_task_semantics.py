@@ -63,6 +63,8 @@ class TaskSemanticsTests(unittest.TestCase):
         self.assertTrue(contract.validate(answer('遗址甲'),c,[data_doc()])[0])
         # Presence alone is not a ranking oracle; this module does not assert correctness.
         self.assertTrue(contract.validate(answer('未知但可能有效名称'),c,[])[0])
+        era_contract=contract.derive(TEMPLATE.replace('年代最早的遗产名称','最早的朝代名称'),'task')
+        self.assertTrue(contract.validate(answer('晋'),era_contract,[data_doc()])[0], 'a period name is not an entity name')
 
     def test_field_renaming_and_changed_records_do_not_use_historical_answers(self):
         c=contract.derive(TEMPLATE.replace('oldest_era','earliest_record'),'task')

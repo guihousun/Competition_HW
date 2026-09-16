@@ -58,7 +58,8 @@ def descriptions(text, fields):
 def record_name_error(answer, contract, documents):
     """Reject only a witnessed compare-value/name confusion, not an unknown answer."""
     targets=[key for key,description in contract.get('semantics',{}).items()
-             if re.search(r'(?:最早|最晚|最大|最小|最高|最低|最古老).{0,30}(?:名称|名字)',description)]
+             if re.search(r'(?:最早|最晚|最大|最小|最高|最低|最古老).{0,30}(?:名称|名字)',description)
+             and re.search(r'(?:遗产|记录|文物|景点|项目|实体|对象)(?:的)?(?:名称|名字)',description)]
     if not targets:return None
     from .task_tools import http_request
     for doc in reversed(documents):
