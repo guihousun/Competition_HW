@@ -1,0 +1,89 @@
+{
+  "cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "positions": {
+        "vendor": {
+          "x": 20,
+          "y": 16
+        },
+        "weaponShop": {
+          "x": 25,
+          "y": 20
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "positions": {
+        "vendor": {
+          "x": 20,
+          "y": 16
+        },
+        "weaponShop": {
+          "x": 25,
+          "y": 20
+        }
+      }
+    },
+    {
+      "seed": 19,
+      "side": "challenger",
+      "positions": {
+        "vendor": {
+          "x": 20,
+          "y": 16
+        },
+        "weaponShop": {
+          "x": 25,
+          "y": 20
+        }
+      }
+    },
+    {
+      "seed": 19,
+      "side": "defender",
+      "positions": {
+        "vendor": {
+          "x": 20,
+          "y": 16
+        },
+        "weaponShop": {
+          "x": 25,
+          "y": 20
+        }
+      }
+    },
+    {
+      "seed": 90601,
+      "side": "challenger",
+      "positions": {
+        "vendor": {
+          "x": 20,
+          "y": 16
+        },
+        "weaponShop": {
+          "x": 25,
+          "y": 20
+        }
+      }
+    },
+    {
+      "seed": 90601,
+      "side": "defender",
+      "positions": {
+        "vendor": {
+          "x": 20,
+          "y": 16
+        },
+        "weaponShop": {
+          "x": 25,
+          "y": 20
+        }
+      }
+    }
+  ],
+  "result": "PASS"
+}

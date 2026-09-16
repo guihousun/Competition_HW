@@ -1,0 +1,210 @@
+{
+  "source_commit": "bebd99f6696af2e279f8fc3ea56debb612332b73",
+  "archive_sha256": "86cc678e48ec3f12505fada3c6a3c3e52386cbfd608a998661a0ef5332e99cb8",
+  "python": "3.11.10 (main, Oct 16 2024, 00:15:32) [MSC v.1929 64 bit (AMD64)]",
+  "scope": "Synthetic HTTP cases, no intranet/official PASS",
+  "cases": [
+    {
+      "side": "challenger",
+      "case": "outside",
+      "commands": {
+        "1": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 11,
+              "y": 22
+            }
+          ]
+        },
+        "10041": {
+          "action": "attack",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 21
+            }
+          ],
+          "controllerId": "2"
+        }
+      },
+      "ms": 6.929
+    },
+    {
+      "side": "challenger",
+      "case": "repair",
+      "commands": {
+        "1": {
+          "action": "use",
+          "name": "WallFixer",
+          "targetPos": [
+            {
+              "x": 12,
+              "y": 20
+            }
+          ]
+        },
+        "10041": {
+          "action": "attack",
+          "targetPos": [
+            {
+              "x": 15,
+              "y": 21
+            }
+          ],
+          "controllerId": "2"
+        }
+      },
+      "ms": 10.86
+    },
+    {
+      "side": "challenger",
+      "case": "quiet",
+      "commands": {
+        "2": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 9,
+              "y": 5
+            }
+          ]
+        }
+      },
+      "ms": 3.967
+    },
+    {
+      "side": "challenger",
+      "case": "unknown",
+      "commands": {
+        "2": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 5
+            }
+          ]
+        }
+      },
+      "ms": 21.251
+    },
+    {
+      "side": "challenger",
+      "case": "quiet_fourth_night",
+      "commands": {
+        "2": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 5
+            }
+          ]
+        }
+      },
+      "ms": 2.057
+    },
+    {
+      "side": "defender",
+      "case": "outside",
+      "commands": {
+        "1": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 29,
+              "y": 22
+            }
+          ]
+        },
+        "10041": {
+          "action": "attack",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 21
+            }
+          ],
+          "controllerId": "2"
+        }
+      },
+      "ms": 55.288
+    },
+    {
+      "side": "defender",
+      "case": "repair",
+      "commands": {
+        "1": {
+          "action": "use",
+          "name": "WallFixer",
+          "targetPos": [
+            {
+              "x": 28,
+              "y": 20
+            }
+          ]
+        },
+        "10041": {
+          "action": "attack",
+          "targetPos": [
+            {
+              "x": 25,
+              "y": 21
+            }
+          ],
+          "controllerId": "2"
+        }
+      },
+      "ms": 3.421
+    },
+    {
+      "side": "defender",
+      "case": "quiet",
+      "commands": {
+        "2": {
+          "action": "collect",
+          "targetPos": [
+            {
+              "x": 31,
+              "y": 5
+            }
+          ]
+        }
+      },
+      "ms": 2.266
+    },
+    {
+      "side": "defender",
+      "case": "unknown",
+      "commands": {
+        "2": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 5
+            }
+          ]
+        }
+      },
+      "ms": 4.519
+    },
+    {
+      "side": "defender",
+      "case": "quiet_fourth_night",
+      "commands": {
+        "2": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 5
+            }
+          ]
+        }
+      },
+      "ms": 2.279
+    }
+  ]
+}

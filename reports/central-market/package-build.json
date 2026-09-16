@@ -1,0 +1,28 @@
+{
+  "commit": "bebd99f6696af2e279f8fc3ea56debb612332b73",
+  "profile": "competition-flat-v1",
+  "archive": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\worktrees\\codex-central-market\\.workflow\\package-central\\CoreGeek.tar.gz",
+  "archive_sha256": "86cc678e48ec3f12505fada3c6a3c3e52386cbfd608a998661a0ef5332e99cb8",
+  "archive_bytes": 271022,
+  "dirty_working_tree": true,
+  "verification": {
+    "archive": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\worktrees\\codex-central-market\\.workflow\\package-central\\CoreGeek.tar.gz",
+    "ok": true,
+    "problems": [],
+    "warnings": [],
+    "bytes": 271022,
+    "sha256": "86cc678e48ec3f12505fada3c6a3c3e52386cbfd608a998661a0ef5332e99cb8",
+    "container": "gzip",
+    "members": 69,
+    "roots": [
+      "CoreGeek"
+    ],
+    "directory_headers": 5,
+    "manifest_state": "present",
+    "commit": "bebd99f6696af2e279f8fc3ea56debb612332b73",
+    "source_digest_ok": true,
+    "files": 63,
+    "entry": "CoreGeek/main3.py",
+    "sidecar_ok": true
+  }
+}
