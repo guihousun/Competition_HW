@@ -1,5 +1,5 @@
 {
-  "commit": "04e139604ae14ba71fa15c95efeb585caf0e274f",
+  "commit": "bebd99f6696af2e279f8fc3ea56debb612332b73",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -86,9 +86,9 @@
       "source": "Demo/CoreGeek/src/agent/coordination.py"
     },
     {
-      "bytes": 23831,
+      "bytes": 24176,
       "path": "CoreGeek/src/agent/debug.py",
-      "sha256": "01eb51d1a320c635945578f125448d7eaeec6cdba90025b5c18a7557b5eb1bd0",
+      "sha256": "0d45f2aa0c8bc6ac73a5118fd45f0c8548c06b2b601f5684c3dd8521f4e753a6",
       "source": "Demo/CoreGeek/src/agent/debug.py"
     },
     {
@@ -236,9 +236,9 @@
       "source": "Demo/CoreGeek/src/agent/sandbox.py"
     },
     {
-      "bytes": 16750,
+      "bytes": 19039,
       "path": "CoreGeek/src/agent/scenarios.py",
-      "sha256": "8a7bf22c4e87ca28e0d8393bfb1053789e38a2dc5e959821de8db29886a6aa20",
+      "sha256": "01e4c8f767e80a2c80e9ad9cc2c1d7c168a9f608ffd9018dd13cda1877b4318e",
       "source": "Demo/CoreGeek/src/agent/scenarios.py"
     },
     {
@@ -399,5 +399,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "e5bbe31f2a7c2e096032761268c298a1ed707fcd81857fef163dc13c81c361a4"
+  "source_digest": "0958af63247f42e5a1eeb3ece6d7833b0887f622ac7f3d47d812434030aff6d5"
 }
