@@ -162,143 +162,53 @@ def _adjacent_building(turn: Turn, origin: Pos) -> Pos | None:
 
 def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
                   blocked: set[Pos]) -> tuple[list[tuple[str, Pos]], list[tuple[str, Pos, str]]]:
-    """Resolve one round of movement intents.
+    """Resolve simultaneous role moves (任务书 §4.5.4 第5条).
 
-    Officially every role acts in the same round, so a cell that a role leaves
-    this round is free for a role stepping into it. Rejecting anything whose
-    destination happened to be occupied when the round *started* was the largest
-    single source of "指令未执行" and is not what 任务书 §4.2 describes.
-
-    The resolution is a fixpoint over "who is leaving":
-
-    * two roles aimed at the same cell — nobody moves (目标争抢);
-    * a role aimed at a cell held by a role that is *not* leaving — refused;
-    * a role aimed at a cell held by a role that *is* leaving — allowed, and its
-      own cell becomes free for the next pass (this is what lets a whole chain
-      step forward in one round);
-    * a swap — both move;
-    * a cycle (A→B→C→A) — nobody moves, because no single step completes without a
-      temporary overlap the grid does not allow.
-
-    Successful movers are emitted in dependency order (the occupant of a target
-    moves first), so applying them one at a time never writes a unit onto an
-    occupied cell. Order is deterministic, so a replay is reproducible.
-
-    Cell occupancy comes from `origins`; `blocked` is only the *terrain* that can
-    never be entered. Passing occupied cells inside `blocked` would make a legal
-    swap look like a step into a wall, so the two are kept separate here (any
-    overlap is removed) to make the contract hard to get wrong.
+    ``origins`` includes stationary roles; ``blocked`` contains only hard
+    obstacles, never dynamic role origins. A hard obstacle wins even when an
+    invalid input has a role on the same cell. Reject contests and pair swaps,
+    then propagate blocked departures. Chains and cycles of three or more
+    distinct movers can vacate their cells simultaneously (任务书 §4.2).
+    The returned list is a final-position batch, not sequential move commands.
     """
-    def key(pos: Pos) -> tuple[int, int]:
-        return (int(pos.x), int(pos.y))
-
-    occupied_by: dict[tuple[int, int], str] = {}
-    for uid, origin in origins.items():
-        occupied_by.setdefault(key(origin), uid)
-    blocked_keys = {key(pos) for pos in blocked} - set(occupied_by)
-    goals: dict[tuple[int, int], list[str]] = {}
+    occupants: dict[Pos, set[str]] = {}
+    for uid, pos in origins.items():
+        occupants.setdefault(pos, set()).add(uid)
+    goals: dict[Pos, list[str]] = {}
     for uid, target in moves.items():
-        goals.setdefault(key(target), []).append(uid)
-
-    contested = {target for target, uids in goals.items() if len(uids) > 1}
-
-    # Reachability fixpoint. A move is possible when its destination is empty or is
-    # held by a mover that is itself leaving. Removing impossible moves can make
-    # others impossible (its holder is no longer leaving), so iterate.
-    departing = {uid for uid, target in moves.items() if key(target) not in contested}
-    changed = True
-    while changed:
-        changed = False
-        # Snapshot before iterating: mutating `departing` mid-loop made the
-        # membership test read a half-updated set and reject legal swaps.
-        for uid in sorted(list(departing)):
-            if uid not in departing:
-                continue
-            target = key(moves[uid])
-            if target in blocked_keys and target not in occupied_by:
-                departing.discard(uid)   # permanent terrain
-                changed = True
-                continue
-            occupant = occupied_by.get(target)
-            if occupant is not None and occupant != uid and occupant not in departing:
-                departing.discard(uid)   # held by someone who stays put
-                changed = True
-
-    # Order the survivors so that applying them one at a time never writes a unit
-    # onto an occupied cell. Greedily take any move whose destination is currently
-    # free; committing it frees its own cell, which can unblock the next. A chain
-    # therefore resolves end-first, and a swap resolves once one leg is taken.
-    #
-    # A cycle that frees nothing (A→B→C→A) never becomes available and is dropped:
-    # the grid allows no temporary overlap, so no single step can complete.
-    rejected_cycle: list[tuple[str, Pos, str]] = []
-    order: list[str] = []
-    pending = set(departing)
-    current: dict[tuple[int, int], str] = dict(occupied_by)
-    # A straight swap is officially legal: apply the two legs as a pair, since
-    # neither can go first on its own. This is what lets two roles pass each other
-    # in a corridor instead of one of them losing the round.
-    for _ in range(len(pending)):
-        pair = None
-        for uid in sorted(pending):
-            other = current.get(key(moves[uid]))
-            if (other is None or other == uid or other not in pending
-                    or current.get(key(moves[other])) != uid):
-                continue
-            if key(moves[uid]) in blocked_keys or key(moves[other]) in blocked_keys:
-                continue
-            pair = (uid, other)
+        goals.setdefault(target, []).append(uid)
+    reasons: dict[str, str] = {}
+    for uid, target in moves.items():
+        if target in blocked:
+            reasons[uid] = "目标格被永久障碍占用"
+        elif len(goals[target]) > 1:
+            reasons[uid] = "目标格被其他角色同时争抢"
+        elif uid not in origins or target == origins[uid]:
+            reasons[uid] = "移动未离开原位置"
+    for uid, target in moves.items():
+        for other in occupants.get(target, ()):
+            if (uid in origins and other != uid and other in moves
+                    and moves[other] == origins[uid]):
+                reasons.setdefault(uid, "两名角色互换位置发生碰撞")
+                reasons.setdefault(other, "两名角色互换位置发生碰撞")
+    departing = set(moves) - set(reasons)
+    while True:
+        stopped = {uid for uid in departing
+                   if occupants.get(moves[uid], set()) - departing}
+        if not stopped:
             break
-        if pair is None:
-            break
-        first, second = pair
-        current.pop(key(origins[first]), None)
-        current.pop(key(origins[second]), None)
-        current[key(moves[first])] = first
-        current[key(moves[second])] = second
-        order.extend([first, second])
-        pending.discard(first)
-        pending.discard(second)
-    guard = len(pending) + 2
-    while pending and guard > 0:
-        guard -= 1
-        progressed = False
-        for uid in sorted(pending):
-            target = key(moves[uid])
-            occupant = current.get(target)
-            if occupant is not None and occupant != uid:
-                continue
-            if target in blocked_keys and occupant is None:
-                continue
-            origin = key(origins[uid])
-            if current.get(origin) != uid or occupant == uid:
-                continue
-            current.pop(origin, None)
-            current[target] = uid
-            order.append(uid)
-            pending.discard(uid)
-            progressed = True
-        if not progressed:
-            break
-    for uid in sorted(pending):
-        rejected_cycle.append((uid, moves[uid], "移动意图形成闭环，本轮无法单步完成"))
+        for uid in stopped:
+            reasons[uid] = "目标格已被占用且本轮不会空出"
+        departing.difference_update(stopped)
+    return ([(uid, moves[uid]) for uid in sorted(departing)],
+            [(uid, moves[uid], reasons[uid]) for uid in sorted(reasons)])
 
-    resolved: list[tuple[str, Pos]] = [(uid, moves[uid]) for uid in order]
 
-    rejected: list[tuple[str, Pos, str]] = list(rejected_cycle)
-    contested_ids: set[str] = set()
-    for target in sorted(contested):
-        for uid in sorted(goals[target]):
-            rejected.append((uid, moves[uid], "目标格被其他角色同时争抢"))
-            contested_ids.add(uid)
-    moved = {uid for uid, _target in resolved}
-    for uid in sorted(set(moves) - moved - contested_ids - {u for u, _p, _w in rejected_cycle}):
-        target = key(moves[uid])
-        reason = ("目标格被永久障碍占用"
-                  if target in blocked_keys and target not in occupied_by
-                  else "目标格已被占用且本轮不会空出")
-        rejected.append((uid, moves[uid], reason))
-    return resolved, rejected
+def _movement_terrain(turn: Turn) -> set[Pos]:
+    """Neutral/mineral cells, including the existing two-cell task-point model."""
+    from .taskworld import point_cells
+    return {cell for pos, kind in turn.zones.items() if kind != LAND
+            for cell in point_cells(kind, pos)}
 
 
 from .combat_geometry import intervening_wall as _intervening_wall
@@ -370,17 +280,8 @@ def step(payload, commands=None, *, external_response=None):
                                     'pos': Pos.load(r['pos']), 'type': r.get('roleType')}
                      for r in (state.get('robot') or {}).get('roles') or ()}
     gold_before = int(state['teamOur'].get('goldNum') or 0)
-    occupied = set(turn.occupied_cells())
-    # `occupied_cells()` counts every listed unit, including ones at 0 health, so a
-    # destroyed building (whose role entry the judge keeps reporting) would hold its
-    # cell forever. A dead unit holds nothing: the role list keeps the record, the
-    # ground is free. Terrain is separate and still takes precedence for buildings.
-    for unit in turn.ours + turn.enemies:
-        if unit.health <= 0 and unit.pos in occupied:
-            occupied.discard(unit.pos)
-    # Terrain is kept apart from occupancy: a cell held by a role that leaves this
-    # round is a legal destination, but a wall or a base never is.
-    terrain = {p for p, kind in turn.zones.items() if kind != 'land'}
+    occupied = set(turn.occupied_cells())  # already excludes dead units
+    terrain = _movement_terrain(turn)
     blocked = occupied | terrain
     robots = (state.get('robot') or {}).get('roles') or []
     moves = {}
@@ -614,13 +515,21 @@ def step(payload, commands=None, *, external_response=None):
                             'level': int(unit.get('level') or 1), 'from': pos.dump(),
                             'controller': controller['id'], 'salvos': salvos,
                             'source': 'missile'})
-    # Movement: intents are collected first and then resolved as one set, so a
-    # role may step into a cell that another role is leaving this same round.
-    # Rejecting those outright was the single largest source of "指令未执行"
-    # (measured: hundreds per match) and is not what the rules describe — 任务书
-    # §4.2 has both teams' roles act in the same round.
-    origins = {uid: Pos.load(by_id[uid]['pos']) for uid in moves}
-    resolved, rejected = resolve_moves(moves, origins, terrain)
+    # Preserve all stationary roles and hard occupancy; only an actual successful
+    # departure can free a role's cell. Buildings built earlier in this settle
+    # pass also block movement. Robots/enemies have no intents in this role pass:
+    # enemy policy is stationary and robot navigation remains a later local
+    # approximation, not an official joint role/robot collision implementation.
+    movement_turn = Turn.load(state)
+    origins = {str(u.unit_id): u.pos for u in movement_turn.controllable()}
+    hard_blocked = terrain | {r.pos for r in movement_turn.robots if r.health > 0}
+    fixed_units = (tuple(u for u in movement_turn.ours
+                         if u.kind not in ('worker', 'pioneer'))
+                   + movement_turn.enemies)
+    for unit in fixed_units:
+        if unit.health > 0:
+            hard_blocked.update(movement_turn.footprint(unit))
+    resolved, rejected = resolve_moves(moves, origins, hard_blocked)
     for uid, target in resolved:
         by_id[uid]['pos'] = target.dump()
         outcomes[uid] = True
@@ -645,12 +554,7 @@ def step(payload, commands=None, *, external_response=None):
     # Sequential greedy robot movement: deliberately conservative and deterministic.
     if not turn.is_day:
         refreshed = Turn.load(state)
-        obstacles = set(refreshed.occupied_cells()) | {p for p, k in turn.zones.items() if k != 'land'}
-        # Dead units hold nothing: a destroyed building's cell is rubble to walk
-        # over, and the role list still carries its record at 0 health.
-        for unit in refreshed.ours + refreshed.enemies:
-            if unit.health <= 0:
-                obstacles.discard(unit.pos)
+        obstacles = set(refreshed.occupied_cells()) | _movement_terrain(refreshed)
         # 任务书 §4.7.3: "机器人会攻击阻挡其移动的单位（包括角色/建筑）". A robot
         # blocked by a building therefore attacks *that building* rather than
         # picking the nearest unit — which is what makes a wall ring a delaying
