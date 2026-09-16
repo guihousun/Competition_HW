@@ -8,6 +8,7 @@ from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass, replace
 from heapq import heappop, heappush
+from functools import lru_cache
 
 from .coordination import available_gold
 from .home_defense import inside
@@ -18,9 +19,12 @@ from .protocol import (Pos, CONTROLLABLE_TYPES, TOWER_TYPES, DAY_ROUNDS, ROUNDS_
 MAX_ROUTE_OVERLAYS = 64  # compute bound; exhaustion defers construction
 
 
+@lru_cache(maxsize=4096)
 def neighbours(pos):
-    return (Pos(pos.x + dx, pos.y + dy) for dx in (-1, 0, 1)
-            for dy in (-1, 0, 1) if dx or dy)
+    # Only immutable coordinate geometry is shared across observations. Keep
+    # the original ordering: BFS tie breaks depend on it; occupancy is not cached.
+    return tuple(Pos(pos.x + dx, pos.y + dy) for dx in (-1, 0, 1)
+                 for dy in (-1, 0, 1) if dx or dy)
 
 
 def task_cells(turn):

@@ -6,6 +6,7 @@ The caller supplies ordered legal missing wall sites and owns worker assignment.
 No persistent itinerary, inferred mine reserves, purchases or private inputs.
 """
 from collections import deque
+from functools import lru_cache
 
 from .home_defense import inside
 from .protocol import (DAY_ROUNDS, ROUNDS_PER_DAY, CONTROLLABLE_TYPES, TOWER_TYPES,
@@ -15,9 +16,12 @@ from .protocol import (DAY_ROUNDS, ROUNDS_PER_DAY, CONTROLLABLE_TYPES, TOWER_TYP
 MARGIN = 2
 
 
+@lru_cache(maxsize=4096)
 def _neighbours(pos):
-    return (Pos(pos.x + dx, pos.y + dy) for dx in (-1, 0, 1)
-            for dy in (-1, 0, 1) if dx or dy)
+    # A reusable tuple avoids allocating the same eight frozen Pos values in
+    # every BFS overlay. No mutable map, wall or role state enters this cache.
+    return tuple(Pos(pos.x + dx, pos.y + dy) for dx in (-1, 0, 1)
+                 for dy in (-1, 0, 1) if dx or dy)
 
 
 class _Board:
