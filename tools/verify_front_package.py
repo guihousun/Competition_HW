@@ -55,7 +55,7 @@ def main():
         with tarfile.open(archive, 'r:gz') as handle:
             handle.extractall(folder, filter='data')
         root = Path(folder) / 'CoreGeek'
-        manifest = json.loads((root / 'submission-manifest.json').read_text())
+        manifest = json.loads((root / 'submission-manifest.json').read_text(encoding='utf-8'))
         for side in ('challenger', 'defender'):
             with socket.socket() as sock:
                 sock.bind(('127.0.0.1', 0)); port = sock.getsockname()[1]
