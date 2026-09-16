@@ -64,6 +64,8 @@ def purchase_allowed(turn, payload, item, commands):
     base = turn.station()
     if (base is not None and priority(base)[0] == 0 and can_upgrade(item,base.kind,base.level)):
         return True
+    if item in VOUCHER_TARGETS:
+        return False  # Finish quoted weapon upgrades before new non-emergency wall/base vouchers.
     price = shop_prices(payload).get(item)
     if price is None:
         return False

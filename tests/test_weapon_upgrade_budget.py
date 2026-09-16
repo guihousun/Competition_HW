@@ -40,13 +40,14 @@ class WeaponBudgetTests(unittest.TestCase):
         self.assertIsNotNone(proposal);self.assertEqual(report['voucher'],WV)
 
     def test_actual_price_and_previous_purchase_reduce_spare_budget(self):
-        p=self.wall_board(92);p['weaponShopList'][0]['price']=73
+        p=self.wall_board(172);p['weaponShopList'][0]['price']=73
+        p['weaponShopList'].append({'name':'Bomb','price':100})
+        self.assertFalse(upgrade.purchase_allowed(Turn.load(p),p,'Bomb',{}))
+        p['teamOur']['goldNum']=173
+        self.assertTrue(upgrade.purchase_allowed(Turn.load(p),p,'Bomb',{}))
+        self.assertFalse(upgrade.purchase_allowed(Turn.load(p),p,'Bomb',{13:{'action':'buy','name':AV}}))
+        self.assertTrue(upgrade.purchase_allowed(Turn.load(p),p,'Bomb',{13:{'action':'buy','name':WV}}))
         self.assertFalse(upgrade.purchase_allowed(Turn.load(p),p,AV,{}))
-        p['teamOur']['goldNum']=93
-        self.assertTrue(upgrade.purchase_allowed(Turn.load(p),p,AV,{}))
-        self.assertFalse(upgrade.purchase_allowed(Turn.load(p),p,AV,{13:{'action':'buy','name':AV}}))
-        # Already paid for this weapon voucher: another 73 is not reserved again.
-        self.assertTrue(upgrade.purchase_allowed(Turn.load(p),p,AV,{13:{'action':'buy','name':WV}}))
 
     def test_adjacent_shop_cannot_bypass_reserve_for_wall(self):
         p=self.wall_board();p['mapInfo']['zones']=[{'neutralType':'weaponShop','pos':{'x':4,'y':7}}]
