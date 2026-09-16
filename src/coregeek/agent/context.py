@@ -80,7 +80,7 @@ class Context:
         self._messages.append(Message(_TOOL, f"【本地 python 的执行结果（原文）】\n{text}"))
 
     def hear(self, reply: str) -> None:
-        """记一条 LLM 的回复（原文 —— assistant 消息收它真说过的话）。
+        """记一条 LLM 的原始回复（原文 —— assistant 消息收它真说过的话）。
 
         粘住去重：`llmResp` 按可能粘住设计（接口文档对它一个字没写、对 `lastCmdResult`
         却写明"未发命令时为空"）⇒ 与最后一条消息（且得是 assistant）相同就不进表。

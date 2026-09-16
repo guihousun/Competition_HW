@@ -185,8 +185,10 @@ class _Queue:
 
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
-    """两段式决策：第一段 `_intents` 逐角色出"初步行为"（能直接干的当场落指令、
-    要走路的只交 `(角色, 目标)` 意图），第二段 `_walk_out` 按同一顺序批量解
+    """两段式决策：
+    第一段 `_intents` 逐角色出"初步行为"（能直接干的当场落指令、
+    要走路的只交 `(角色, 目标)` 意图）
+    第二段 `_walk_out` 按同一顺序批量解
     走路意图 —— BFS 落一格、记落子账与路径预留账，后解的让开先落的。
 
     黑板（建造格 / 矿格 / 炮位 / 修墙格认领、金币预留、环缺口切段）是第一段的
@@ -389,92 +391,55 @@ def _walk_out(turn: Turn, q: _Queue, sites: set[Pos]) -> None:
 
 
 def task_channel(turn: Turn) -> tuple[str, str]:
-    """本回合任务的 `(prompt, executeCmd)` —— 响应顶层那两个字段的唯一来源。
-
-    合成一个函数是因为这条链唯一的不变量是"两者互斥"：同一轮既提问又发命令 ⇒ LLM 拿着
-    过期结果作答 ⇒ 活锁。本函数无状态（跨回合状态在 `AGENT` 实例上）。判据先命中先定夺：
-
-    ① 没任务或名册里没有开拓者 ⇒ 都不发。"开拓者还活着"是显式补的：`submitAnswer` 走
-    `roleCommandMap`（死了不在名册里，天然进不来），而 `executeCmd` 是响应顶层字段、
-    不经过角色闸门。② `cmd_result` 非空 ⇒ 回灌结果、这轮绝不发命令 —— 必须压在 ③ 前：
-    `lastCmdResult` 文档明说"未发命令时为空"（不粘），`llmResp` 一个字没写 ⇒ 必须按可能
-    粘住设计，否则同一条命令被反复丢进沙盒。③ 完整工具调用且给了命令 ⇒ 发命令、不提问。
-    ④ 判题器报 `code 2` ⇒ 带反馈重问，拿不到答案原文也照样纠错（反馈原话装进提示词，
-    绝不落「请继续。」—— 那等于没告诉它答案错了）。纠错是修饰符不是分支：`errors` 报的
-    是本轮产生的错误、与上轮发了什么不同步，做成独立分支会整段吞掉。⑤ 有答案 ⇒ 只交
-    答案：不发模型请求、也不压缩；判据用 `answer_of` 而不是"取不出命令"—— 畸形工具调用
-    会被当答案交上去、`_answer_task` 又跳过工具回复 ⇒ 两条通道同时哑火、永久空转。
-    ⑥ 否则把问题问出去（首问 = 题目，重问 = 一句「请继续。」）；完整调用但拿不到命令
-    （`SOP2Prompt`、`python_exec`、未知工具、空参数）也落这里，不活锁 —— 任务期间
-    prompt 不限量不计数，出口有"LLM 改口给答案""纠错段""它自己写进 prompt 的 SOP 段"。
-
-    链尾压缩闸门：判据算完 `prompt` 仍空（只有 ③ 命令轮会这样 —— ⑤ 答案轮提前返回，
-    压缩与 `<answer>` 互斥：压缩回复会占住下一轮的 llmResp 槽，答案被判错时纠错就拿不到
-    答案原文）⇒ 填压缩请求。②/④/⑥ 的模型请求永远优先；① 的早返回在闸门之前 ⇒ 场外
-    绝不压缩（任务线之外每游戏日只有 3 次额度）。压缩回复（裸 `<summary>`）在链首就被
-    路由进摘要、不进会话表，下一轮判据按"没回复"落 ⑥ ⇒ 命令轮与压缩轮交替，互不阻塞。
-
-    工具调度只有 `AGENT.tool_call` 一个入口，副作用（SOP 沉淀）只发生在那一行、写在判据
-    之前 ⇒ 走"回灌结果"那一轮 SOP 照样生效。`AGENT.hear` 把回复记进会话：发命令/交答案
-    那两轮没有 prompt，回复照样得记，否则回灌轮 LLM 看见的是"题目 → 莫名其妙的结果"，
-    它自己要的命令凭空消失。骂的那一份必须与交的那一份出自同一个谓词（`answer_of`）——
-    交的是解包后的答案、骂的是带标签原文的话，LLM 会以为我们交了一堆标签。
-
-    本函数还打"本轮任务 / 上一轮模型回复 / CMD 执行结果"三样日志（logger 名
-    `coregeek.game.planner`，不在 `app` 名下 ⇒ 只盯 `coregeek.app` 的守卫看不见）；
-    组装出来的 `prompt` 那一行由 `app._log` 打。
+    """处理本回合任务的 `(prompt, executeCmd)` —— 响应顶层那两个字段的唯一来源。
     """
+
+    # 打印任务信息和模型回复的日志
     if turn.phase_task or turn.llm_resp:
-        # 必须记：题目原文与 LLM 答了什么只存在于本回合的 payload 里。触发条件带上
-        # `llm_resp`：任务刚结束那一回合 `phase_task` 已经空了，而那是唯一一次能看见
-        # "判题器最后答了什么"的机会 —— 所以这一行写在下面那道早返回之前。
         LOGGER.info(
             "【本轮任务】：%s ｜ 【上一轮模型回复】：%s",
             _clip(turn.phase_task) or "无",
             _clip(turn.llm_resp) or "无",
         )
-
+    # 打印CMD执行结果日志
     if turn.cmd_result:
-        # 沙盒回执必须记：回灌给 LLM 的就是它。只记结果、不记发出去的命令 —— 发命令那
-        # 一回合 `llm_resp` 就是那次工具调用，已经印在上面那行的回复里；这样
-        # "沙盒行数 = 实际跑过的命令数"。回灌给 LLM 是全文，这里才截断 —— 一个要
-        # 正确性，一个要人眼看得下。
         LOGGER.info("【CMD命令执行结果】：「%s」", _clip(turn.cmd_result))
 
-    reply = turn.llm_resp.strip()
-    summary = is_summary_reply(reply)
-    prices = is_prices_reply(reply)
+    llmReply = turn.llm_resp.strip()
+    # 获取摘要
+    summary = is_summary_reply(llmReply)
+    # 价格影响信息
+    prices = is_prices_reply(llmReply)
     if summary is not None:
-        # 压缩回复（只跟在 ③ 命令轮后面）：进摘要、不进会话表 —— 它不是 LLM 在任务上
-        # 说过的话，进表会污染窗口、与【历史摘要】双份。粘住的重复路由一次 = 幂等；
-        # 任务判据按"没回复"继续走。
+        # 赋值给 AGENT 的摘要信息，供后续使用
         AGENT.adopt_summary(summary)
-        reply = ""
+        llmReply = ""
     elif prices is not None:
-        # 查价回复：进价格期望表、不进会话表 —— 与摘要同一条路由纪律
-        # （内容路由、永不当任务材料）。
+        # 修正价格信息，赋值给 AGENT 的价格提示，供后续使用
         AGENT.adopt_price_hints(prices)
-        reply = ""
+        llmReply = ""
     else:
-        AGENT.hear(reply)  # 它自己说过的话得在会话里（发命令/交答案那轮没有 prompt，也得记）
+        # 记录模型回复到会话中，供后续使用
+        AGENT.hear(llmReply)  
 
+    # 不在任务回合，进行新闻查询
     if not turn.phase_task:
-        # 没任务 ⇒ 新闻查价：同一份 news 指纹去重（任务线之外每游戏日只有 3 次额度）。
-        # 没有新闻 / 问过 ⇒ 什么都不发。
         return AGENT.news_question(turn.news), ""
+
+    # 任务回合，但没有开拓者参与 ⇒ 不发 prompt、也不发命令（任务线只在开拓者身上）。
     if not any(isinstance(r, Pioneer) for r in turn.roles):
         return "", ""
-    answer = answer_of(reply)  # 「该提交什么」与「该骂什么」是同一份
-    call = tool_of(reply)
+    # 解析任务答案
+    answer = answer_of(llmReply) 
+    # 解析工具调用
+    call = tool_of(llmReply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
     #: 判题器本轮报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件。
     rejected = any(e.code == 2 for e in turn.errors)
     #: 判题器的原话：黑盒里唯一能回答"错在哪一项"的东西。
     why = "；".join(e.description for e in turn.errors if e.code == 2 and e.description)
-    #: 骂的那一份必须与交的那一份同源（都出自 `answer_of`）：交上去的是解包后的答案，
-    #: 骂的不能是带标签的原文。判题器没给描述（`why` 空）⇒ 只骂答案本身，不为"少了
-    #: 一句话"把整段纠错吞掉。`code 2` 而这轮拿不到答案原文（`llmResp` 按可能不粘设计）
-    #: ⇒ 反馈照样装进提示词，绝不落「请继续。」—— 那等于没告诉它答案错了。
+
+    # 构建错误信息提示
     retry = ""
     if rejected and answer:
         retry = f"{answer}\n【判题器反馈】：{why}" if why else answer
@@ -482,18 +447,22 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         retry = f"【判题器反馈】：{why}" if why else "（判题器未说明错在哪一项）"
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（必须压在 ③ 前）
+        # 有CMD执行结果，给大模型发
         prompt, cmd = AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
     elif command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽留给链尾的压缩闸门
+        # 有CMD命令，直接交给沙盒执行
         prompt, cmd = "", command
-    elif retry:  # ④ 判题器说答案错了 ⇒ 带上反馈重问
+    elif retry:
+        # 错了，构建错误命令
         prompt, cmd = AGENT.chat(turn.phase_task, retry=retry), ""
-    elif answer:  # ⑤ 拿到了答案 ⇒ 只交答案：不发模型请求、也不压缩
-        # 压缩与 `<answer>` 互斥（理由见 docstring）⇒ 提前返回，压缩闸门只剩 ③ 命令轮。
+    elif answer:  
+        # 拿到了答案 ⇒ 只交答案：不发模型请求、也不压缩
         return "", ""
-    else:  # ⑥ 第一次提问 / 畸形或"不产出命令"的工具回复 ⇒ 只把题目问出去（③′ 落在这里）
+    else:  
+        # 第一次提问，只把题目问出去（
         prompt, cmd = AGENT.chat(turn.phase_task), ""
-    # 链尾压缩闸门：模型请求永远优先，压缩只填 ③ 落空的 prompt 槽 —— 这条链上优先级
-    # 最低的租客。没开过会话 ⇒ `compression_request` 给 ""（降级安全）。
+
+    # 任务阶段 && 非答案轮次 && 非命令占用，进行上下文压缩请求
     if not answer and prompt == "":
         prompt = AGENT.compression_request()
     return prompt, cmd

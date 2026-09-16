@@ -39,8 +39,9 @@ def handle(raw: bytes) -> bytes:
         if turn is None:
             raise ValueError("payload 不是 JSON 对象")
         LOGGER.info(f"###################################第{turn.round_no}回合###################################")
-        # 处理Agent逻辑
+        # 处理任务逻辑
         prompt, execute = planner.task_channel(turn)
+        # 处理动作逻辑
         cmds = planner.plan(turn)
         _log(turn, cmds, prompt)
         body = json.dumps(
