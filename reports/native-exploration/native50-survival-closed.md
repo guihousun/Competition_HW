@@ -8,7 +8,7 @@
 
 - 两局均seed1/challenger、observed-seven-days、pressure1、最多1300轮、每点3题、失败率0.5、成功奖励80；初始完整hash同为 `49acdbc6c18604ad0f2b806c1aa5b25e3efdb9c2d396568547ee102ccb04fdd8`，首帧公开JSON相同。配置的实质差别是arm目标；mixed另有恢复说明字段。
 - 两局实际模型配置均deepseek-official/deepseek-flash/high，保留各自原native上下文。survival指纹匹配冻结v2，mixed恢复后的指纹匹配v3；v1/v2/v3的107项受保护engine/agent/docs/plans/reactive/task_stress清单全部相等。因此运行工具版本不同，不是游戏参数变更；相同引擎也包含相同占格缺口。
-- 核验1293+512个公开观测hash及1803处相邻after→next-observation衔接；逐次购买/采集/卖矿/使用用后帧库存验证，升级另核对等级变化。summary与有序round文件SHA均在JSON。两局目标和历史上下文不同，不是只替换武器类型的随机对照。
+- 核验1293+512个公开观测hash及1803处相邻after→next-observation衔接；逐次购买/采集/卖矿/使用用后帧库存验证，升级另核对等级变化。summary哈希在公开JSON，有序round文件哈希清单在本地完整审计JSON。两局目标和历史上下文不同，不是只替换武器类型的随机对照。
 
 ## 真实经济与分工
 
