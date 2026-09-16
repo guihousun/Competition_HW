@@ -215,13 +215,12 @@ class HandleTest(unittest.TestCase):
         ):
             self.assertIn(piece, messages[0]["content"])
 
-        #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**。第 43 步起答案轮的
-        #: 空 prompt 槽改发**压缩请求**（任务期间不限量不计数 —— "省额度"针对的是
-        #: 任务提问与任务线之外那 3 次/日；判别器 = 压缩指令的头，不是任务模板的头）
+        #: 判题器答了 ⇒ 回复那一格才有内容，而且**不再提问**。第 47 步起答案轮
+        #: **只交答案**：prompt 槽完全空着（压缩与 `<answer>` 互斥 —— 压缩回复
+        #: 会占住下一轮的 `llmResp` 槽，答案被判错时纠错分支拿不到答案原文）
         task, ask = asked_after_sending(llmResp="答案")
         self.assertIn("【上一轮模型回复】：答案", task)
-        self.assertIn("【上下文压缩】", ask, "答案轮的空槽发压缩请求（第 43 步）")
-        self.assertNotIn("# 【ROLE定位】", ask, "不是任务提问")
+        self.assertEqual(ask, "", "答案轮不提问也不压缩（第 47 步）")
 
         long_text = "题" * (LOG_TEXT_MAX + 7)
         task, _ = asked_after_sending(phaseTask=long_text)
@@ -473,7 +472,8 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body["executeCmd"], "")
 
         # ④ LLM 给出答案 ⇒ **只交 `<answer>` 里的内容**（不是整段回复）；
-        #    答案轮本回合没有模型请求 ⇒ 第 43 步起空槽改发**压缩请求**
+        #    答案轮**只交答案**：prompt 与 executeCmd 全空 —— 不压缩（第 47 步：
+        #    压缩与 `<answer>` 互斥）
         #    （清掉 `lastCmdResult`：文档说"未发命令时为空字符串"，上一轮我们没发命令）
         raw["lastCmdResult"] = ""
         raw["llmResp"] = "<answer>晴 26 度</answer>"
@@ -482,7 +482,7 @@ class HandleTest(unittest.TestCase):
             body["roleCommandMap"]["10011"],
             {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
         )
-        self.assertIn("【上下文压缩】", body["prompt"], "答案轮的空槽发压缩请求（第 43 步）")
+        self.assertEqual(body["prompt"], "", "答案轮不提问也不压缩（第 47 步）")
         self.assertEqual(body["executeCmd"], "")
 
         # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，**同时照旧提交**

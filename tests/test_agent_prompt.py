@@ -64,6 +64,18 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("接口", role)
         self.assertIn("SOP2Prompt", role)
 
+    def test_the_role_section_pins_the_deposit_timing(self):
+        """第 47 步（用户口径）：沉淀的时机 = **【沉淀的SOP】段里还没有**这条经验
+        —— "值不值得"不再是门槛，只要没沉淀过就存；存过的不要重复存。
+        输出约定第 3 条的导语同步松绑：不再暗示"拖到完成任务才存"
+        （任务可能超时，拖到那时经验就丢了），组合形状的示例不变。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        self.assertIn("还没出现在下面的【沉淀的SOP】段", system)
+        self.assertIn("已经沉淀过的不要重复存", system)
+        self.assertNotIn("当认为解题流程值得沉淀时", system, "旧措辞把判断权丢给'值不值得'")
+        self.assertIn("当要沉淀且同回合要交答案时", system)
+        self.assertNotIn("当完成任务且认为流程可沉淀时", system)
+
     def test_both_output_shapes_are_shown_verbatim(self):
         """两个形状（工具调用 / `<answer>`）**逐字**出现在模板里。
 

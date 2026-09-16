@@ -281,17 +281,15 @@ class TaskChannelTest(unittest.TestCase):
     def test_no_question_once_the_llm_answered(self):
         """回复是答案 ⇒ 不再提问（同一个 prompt 问两遍不会得到更好的答案）。
 
-        第 43 步起"不发" ≠ "prompt 留空"：答案轮本回合没有模型请求，回合最末尾的
-        压缩闸门把空槽填成**压缩请求**（用户口径：任务中、未生产模型请求才压缩）。
-        先 ⑥ 首问把会话建起来 —— 没开过会话时 `compression_request` 给 ""，
-        维持旧形状。
+        第 47 步（用户口径）：答案轮**只交答案** —— prompt 完全为空，压缩闸门
+        不再落进这一轮（**压缩与 `<answer>` 互斥**）：压缩回复会占住下一轮的
+        `llmResp` 槽，答案被判错时纠错分支就拿不到答案原文。第 43 步"⑤ 答案轮
+        也压缩"的口径就此撤销。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
         prompt, execute = task_channel(self._turn(self.TASK, self.ANSWER))
         self.assertEqual(execute, "")
-        self.assertIn("【上下文压缩】", prompt, "答案轮的空槽发的是压缩请求（第 43 步）")
-        self.assertNotIn(self.RETRY_MARK, prompt)
-        self.assertNotIn(self.RESULT_MARK, prompt)
+        self.assertEqual(prompt, "", "答案轮只交答案：不提问、不压缩（第 47 步）")
 
     def test_the_command_comes_out_of_the_tool_markup(self):
         """工具调用里 `<tool_param>` 内层的 `<cmd>` **就是那条命令**，两侧空白去掉、内部原样保留。
@@ -578,12 +576,18 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_summary_reply_round_goes_back_to_the_task(self):
         """压缩回复到达、又没有别的回执 ⇒ 判据按"没回复"走 → ⑥ 重问。
 
-        第 43 步起答案轮与压缩轮**交替**：压缩请求的回复下一轮到达，这一轮把任务对话
-        推回去（nudge），再下一轮 LLM 重新给出答案、⑤ 接着交接着压。这一轮**不是**
-        压缩轮 —— nudge 是模型请求，闸门不落；摘要照样进（`【历史摘要】` 可见）。
+        第 47 步起压缩只跟在 ③ 命令轮后面（答案轮不压缩，压缩与 `<answer>` 互斥）
+        ⇒ **命令轮与压缩轮交替**：压缩请求的回复下一轮到达，这一轮把任务对话推回去
+        （nudge）。这一轮**不是**压缩轮 —— nudge 是模型请求，闸门不落；
+        摘要照样进（`【历史摘要】` 可见）。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问
-        task_channel(self._turn(self.TASK, self.ANSWER))  # ⑤ 答案轮（发压缩请求）
+        task_channel(
+            self._turn(
+                self.TASK,
+                "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>",
+            )
+        )  # ③ 命令轮（prompt = 压缩请求）
         prompt, execute = task_channel(
             self._turn(self.TASK, "<summary>【总目标】交 token</summary>")
         )
@@ -633,18 +637,27 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn(self.ANSWER, users[-1])
         self.assertIn(self.RETRY_MARK, users[-1])
 
-    def test_a_rejection_needs_an_answer_to_blame(self):
-        """带纠错那一段的**前提是"手上真有一个被否掉的答案"**，两个反例都要挡住。
+    def test_a_rejection_blames_even_when_the_answer_is_not_in_hand(self):
+        """判据 ④ 第 47 步起**不再要求手上真有那个答案**（用户口径：判题器给了
+        错误提示就要装进提示词，绝不落「请继续。」）—— 旧口径"骂的那份与交的那份
+        同源"防的是**拿带标签的原文当答案骂**，反馈-only 的重问里没有答案文本，
+        无从踩雷；会话里最后一条 assistant 正是它上一次说过的话，反馈紧跟着落。
 
-        - `llm_resp` 为空：任务刚换（上一条超时结束、开拓者立刻接了新任务）时
-          `errors` 里那个 2 是**旧账** —— 拿它去骂新任务，只会把 LLM 带偏。
-        - `llm_resp` 是工具调用：否则会塞进"你上一次的答案是 `<tool>ls</tool>` 被判错了"。
-          **两种工具回复都要挡**：取得出命令的（`<tool>ls</tool>`）在判据 3 就走了，
-          取不出的（`<tool ls`）会落到判据 4 —— 后者才是这条判据真正的守门员。
+        仍然不骂的只剩**取得了命令的工具回复**：它在判据 3 就走了 —— 有 error 2
+        也不该妨碍"该跑的命令照跑"；这一轮的反馈落空没关系，code 2 会连着报几轮。
         """
         nobody_to_blame = task_channel(self._turn(self.TASK, errors=(Error(2, "x"),)))
-        self.assertNotIn(self.RETRY_MARK, nobody_to_blame[0])
+        self.assertIn(self.RETRY_MARK, nobody_to_blame[0], "反馈照样装进提示词（第 47 步）")
 
+        broken = task_channel(
+            self._turn(self.TASK, llm_resp="<tool ls", errors=(Error(2, "x"),))
+        )
+        self.assertIn(self.RETRY_MARK, broken[0], "半条命令不妨碍把反馈带到")
+
+        # **独立会话**：这轮走 ③ ⇒ prompt 是压缩请求，而压缩原料是**原始上下文全文**
+        # —— 不清会话的话，上面两个 case 的纠错块会留在会话里、被原料带出来，
+        # "不骂"就断言不出来了。
+        AGENT.reset()
         replied_a_command = task_channel(
             self._turn(
                 self.TASK,
@@ -655,11 +668,6 @@ class TaskChannelTest(unittest.TestCase):
         self.assertNotIn(self.RETRY_MARK, replied_a_command[0])
         # 顺带钉住：有 error 2 也不该妨碍"该跑的命令照跑"（判据 3 排在判据 4 前面）
         self.assertEqual(replied_a_command[1], "ls")
-
-        broken = task_channel(
-            self._turn(self.TASK, llm_resp="<tool ls", errors=(Error(2, "x"),))
-        )
-        self.assertNotIn(self.RETRY_MARK, broken[0], "半条命令不是'上次交的答案'")
 
     def test_the_retry_blames_exactly_what_we_submitted(self):
         """⚠️ **纠错段里带的必须是"我们交上去的那一份"，不是回复原文。**
@@ -758,9 +766,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_only_the_answer_error_triggers_the_retry(self):
         """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。
 
-        第 43 步起答案轮的空槽发压缩请求：非 2 的码 ⇒ prompt 是**压缩请求**、
-        绝不是带纠错段的任务重问（判别器 = 任务模板的头；压缩原料是**原文**，
-        上一轮 code 2 落进历史的纠错块当然还在里面，不算这一轮在骂）。
+        第 47 步起答案轮**不压缩**：非 2 的码时回复仍是答案 ⇒ 判据 ⑤ 只交答案，
+        prompt 与 executeCmd 全空 —— 不是压缩请求（第 43 步的口径撤销）、
+        也不是带纠错段的任务重问。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
         prompt, execute = task_channel(
@@ -772,9 +780,30 @@ class TaskChannelTest(unittest.TestCase):
                 prompt, execute = task_channel(
                     self._turn(self.TASK, llm_resp=self.ANSWER, errors=(Error(code, "x"),))
                 )
-                self.assertIn("【上下文压缩】", prompt)
-                self.assertNotIn("# 【ROLE定位】", prompt, "是压缩请求，不是任务重问")
+                self.assertEqual(prompt, "")
                 self.assertEqual(execute, "")
+
+    def test_the_error_feedback_enters_the_prompt_even_without_the_answer(self):
+        """**答案轮之后判题器报 `code 2`、而这轮回复里拿不到答案原文**（`llmResp`
+        文档没写 ⇒ 必须按可能不粘设计）⇒ 错误反馈照样装进提示词（第 47 步用户
+        口径），绝不落成一句「请继续。」—— 那等于没告诉它答案错了。
+
+        会话里最后一条 assistant 正是它上一次的答案，反馈紧跟着落，语义完整。
+        判题器没给 `description` ⇒ 纠错块的外壳（"被判定为不正确／请重新作答"）
+        自己就是事实陈述，占位一句即可。
+        """
+        task_channel(self._turn(self.TASK, self.ANSWER))  # ⑤ 答案轮：只交答案（prompt 空）
+        prompt, execute = task_channel(
+            self._turn(self.TASK, errors=(Error(2, "第 3 项应为整数"),))
+        )
+        self.assertIn(self.RETRY_MARK, prompt)
+        self.assertIn("第 3 项应为整数", prompt, "判题器的 description 原话进了提示词")
+        self.assertNotIn("请继续", prompt)
+        self.assertEqual(execute, "")
+        prompt, _ = task_channel(self._turn(self.TASK, errors=(Error(2, ""),)))
+        self.assertIn(self.RETRY_MARK, prompt)
+        self.assertIn("不正确", prompt, "纠错块外壳自带的事实陈述还在")
+        self.assertNotIn("请继续", prompt)
 
     def test_a_timeout_result_still_goes_back(self):
         """`[TIMEOUT]` / `[JUDGER_ERROR]` 打头的回执**照样原样回灌** —— 那是沙盒侧的
