@@ -13,7 +13,7 @@ from functools import lru_cache
 from .coordination import available_gold
 from .home_defense import inside
 from .market import can_upgrade, shop_prices
-from .protocol import (Pos, CONTROLLABLE_TYPES, TOWER_TYPES, DAY_ROUNDS, ROUNDS_PER_DAY, distance,
+from .protocol import (Pos, WALL, WALL_FIXER, CONTROLLABLE_TYPES, TOWER_TYPES, DAY_ROUNDS, ROUNDS_PER_DAY, distance,
                        move_command, buy_command, use_command)
 
 MAX_ROUTE_OVERLAYS = 64  # compute bound; exhaustion defers construction
@@ -68,6 +68,10 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     def reject(reason, actions=None):
         return TripCost(False, actions, budget, reason)
     returning = commitment.get('phase') == 'return'
+    operation = commitment.get('operation','upgrade')
+    if (operation not in ('upgrade','repair') or (operation=='repair' and commitment['item']!=WALL_FIXER)
+            or (operation=='upgrade' and commitment['item']==WALL_FIXER)):
+        return reject('unsupported_operation')
     if not turn.is_day or (budget <= 0 and not returning):
         return reject('deadline')
     owner = next((w for w in turn.workers() if w.unit_id == commitment['owner']), None)
@@ -75,7 +79,10 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     item = commitment['item']
     if owner is None or (target is None and not returning):
         return reject('owner_or_target_missing')
-    if not returning and not can_upgrade(item, target.kind, target.level):
+    eligible = (target is not None and target.kind==WALL and 1<=target.level<=3
+                and 0<target.health<(1000,1500,2000)[target.level-1]) if operation=='repair' else (
+                    target is not None and can_upgrade(item,target.kind,target.level))
+    if not returning and not eligible:
         return reject('target_no_longer_eligible')
     held = item in owner.backpack
     price = shop_prices(payload).get(item)
@@ -181,6 +188,19 @@ def evaluate_after_action(turn, payload, commitment, command, commands, *, actor
     owner=next((w for w in turn.workers() if w.unit_id==commitment['owner']),None)
     if owner is None:
         return TripCost(False,None,commitment['deadline']-turn.round_no-1,'owner_or_target_missing')
+    if commitment.get('operation')=='repair' and command and command.get('action') in ('buy','use'):
+        valid=command.get('name')==WALL_FIXER and commitment['item']==WALL_FIXER
+        if command['action']=='buy':
+            price=shop_prices(payload).get(WALL_FIXER)
+            valid=valid and command.get('num',1)==1 and WALL_FIXER not in owner.backpack and not owner.backpack_full
+            valid=valid and price is not None and 0<=price<=available_gold(turn,payload,commands,replacing=owner.unit_id)
+            valid=valid and any(kind=='weaponShop' and distance(owner.pos,p)==1 for p,kind in turn.zones.items())
+        else:
+            target=next((u for u in turn.walls() if u.unit_id==commitment['target']),None)
+            valid=valid and target is not None and WALL_FIXER in owner.backpack
+            valid=valid and target is not None and distance(owner.pos,target.pos)==1 and command.get('targetPos')==[target.pos.dump()]
+        if not valid:
+            return TripCost(False,None,commitment['deadline']-turn.round_no-1,'repair_first_action_invalid')
     start=owner.pos
     after_record=dict(commitment)
     if command and command.get('action')=='move':
@@ -282,8 +302,28 @@ def clean_memory(value):
                     or row.get('phase','acquire') not in ('acquire','return')
                     or row.get('last_action','') not in ('','move','buy','use')):
                 continue
+            operation = row.get('operation','upgrade')
+            if operation not in ('upgrade','repair') or (operation=='upgrade' and row['item']==WALL_FIXER):
+                continue
+            if operation=='repair':
+                target_pos=row.get('target_pos')
+                if (row['item']!=WALL_FIXER or not 1<=row['level']<=3
+                        or type(row.get('target_health')) is not int or not 0<row['target_health']<=2000
+                        or not isinstance(target_pos,dict) or set(target_pos)!={'x','y'}
+                        or any(type(target_pos[k]) is not int or not 0<=target_pos[k]<limit
+                               for k,limit in (('x',41),('y',32)))
+                        or ('use_round' in row and (type(row['use_round']) is not int
+                            or not row['issued_round']<=row['use_round']<=row['last_round']))):
+                    continue
             common.update({k:row[k] for k in ('target','level','count','item')})
             common.update(phase=row.get('phase','acquire'),last_action=row.get('last_action',''))
+            # Do not add an operation field to legacy upgrade records: their
+            # default-off serialization and byte ordering remain unchanged.
+            if 'operation' in row:
+                common['operation']=operation
+            if operation=='repair':
+                common.update(target_health=row['target_health'],target_pos=deepcopy(row['target_pos']))
+                if 'use_round' in row:common['use_round']=row['use_round']
         else:
             cells = row.get('walls')
             if (row.get('phase') not in ('work','return') or not isinstance(cells,list)
@@ -322,7 +362,9 @@ class TripFrame:
                 if row['phase']=='acquire':
                     target = next((u for u in turn.ours if u.unit_id==row['target'] and u.health>0),None)
                     count = live[row['owner']].backpack.count(row['item'])
-                    if target is None or target.level != row['level']:
+                    if row.get('operation')=='repair':
+                        self.observe_repair(row,target,count)
+                    elif target is None or target.level != row['level']:
                         confirmed = (target is not None and target.level>row['level']
                                      and count<row['count'] and row['last_action']=='use')
                         self.begin_return(row,'upgrade_confirmed_observed' if confirmed else 'target_changed_observed')
@@ -379,6 +421,31 @@ class TripFrame:
             self.events.append({'kind':'purchase','event':'return','reason':reason,'owner':row['owner']})
             row['phase']='return'
 
+    def observe_repair(self,row,target,count):
+        """Consumption is an exit signal, never sufficient proof of success.
+
+        A boolean previous-round use receipt plus actual consumption confirms
+        repair even if same-round attacks hide its healing in net wall HP.
+        Missing/contradictory receipts stay unknown; no inferred bonus stock.
+        """
+        consumed=count<row['count']
+        current=(target is not None and target.kind==WALL and target.level==row['level']
+                 and target.pos.dump()==row['target_pos'])
+        attempted=(row.get('last_action')=='use' and row.get('use_round')==self.turn.round_no-1)
+        receipts=self.payload.get('lastRoundRoleActionResults')
+        feedback=receipts.get(str(row['owner'])) if isinstance(receipts,dict) else None
+        if consumed:
+            confirmed=current and attempted and feedback is True
+            self.begin_return(row,'repair_confirmed_observed' if confirmed else 'repair_consumed_unconfirmed')
+        elif not current:
+            self.begin_return(row,'repair_target_changed_observed')
+        elif attempted and feedback is not False:
+            # A claimed success without consumption, or no attributable result,
+            # is not a safe basis for retrying/buying. Retain the real inventory.
+            self.begin_return(row,'repair_use_unconfirmed')
+        elif attempted:
+            self.events.append({'kind':'purchase','event':'repair_use_failed_observed','owner':row['owner']})
+
     def stage_purchase(self, report, proposal):
         if proposal is None:
             return
@@ -386,7 +453,28 @@ class TripFrame:
         target = next((u for u in self.turn.ours if u.unit_id==report.get('building')),None)
         worker = next((w for w in self.turn.workers() if w.unit_id==owner),None)
         prior = self.purchase
-        if worker is None or not report.get('voucher'):
+        operation=report.get('operation','upgrade')
+        item=report.get('item',report.get('voucher')) if 'operation' in report else report.get('voucher')
+        if (worker is None or not item or operation not in ('upgrade','repair')
+                or (operation=='upgrade' and item==WALL_FIXER)
+                or ('item' in report and report.get('voucher',report['item'])!=report['item'])):
+            return
+        if operation=='repair' or (prior and prior.get('operation')=='repair'):
+            if (operation!='repair' or item!=WALL_FIXER or command.get('action') not in ('move','buy','use')
+                    or (command.get('action') in ('buy','use') and command.get('name')!=WALL_FIXER)
+                    or (command.get('action')=='buy' and command.get('num',1)!=1)
+                    or (prior and (prior.get('operation')!='repair' or prior['owner']!=owner
+                                   or prior['target']!=report.get('building') or prior['item']!=item))
+                    or (prior and prior['phase']=='return' and command.get('action')!='move')
+                    or (self.construction and self.construction['owner']==owner)
+                    or (self.pending.get('construction',({},))[0].get('owner')==owner)):
+                return
+            if not (prior and prior['phase']=='return') and (
+                    target is None or target.kind!=WALL or not 1<=target.level<=3
+                    or not 0<target.health<(1000,1500,2000)[target.level-1]):
+                return
+        if operation=='repair' and command.get('action')=='use' and (
+                command.get('targetPos')!=[target.pos.dump()] or WALL_FIXER not in worker.backpack):
             return
         if prior and prior['phase']=='return':
             record = dict(prior,last_round=self.turn.round_no,last_action=command['action'],
@@ -394,10 +482,14 @@ class TripFrame:
         elif target is None:
             return
         else:
-            record = dict(owner=owner,target=target.unit_id,item=report['voucher'],level=target.level,
-                      count=worker.backpack.count(report['voucher']),issued_round=(prior or {}).get('issued_round',self.turn.round_no),
+            record = dict(owner=owner,target=target.unit_id,item=item,level=target.level,
+                      count=worker.backpack.count(item),issued_round=(prior or {}).get('issued_round',self.turn.round_no),
                       last_round=self.turn.round_no,deadline=(prior or {}).get('deadline',self.purchase_deadline),
                       phase='acquire',last_action=command['action'])
+            if 'operation' in report:record['operation']=operation
+            if operation=='repair':
+                record.update(target_health=target.health,target_pos=target.pos.dump())
+                if command['action']=='use':record['use_round']=self.turn.round_no
         self.pending['purchase'] = record,deepcopy(command)
 
     def stage_construction(self, owner, command, report):

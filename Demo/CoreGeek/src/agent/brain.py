@@ -7,7 +7,7 @@ import os
 
 from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
-from . import home_defense
+from . import home_defense, defense_sustain, maintenance_supply
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
 from .market import (
@@ -82,6 +82,7 @@ _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
 _SHARED_CONTROL = ContextVar('competition_shared_control', default=None)
 _UPGRADE_REPORT = ContextVar('competition_upgrade_report',default=None)
 _TRIP_FRAME = ContextVar('competition_team_trip_frame',default=None)
+_SUSTAIN_CONTROL = ContextVar('competition_sustain_control',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
@@ -197,6 +198,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     """
     turn = Turn.load(payload)
     _TRIP_FRAME.set(None)
+    _SUSTAIN_CONTROL.set(None)
     last_round = getattr(planner_state, "last_round", 0)
     if last_round and turn.round_no < last_round and turn.round_no != 1:
         return sandbox.ResponseBuilder()
@@ -238,10 +240,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     if commit:
         planner_state.tasks['supervisor'] = directive.summary()
     night_staging = None
+    defense_state = deepcopy(planner_state) if defense_sustain.enabled() and not commit else planner_state
     if turn.is_day:
-        _day(turn, commands, payload, planner_state)
+        _day(turn, commands, payload, defense_state)
     else:
-        night_staging = _night(turn, commands, payload, planner_state)
+        night_staging = _night(turn, commands, payload, defense_state)
 
     if directive.reserve_pioneer and turn.is_day and pioneer is not None:
         # Workers keep their day plan. Only the needed pioneer returns early.
@@ -332,6 +335,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         excluded = {pioneer_role.unit_id} if job and job.get('claimed') and pioneer_role is not None else set()
         if night_staging and night_staging['hold']:
             excluded.add(night_staging['owner'])
+        sustain = _SUSTAIN_CONTROL.get()
+        if sustain and sustain[0] is turn:
+            excluded.update(sustain[1]["owned_roles"])
         _fill_ready_weapons(turn, commands, excluded)
     from . import pioneer_safety
     safety = pioneer_safety.override(turn, commands)
@@ -359,6 +365,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                 report.update(phase='deferred',reason=deferred['reason'],final_route=deepcopy(deferred['route']))
     elif commit and hasattr(planner_state,'team_trips'):
         planner_state.team_trips.clear()
+    sustain = _SUSTAIN_CONTROL.get()
+    if sustain and sustain[0] is turn:
+        defense_sustain.finalize(defense_state.sustain_memory,sustain[1],commands)
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
     plan = job.get("plan") if job else None
@@ -395,6 +404,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                      'acceptance_status':deepcopy(planner_state.tasks.get('acceptance_status') or {}),
                                      'pending_command':getattr(judge_state,'pending_cmd',None) is not None if judge_state is not None else None,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
+        sustain = _SUSTAIN_CONTROL.get()
+        if sustain and sustain[0] is turn:
+            _DECISION_REPORT.get()["defense_sustain"] = deepcopy(sustain[1]["report"])
         if getattr(planner_state, "team_agent", None) is not None:
             _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
         if turn.is_day:
@@ -674,13 +686,34 @@ def _sync_cycle(payload: dict[str, Any], turn: Turn, planner_state: Any) -> None
 def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
          planner_state: Any = None) -> None:
     from . import team_trip
+    if defense_sustain.enabled():
+        getattr(planner_state,"sustain_memory",{}).clear()
     frame = team_trip.TripFrame(turn,state,getattr(planner_state,'team_trips',{}),
         purchase_deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,construction_deadline=RETURN_BEFORE_NIGHT)
     _TRIP_FRAME.set(frame)
 
     def upgrade_plan():
         construction = frame.construction
-        proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
+        cached_upgrade = None
+        if defense_sustain.enabled() and (frame.purchase is None or frame.purchase.get('operation')=='repair'):
+            if frame.purchase is None:
+                # Already paid, currently feasible delivery keeps priority even
+                # after a restart with no purchase-memory record. This protects
+                # carried stock, not a perpetual preference for new weapons.
+                cached_upgrade = upgrade_itinerary.plan(turn,state,commands,start=0,
+                    deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
+                    reserved_workers=({construction['owner']} if construction else ()))
+                proposal, report = cached_upgrade
+                if proposal is not None and report.get('phase') in ('use','return_with_voucher'):
+                    frame.stage_purchase(report,proposal)
+                    return proposal,report
+            proposal, report = maintenance_supply.plan(turn,state,commands,
+                deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,commitment=frame.purchase,
+                reserved_workers=({construction['owner']} if construction else ()))
+            if proposal is not None or frame.purchase is not None:
+                frame.stage_purchase(report,proposal)
+                return proposal,report
+        proposal,report = cached_upgrade or upgrade_itinerary.plan(turn,state,commands,start=0,
             deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,commitment=frame.purchase,
             reserved_workers=({construction['owner']} if construction else ()))
         if frame.purchase and proposal is None and frame.purchase.get('phase')!='return':
@@ -1868,6 +1901,11 @@ def _adjacent_mine(turn: Turn, role: Unit) -> Pos | None:
 def _night(turn: Turn, commands: dict[int, dict[str, Any]],
            state: dict[str, Any] | None = None, planner_state: Any = None) -> dict | None:
     _SHARED_CONTROL.set(None)
+    _SUSTAIN_CONTROL.set(None)
+    sustain_enabled = defense_sustain.enabled() and not turn.is_day
+    sustain_memory = getattr(planner_state,'sustain_memory',{})
+    old_lease = defense_sustain.sanitize_memory(sustain_memory).get('lease',{})
+    old_owner = old_lease.get('role_id') if sustain_enabled else None
     claimed: set[Pos] = set()
     pairs = _tower_pairs(turn)
     confine = not nightwork.field_clear(turn, state)
@@ -1875,7 +1913,41 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
     committed_task = committed_task and not home_defense.full_night(turn)
     staging = _treasure_night_staging(turn, state, pairs) if state is not None and not committed_task else None
-    extra_work = nightwork.plan(turn, state, pairs) if state is not None and staging is None else {}
+    owned = set()
+    if sustain_enabled:
+        # Observe prior return/item claims before proving the remaining fire
+        # coverage. The ordinary maintenance pass must not consume an item
+        # before the coordinator can establish its repair-and-return lease.
+        for role in turn.controllable():
+            if role.kind == PIONEER and committed_task:continue
+            if (confine and not home_defense.inside(turn,role.pos)
+                    and role.unit_id not in commands):
+                step=home_defense.step_inside(turn,role,claimed=claimed)
+                if step is not None:
+                    commands[role.unit_id]=move_command(step);claimed.add(step)
+        if state is not None:
+            _try_battle_items(turn,commands,state,excluded=() if old_owner is None else (old_owner,))
+        protected = dict(commands)
+        pioneer = turn.pioneer()
+        if pioneer is not None and (bool(cycle) or staging is not None
+                or str((state or {}).get('phaseTask') or '').strip()):
+            protected.setdefault(pioneer.unit_id,{})  # Internal availability only.
+        if pioneer is not None:
+            from . import pioneer_safety
+            if pioneer_safety.override(turn,protected) is not None:
+                # A role about to evade cannot prove coverage for a repair trip.
+                protected.setdefault(pioneer.unit_id,{})
+        ready = [gun for gun in turn.weapons() if gun.cooldown == 0 and _aim_points(turn,gun)]
+        sustain = defense_sustain.plan(turn,sustain_memory,pairs,protected,payload=state,
+            claimed=claimed,ready_weapons=ready,excluded_roles=set(protected))
+        _SUSTAIN_CONTROL.set((turn,sustain))
+        commands.update(sustain['commands'])
+        claimed.update(sustain['claimed'])
+        owned.update(sustain['owned_roles'])
+    # Keep at most one maintenance worker; quiet-night jobs must not consume
+    # either the leased action or its covering guard.
+    extra_work = (nightwork.plan(turn,state,pairs) if state is not None and staging is None and not owned
+                  and (not sustain_enabled or nightwork.field_clear(turn,state)) else {})
     for command in extra_work.values():
         if command.get('action') == 'move':
             claimed.add(Pos.load(command['targetPos'][0]))
@@ -1897,16 +1969,18 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
                 commands.setdefault(uid, command)
         elif staging['command'] is not None:
             commands.setdefault(staging['owner'], staging['command'])
-        if staging is not None and not staging['hold']:
+        if staging is not None and not staging['hold'] and not owned:
             repair = _guard_access_repair(turn, pairs)
             if repair is not None:
                 uid, command = repair
                 commands.setdefault(uid, command)
     # Battlefield reagents first: a bomb or a dizzy on a clustered wave is worth
     # more than one extra shot, and items resolve before robot movement (R06).
-    if state is not None and _try_battle_items(turn, commands, state):
+    if not sustain_enabled and state is not None and _try_battle_items(turn, commands, state):
         pass
-    shared = _coordinate_rockets(turn, commands, claimed) if confine else None
+    # During a lease use the final global matching pass for the remaining crew;
+    # shared-rocket reservation must not hide a ready gun from another operator.
+    shared = _coordinate_rockets(turn, commands, claimed) if confine and not owned else None
     if shared is not None:
         _SHARED_CONTROL.set((turn, shared))
         # A second worker runs the laser while the first rotates the rockets.
@@ -1916,6 +1990,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
             guard = min(guards, key=lambda r: (distance(r.pos, laser.pos), r.unit_id))
             pairs = ((guard, laser),)
     for role, tower in pairs:
+        if role.unit_id in owned:continue
         if shared and (role.unit_id == shared['owner'] or (shared['active'] and tower.unit_id in shared['weapons'])):
             continue
         if role.unit_id in outside_workers:
@@ -1925,6 +2000,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
         if staging is not None and staging['hold'] and role.unit_id == staging['owner']:
             continue
         if distance(role.pos, tower.pos) <= 1:
+            if owned:continue  # Final matching supplies the non-maintenance fire.
             if turn.is_day or tower.cooldown > 0:
                 continue
             targets = _aim_points(turn, tower)
@@ -2043,7 +2119,7 @@ def _guard_access_repair(turn, pairs):
 
 
 def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
-                      state: dict[str, Any]) -> bool:
+                      state: dict[str, Any], *, excluded=()) -> bool:
     """Use a bomb when a 3×3 blast covers several robots and we hold one.
 
     Only committed when the blast is clearly worth it: the item costs 100 gold
@@ -2052,7 +2128,7 @@ def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
     from .protocol import BOMB_RADIUS
     best: tuple[int, Pos, Unit] | None = None
     for role in turn.controllable():
-        if role.unit_id in commands:
+        if role.unit_id in commands or role.unit_id in excluded:
             continue
         role_state = _role_state(state, role.unit_id)
         if not role_state or count_item(role_state, BOMB) <= 0:
