@@ -54,7 +54,9 @@ def _payload_for(rng: random.Random) -> tuple[str, str]:
     title, description_template, answer_template = rng.choice(_TEMPLATES)
     fields = {"room": rng.choice(_ROOMS), "a": rng.randint(10, 99), "b": rng.randint(10, 99)}
     description = (f"【{title}】请读取下列现场信息并回报：\n"
-                   + description_template.format(**fields))
+                   + description_template.format(**fields)
+                   + "\n作答格式：保留原中文字段名，将每个字段名与对应值用半角等号连接，"
+                     "用半角分号分隔多个字段。只提交这些键值对，不要输出解释或其他内容。")
     return description, answer_template.format(**fields)
 
 
