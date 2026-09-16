@@ -1,0 +1,218 @@
+{
+  "scope": "Owner-provided filtered comment archive, not full raw logs or complete HTTP replay. Counts cover retained events only; prompt/task-end events were filtered out.",
+  "source_issue": 26,
+  "rows": [
+    {
+      "match": "596379",
+      "comment_id": 5690845652,
+      "comment_sha256": "86aa1ddc799907365e3f33880739824138b7e54d0deb18a3a51fcce9525035db",
+      "map": "attack_map_update_long_context_mission",
+      "teamAName": "逐夜GISer",
+      "teamBName": "谢谢",
+      "teams_in_kept_task_events": [
+        "challenger"
+      ],
+      "events_retained": 23,
+      "parse_errors": 2,
+      "retained_submissions": 0,
+      "explicit_submission_sections": [
+        {
+          "round": 38,
+          "text_sha256": "7e9350fb03f1f56197e2afc69d4b2940d9e6f1e1bdb7b04776a36ee4c7c0c25a",
+          "new_contract": {
+            "source_id": "owner-comment:5690845652",
+            "source_sha256": "7e9350fb03f1f56197e2afc69d4b2940d9e6f1e1bdb7b04776a36ee4c7c0c25a",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        },
+        {
+          "round": 145,
+          "text_sha256": "f62de9219a9cff2a68bb9a6928298fa0515a6123c5d636adbdb1a0b97de37d64",
+          "new_contract": {
+            "source_id": "owner-comment:5690845652",
+            "source_sha256": "f62de9219a9cff2a68bb9a6928298fa0515a6123c5d636adbdb1a0b97de37d64",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        }
+      ]
+    },
+    {
+      "match": "596391",
+      "comment_id": 5690846043,
+      "comment_sha256": "c1c4138757242bed78c13032892b524ac81acbe242a6d3fe7bca84a81a7e0bb6",
+      "map": "attack_map",
+      "teamAName": "逐夜GISer",
+      "teamBName": "谢谢",
+      "teams_in_kept_task_events": [
+        "challenger"
+      ],
+      "events_retained": 18,
+      "parse_errors": 2,
+      "retained_submissions": 0,
+      "explicit_submission_sections": [
+        {
+          "round": 146,
+          "text_sha256": "f62de9219a9cff2a68bb9a6928298fa0515a6123c5d636adbdb1a0b97de37d64",
+          "new_contract": {
+            "source_id": "owner-comment:5690846043",
+            "source_sha256": "f62de9219a9cff2a68bb9a6928298fa0515a6123c5d636adbdb1a0b97de37d64",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        }
+      ]
+    },
+    {
+      "match": "596412",
+      "comment_id": 5690846412,
+      "comment_sha256": "7d65f096dad036e311b8ae1240a6c2d8e5cf6606f2bf371b81e72a992293d391",
+      "map": "attack_map_update_long_context_mission",
+      "teamAName": "逐夜GISer",
+      "teamBName": "谢谢",
+      "teams_in_kept_task_events": [
+        "challenger"
+      ],
+      "events_retained": 22,
+      "parse_errors": 2,
+      "retained_submissions": 0,
+      "explicit_submission_sections": [
+        {
+          "round": 34,
+          "text_sha256": "7e9350fb03f1f56197e2afc69d4b2940d9e6f1e1bdb7b04776a36ee4c7c0c25a",
+          "new_contract": {
+            "source_id": "owner-comment:5690846412",
+            "source_sha256": "7e9350fb03f1f56197e2afc69d4b2940d9e6f1e1bdb7b04776a36ee4c7c0c25a",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        }
+      ]
+    },
+    {
+      "match": "596419",
+      "comment_id": 5690846721,
+      "comment_sha256": "1776b3c7b68c5bdaae0c31e11ce4efa1ecc15a4381fd8e3b94934d949f0ab29c",
+      "map": "attack_map",
+      "teamAName": "逐夜GISer",
+      "teamBName": "谢谢",
+      "teams_in_kept_task_events": [
+        "challenger"
+      ],
+      "events_retained": 17,
+      "parse_errors": 0,
+      "retained_submissions": 0,
+      "explicit_submission_sections": []
+    },
+    {
+      "match": "596420",
+      "comment_id": 5690847034,
+      "comment_sha256": "b109fd2188c9f6f6ce8bb56cbe990c076bbed3a743dda1c05c09778e724ae455",
+      "map": "attack_map_update_long_context_mission",
+      "teamAName": "汪汪队开大会",
+      "teamBName": "逐夜GISer",
+      "teams_in_kept_task_events": [],
+      "events_retained": 0,
+      "parse_errors": 0,
+      "retained_submissions": 0,
+      "explicit_submission_sections": []
+    },
+    {
+      "match": "596452",
+      "comment_id": 5690847334,
+      "comment_sha256": "fe15fe722f28b6d90be749359de27708771a77b5daf03e439477d9acf4ebb01b",
+      "map": "attack_map",
+      "teamAName": "逐夜GISer",
+      "teamBName": "谢谢",
+      "teams_in_kept_task_events": [
+        "challenger"
+      ],
+      "events_retained": 26,
+      "parse_errors": 2,
+      "retained_submissions": 0,
+      "explicit_submission_sections": [
+        {
+          "round": 37,
+          "text_sha256": "7e9350fb03f1f56197e2afc69d4b2940d9e6f1e1bdb7b04776a36ee4c7c0c25a",
+          "new_contract": {
+            "source_id": "owner-comment:5690847334",
+            "source_sha256": "7e9350fb03f1f56197e2afc69d4b2940d9e6f1e1bdb7b04776a36ee4c7c0c25a",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        },
+        {
+          "round": 144,
+          "text_sha256": "f62de9219a9cff2a68bb9a6928298fa0515a6123c5d636adbdb1a0b97de37d64",
+          "new_contract": {
+            "source_id": "owner-comment:5690847334",
+            "source_sha256": "f62de9219a9cff2a68bb9a6928298fa0515a6123c5d636adbdb1a0b97de37d64",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        },
+        {
+          "round": 186,
+          "text_sha256": "8b7304a714760621c664816be69569977f0d8b70b6cc05d314f4daebe7682d1a",
+          "new_contract": {
+            "source_id": "owner-comment:5690847334",
+            "source_sha256": "8b7304a714760621c664816be69569977f0d8b70b6cc05d314f4daebe7682d1a",
+            "kind": "object",
+            "fields": {
+              "city": "str",
+              "total_count": "int",
+              "world_heritage_count": "int",
+              "types": "list",
+              "oldest_era": "str"
+            }
+          },
+          "old_heading_supported": false
+        }
+      ]
+    }
+  ],
+  "all_explicit_sections_recognized": true
+}

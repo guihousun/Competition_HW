@@ -1,0 +1,46 @@
+{
+  "source_commit": "32b1c609e94b70ce87f6c30020c89fa587f9294e",
+  "archive_sha256": "37708c1630761ac8c9b369c4cd24e176776122e3f72b2c752c103971de0aa2ce",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "requests": 16,
+      "events": [
+        {
+          "round": 20,
+          "action": "buy",
+          "item": "WeaponUpgradeVoucher1",
+          "gold": 100
+        },
+        {
+          "round": 28,
+          "action": "use",
+          "item": "WeaponUpgradeVoucher1"
+        }
+      ],
+      "max_http_ms": 249.0710000274703,
+      "passed": true
+    },
+    {
+      "side": "defender",
+      "requests": 16,
+      "events": [
+        {
+          "round": 20,
+          "action": "buy",
+          "item": "WeaponUpgradeVoucher1",
+          "gold": 100
+        },
+        {
+          "round": 28,
+          "action": "use",
+          "item": "WeaponUpgradeVoucher1"
+        }
+      ],
+      "max_http_ms": 208.32209999207407,
+      "passed": true
+    }
+  ],
+  "scope": "Actual archive main3 HTTP; independent synthetic mirrored board and local buy/use settlement, not official platform PASS"
+}

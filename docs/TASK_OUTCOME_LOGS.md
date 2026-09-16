@@ -10,6 +10,8 @@
 
 摘要保存在事件的 `content.text` 中（JSON字符串），外层包含阵营、stream、episode和回合。`meaning` 提供中文说明。
 
+2026-09-16修正：金币输入从官方 `teamOur.goldNum` 读取，摘要输出键仍叫 `gold`。旧65b03f9版本误读gold，导致真实平台差额为null，旧记录不能当作零收益证据。
+
 ## 结束状态
 
 | status | 含义 |
