@@ -1,4 +1,13 @@
 {
+  "evidence_revision_2026_09_17": {
+    "status": "historical_observation_only; rule-compliant policy conclusions suspended",
+    "reason": "Old engine omitted stationary role and live building occupancy in movement resolution; old action auditor did not detect all such violations.",
+    "confirmed_later_failure50_games": {"survival_live_building_entries": 131, "solo_mixed_live_building_entries": 2},
+    "original_twenty_games_violation_counts": null,
+    "next_step": "Retain original native session context, archive old checkpoints, start fresh games after reviewed collision repair.",
+    "spec": "specs/SIM_STATIC_OCCUPANCY.md",
+    "intranet_pass": false
+  },
   "scope": "Completed original rich-task native exploration; not paired causal policy ranking, not strict single-operator compliance, not official validation",
   "summary": [
     {
