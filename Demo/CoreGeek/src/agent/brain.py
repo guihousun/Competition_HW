@@ -77,6 +77,7 @@ TREASURE_PREP_RESERVE = 25  # strategy reserve, not an official price/limit
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
 _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
+_SHARED_CONTROL = ContextVar('competition_shared_control', default=None)
 _UPGRADE_REPORT = ContextVar('competition_upgrade_report',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
@@ -328,6 +329,16 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if night_staging and night_staging['hold']:
             excluded.add(night_staging['owner'])
         _fill_ready_weapons(turn, commands, excluded)
+    from . import pioneer_safety
+    safety = pioneer_safety.override(turn, commands)
+    if safety is not None and pioneer_role is not None:
+        for uid, command in list(commands.items()):
+            if uid == pioneer_role.unit_id or (command.get('action') == 'attack'
+                    and str(command.get('controllerId')) == str(pioneer_role.unit_id)):
+                commands.pop(uid)
+        if safety['command'] is not None:
+            commands[pioneer_role.unit_id] = safety['command']
+            job = None  # Leaving task range must not also submit a new task action.
     commands = reconcile(turn, payload, commands)
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
@@ -369,6 +380,10 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
         if turn.is_day:
             _DECISION_REPORT.get()['upgrade_itinerary'] = deepcopy(_UPGRADE_REPORT.get())
+        context = _SHARED_CONTROL.get()
+        if context and context[0] is turn:
+            _DECISION_REPORT.get()['shared_rocket_control'] = deepcopy(context[1])
+        _DECISION_REPORT.get()['pioneer_safety'] = {k:v for k,v in safety.items() if k != 'command'} if safety else None
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
         _DECISION_REPORT.get()['worker_shelter'] = home_defense.status(
             turn, commands, quiet=nightwork.field_clear(turn, payload))
@@ -1723,6 +1738,7 @@ def _adjacent_mine(turn: Turn, role: Unit) -> Pos | None:
 
 def _night(turn: Turn, commands: dict[int, dict[str, Any]],
            state: dict[str, Any] | None = None, planner_state: Any = None) -> dict | None:
+    _SHARED_CONTROL.set(None)
     claimed: set[Pos] = set()
     pairs = _tower_pairs(turn)
     confine = not nightwork.field_clear(turn, state)
@@ -1761,7 +1777,18 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     # more than one extra shot, and items resolve before robot movement (R06).
     if state is not None and _try_battle_items(turn, commands, state):
         pass
+    shared = _coordinate_rockets(turn, commands, claimed) if confine else None
+    if shared is not None:
+        _SHARED_CONTROL.set((turn, shared))
+        # A second worker runs the laser while the first rotates the rockets.
+        laser = next((g for g in turn.weapons() if g.kind == 'railgun'), None)
+        guards = [r for r in turn.workers() if r.unit_id != shared['owner']]
+        if shared['active'] and laser is not None and guards:
+            guard = min(guards, key=lambda r: (distance(r.pos, laser.pos), r.unit_id))
+            pairs = ((guard, laser),)
     for role, tower in pairs:
+        if shared and (role.unit_id == shared['owner'] or (shared['active'] and tower.unit_id in shared['weapons'])):
+            continue
         if role.unit_id in outside_workers:
             continue
         if role.unit_id in commands:
@@ -1917,6 +1944,44 @@ def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
     return True
 
 
+def _coordinate_rockets(turn, commands, claimed):
+    """Use a reachable shared inner stand; retain ordinary fire on approach/failure."""
+    base = turn.station()
+    if base is None or len(turn.weapons()) != 3:
+        return None
+    permanent = {p for u in turn.ours + turn.enemies if u.health > 0 and u.kind not in ('worker','pioneer')
+                 for p in turn.footprint(u)}
+    stands = _shared_rocket_cells({u.pos:u.kind for u in turn.weapons()},
+                                  _controller_cells(turn,base.pos,permanent))
+    choices = []
+    for worker in turn.workers():
+        if worker.unit_id in commands or not home_defense.inside(turn, worker.pos):
+            continue
+        for stand in stands:
+            if stand in claimed or (stand != worker.pos and stand in turn.blocked(worker)):
+                continue
+            step = None if worker.pos == stand else home_defense.step_inside(turn,worker,[stand],claimed)
+            if worker.pos == stand or step is not None:
+                choices.append((distance(worker.pos,stand),worker.unit_id,stand.x,stand.y,worker,stand,step))
+    if not choices:
+        return None
+    _,_,_,_,worker,stand,step = min(choices,key=lambda row:row[:4])
+    guns = sorted((g for g in turn.weapons() if g.kind == 'rocket'),key=lambda g:g.unit_id)
+    result = {'owner':worker.unit_id,'stand':stand.dump(),'weapons':[g.unit_id for g in guns],
+              'active':worker.pos == stand, 'phase':'moving' if step else 'holding_cooldown_or_no_target'}
+    if step:
+        commands[worker.unit_id] = move_command(step); claimed.add(step)
+    else:
+        claimed.add(stand)
+        for gun in guns:
+            targets = _aim_points(turn,gun) if gun.cooldown == 0 else []
+            if targets:
+                commands[gun.unit_id] = attack_command_multi(worker.unit_id,targets)
+                result.update(phase='firing',firing=gun.unit_id)
+                break
+    return result
+
+
 def _fill_ready_weapons(turn, commands, excluded):
     """Fill an unserved ready weapon with adjacent free crew after task arbitration.
 
@@ -1924,11 +1989,18 @@ def _fill_ready_weapons(turn, commands, excluded):
     action per role still applies; never replace a use/buy/task action.
     """
     if turn.is_day:return
+    context = _SHARED_CONTROL.get()
+    shared = context[1] if context and context[0] is turn else None
+    excluded = set(excluded)
+    reserved = set()
+    if shared:
+        excluded.add(shared['owner'])
+        if shared['active']: reserved.update(shared['weapons'])
     used={str(c.get('controllerId')) for c in commands.values() if c.get('action')=='attack'}
     roles=[r for r in turn.controllable() if r.unit_id not in excluded and str(r.unit_id) not in used
            and (turn.station() is None or home_defense.inside(turn, r.pos))
            and (r.unit_id not in commands or commands[r.unit_id].get('action')=='move')]
-    towers=[(t,_aim_points(turn,t)) for t in turn.weapons() if t.cooldown==0 and t.unit_id not in commands]
+    towers=[(t,_aim_points(turn,t)) for t in turn.weapons() if t.cooldown==0 and t.unit_id not in commands and t.unit_id not in reserved]
     towers=[(t,aim) for t,aim in towers if aim]
     best=[]
     def search(index,chosen,claimed):
@@ -2282,6 +2354,7 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
                    trapped,
                    -matched,
                    mismatch,
+                   0 if _shared_rocket_cells(intended, stands - set(sites)) else 1,
                    sum(distance(a, b) < 2 for a, b in combinations(sites, 2)),
                    len(sites) - len({p.y if plan.approach in ('E', 'W') else p.x for p in sites}),
                    sum(defense_layout.side_rank(p, station.pos, plan.side_order)[0]
@@ -2302,6 +2375,14 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
 def _ordered_sites(sites, approach):
     """Across the front: bottom-to-top for E/W, left-to-right for N/S."""
     return tuple(sorted(sites, key=lambda p: (p.y, p.x) if approach in ('E', 'W') else (p.x, p.y)))
+
+
+def _shared_rocket_cells(intended, stands):
+    rockets = [p for p, kind in intended.items() if kind == 'rocket']
+    if len(rockets) != 2:
+        return ()
+    return tuple(sorted((p for p in stands if all(distance(p, gun) == 1 for gun in rockets)),
+                        key=lambda p: (p.x, p.y)))
 
 
 def _controller_cells(turn: Turn, station_pos: Pos, terrain: set[Pos]) -> set[Pos]:

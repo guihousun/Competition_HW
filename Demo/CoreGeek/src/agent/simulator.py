@@ -301,27 +301,7 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     return resolved, rejected
 
 
-def _intervening_wall(turn, origin, goal):
-    """First live friendly wall intersected by the robot-to-role centre segment.
-
-    S04: a wall screens roles from robot attacks. Corner-only contact is not a
-    passage through a cell (local geometric convention, not an official detail).
-    """
-    hits = []
-    for wall in turn.walls():
-        enter, leave = 0.0, 1.0
-        for start, delta, cell in ((origin.x, goal.x - origin.x, wall.pos.x),
-                                   (origin.y, goal.y - origin.y, wall.pos.y)):
-            if delta == 0:
-                if not cell - .5 < start < cell + .5:
-                    leave = -1
-                    break
-            else:
-                lo, hi = sorted(((cell - .5 - start) / delta, (cell + .5 - start) / delta))
-                enter, leave = max(enter, lo), min(leave, hi)
-        if leave - enter > 1e-12 and leave > 0 and enter < 1:
-            hits.append((enter, wall.unit_id, wall.pos))
-    return min(hits)[2] if hits else None
+from .combat_geometry import intervening_wall as _intervening_wall
 
 
 def step(payload, commands=None, *, external_response=None):
@@ -674,18 +654,19 @@ def step(payload, commands=None, *, external_response=None):
             # would often *be* that wall, and would blur two different behaviours
             # into one record type).
             units = [u for u in roles if u['health'] > 0
-                     and u['roleType'] not in ATTACKABLE_BUILDING_KINDS]
+                     and u['roleType'] not in ATTACKABLE_BUILDING_KINDS
+                     and min(distance(p, c) for c in cells(u)) <= 3]
             victim = None
             goal = None
             if units:
                 victim = min(units, key=lambda u: min(distance(p, c) for c in cells(u)))
                 goal = min(cells(victim), key=lambda c: distance(p, c))
             else:
-                # Nothing to chase: head for the nearest building instead of
-                # wandering. Without this a robot with no unit in the list picked
-                # an arbitrary free cell each round (every candidate scored as
-                # "equally far" from a None goal) and drifted off the board.
-                goal = _nearest_building_cell(refreshed, p)
+                # S06 user observation: advance on the base, engage nearby roles.
+                # Acquisition radius 3 is a local assumption, not official AI.
+                base = refreshed.station()
+                goal = (min(refreshed.footprint(base), key=lambda c: (distance(p, c), abs(p.x-c.x)+abs(p.y-c.y), c.x, c.y))
+                        if base is not None else _nearest_building_cell(refreshed, p))
             screening_wall = None
             if victim is not None and goal is not None and distance(p, goal) <= 3:
                 screening_wall = _intervening_wall(refreshed, p, goal)

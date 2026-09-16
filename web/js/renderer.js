@@ -622,11 +622,32 @@
       S.paint(ctx, actor, centerX, centerY, tile);
       ctx.restore();
 
+      if (actor.kind === 'wall' || HW.OFFICIAL.towerTypes.includes(actor.kind)) {
+        this.drawLevel(ctx, actor, centerX, centerY, tile);
+      }
       if (this.options.health) this.drawHealth(ctx, actor, centerX, centerY, tile, span);
       if (this.options.labels) this.drawTeamMark(ctx, actor, centerX, centerY, tile, span);
       if (actor.selected || (this.selected && this.selected.key === actor.key)) {
         this.drawSelection(ctx, actor, centerX, centerY, tile, span);
       }
+    }
+
+    drawLevel(ctx, actor, x, y, tile) {
+      const level = Math.max(1, Math.min(3, Number(actor.level) || 1));
+      const colors = ['#c6d2e0', '#67e8d1', '#ffd166'];
+      // Keep text at least 10 screen pixels at full-map zoom; no large nameplate.
+      const font = Math.max(10 / this.camera.scale, tile * 0.34);
+      const label = String(level);
+      ctx.save();
+      ctx.font = `bold ${font}px ui-monospace, monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const bx = x + tile * 0.25, by = y + tile * 0.23;
+      ctx.fillStyle = '#101b2a';
+      ctx.fillRect(bx - font * 0.54, by - font * 0.58, font * 1.08, font * 1.16);
+      ctx.strokeStyle = colors[level - 1]; ctx.lineWidth = 1 / this.camera.scale;
+      ctx.strokeRect(bx - font * 0.54, by - font * 0.58, font * 1.08, font * 1.16);
+      ctx.fillStyle = colors[level - 1]; ctx.fillText(label, bx, by);
+      ctx.restore();
     }
 
     drawHealth(ctx, actor, x, y, tile, span) {
@@ -814,10 +835,12 @@
         else ctx.setLineDash([]);
         targets.forEach((target, index) => {
           const to = { x: target.x * tile + tile / 2, y: (map.height - 1 - target.y) * tile + tile / 2 };
-          ctx.beginPath();
-          ctx.moveTo(from.x, from.y);
-          ctx.lineTo(to.x, to.y);
-          ctx.stroke();
+          // Attack overlays mark aim points only. A permanent command line
+          // looked like a laser for every weapon and hid the actual shot FX.
+          if (!isAttack) {
+            ctx.beginPath(); ctx.moveTo(from.x, from.y);
+            ctx.lineTo(to.x, to.y); ctx.stroke();
+          }
           if (isAttack) {
             ctx.beginPath();
             ctx.arc(to.x, to.y, tile * 0.42, 0, Math.PI * 2);

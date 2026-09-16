@@ -280,9 +280,20 @@
 
   function drawTower(ctx, x, y, s, actor, theme) {
     const style = TOWER_STYLE[actor.kind] || TOWER_STYLE.gatling;
-    const size = s * 0.9;
+    const level = Math.max(1, Math.min(3, Number(actor.level) || 1));
+    const trim = ['#94a3b8', '#67e8d1', '#ffd166'][level - 1];
+    const size = s * (0.82 + level * 0.04);
     shadow(ctx, x, y, size * 1.12, s * 0.4, 0.45);
-    extrude(ctx, x, y, size, s * 0.3, style.base, style.top, U.rgba(theme.main, 0.5));
+    extrude(ctx, x, y, size, s * (0.23 + level * 0.07), style.base, style.top, trim);
+    if (level > 1) {
+      ctx.save(); ctx.strokeStyle = trim; ctx.lineWidth = s * 0.055;
+      ctx.strokeRect(x - s * 0.36, y - s * 0.45, s * 0.72, s * 0.38);
+      if (level === 3) {
+        ctx.fillStyle = trim;
+        for (const side of [-1, 1]) ctx.fillRect(x + side * s * 0.36 - s * 0.04, y - s * 0.6, s * 0.08, s * 0.42);
+      }
+      ctx.restore();
+    }
     // Level ring: 1/2/3 lit pips, taken from the real `level` field.
     ctx.save();
     for (let i = 0; i < 3; i += 1) {
@@ -321,7 +332,8 @@
       roundRect(ctx, -s * 0.12 - recoil, -s * 0.2, s * 0.36, s * 0.4, s * 0.06);
       ctx.fill();
       ctx.fillStyle = style.barrel;
-      for (const offset of [-0.12, 0, 0.12]) {
+      // Launch tubes reflect the real 1/2/3 missiles per salvo.
+      for (const offset of Array.from({ length: level }, (_, i) => (i - (level - 1) / 2) * 0.14)) {
         ctx.beginPath();
         ctx.arc(s * 0.2 - recoil, offset * s, s * 0.055, 0, TAU);
         ctx.fill();
@@ -339,10 +351,11 @@
 
   function drawWall(ctx, x, y, s, actor, theme) {
     const size = s * 0.96;
-    const height = s * (0.3 + 0.08 * (actor.level - 1));
+    const level = Math.max(1, Math.min(3, Number(actor.level) || 1));
+    const height = s * (0.24 + 0.15 * (level - 1));
     shadow(ctx, x, y, size, height, 0.4);
-    const base = '#7d8b9c';
-    const top = '#a3b2c4';
+    const base = ['#64748b', '#316c72', '#846635'][level - 1];
+    const top = ['#a3b2c4', '#7dcfc3', '#ebc773'][level - 1];
     extrude(ctx, x, y, size, height, base, top, 'rgba(255,255,255,0.2)');
     // Masonry courses: two rows of offset blocks.
     ctx.save();
@@ -366,8 +379,11 @@
     if (actor.level > 1) {
       // Upgraded walls get a visible reinforced cap (real `level` field).
       ctx.save();
-      ctx.fillStyle = U.rgba(theme.main, 0.55);
-      ctx.fillRect(x - half, yTop - s * 0.07, size, s * 0.08);
+      ctx.fillStyle = level === 3 ? '#ffe3a0' : '#a2f0dd';
+      ctx.fillRect(x - half, yTop - s * 0.07, size, s * 0.10);
+      for (let i = 0; i < level; i += 1) {
+        ctx.fillRect(x - half + size * (i + 0.5) / level - s * 0.045, yTop, s * 0.09, size * 0.75);
+      }
       ctx.restore();
     }
   }

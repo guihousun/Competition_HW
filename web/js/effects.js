@@ -73,11 +73,14 @@
         const kind = action.kind;
         action.salvos.forEach((salvo, index) => {
           const to = center(salvo.cell, 1);
-          const ballistic = !!salvo.path;
+          const ballistic = kind !== 'rocket' && !!salvo.path;
+          const born = phase(0.06 + index * 0.05);
+          const flight = Math.max(90, frameMs * 0.28);
+          const impactAt = kind === 'rocket' ? born + flight : phase(0.34 + index * 0.05);
           this._push({
             type: kind === 'railgun' ? 'beam' : (kind === 'rocket' ? 'rocket' : 'tracer'),
-            from, to, born: phase(0.06 + index * 0.05),
-            ttl: lifetime(kind === 'railgun' ? 320 : 420, frameMs),
+            from, to, born,
+            ttl: kind === 'rocket' ? flight : lifetime(kind === 'railgun' ? 320 : 420, frameMs),
             color: kind === 'rocket' ? PALETTE.robot : (kind === 'railgun' ? '#9fe3ff' : '#ffe08a'),
             kind,
             // The recorded path is the real line the projectile travelled; the
@@ -92,7 +95,7 @@
             const anyHit = (salvo.hits || []).length > 0;
             if (anyHit || !ballistic) {
               this._push({
-                type: 'impact', at: to, born: phase(0.34 + index * 0.05),
+                type: kind === 'rocket' ? 'explosion' : 'impact', at: to, born: impactAt,
                 ttl: lifetime(340, frameMs),
                 color: kind === 'rocket' ? '#ffb347' : '#ffe08a',
                 radius: tile * (kind === 'rocket' ? 1.5 : 1.1),
@@ -104,7 +107,7 @@
           hits.forEach((hit, hitIndex) => {
             const at = hit.cell ? center(hit.cell, 1) : to;
             this._push({
-              type: 'damage', at, value: hit.damage, born: phase(0.36 + index * 0.05 + hitIndex * 0.04),
+              type: 'damage', at, value: hit.damage, born: impactAt + frameMs * (0.02 + hitIndex * 0.04),
               ttl: lifetime(900, frameMs), color: '#ffd9a0', robot: hit.robot,
             });
           });
@@ -167,6 +170,24 @@
         });
         if (death.kind === 'station' || death.kind === 'wall' || HW.OFFICIAL.towerTypes.includes(death.kind)) {
           this._push({ type: 'rubble', at, born: phase(0.68), ttl: lifetime(20000, frameMs), radius: tile * 0.5 });
+        }
+      }
+
+      // Compare adjacent recorded states, never the last frame the viewer saw.
+      // Seeking backwards/forwards therefore cannot invent a level-up.
+      const previous = world.states && world.index > 0 ? world.states[world.index - 1] : null;
+      if (previous) {
+        for (const [group, owner] of [['teamOur', 'own'], ['teamEnemy', 'enemy']]) {
+          const prior = new Map(((previous[group] || {}).roles || []).map(r => [String(r.id), r]));
+          for (const actor of world.actors || []) {
+            const before = prior.get(String(actor.id));
+            if (actor.owner !== owner || !before || before.roleType !== actor.kind
+                || !(Number(actor.level) > Number(before.level || 1))) continue;
+            if (actor.kind !== 'wall' && !HW.OFFICIAL.towerTypes.includes(actor.kind) && actor.kind !== 'station') continue;
+            this._push({ type: 'float', at: center(actor.pos, actor.size),
+              text: `${U.kindName(actor.kind)} Lv.${before.level || 1} → ${actor.level}`,
+              born: phase(0.4), ttl: lifetime(1200, frameMs), color: '#ffe08a' });
+          }
         }
       }
 
@@ -273,43 +294,31 @@
     }
 
     _beam(ctx, effect, t) {
-      const { from, to } = effect;
-      // Energy is what the railgun really spends, so the beam's length tracks the
-      // penetration instead of always reaching the aim point.
-      const spent = effect.energy && effect.energy > 0
-        ? 1 - U.clamp(1 - t, 0, 1) : 1;
-      ctx.save();
-      ctx.globalAlpha = 1 - t;
-      ctx.strokeStyle = effect.color;
-      ctx.lineWidth = 3.4 * (1 - t * 0.7);
-      ctx.shadowColor = effect.color;
-      ctx.shadowBlur = 14;
-      const reach = Math.min(1, t * 3.2) * (effect.energy ? Math.max(0.35, spent) : 1);
-      ctx.beginPath();
-      ctx.moveTo(from.x, from.y);
-      ctx.lineTo(U.lerp(from.x, to.x, reach), U.lerp(from.y, to.y, reach));
+      const path = effect.path && effect.path.length >= 2 ? effect.path : [effect.from, effect.to];
+      ctx.save(); ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = effect.color; ctx.lineWidth = 3.4 * (1 - t * 0.7);
+      ctx.shadowColor = effect.color; ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.moveTo(path[0].x, path[0].y);
+      for (const point of path.slice(1)) ctx.lineTo(point.x, point.y);
       ctx.stroke();
-      ctx.restore();
+      ctx.strokeStyle = '#effbff'; ctx.lineWidth = 1;
+      ctx.stroke(); ctx.restore();
     }
 
     _rocket(ctx, effect, t) {
       const { from, to } = effect;
-      const arc = -Math.sin(Math.PI * Math.min(1, t * 1.6)) * 26;
-      const x = U.lerp(from.x, to.x, Math.min(1, t * 1.6));
-      const y = U.lerp(from.y, to.y, Math.min(1, t * 1.6)) + arc;
-      ctx.save();
-      ctx.globalAlpha = 1 - t * 0.5;
-      ctx.fillStyle = '#ffe08a';
-      ctx.beginPath();
-      ctx.arc(x, y, 3.4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = (1 - t) * 0.5;
-      ctx.strokeStyle = '#ffb347';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-      ctx.lineTo(U.lerp(from.x, to.x, Math.max(0, t * 1.6 - 0.22)), U.lerp(from.y, to.y, Math.max(0, t * 1.6 - 0.22)) + arc);
-      ctx.stroke();
+      const lift = Math.min(32, Math.hypot(to.x - from.x, to.y - from.y) * 0.12);
+      const point = (v) => ({ x: U.lerp(from.x, to.x, v), y: U.lerp(from.y, to.y, v) - Math.sin(Math.PI * v) * lift });
+      const head = point(t), tail = point(Math.max(0, t - 0.10));
+      // Short smoke trail and a solid missile, never a full-length energy beam.
+      ctx.save(); ctx.strokeStyle = 'rgba(240,190,140,0.55)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(tail.x, tail.y); ctx.lineTo(head.x, head.y); ctx.stroke();
+      ctx.translate(head.x, head.y);
+      ctx.rotate(Math.atan2(to.y - from.y - Math.PI * lift * Math.cos(Math.PI * t), to.x - from.x));
+      ctx.fillStyle = '#ff7c35';
+      ctx.beginPath(); ctx.moveTo(-5, -2); ctx.lineTo(-11, 0); ctx.lineTo(-5, 2); ctx.fill();
+      ctx.fillStyle = '#fff0c0'; ctx.fillRect(-5, -2.5, 9, 5);
+      ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.moveTo(4, -2.5); ctx.lineTo(8, 0); ctx.lineTo(4, 2.5); ctx.fill();
       ctx.restore();
     }
 

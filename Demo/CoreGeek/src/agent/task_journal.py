@@ -170,7 +170,7 @@ class TaskJournal:
 
         agent = decision.get('agent') if isinstance(decision, dict) else None
         if isinstance(decision, dict):
-            for field in ('upgrade_itinerary','weapon_readiness','worker_shelter'):
+            for field in ('upgrade_itinerary','weapon_readiness','worker_shelter','shared_rocket_control','pioneer_safety'):
                 value=decision.get(field)
                 if not value:continue
                 # Route progress does not need another line on every move.
