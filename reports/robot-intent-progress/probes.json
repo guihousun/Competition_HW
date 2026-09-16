@@ -1,0 +1,1660 @@
+{
+  "baseline_source": "18cdb9ef63ea0ecc609929ad15ca9b85437926ac",
+  "baseline_simulator_sha256": "ebf889ce2830ff7614c2c0fd54373835e885dfd62c0fb07adfa5ffe5fda5bc43",
+  "candidate_simulator_sha256": "e38cc4efc6a90e6a52511d9c7412fccf379f3099a9750f5add4a5089ba978243",
+  "native_r100_baseline": {
+    "intents": 26,
+    "attacks": 0,
+    "actual_moves": 0,
+    "rejections": 26,
+    "reasons": {
+      "目标格被其他单位同时争抢": 13,
+      "目标格已被占用且本轮不会空出": 13
+    }
+  },
+  "cases": [
+    {
+      "kind": "r100",
+      "count": 26,
+      "side": "challenger",
+      "rounds": [
+        {
+          "round": 100,
+          "moves": 22,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 101,
+          "moves": 19,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 102,
+          "moves": 18,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 103,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 104,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 105,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 106,
+          "moves": 19,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 107,
+          "moves": 16,
+          "attacks": 1,
+          "base_attacks": 0,
+          "wall_hp": 11990,
+          "base_hp": 1500
+        },
+        {
+          "round": 108,
+          "moves": 16,
+          "attacks": 1,
+          "base_attacks": 0,
+          "wall_hp": 11980,
+          "base_hp": 1500
+        },
+        {
+          "round": 109,
+          "moves": 14,
+          "attacks": 1,
+          "base_attacks": 0,
+          "wall_hp": 11970,
+          "base_hp": 1500
+        },
+        {
+          "round": 110,
+          "moves": 7,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11955,
+          "base_hp": 1500
+        },
+        {
+          "round": 111,
+          "moves": 4,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11940,
+          "base_hp": 1500
+        },
+        {
+          "round": 112,
+          "moves": 8,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11925,
+          "base_hp": 1500
+        },
+        {
+          "round": 113,
+          "moves": 6,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11910,
+          "base_hp": 1500
+        },
+        {
+          "round": 114,
+          "moves": 8,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11895,
+          "base_hp": 1500
+        },
+        {
+          "round": 115,
+          "moves": 5,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11880,
+          "base_hp": 1500
+        },
+        {
+          "round": 116,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11860,
+          "base_hp": 1500
+        },
+        {
+          "round": 117,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11840,
+          "base_hp": 1500
+        },
+        {
+          "round": 118,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11820,
+          "base_hp": 1500
+        },
+        {
+          "round": 119,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11800,
+          "base_hp": 1500
+        }
+      ]
+    },
+    {
+      "kind": "r100",
+      "count": 26,
+      "side": "defender",
+      "rounds": [
+        {
+          "round": 100,
+          "moves": 22,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 101,
+          "moves": 19,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 102,
+          "moves": 18,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 103,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 104,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 105,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 106,
+          "moves": 19,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 12000,
+          "base_hp": 1500
+        },
+        {
+          "round": 107,
+          "moves": 16,
+          "attacks": 1,
+          "base_attacks": 0,
+          "wall_hp": 11990,
+          "base_hp": 1500
+        },
+        {
+          "round": 108,
+          "moves": 16,
+          "attacks": 1,
+          "base_attacks": 0,
+          "wall_hp": 11980,
+          "base_hp": 1500
+        },
+        {
+          "round": 109,
+          "moves": 14,
+          "attacks": 1,
+          "base_attacks": 0,
+          "wall_hp": 11970,
+          "base_hp": 1500
+        },
+        {
+          "round": 110,
+          "moves": 7,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11955,
+          "base_hp": 1500
+        },
+        {
+          "round": 111,
+          "moves": 4,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11940,
+          "base_hp": 1500
+        },
+        {
+          "round": 112,
+          "moves": 8,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11925,
+          "base_hp": 1500
+        },
+        {
+          "round": 113,
+          "moves": 6,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11910,
+          "base_hp": 1500
+        },
+        {
+          "round": 114,
+          "moves": 8,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11895,
+          "base_hp": 1500
+        },
+        {
+          "round": 115,
+          "moves": 5,
+          "attacks": 2,
+          "base_attacks": 0,
+          "wall_hp": 11880,
+          "base_hp": 1500
+        },
+        {
+          "round": 116,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11860,
+          "base_hp": 1500
+        },
+        {
+          "round": 117,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11840,
+          "base_hp": 1500
+        },
+        {
+          "round": 118,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11820,
+          "base_hp": 1500
+        },
+        {
+          "round": 119,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 0,
+          "wall_hp": 11800,
+          "base_hp": 1500
+        }
+      ]
+    },
+    {
+      "kind": "dense",
+      "count": 35,
+      "side": "challenger",
+      "rounds": [
+        {
+          "round": 80,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 81,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 82,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 83,
+          "moves": 31,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 84,
+          "moves": 27,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 85,
+          "moves": 23,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 86,
+          "moves": 23,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 87,
+          "moves": 15,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 88,
+          "moves": 14,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 89,
+          "moves": 11,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 90,
+          "moves": 13,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 91,
+          "moves": 7,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 92,
+          "moves": 9,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 93,
+          "moves": 11,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 94,
+          "moves": 9,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 95,
+          "moves": 19,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 96,
+          "moves": 14,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 97,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 98,
+          "moves": 8,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1495
+        },
+        {
+          "round": 99,
+          "moves": 8,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1490
+        },
+        {
+          "round": 100,
+          "moves": 19,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1485
+        },
+        {
+          "round": 101,
+          "moves": 10,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1480
+        },
+        {
+          "round": 102,
+          "moves": 7,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1475
+        },
+        {
+          "round": 103,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1465
+        },
+        {
+          "round": 104,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1455
+        },
+        {
+          "round": 105,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1445
+        },
+        {
+          "round": 106,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1435
+        },
+        {
+          "round": 107,
+          "moves": 2,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1420
+        },
+        {
+          "round": 108,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1405
+        },
+        {
+          "round": 109,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1390
+        },
+        {
+          "round": 110,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1375
+        },
+        {
+          "round": 111,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1360
+        },
+        {
+          "round": 112,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1345
+        },
+        {
+          "round": 113,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1330
+        },
+        {
+          "round": 114,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1315
+        },
+        {
+          "round": 115,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1300
+        },
+        {
+          "round": 116,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1285
+        },
+        {
+          "round": 117,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1270
+        },
+        {
+          "round": 118,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1255
+        },
+        {
+          "round": 119,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1240
+        }
+      ]
+    },
+    {
+      "kind": "dense",
+      "count": 35,
+      "side": "defender",
+      "rounds": [
+        {
+          "round": 80,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 81,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 82,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 83,
+          "moves": 31,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 84,
+          "moves": 27,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 85,
+          "moves": 23,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 86,
+          "moves": 23,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 87,
+          "moves": 15,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 88,
+          "moves": 14,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 89,
+          "moves": 11,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 90,
+          "moves": 13,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 91,
+          "moves": 7,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 92,
+          "moves": 9,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 93,
+          "moves": 11,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 94,
+          "moves": 9,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 95,
+          "moves": 19,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 96,
+          "moves": 14,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 97,
+          "moves": 20,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 98,
+          "moves": 8,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1495
+        },
+        {
+          "round": 99,
+          "moves": 8,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1490
+        },
+        {
+          "round": 100,
+          "moves": 19,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1485
+        },
+        {
+          "round": 101,
+          "moves": 10,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1480
+        },
+        {
+          "round": 102,
+          "moves": 7,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1475
+        },
+        {
+          "round": 103,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1465
+        },
+        {
+          "round": 104,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1455
+        },
+        {
+          "round": 105,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1445
+        },
+        {
+          "round": 106,
+          "moves": 3,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1435
+        },
+        {
+          "round": 107,
+          "moves": 2,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1420
+        },
+        {
+          "round": 108,
+          "moves": 1,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1405
+        },
+        {
+          "round": 109,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1390
+        },
+        {
+          "round": 110,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1375
+        },
+        {
+          "round": 111,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1360
+        },
+        {
+          "round": 112,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1345
+        },
+        {
+          "round": 113,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1330
+        },
+        {
+          "round": 114,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1315
+        },
+        {
+          "round": 115,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1300
+        },
+        {
+          "round": 116,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1285
+        },
+        {
+          "round": 117,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1270
+        },
+        {
+          "round": 118,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1255
+        },
+        {
+          "round": 119,
+          "moves": 0,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1240
+        }
+      ]
+    },
+    {
+      "kind": "dense",
+      "count": 91,
+      "side": "challenger",
+      "rounds": [
+        {
+          "round": 80,
+          "moves": 91,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 81,
+          "moves": 91,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 82,
+          "moves": 91,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 83,
+          "moves": 86,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 84,
+          "moves": 75,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 85,
+          "moves": 60,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 86,
+          "moves": 62,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 87,
+          "moves": 46,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 88,
+          "moves": 52,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 89,
+          "moves": 37,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 90,
+          "moves": 47,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 91,
+          "moves": 48,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 92,
+          "moves": 45,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 93,
+          "moves": 45,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 94,
+          "moves": 50,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 95,
+          "moves": 25,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 96,
+          "moves": 34,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 97,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 98,
+          "moves": 10,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1495
+        },
+        {
+          "round": 99,
+          "moves": 38,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1490
+        },
+        {
+          "round": 100,
+          "moves": 28,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1485
+        },
+        {
+          "round": 101,
+          "moves": 28,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1480
+        },
+        {
+          "round": 102,
+          "moves": 16,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1470
+        },
+        {
+          "round": 103,
+          "moves": 12,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1455
+        },
+        {
+          "round": 104,
+          "moves": 8,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1435
+        },
+        {
+          "round": 105,
+          "moves": 4,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1415
+        },
+        {
+          "round": 106,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1395
+        },
+        {
+          "round": 107,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1375
+        },
+        {
+          "round": 108,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1355
+        },
+        {
+          "round": 109,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1335
+        },
+        {
+          "round": 110,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1315
+        },
+        {
+          "round": 111,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1295
+        },
+        {
+          "round": 112,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1275
+        },
+        {
+          "round": 113,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1255
+        },
+        {
+          "round": 114,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1235
+        },
+        {
+          "round": 115,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1215
+        },
+        {
+          "round": 116,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1195
+        },
+        {
+          "round": 117,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1175
+        },
+        {
+          "round": 118,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1155
+        },
+        {
+          "round": 119,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1135
+        }
+      ]
+    },
+    {
+      "kind": "dense",
+      "count": 91,
+      "side": "defender",
+      "rounds": [
+        {
+          "round": 80,
+          "moves": 91,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 81,
+          "moves": 91,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 82,
+          "moves": 91,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 83,
+          "moves": 86,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 84,
+          "moves": 75,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 85,
+          "moves": 60,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 86,
+          "moves": 62,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 87,
+          "moves": 46,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 88,
+          "moves": 52,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 89,
+          "moves": 37,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 90,
+          "moves": 47,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 91,
+          "moves": 48,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 92,
+          "moves": 45,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 93,
+          "moves": 45,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 94,
+          "moves": 50,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 95,
+          "moves": 25,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 96,
+          "moves": 34,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 97,
+          "moves": 35,
+          "attacks": 0,
+          "base_attacks": 0,
+          "wall_hp": 0,
+          "base_hp": 1500
+        },
+        {
+          "round": 98,
+          "moves": 10,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1495
+        },
+        {
+          "round": 99,
+          "moves": 38,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1490
+        },
+        {
+          "round": 100,
+          "moves": 28,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1485
+        },
+        {
+          "round": 101,
+          "moves": 28,
+          "attacks": 1,
+          "base_attacks": 1,
+          "wall_hp": 0,
+          "base_hp": 1480
+        },
+        {
+          "round": 102,
+          "moves": 16,
+          "attacks": 2,
+          "base_attacks": 2,
+          "wall_hp": 0,
+          "base_hp": 1470
+        },
+        {
+          "round": 103,
+          "moves": 12,
+          "attacks": 3,
+          "base_attacks": 3,
+          "wall_hp": 0,
+          "base_hp": 1455
+        },
+        {
+          "round": 104,
+          "moves": 8,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1435
+        },
+        {
+          "round": 105,
+          "moves": 4,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1415
+        },
+        {
+          "round": 106,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1395
+        },
+        {
+          "round": 107,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1375
+        },
+        {
+          "round": 108,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1355
+        },
+        {
+          "round": 109,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1335
+        },
+        {
+          "round": 110,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1315
+        },
+        {
+          "round": 111,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1295
+        },
+        {
+          "round": 112,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1275
+        },
+        {
+          "round": 113,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1255
+        },
+        {
+          "round": 114,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1235
+        },
+        {
+          "round": 115,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1215
+        },
+        {
+          "round": 116,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1195
+        },
+        {
+          "round": 117,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1175
+        },
+        {
+          "round": 118,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1155
+        },
+        {
+          "round": 119,
+          "moves": 0,
+          "attacks": 4,
+          "base_attacks": 4,
+          "wall_hp": 0,
+          "base_hp": 1135
+        }
+      ]
+    }
+  ],
+  "scope": "Read-only model-free engine probes; no native run; empirical bounded local AI checks, not official time thresholds."
+}

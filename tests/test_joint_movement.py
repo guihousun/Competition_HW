@@ -101,21 +101,30 @@ class JointIntentStageTests(unittest.TestCase):
 
 
 class RealRobotStepTests(unittest.TestCase):
-    def test_two_robots_choose_same_cell_both_stop_in_either_list_order(self):
+    def test_two_robots_reserve_different_cells_before_settlement(self):
         for reverse in (False,True):
             state = board()
             state['robot']['roles'] = [robot(901,6,4), robot(902,6,3)]
-            # Existing (distance,x,y) tie-break selects (7,3) for both when
-            # (7,2), the lower robot's first choice, is neutral terrain.
+            # Without local intent coordination both would choose (7,3).
+            # Round80 rotates the equal-distance rank: 902 reserves it first,
+            # 901 chooses (7,4). This is AI choice, not collision forgiveness.
             state['mapInfo']['zones'].append({'neutralType':'stone','pos':{'x':7,'y':2}})
             if reverse:
                 state['robot']['roles'].reverse()
             before = deepcopy(state)
             result = advance(state)
-            self.assertEqual(positions(result['state']), {901:(6,4),902:(6,3)})
-            self.assertEqual(result['frame']['robotMoves'], [])
+            self.assertEqual(positions(result['state']), {901:(7,4),902:(7,3)})
+            self.assertEqual(len(result['frame']['robotMoves']), 2)
             self.assertEqual(result['frame']['robotAttacks'], [])
             self.assertEqual(state, before)
+
+    def test_explicit_two_robot_same_destination_still_stops_both(self):
+        state=board()
+        state['robot']['roles']=[robot(901,6,4),robot(902,6,3)]
+        roles,bots,rejected=_settle_joint_moves(state,{}, {'901':Pos(7,3),'902':Pos(7,3)})
+        self.assertEqual((roles,bots),([],[]))
+        self.assertEqual({uid for uid,_,_ in rejected},{'robot:901','robot:902'})
+        self.assertEqual(positions(state),{901:(6,4),902:(6,3)})
 
     def test_robot_chain_follows_vacated_cells_independent_of_list_order(self):
         for reverse in (False,True):

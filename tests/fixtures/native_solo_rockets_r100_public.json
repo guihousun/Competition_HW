@@ -1,0 +1,908 @@
+{
+  "source_commit": "440f3246e74872cc13718ff432edb667344a879c",
+  "source_record": ".workflow\\react-lab\\failure50-collision-corrected\\solo_rockets\\train-1-challenger\\rounds\\0100.json",
+  "source_record_sha256": "d18b3f148efffdf8586d766fbe717e6e0dcbfbe5232076d4264fb4097815015e",
+  "observation_hash": "82ebb001910cd791cc5bd26559632e1b5afd9228198924ade0ea111fd040bc31",
+  "observation": {
+    "errors": [],
+    "lastCmdResult": "",
+    "lastRoundRoleActionResults": {
+      "10042": true
+    },
+    "lastSummonTreasureResult": 0,
+    "llmResp": "",
+    "mapInfo": {
+      "height": 32,
+      "width": 41,
+      "zones": [
+        {
+          "neutralType": "vendor",
+          "pos": {
+            "x": 20,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "weaponShop",
+          "pos": {
+            "x": 25,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint1",
+          "pos": {
+            "x": 8,
+            "y": 3
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint2",
+          "pos": {
+            "x": 33,
+            "y": 18
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint1",
+          "pos": {
+            "x": 29,
+            "y": 28
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint2",
+          "pos": {
+            "x": 31,
+            "y": 23
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 25,
+            "y": 13
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 14,
+            "y": 17
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 6,
+            "y": 6
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 32,
+            "y": 29
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 26,
+            "y": 2
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 28,
+            "y": 26
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 0,
+            "y": 4
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 29,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 18,
+            "y": 5
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 40,
+            "y": 2
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 30,
+            "y": 31
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 32,
+            "y": 27
+          }
+        }
+      ]
+    },
+    "phaseTask": "",
+    "robot": {
+      "roles": [
+        {
+          "abnormalState": "",
+          "health": 20,
+          "id": 307100,
+          "pos": {
+            "x": 18,
+            "y": 17
+          },
+          "roleType": "middleRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 20,
+          "id": 307101,
+          "pos": {
+            "x": 18,
+            "y": 16
+          },
+          "roleType": "middleRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307102,
+          "pos": {
+            "x": 17,
+            "y": 17
+          },
+          "roleType": "middleRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 60,
+          "id": 307103,
+          "pos": {
+            "x": 18,
+            "y": 15
+          },
+          "roleType": "middleRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307104,
+          "pos": {
+            "x": 15,
+            "y": 18
+          },
+          "roleType": "middleRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307105,
+          "pos": {
+            "x": 26,
+            "y": 22
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307106,
+          "pos": {
+            "x": 16,
+            "y": 18
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307107,
+          "pos": {
+            "x": 26,
+            "y": 21
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307108,
+          "pos": {
+            "x": 14,
+            "y": 19
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307109,
+          "pos": {
+            "x": 19,
+            "y": 16
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307110,
+          "pos": {
+            "x": 19,
+            "y": 18
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307111,
+          "pos": {
+            "x": 27,
+            "y": 23
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307112,
+          "pos": {
+            "x": 17,
+            "y": 17
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307113,
+          "pos": {
+            "x": 27,
+            "y": 22
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307114,
+          "pos": {
+            "x": 15,
+            "y": 18
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307115,
+          "pos": {
+            "x": 19,
+            "y": 14
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307116,
+          "pos": {
+            "x": 14,
+            "y": 19
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307117,
+          "pos": {
+            "x": 20,
+            "y": 17
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307118,
+          "pos": {
+            "x": 28,
+            "y": 24
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307119,
+          "pos": {
+            "x": 20,
+            "y": 19
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307120,
+          "pos": {
+            "x": 28,
+            "y": 23
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307121,
+          "pos": {
+            "x": 20,
+            "y": 14
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307122,
+          "pos": {
+            "x": 17,
+            "y": 17
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307123,
+          "pos": {
+            "x": 20,
+            "y": 13
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 0,
+          "id": 307124,
+          "pos": {
+            "x": 15,
+            "y": 18
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307125,
+          "pos": {
+            "x": 29,
+            "y": 25
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307126,
+          "pos": {
+            "x": 29,
+            "y": 24
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307127,
+          "pos": {
+            "x": 21,
+            "y": 18
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307128,
+          "pos": {
+            "x": 21,
+            "y": 15
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307129,
+          "pos": {
+            "x": 21,
+            "y": 20
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307130,
+          "pos": {
+            "x": 21,
+            "y": 14
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307131,
+          "pos": {
+            "x": 30,
+            "y": 29
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307132,
+          "pos": {
+            "x": 21,
+            "y": 13
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307133,
+          "pos": {
+            "x": 30,
+            "y": 30
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        },
+        {
+          "abnormalState": "",
+          "health": 40,
+          "id": 307134,
+          "pos": {
+            "x": 30,
+            "y": 25
+          },
+          "roleType": "smallRobot",
+          "targetTeam": "challenger"
+        }
+      ]
+    },
+    "roundNo": 100,
+    "teamEnemy": {
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 20013,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 6
+          },
+          "roleType": "station"
+        }
+      ]
+    },
+    "teamOur": {
+      "goldNum": 30,
+      "playerTasks": [
+        {
+          "coldDownRounds": 0,
+          "goldReward": 80,
+          "isValid": true,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 8,
+            "y": 3
+          },
+          "taskType": "自进化类1",
+          "timeoutRounds": 25
+        },
+        {
+          "coldDownRounds": 0,
+          "goldReward": 80,
+          "isValid": true,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 33,
+            "y": 18
+          },
+          "taskType": "自进化类2",
+          "timeoutRounds": 25
+        }
+      ],
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 10013,
+          "level": 1,
+          "pos": {
+            "x": 7,
+            "y": 26
+          },
+          "roleType": "station"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "WeaponUpgradeVoucher1"
+          ],
+          "health": 220,
+          "id": 10010,
+          "level": 1,
+          "pos": {
+            "x": 4,
+            "y": 25
+          },
+          "roleType": "worker"
+        },
+        {
+          "backPackCapability": 40,
+          "backpack": [],
+          "health": 200,
+          "id": 10011,
+          "level": 1,
+          "pos": {
+            "x": 3,
+            "y": 28
+          },
+          "roleType": "pioneer"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone",
+            "stone",
+            "stone",
+            "stone",
+            "stone"
+          ],
+          "health": 220,
+          "id": 10012,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 25
+          },
+          "roleType": "worker"
+        },
+        {
+          "cooldown": 1,
+          "health": 1000,
+          "id": 10040,
+          "level": 1,
+          "pos": {
+            "x": 7,
+            "y": 24
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10041,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 24
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 3,
+          "health": 1000,
+          "id": 10042,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 26
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40000,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 28
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40001,
+          "level": 1,
+          "pos": {
+            "x": 6,
+            "y": 23
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40002,
+          "level": 1,
+          "pos": {
+            "x": 7,
+            "y": 28
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40003,
+          "level": 1,
+          "pos": {
+            "x": 5,
+            "y": 24
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40004,
+          "level": 1,
+          "pos": {
+            "x": 8,
+            "y": 28
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40005,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 28
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40006,
+          "level": 1,
+          "pos": {
+            "x": 8,
+            "y": 23
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40007,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 23
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40008,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 23
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40009,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 24
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40010,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 25
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40011,
+          "level": 1,
+          "pos": {
+            "x": 5,
+            "y": 26
+          },
+          "roleType": "wall"
+        }
+      ],
+      "totalScore": 123,
+      "type": "challenger"
+    },
+    "vendorShopList": [
+      {
+        "name": "stone",
+        "price": 1
+      },
+      {
+        "name": "iron",
+        "price": 3
+      },
+      {
+        "name": "copper",
+        "price": 5
+      }
+    ],
+    "weaponShopList": [
+      {
+        "name": "WeaponUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "WeaponUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallUpgradeVoucher1",
+        "price": 20
+      },
+      {
+        "name": "WallUpgradeVoucher2",
+        "price": 30
+      },
+      {
+        "name": "StationUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "StationUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallFixer",
+        "price": 10
+      },
+      {
+        "name": "Medicine",
+        "price": 10
+      },
+      {
+        "name": "DizzyWeapon",
+        "price": 100
+      },
+      {
+        "name": "Bomb",
+        "price": 100
+      },
+      {
+        "name": "SmallRobotSummonOrder",
+        "price": 20
+      },
+      {
+        "name": "MiddleRobotSummonOrder",
+        "price": 30
+      },
+      {
+        "name": "LargeRobotSummonOrder",
+        "price": 100
+      },
+      {
+        "name": "BossRobotSummonOrder",
+        "price": 200
+      },
+      {
+        "name": "AcientTablet",
+        "price": 15
+      },
+      {
+        "name": "StarSand",
+        "price": 15
+      },
+      {
+        "name": "FlameBreath",
+        "price": 15
+      },
+      {
+        "name": "FrostPotion",
+        "price": 15
+      },
+      {
+        "name": "ThornAmulet",
+        "price": 15
+      },
+      {
+        "name": "IronWhistle",
+        "price": 15
+      }
+    ],
+    "worldNews": {
+      "folkLegends": "民间传闻（本地夹具）：祭坛在 (27, 22) 附近，需献祭 AcientTablet、StarSand，第 184-224 回合有效",
+      "officialNews": ""
+    }
+  }
+}

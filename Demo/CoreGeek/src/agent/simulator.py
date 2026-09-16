@@ -257,8 +257,39 @@ def _settle_joint_moves(state, role_moves: dict[str, Pos], robot_moves: dict[str
     return role_records, robot_records, rejected
 
 
+def _allocate_robot_moves(turn, walkers, obstacles):
+    """Local AI intent reservations, never sequential position settlement.
+
+    Front ranks choose first, with round-rotated stable IDs within each rank.
+    A robot may follow an already planned departure, but never assumes that an
+    unplanned/staying robot will vacate. Final player/robot collisions are still
+    resolved once by the shared resolver, without retrying failed intentions.
+    """
+    ranks = {}
+    for robot, origin, goal in walkers:
+        ranks.setdefault(distance(origin, goal) if goal is not None else 0, []).append((robot, origin, goal))
+    unvacated = {origin for _, origin, _ in walkers}
+    reserved, moves = set(), {}
+    for rank in sorted(ranks):
+        group = sorted(ranks[rank], key=lambda row: row[0]['id'])
+        offset = (turn.round_no - 1) % len(group)
+        for robot, origin, goal in group[offset:] + group[:offset]:
+            options = [Pos(origin.x + dx, origin.y + dy)
+                       for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
+            options = [q for q in options if turn.land(q) and q not in obstacles
+                       and q not in unvacated and q not in reserved
+                       and (goal is None or distance(q, goal) < distance(origin, goal))]
+            if not options:
+                continue
+            target = min(options, key=lambda q: (distance(q, goal) if goal is not None else 0, q.x, q.y))
+            moves[str(robot['id'])] = target
+            reserved.add(target)
+            unvacated.discard(origin)
+    return moves
+
+
 def _plan_robot_actions(state):
-    """Existing greedy AI, with every intent read from one pre-movement snapshot.
+    """Local collision-aware AI, reading one pre-movement snapshot.
 
     Acquisition/path tie-breaks are local assumptions, not official AI. Selecting
     and locking a ranged attack before player movement is also a local timing
@@ -332,20 +363,14 @@ def _plan_robot_actions(state):
             walkers.append((robot, p, goal))
     # First classify actions for the entire unchanged snapshot. Attacking,
     # stunned and inactive robots are known not to vacate; route around them.
-    # Other walkers may vacate, so leave their origins available for the joint
-    # resolver. No position is written and no collision triggers a second choice.
+    # Plan non-conflicting robot destinations before the joint resolver. This
+    # local AI coordination avoids repeatedly choosing an identical failed
+    # destination set; it is not permission to ignore an actual collision.
     walker_ids = {robot['id'] for robot, _, _ in walkers}
     known_stationary = {Pos.load(robot['pos']) for robot in robots
                         if robot['health'] > 0 and robot['id'] not in walker_ids}
     obstacles = hard_blocked | known_stationary
-    for robot, p, goal in walkers:
-        options = [Pos(p.x + dx, p.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
-        options = [q for q in options if turn.land(q) and q not in obstacles
-                   and (goal is None or distance(q, goal) < distance(p, goal))]
-        if options:
-            q = min(options, key=lambda c: (distance(c, goal) if goal is not None else 0,
-                                            c.x, c.y))
-            robot_moves[str(robot['id'])] = q
+    robot_moves = _allocate_robot_moves(turn, walkers, obstacles)
     return robot_moves, robot_attacks
 
 
