@@ -394,6 +394,7 @@ game/planner → utils                  ← 第 23 步新增：任务行自己�
 | `docs/design/code-task.md` | **迭代留痕**：每一步的目标/产出/**仍生效的已知不确定性**，加文末一张「当前仍悬着的事」。动手前先看这里知道走到哪了 |
 | `docs/design/task-analysis.md` | 规则整理笔记（标注了"文档明示 / 我的推断 / 矛盾点"三类，以及待实测清单） |
 | `docs/design/strategy.md` | **当前策略导读**（第 31 步）：打什么 / 每回合的判据链 / 旋钮在哪。**代码是唯一权威**，本文只讲"为什么"；逐条规则不重抄，未了结项只指向 `code-task.md` 文末那张表 |
+| `docs/design/worker.md` | **角色运行逻辑全景**（第 46 步重写，旧"六问"作废）：三个角色每回合怎么决策——`plan()` 骨架 / 黑板五本账 / 白天优先级阶梯（修墙→砌墙→武器→经济）/ 夜里操炮 / 常量旋钮表。现状梳理，与 `strategy.md`（为什么）互补 |
 | `docs/design/code-design.md` | 上一版重写的设计稿。**正文已在工作区删除**，需要时 `git show HEAD:docs/design/code-design.md` 取；其中 §19「实盘接入踩坑」仍然有效，但**代码架构部分已被本次重写取代** |
 | `docs/request.txt` / `docs/response.txt` | **只能当字段形状参考**。`response.txt` 不是合法 JSON（缺逗号 + 同 id 重复），不能 `json.load`；`request.txt` 是合法 JSON 但几何是手工示意数据（挑战者那两座墙不在环上），**不可用于校准几何**，`lastRoundRoleActionResults` 的值也别当真实信号解读 |
 | `example/CoreGeek/CoreGeek/` | 官方 demo（**双层嵌套目录**）。入口形态照抄；`brain.py` 的 `_wall_order` 等已验证实现可参考，但整体策略是玩具级，不继承 |
