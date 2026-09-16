@@ -1,7 +1,7 @@
 """agent/context.py 的用例：任务内会话上下文（构造即问、粘住去重、全量保真渲染成
 标准 messages JSON）。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import json
@@ -19,28 +19,28 @@ from coregeek.agent.context import Context  # noqa: E402
 
 
 class ContextTest(unittest.TestCase):
-    """`Context` —— 任务内全量会话上下文（第 25 步；第 28 步起渲染成**标准 messages JSON**）。
+    """`Context` —— 任务内会话上下文，渲染成标准 messages JSON。
 
-    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串；第 28 步起它是一个
-    JSON 数组 `[{"role": "system"/"user"/"assistant", "content": ...}]`（标准 chat 格式 ——
-    自造的文本版式用户实测**效果非常差**，已弃）。这里钉 Context 本身：构造即问、进表规则、
-    粘住去重、全量保真。跨回合接线在 `ChatPromptTest`，判据链接线在 `TaskChannelTest`，
-    端到端在 `HandleTest.test_the_task_loop_through_handle`。
+    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串；它是一个
+    JSON 数组 `[{"role": "system"/"user"/"assistant", "content": ...}]`。
+    这里钉 Context 本身：构造即问、进表规则、粘住去重、全量保真。跨回合接线在
+    `ChatPromptTest`，判据链接线在 `TaskChannelTest`，端到端在
+    `HandleTest.test_the_task_loop_through_handle`。
     """
 
     SYSTEM = "# Agent定位\n（占位 header）"
 
     def setUp(self) -> None:
         self.ctx = Context("请查询北京天气")
-        #: system 由 Agent 每次发送前刷新（五段 header），这里给个占位证明它进 JSON
+        #: system 由 Agent 每次发送前刷新，这里给个占位证明它进 JSON
         self.ctx.system = self.SYSTEM
 
     def messages(self) -> list[dict]:
         return json.loads(self.ctx.render())
 
     def test_a_fresh_context_opens_with_the_task(self):
-        """**构造即问**：首条 user 消息 = 题目**原文** —— 结构由 role 表达，
-        正文不再加 `【题目】` 这类包装（那是文本版式的补丁）。"""
+        """构造即问：首条 user 消息 = 题目原文 —— 结构由 role 表达，
+        正文不加 `【题目】` 这类包装。"""
         self.assertEqual(self.ctx.task, "请查询北京天气")
         self.assertEqual(
             self.messages(),
@@ -51,7 +51,7 @@ class ContextTest(unittest.TestCase):
         )
 
     def test_hear_records_the_reply_verbatim(self):
-        """回复**原文**进 assistant 消息 —— 会话记的是它真说过的话
+        """回复原文进 assistant 消息 —— 会话记的是它真说过的话
         （纠错块才收 `answer_of` 解包后的那份）。"""
         self.ctx.hear("<tool>ls</tool>")
         self.assertEqual(
@@ -60,7 +60,7 @@ class ContextTest(unittest.TestCase):
 
     def test_a_sticky_reply_is_heard_only_once(self):
         """`llmResp` 可能粘住（接口文档对它一个字没写、对 `lastCmdResult` 却写明不粘）
-        ⇒ 与**最后一条消息**相同的回复不进表第二遍。"""
+        ⇒ 与最后一条消息相同的回复不进表第二遍。"""
         self.ctx.hear("同一条回复")
         self.ctx.hear("同一条回复")
         self.assertEqual(
@@ -68,7 +68,7 @@ class ContextTest(unittest.TestCase):
         )
 
     def test_a_repeat_after_another_message_is_heard_again(self):
-        """中间隔了别的消息之后又来同文 ⇒ **记**：那不是粘住，是真的又说了。"""
+        """中间隔了别的消息之后又来同文 ⇒ 记：那不是粘住，是真的又说了。"""
         self.ctx.hear("同一句话")
         self.ctx.nudge()
         self.ctx.hear("同一句话")
@@ -78,11 +78,10 @@ class ContextTest(unittest.TestCase):
         )
 
     def test_feed_adds_the_two_titled_blocks(self):
-        """回灌轮**按 role 分条**：结果 = `tool` 消息、纠错 = `user` 消息 ——
+        """回灌轮按 role 分条：结果 = `tool` 消息、纠错 = `user` 消息 ——
         标题留在 content 里当内容标签（沙盒输出是任意文本，没标签分不清哪段是什么）。
-        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`（影响判题判断）。
-        ⚠️ "做完了吗"的决策指引在第 39 步挪进了 system（输出约定第 4 条）——
-        它是常驻规则，不是跟着每条结果走一遍的消息。"""
+        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`。"做完了吗"的决策指引
+        在 system 里（常驻规则），不跟着每条结果走。"""
         self.ctx.feed("[exitCode:0]\n2", "晴 26 度")
         self.assertEqual(
             [m["role"] for m in self.messages()],
@@ -107,9 +106,9 @@ class ContextTest(unittest.TestCase):
         self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
 
     def test_every_message_survives_verbatim_and_in_order(self):
-        """**进表逐字**：题目/回复/结果里的 `{}`、换行、标签一个都不许动，顺序就是
-        进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。（渲染侧的窗口与摘要是
-        第 39 步的事，钉在下面的窗口用例里；**存储**始终是全量逐字。）"""
+        """进表逐字：题目/回复/结果里的 `{}`、换行、标签一个都不许动，顺序就是
+        进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。（渲染侧的窗口与摘要
+        钉在下面的窗口用例里；存储始终是全量逐字。）"""
         self.ctx.hear("回复 {'a': 1}")
         self.ctx.feed("结果 {task} {0}", "")
         self.ctx.hear("<answer>答案</answer>")
@@ -126,7 +125,7 @@ class ContextTest(unittest.TestCase):
 
 
     def test_the_summary_rides_right_after_the_task(self):
-        """第 39 步：`summary` 渲染成题目后面的**一条 user 消息**（`【历史摘要】` 头 ——
+        """`summary` 渲染成题目后面的一条 user 消息（`【历史摘要】` 头 ——
         标题当内容标签的既有模式）。没有摘要时这条不出现（首问 = `[system, user]`，
         由 `test_a_fresh_context_opens_with_the_task` 钉着）。"""
         self.ctx.summary = "【总目标】交 token"
@@ -138,10 +137,9 @@ class ContextTest(unittest.TestCase):
         )
 
     def test_the_window_keeps_the_last_two_rounds(self):
-        """第 39 步压缩：题目与摘要永远在，**原始往来只留最近两轮**（最后
-        `_WINDOW` 条 assistant 及其后全部 —— tool 结果、纠错、nudge 都跟着
-        它们前面那条 assistant 走）。更早的只活在摘要里 ⇒ prompt 从
-        O(全部历史) 变成 O(窗口)，64KB 回执堆不出来了。"""
+        """渲染窗口：题目与摘要永远在，原始往来只留最近两轮（最后 `_WINDOW` 条
+        assistant 及其后全部 —— tool 结果、纠错、nudge 都跟着它们前面那条 assistant 走）。
+        更早的只活在摘要里 ⇒ prompt 从 O(全部历史) 变成 O(窗口)。"""
         for i in (1, 2, 3):
             self.ctx.hear(f"回复{i}")
             self.ctx.feed(f"结果{i}", "")
@@ -156,8 +154,8 @@ class ContextTest(unittest.TestCase):
         self.assertNotIn("回复1", contents, "第一轮的原文被窗口掐掉 —— 它只有摘要替它记着")
 
     def test_a_short_history_is_kept_in_full(self):
-        """assistant 不超过 `_WINDOW` 条 ⇒ 全量保留（窗口掐不着）—— 短任务与
-        压缩前逐字节同形，压缩只在长任务上才真正生效。"""
+        """assistant 不超过 `_WINDOW` 条 ⇒ 全量保留（窗口掐不着）—— 短任务
+        与压缩前逐字节同形，压缩只在长任务上才真正生效。"""
         self.ctx.hear("回复1")
         self.ctx.feed("结果1", "")
         self.ctx.hear("回复2")

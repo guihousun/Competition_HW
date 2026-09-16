@@ -1,7 +1,7 @@
 """protocol/model.py 的用例：payload → Turn 的容错解析（字段缺失的缺省方向、判题器回执
 `errors` / `lastRoundRoleActionResults`、沙盒回执 `lastCmdResult`、任务点 `playerTasks`）。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import json
@@ -41,13 +41,9 @@ class ParseTest(unittest.TestCase):
     def test_weapons_and_robots_come_from_the_payload(self):
         """武器名册与机器人来自 `teamOur.roles` / `robot.roles`（`turn.weapons` / `turn.robots`）。
 
-        `attackRange` 取**样例**的 4/7/INT_MAX，而不是任务书 §4.5.1 表格里的 3/6/10 ——
-        两处矛盾，以 payload 为准（见 `CLAUDE.md`）。`cooldown` 三座炮**都没有这个字段**
-        ⇒ 全 -1 ⇒ 不当成"冷却中"（否则火箭整晚一炮不开）。
-
-        顺带钉一件事：**地图网格里还留着这三格**（武器一样挡路），
-        但"哪座炮能开火"只认这份名册 —— 第 10 步把 `Map.weapons` 删掉之后，
-        网格那份旧真相与这份新真相在这里对一次。
+        `attackRange` 取样例的 4/7/INT_MAX（与任务书 §4.5.1 表格的 3/6/10 矛盾，以 payload 为准）；
+        三座炮都没有 `cooldown` 字段 ⇒ 全 -1 ⇒ 不当成"冷却中"。
+        地图网格里还留着这三格（武器一样挡路），但"哪座炮能开火"只认这份名册。
         """
         turn = self._turn()
         by_id = {w.id: w for w in turn.weapons}
@@ -77,7 +73,7 @@ class ParseTest(unittest.TestCase):
 
     def test_shop_prices_come_from_the_payload(self):
         """顶层 `weaponShopList` → `Turn.shop_prices`（与 `vendor_prices` 同一套解析；
-        样例实证：升级券1=100、券2=150）。**不写死价格**——与矿价同一条原则。"""
+        样例实证：升级券1=100、券2=150）。不写死价格 —— 与矿价同一条原则。"""
         self.assertEqual(self._turn().shop_prices.get("WeaponUpgradeVoucher1"), 100)
         self.assertEqual(self._turn().shop_prices.get("WeaponUpgradeVoucher2"), 150)
 
@@ -87,11 +83,11 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(self._turn().map.shops, frozenset({Pos(25, 20)}))
 
     def test_vendor_prices_come_from_the_payload_verbatim(self):
-        """价目**照抄载荷**，不写死 —— 样例是 1/3/5，事件期间会变（任务书 L386）。
+        """价目照抄载荷，不写死 —— 样例是 1/3/5，事件期间会变（任务书 L386）。
 
-        字段坏掉的整条丢掉，**尤其不能把"解析不出来"的 -1 当成一个价格** ——
-        `_int` 对缺字段/类型不对给 -1，而负的收购价不存在。混进来会让挑矿那一步
-        选出一座**倒贴钱**的矿，或者反过来把整张表判成"没有价"（`_pick_ore` 滤掉 <= 0）。
+        字段坏掉的整条丢掉，尤其不能把"解析不出来"的 -1 当成一个价格（`_int` 对缺字段/
+        类型不对给 -1，而负的收购价不存在）：混进来要么选出倒贴钱的矿，
+        要么把整张表判成"没有价"（`_pick_ore` 滤掉 <= 0）。
         """
         self.assertEqual(
             dict(self._turn().vendor_prices), {"stone": 1, "iron": 3, "copper": 5}
@@ -109,10 +105,9 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(dict(model.load(raw).vendor_prices), {}, "整份缺失 ⇒ 空表 ⇒ 不去采")
 
     def test_a_destroyed_weapon_is_not_operated(self):
-        """`health == 0` 的炮**丢掉** —— 已毁的炮不该再被操控（demo 的 `alive()` 也是 `> 0`）。
+        """`health == 0` 的炮丢掉 —— 已毁的炮不该再被操控。
 
-        样例三座炮的 `health` 都是 1000，这里手改成 0 复现"被打掉一座"。
-        `map.cells` 里它还在（地形由地图层管），但**名册里没有它** ⇒ 不会被发 `attack`。
+        `map.cells` 里它还在（地形由地图层管），但名册里没有它 ⇒ 不会被发 `attack`。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         for node in raw["teamOur"]["roles"]:
@@ -122,10 +117,9 @@ class ParseTest(unittest.TestCase):
         self.assertEqual({w.id for w in turn.weapons}, {10030, 10040})
 
     def test_a_destroyed_role_gets_no_command(self):
-        """**阵亡的角色不该再收到指令**（`health == 0`）—— 与"操纵已毁的炮"同一类风险。
+        """阵亡的角色不该再收到指令（`health == 0`）—— 与"操纵已毁的炮"同一类风险。
 
-        死单位可能仍留在 `teamOur.roles` 里（官方 demo 的 `alive()` 就为此而写）。
-        给尸体发 `move` / `collect` 判题器会怎么算文档没写，但没必要赌。
+        死单位可能仍留在 `teamOur.roles` 里。给尸体发指令判题器会怎么算文档没写，没必要赌。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         for node in raw["teamOur"]["roles"]:
@@ -135,7 +129,7 @@ class ParseTest(unittest.TestCase):
         self.assertEqual({r.id for r in turn.roles}, {10010, 10011})
 
     def test_a_missing_health_is_not_a_death(self):
-        """`health` **字段缺失**（`_int` 给 -1）与"声明阵亡"（0）要分开 —— 别用 `<= 0`。"""
+        """`health` 字段缺失（`_int` 给 -1）与"声明阵亡"（0）要分开 —— 别用 `<= 0`。"""
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         for node in raw["teamOur"]["roles"]:
             node.pop("health", None)
@@ -144,12 +138,10 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(len(turn.weapons), 3)
 
     def test_ores_carry_their_kind_but_everything_blocks(self):
-        """石/铁/铜**各自带矿种**进 `ores`；小贩 / 武器商店 / 任务点不是矿，却一样挡路。
+        """石/铁/铜各自带矿种进 `ores`；小贩 / 武器商店 / 任务点不是矿，却一样挡路。
 
-        `ores` 装的是"矿点 → 矿种"而不是坐标集：选矿那一步要在三种矿之间按**收购价**排
+        `ores` 装的是"矿点 → 矿种"而不是坐标集：选矿那一步要在三种矿之间按收购价排
         （铜未必比铁贵，见 `Turn.vendor_prices`），只留坐标就答不出"这是哪种矿"。
-
-        后四项**不是矿**（任务书 L85）—— 只挑矿会让工人一头撞上去，这是"以为能走"的典型。
         """
         grid = self._turn().map
         self.assertEqual(
@@ -174,14 +166,12 @@ class ParseTest(unittest.TestCase):
                 self.assertNotIn(pos, grid.ores, f"{what} 不是矿")
 
     def test_vendors_are_an_index_of_their_own(self):
-        """小贩**单独一张表**（`Map.vendors`，第 22 步）：`sell` 那条线唯一的目标点。
+        """小贩单独一张表（`Map.vendors`）：`sell` 那条线唯一的目标点。
 
-        它和矿在网格里的形状一样（都是 `neutralType`）却**不打矿种** —— 所以是
-        `frozenset[Pos]` 而不是 `Mapping`。卖矿要先知道"小贩在哪"，而这一点
-        **只能从网格认**：小贩不是 `teamOur.roles` 里的单位，别处查不到。
-
-        顺带钉住第 15 步那条不变量没被改写：小贩**照样挡路、也照样不是矿**
-        （`step_toward` 撞上它自然停在贴着一格 —— 那正好是 `sell` 要求的站位）。
+        它和矿在网格里的形状一样（都是 `neutralType`）却不像矿那样带矿种 ⇒ 是
+        `frozenset[Pos]` 而不是 `Mapping`。小贩不是 `teamOur.roles` 里的单位，
+        "小贩在哪"只能从网格认；它照样挡路（`step_toward` 撞上它自然停在贴着一格 ——
+        那正好是 `sell` 要求的站位）。
         """
         grid = self._turn().map
         self.assertEqual(grid.vendors, {Pos(20, 16)})
@@ -189,11 +179,11 @@ class ParseTest(unittest.TestCase):
         self.assertNotIn(Pos(20, 16), grid.ores)
 
     def test_a_size_less_map_has_no_vendors_either(self):
-        """尺寸非法 ⇒ 整个矩阵为空 ⇒ **小贩也没有**（`vendors` 得跟着 `ores` 一起空）。
+        """尺寸非法 ⇒ 整个矩阵为空 ⇒ 小贩也没有（`vendors` 得跟着 `ores` 一起空）。
 
-        漏了这一步的症状很隐蔽：`frozenset()` 与"地图上没有小贩"在策略侧是同一件事
-        （`_sell_ore` 的门 ②），但**属性不存在**会直接 `AttributeError`
-        —— 那跑在 `handle` 的 `try` 里，代价是整回合空指令。
+        `frozenset()` 与"地图上没有小贩"在策略侧是同一件事（`_sell_ore` 的门 ②），
+        但属性不存在会直接 `AttributeError` —— 那跑在 `handle` 的 `try` 里，
+        代价是整回合空指令。
         """
         for size in ((-1, -1), (41, 0)):
             with self.subTest(size=size):
@@ -203,13 +193,10 @@ class ParseTest(unittest.TestCase):
                 self.assertEqual(empty.blocked, frozenset())
 
     def test_the_backpack_is_counted_by_name(self):
-        """背包是**物品名数组**，重复即计数（接口文档 §1.3.1）—— `_bag` 取代了"只数石头"。
+        """背包是物品名数组，重复即计数（接口文档 §1.3.1）—— `_bag` 收整张名字表，
+        `BaseRole.stone` 是它的派生属性。
 
-        `sell` 要按矿种报件数，而三个散装的 int 才是绕的那个东西：`backpack` 本来的形状
-        就是一张名字表，将来买的券和道具也只会往这张表里加。
-        `BaseRole.stone` 现在是它的**派生属性**（既有调用点一字未改）。
-
-        ⚠️ 背包里的**非矿石**（开拓者那个 `medicine`）也照样收进来 —— `_bag` 不认识矿，
+        非矿石（开拓者那个 `medicine`）也照样收进来 —— `_bag` 不认识矿，
         认矿是 `planner` 的事（`SELLABLE`）。
         """
         by_id = {r.id: r for r in self._turn().roles}
@@ -219,10 +206,10 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(by_id[10011].stone, 0, "开拓者没有石头 —— 派生属性得跟着空")
 
     def test_a_missing_backpack_is_an_empty_bag(self):
-        """背包缺失 / 不是数组 ⇒ 空表 ⇒ 石头 0 块、**一件都卖不掉**。
+        """背包缺失 / 不是数组 ⇒ 空表 ⇒ 石头 0 块、一件都卖不掉。
 
-        降级方向是"少做"，与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发 `build`，
-        也不可对着空背包发 `sell`（`num` 报大件数会不会被判"指令非法"文档没写）。
+        降级方向是"少做"，与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发
+        `build` 或 `sell`（`num` 报大件数会不会被判"指令非法"文档没写）。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         for node in raw["teamOur"]["roles"]:
@@ -239,8 +226,8 @@ class ParseTest(unittest.TestCase):
 class TaskParseTest(unittest.TestCase):
     """`teamOur.playerTasks` → `Turn.task_points`，以及顶层的 `phaseTask` / `llmResp`。
 
-    **`playerTasks` 是任务点的权威来源**：它只含**我方**那 2 个点（阵营已按 `teamOur.type`
-    滤好），所以不必去 `mapInfo.zones` 里认 `challengerTaskPoint*`，也不必读 `teamOur.type`。
+    `playerTasks` 是任务点的权威来源：它只含我方那 2 个点（阵营已按 `teamOur.type`
+    滤好），不必去 `mapInfo.zones` 里认 `challengerTaskPoint*`，也不必读 `teamOur.type`。
     """
 
     POINT = {
@@ -259,7 +246,7 @@ class TaskParseTest(unittest.TestCase):
         return turn
 
     def test_task_points_come_from_player_tasks(self):
-        """逐字读原始样例：两个点，坐标取的是 **`taskPosition`**（不是 `pos`）。"""
+        """逐字读原始样例：两个点，坐标取的是 `taskPosition`（不是 `pos`）。"""
         turn = model.load(json.loads(SAMPLE.read_text(encoding="utf-8")))
         self.assertEqual(turn.task_points, (Pos(14, 14), Pos(17, 17)))
         self.assertEqual(turn.phase_task, "", "样例里没接任务")
@@ -269,13 +256,13 @@ class TaskParseTest(unittest.TestCase):
         self.assertEqual(self._load({**self.POINT, "coldDownRounds": 30}).task_points, ())
 
     def test_an_invalid_task_point_is_not_offered(self):
-        """`isValid` 为 false = 冷却中**或**这个点的任务已做完（接口文档 L139）。"""
+        """`isValid` 为 false = 冷却中或这个点的任务已做完（接口文档 L139）。"""
         self.assertEqual(self._load({**self.POINT, "isValid": False}).task_points, ())
 
     def test_walls_carry_their_health_and_level(self):
-        """第 42 步修墙的判据来源：墙是**实体**（`teamOur.roles` 里 roleType=="wall"，
-        id 40000 系、带 health/level）。**已毁（health==0）⇒ 丢** —— 那是一格缺口，
-        归 `_ring` 的候选表管（重建），不该出现在修复名单里。"""
+        """墙是实体（`teamOur.roles` 里 roleType=="wall"，id 40000 系、带 health/level）
+        —— 修墙线的判据来源。已毁（health==0）⇒ 丢 —— 那是一格缺口，归 `_ring`
+        的候选表管（重建），不该出现在修复名单里。"""
         turn = model.load(
             {
                 "teamOur": {
@@ -292,23 +279,23 @@ class TaskParseTest(unittest.TestCase):
         self.assertEqual(turn.station_level, 2)
 
     def test_the_official_news_is_carried(self):
-        """第 42 步新闻查价的原料：`worldNews.officialNews`（矿产事件的原文）；
+        """`worldNews.officialNews`（矿产事件的原文）—— 新闻查价线的原料；
         `folkLegends` 是宝藏线索、不读。字段缺失 ⇒ 空串。"""
         turn = model.load({"worldNews": {"officialNews": "北部铁矿区塌方", "folkLegends": "石门三钥"}})
         self.assertEqual(turn.news, "北部铁矿区塌方")
         self.assertEqual(model.load({}).news, "")
 
     def test_a_missing_cold_down_rounds_still_offers_the_point(self):
-        """缺字段的降级方向**故意不是“少做”**（与 `_gold` / `_size` / `_stone` 相反）。
+        """缺字段的降级方向故意不是"少做"（与 `_gold` / `_size` / `_stone` 相反）。
 
-        误接一个冷却中的点只是**指令执行失败**（任务书 L508，不计异常）；
-        误判成"永远接不了"却会让整条任务线**静默作废**。两害相权取前者。
+        误接一个冷却中的点只是指令执行失败（任务书 L508，不计异常）；
+        误判成"永远接不了"却会让整条任务线静默作废。两害相权取前者。
         """
         point = {k: v for k, v in self.POINT.items() if k != "coldDownRounds"}
         self.assertEqual(self._load(point).task_points, (Pos(14, 14),))
 
     def test_a_missing_is_valid_still_offers_the_point(self):
-        """同上：只有**明确**的 `false` 才算接不了。"""
+        """同上：只有明确的 `false` 才算接不了。"""
         point = {k: v for k, v in self.POINT.items() if k != "isValid"}
         self.assertEqual(self._load(point).task_points, (Pos(14, 14),))
 
@@ -331,8 +318,8 @@ class TaskParseTest(unittest.TestCase):
     def test_the_sandbox_result_comes_from_the_payload(self):
         """顶层 `lastCmdResult` 逐字读进来 —— 它是任务线唯一能看见沙盒的窗口。
 
-        **不解析那行状态**（`[exitCode:N]` / `[TIMEOUT]` / `[JUDGER_ERROR]`）：
-        非空即原文回灌，让 LLM 自己读 —— 解析它就是又多一份会跟判题器漂移的真相。
+        那行状态不解析（`[exitCode:N]` / `[TIMEOUT]` / `[JUDGER_ERROR]`）：非空即原文
+        回灌，让 LLM 自己读 —— 解析它就是又多一份会跟判题器漂移的真相。
         字段缺失 ⇒ 空串（文档 L33："未发命令时为空字符串"）。
         """
         turn = self._load(lastCmdResult="[exitCode:0]\n晴 26 度")
@@ -343,8 +330,7 @@ class TaskParseTest(unittest.TestCase):
 class JudgeReceiptTest(unittest.TestCase):
     """顶层 `errors` / `lastRoundRoleActionResults` → `Turn.errors` / `Turn.action_results`。
 
-    **这两个字段是"任务为什么一直失败"唯一的答案来源**，而第 14 步之前它们
-    一个都没被读进来过 —— 判题器的判决从来没进过日志。
+    这两个字段是"任务为什么一直失败"唯一的答案来源。
     """
 
     def _load(self, **top) -> Turn:
@@ -357,8 +343,8 @@ class JudgeReceiptTest(unittest.TestCase):
     def test_errors_come_from_the_payload(self):
         """逐字读原始样例：`[{"errorCode": 2, "description": "xxx"}]`。
 
-        ⚠️ **样例那条是假错误**（`CLAUDE.md`：`request.txt` 是手工示意数据）——
-        这里钉的是**解析路径通不通**，不是"真的一直在报答案错误"。
+        样例那条是假错误（`request.txt` 是手工示意数据）—— 这里钉的是解析路径
+        通不通，不是"真的一直在报答案错误"。
         """
         self.assertEqual(self._load().errors, (Error(code=2, description="xxx"),))
 
@@ -368,20 +354,20 @@ class JudgeReceiptTest(unittest.TestCase):
         self.assertEqual(turn.errors, (Error(code=5, description=""),))
 
     def test_an_error_without_a_code_is_dropped(self):
-        """降级方向**不是"少做"**：一条 `-1：xxx` 会被当成"未知错误 0"去查一个不存在的问题，
-        比不打印更糟。同理 `errors` 本身缺失 ⇒ 空元组（"本轮没报错"是天然的安全值）。"""
+        """降级方向不是"少做"：一条 `-1：xxx` 会被当成"未知错误 0"去查一个不存在的
+        问题，比不打印更糟。同理 `errors` 本身缺失 ⇒ 空元组（"本轮没报错"是天然的安全值）。"""
         self.assertEqual(self._load(errors=[{"description": "x"}, "junk"]).errors, ())
         self.assertEqual(self._load(errors="boom").errors, ())
         self.assertEqual(self._load(errors=None).errors, ())
 
     def test_action_results_keep_both_verdicts(self):
-        """**两种判决都要留**（`false` 才是信号，`true` 是它的参照）—— 只留 `false` 的话，
+        """两种判决都要留（`false` 才是信号，`true` 是它的参照）—— 只留 `false` 的话，
         "判题器压根没提这个单位" 与 "这个单位通过了" 就分不出来了。"""
         turn = self._load(lastRoundRoleActionResults={"10011": True, "10010": False})
         self.assertEqual(dict(turn.action_results), {10011: True, 10010: False})
 
     def test_action_results_only_trust_real_booleans(self):
-        """JSON 里的 `"false"` 是个**非空字符串** ⇒ `bool("false") == True`。
+        """JSON 里的 `"false"` 是个非空字符串 ⇒ `bool("false") == True`。
 
         那一步会把"不合法"读成"合法"，而这份回执的全部价值就在于"谁没通过" ——
         所以宁可丢掉也不猜（接口文档 §1.1 声明 value 就是 boolean）。

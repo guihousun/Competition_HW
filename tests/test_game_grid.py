@@ -1,7 +1,7 @@
 """game/grid.py 的用例：Pos / 8 方向 / 两个距离口径（切比雪夫 vs BFS）/ `step_toward` /
 基地几何（武器环、围墙环、门、防御盒）。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import json
@@ -23,9 +23,9 @@ from coregeek.protocol import model  # noqa: E402
 
 
 class GridTest(unittest.TestCase):
-    """格子矩阵本身 —— `Turn.map` 这一步的主要交付物。
+    """格子矩阵本身 —— `Turn.map` 的交付物。
 
-    **`cells` 才是真相，`render()` 只是给人看的**（那张字符表是有损的）。
+    `cells` 才是真相，`render()` 只是给人看的（那张字符表是有损的）。
     """
 
     @classmethod
@@ -33,10 +33,10 @@ class GridTest(unittest.TestCase):
         cls.grid = model.load(json.loads(SAMPLE.read_text(encoding="utf-8"))).map
 
     def test_station_is_expanded_to_four_cells(self):
-        """基地 2×2，`pos` 给的是**左上角** ⇒ 占 `y` 和 `y-1`。
+        """基地 2×2，`pos` 给的是左上角 ⇒ 占 `y` 和 `y-1`。
 
-        接口文档写的是"**双方**基地大小为 2*2"，所以敌我都要展。只标一格，角色会一头
-        撞进基地里 —— 那是一条判题器不收的指令。**旧实现只展了我方**，敌方基地只挡了 1 格。
+        接口文档写的是"双方"基地大小都是 2*2，敌我都要展成 4 格。只标一格的话，
+        角色会一头撞进基地里 —— 那是一条判题器不收的指令。
         """
         for corner, kind in ((Pos(10, 24), "station"), (Pos(30, 10), "enemy:station")):
             with self.subTest(corner=corner):
@@ -53,10 +53,10 @@ class GridTest(unittest.TestCase):
         self.assertEqual(self.grid.cells[10][30], "enemy:station")  # 敌方 (30,10)
 
     def test_blocking_is_exactly_non_empty(self):
-        """**这一步的核心回归**：`blocked` 必须恰好等于"非空格子"。
+        """`blocked` 必须恰好等于"非空格子"。
 
-        `expected` 在这里**独立按任务书 L85 重算一遍**（四路来源 + 基地 2×2），完全不走
-        `Map` 的代码 —— 迁移中漏掉任何一类挡路物，症状都是"以为能走、其实撞墙"。
+        `expected` 在这里独立按任务书 L85 重算一遍（四路来源 + 基地 2×2），完全不走
+        `Map` 的代码 —— 漏掉任何一类挡路物，症状都是"以为能走、其实撞墙"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         expected: set[Pos] = set()
@@ -77,10 +77,10 @@ class GridTest(unittest.TestCase):
         self.assertEqual(len(self.grid.blocked), 35)
 
     def test_render_shape(self):
-        """打印出来的图给调试用 —— 错了最坑：**y 翻反了图上照样"像张地图"**。
+        """打印出来的图给调试用 —— 错了最坑：y 翻反了图上照样"像张地图"。
 
-        布局：上下各一行 `—` 标尺 + 32 行网格，每行 **43 列** = `"│"` + 41 列 + `"|"`。
-        下面全是**裸下标**断言：它们把"字符落在第几列、第几行"钉死。
+        布局：上下各一行 `—` 标尺 + 32 行网格，每行 43 列 = `"│"` + 41 列 + `"|"`。
+        下面全是裸下标断言：它们把"字符落在第几列、第几行"钉死。
         """
         lines = self.grid.render().splitlines()
         self.assertEqual(len(lines), 34)
@@ -88,7 +88,7 @@ class GridTest(unittest.TestCase):
         self.assertEqual(lines[0], "—" * 43, "上标尺")
         self.assertEqual(lines[-1], "—" * 43, "下标尺")
         # 行 = height-1-y（y 向上、终端从上往下印）；列 = 1+x（第 0 列是左边框）
-        # **小写 = 我方，大写 = 敌方**
+        # 小写 = 我方，大写 = 敌方
         self.assertEqual(lines[8][11], "s")  # 我方基地左上角 (10,24)
         self.assertEqual(lines[9][12], "s")  # 我方基地右下角 (11,23)
         self.assertEqual(lines[8][10], "g")  # 加特林 (9,24)，与基地同一行
@@ -100,11 +100,10 @@ class GridTest(unittest.TestCase):
         self.assertEqual(lines[32][1], " ")  # (0,0) 空地 —— 最后一行是最底下的 y=0
 
     def test_render_keeps_y_pointing_up(self):
-        """**行自上而下 = y 由大到小**，且每行的列偏移 = `1+x`。
+        """行自上而下 = y 由大到小，且每行的列偏移 = `1+x`。
 
-        这是 y 翻转最直接的守卫 —— 只钉"最后一行是 y=0"的话，中间那些行翻反了它照样过。
-        没有行号槽之后本用例改用**斜线地图**：第 y 行只有 `(y,y)` 是矿 ⇒ 每行矿的列位置
-        就等于那一行的 y，翻反或错位一格立刻挂。
+        只钉"最后一行是 y=0"的话，中间那些行翻反了照样过 —— 这里用斜线地图：
+        第 y 行只有 `(y,y)` 是矿 ⇒ 每行矿的列位置就等于那一行的 y，翻反或错位一格立刻挂。
         """
         width, height = 4, 3
         grid = Map((width, height), {Pos(y, y): "stone" for y in range(height)})
@@ -117,7 +116,7 @@ class GridTest(unittest.TestCase):
         self.assertEqual(lines[-2][1], "o")
 
     def test_render_degrades_when_there_are_no_cells(self):
-        """没有格子 ⇒ 空串，`blocked` 也为空 ⇒ **不挡路也不动**（见 `Map.__init__`）。
+        """没有格子 ⇒ 空串，`blocked` 也为空 ⇒ 不挡路也不动（见 `Map.__init__`）。
 
         判据是 `cells` 为空而不是"尺寸非法"：高/宽为 0 时 `size` 看着合法，
         但同样一格都没有 —— 两种情形走的是同一条早返回。
@@ -130,7 +129,7 @@ class GridTest(unittest.TestCase):
                 self.assertEqual(empty.render(), "")
 
     def test_the_legend_covers_every_category(self):
-        """图例必须覆盖字符表里的**每一个**类别。
+        """图例必须覆盖字符表里的每一个类别。
 
         它守的是"加了新中立元素却忘了往 `_NAMES` 里补" —— 漏掉的症状是复盘时
         把新元素看成 `?`，而 `?` 在地图上到处都是（空地旁边就是），很难注意到。
@@ -143,22 +142,19 @@ class GridTest(unittest.TestCase):
         for token in ("x=机器人", "空格=空地", "?=未知", "大写=敌方", "%=敌方围墙"):
             self.assertIn(token, LEGEND)
 
-        # **一个字符只能代表一样东西。** 第 21 步空地填 `#` 时正撞上"围墙也是 `#`"
-        # —— 两个类别共用一个字符的症状是**图上分不出来**（我方围墙整圈沉进空地背景），
-        # 而图例看上去只是重复了一项，不像 bug。上面那些 `assertIn` 一条都不会挂，
-        # 所以这一条要单独钉。（`_char` 恒返回 1 字符，所以比长度就够了。）
-        # 第 22 步空地改成**空格**、墙收回 `#`，这一对不再撞 —— 守门员照旧留着，
-        # 它管的是"任何两个类别都不许共用字符"，不是"某一对具体值"。
+        # 一个字符只能代表一样东西：两个类别共用字符的症状是图上分不出来
+        # （我方围墙整圈沉进空地背景），而图例看上去只是重复了一项，不像 bug ——
+        # 上面的 `assertIn` 一条都不会挂，所以单独钉。（`_char` 恒返回 1 字符，
+        # 比长度就够。）守门员管的是"任何两个类别都不许共用字符"，不是某一对具体值。
         chars = [_char(kind) for kind in _NAMES] + ["x", " ", "?"]
         self.assertEqual(len(set(chars)), len(chars), sorted(chars))
 
     def test_the_legend_names_the_task_points_by_faction(self):
-        """`1`-`4` 是**阵营**的任务点，不是"我方/敌方"。
+        """`1`-`4` 是阵营的任务点，不是"我方/敌方"。
 
-        它们来自 `zones` 的 `challengerTaskPoint*` / `defenderTaskPoint*`，两队**同时存在**；
-        样例里我方恰好是挑战者、两套重合，所以**写错也测不出来**。
-        我们**可接**的那两个点不在字符表里（它们是 `Turn.task_points`，来自
-        `teamOur.playerTasks`，阵营已滤好）—— 别把两者混为一谈。
+        它们来自 `zones` 的 `challengerTaskPoint*` / `defenderTaskPoint*`，两队同时存在；
+        样例里我方恰好是挑战者、两套重合，写错也测不出来。我方可接的那两个点
+        不在字符表里（`Turn.task_points`，来自 `teamOur.playerTasks`）—— 别混为一谈。
         """
         self.assertIn("挑战方任务点", LEGEND)
         self.assertIn("防守方任务点", LEGEND)
@@ -169,14 +165,14 @@ class GridTest(unittest.TestCase):
 class BuildGeometryTest(unittest.TestCase):
     """可建造区与武器落点。
 
-    ⚠️ **公式的来源是图不是正文**（`docs/pic/build_map.png`）：任务书没写坐标公式，
+    公式来源是图不是正文（`docs/pic/build_map.png`）：任务书没写坐标公式，
     接口文档的 `mapInfo` 里也没有可建造区字段。算错 ⇒ `build` 落点非法 ⇒ 那 25 金币白花。
     """
 
     BASE = Pos(10, 24)  # 样例里的我方基地
 
     def test_weapon_cells_are_the_ring_around_the_base(self):
-        """12 格 = 基地外圈 4×4 减去基地自己，且**一格都不和基地重叠**。"""
+        """12 格 = 基地外圈 4×4 减去基地自己，且一格都不和基地重叠。"""
         cells = weapon_cells(self.BASE)
         own = base_cells(self.BASE)
         self.assertEqual(len(cells), 12)
@@ -188,10 +184,10 @@ class BuildGeometryTest(unittest.TestCase):
             self.assertIn(pos, cells)
 
     def test_all_sites_are_on_the_front_column(self):
-        """三座武器全在**迎着机器人的前排**（左半 `x=bx+2`、右半 `x=bx-1`）。
+        """三座武器全在迎着机器人的前排（左半 `x=bx+2`、右半 `x=bx-1`）。
 
-        新阵形：前排上方相邻两格放 2 火箭、前排下方一格放加特林 —— 两火箭相邻 ⇒
-        一个角色可同时操作两座，释放开拓者夜间行动。
+        阵形：前排上方相邻两格放 2 火箭、前排下方一格放加特林 —— 两火箭相邻 ⇒
+        一个角色可同时操作两座。
         """
         left = weapon_sites(Pos(10, 24), 41)  # 左半 ⇒ 前排 x=12
         self.assertEqual([c.x for c in left], [12, 12, 12])
@@ -208,14 +204,14 @@ class BuildGeometryTest(unittest.TestCase):
             weapon_sites(Pos(10, 24), 41),
             (Pos(12, 24), Pos(12, 25), Pos(12, 22)),
         )
-        #: 换边后整套落点自动跟着翻 —— 按**基地坐标**判而不用 `teamOur.type`
+        #: 换边后整套落点自动跟着翻 —— 按基地坐标判而不用 `teamOur.type`
         self.assertEqual(
             weapon_sites(Pos(30, 10), 41),
             (Pos(29, 10), Pos(29, 11), Pos(29, 8)),
         )
 
     def test_the_two_rockets_share_an_operator_spot(self):
-        """两火箭之间存在一个**同时贴着两座**的环内空格 ⇒ 一个角色能操作两座。
+        """两火箭之间存在一个同时贴着两座的环内空格 ⇒ 一个角色能操作两座。
 
         左半基地两火箭在 (12,24)/(12,25) ⇒ 操作位是 (11,25)（内侧、非基地、非墙）。
         """
@@ -235,10 +231,10 @@ class BuildGeometryTest(unittest.TestCase):
             self.assertEqual(spot.dist(rockets[1]), 1)
 
     def test_every_site_touches_the_base(self):
-        """**这才是这个阵形的理由**：三个落点各自都与基地的一格切比雪夫距离 1。
+        """这个阵形的理由：三个落点各自与基地的一格切比雪夫距离 1。
 
-        升级券/维修包必须在**目标建筑周围一格内**使用（任务书 L292 / L314），而 `attack`
-        也要求角色站在炮旁。于是同一个角色站在落点上，**脚下的炮和旁边的基地一够就是两个**。
+        升级券/维修包必须在目标建筑周围一格内使用（任务书 L292 / L314），`attack`
+        也要求角色站在炮旁 ⇒ 同一个角色站在落点上，脚下的炮和旁边的基地一够就是两个。
         顺带钉住"落点在武器环上" —— 不在环上的话 `build` 落点非法、那 25 金币白花。
         """
         for base, width in ((Pos(10, 24), 41), (Pos(30, 10), 41)):
@@ -257,8 +253,8 @@ class BuildGeometryTest(unittest.TestCase):
 class StepOutsideTest(unittest.TestCase):
     """`step_outside` 的网格级契约 —— 闸门两半唯一的判据，脱离游戏局面单独钉一遍。
 
-    它的两条 `None` 合流是**有意的**（调用方只问"这一步迈不迈得出去"），代价是
-    **"谁在盒子里面"必须由调用方自己筛**（`planner._trapped` 在那里踩过）。三种返回值各钉一条。
+    两条 `None` 合流是有意的（调用方只问"这一步迈不迈得出去"），代价是
+    "谁在盒子里面"必须由调用方自己筛。三种返回值各钉一条。
     """
 
     #: 手搭的 2×2 小盒子 —— 与基地几何无关，测的是基元本身
@@ -266,7 +262,7 @@ class StepOutsideTest(unittest.TestCase):
     SIZE = (41, 32)
 
     def test_a_pos_already_outside_returns_none(self):
-        """已经在外面 ⇒ `None`（**不是**"走不出去"）—— 所以调用方必须自己筛 `pos in box`。"""
+        """已经在外面 ⇒ `None`（不是"走不出去"）—— 所以调用方必须自己筛 `pos in box`。"""
         self.assertIsNone(step_outside(Pos(5, 5), self.BOX, set(), self.SIZE))
 
     def test_a_sealed_box_returns_none(self):
@@ -275,14 +271,14 @@ class StepOutsideTest(unittest.TestCase):
         self.assertIsNone(step_outside(Pos(1, 1), self.BOX, ring, self.SIZE))
 
     def test_the_step_lands_outside_and_moves_exactly_one_cell(self):
-        """返回的是**从 pos 迈出的第一步**：与 pos 切比雪夫距离恒为 1、且落点在盒外。"""
+        """返回的是从 pos 迈出的第一步：与 pos 切比雪夫距离恒为 1、且落点在盒外。"""
         step = step_outside(Pos(1, 1), self.BOX, {Pos(1, 2)}, self.SIZE)
         self.assertIsNotNone(step)
         self.assertEqual(Pos(1, 1).dist(step), 1, "一步一格")
         self.assertNotIn(step, self.BOX, "迈出去的这一步必须是盒外的格")
 
     def test_the_map_edge_never_lets_a_step_off_the_map(self):
-        """贴着地图角、又只有越界一条路 ⇒ `None`（**不许走出地图**）。
+        """贴着地图角、又只有越界一条路 ⇒ `None`（不许走出地图）。
 
         边界不在任务书 L85 的阻挡清单里（越界算"指令非法"还是"执行失败"文档没写），
         不走一定安全 —— `step_toward` 就是这么挡的，这里是同一条。
@@ -292,11 +288,11 @@ class StepOutsideTest(unittest.TestCase):
 
 
 class StepsBetweenTest(unittest.TestCase):
-    """`steps_between`（第 33 步）—— **回合预算**用的那个口径，与 `Pos.dist` 分家。
+    """`steps_between` —— 回合预算用的口径，与 `Pos.dist` 分家。
 
-    两条口径的差别是这一步的核心：`dist` 是切比雪夫直线（选点用），`steps_between` 是
-    绕障的真实步数（"这天还来不来得及来回"用）。**它独有一个 `dist` 给不出的失败态 -1**，
-    每个调用点都得自己接住 ⇒ 三种返回值各钉一条。
+    `dist` 是切比雪夫直线（选点用），`steps_between` 是绕障的真实步数（"这天还来不
+    来得及来回"用），且独有一个 `dist` 给不出的失败态 -1，每个调用点都得自己接住
+    ⇒ 三种返回值各钉一条。
     """
 
     BASE = Pos(10, 24)
@@ -312,15 +308,15 @@ class StepsBetweenTest(unittest.TestCase):
                 self.assertEqual(steps_between(pos, Pos(13, 24), set(), self.SIZE), 0)
 
     def test_a_sealed_goal_is_unreachable(self):
-        """goal 被整个围死 ⇒ **-1**。切比雪夫永远给不出这个值 —— 这就是新失败态。"""
+        """goal 被整个围死 ⇒ -1。切比雪夫永远给不出这个值 —— 这就是这个口径独有的失败态。"""
         goal = Pos(20, 20)
         ring = {Pos(x, y) for x in range(19, 22) for y in range(19, 22)} - {goal}
         self.assertEqual(steps_between(Pos(5, 5), goal, frozenset(ring), self.SIZE), -1)
 
     def test_walking_home_costs_more_than_the_straight_line(self):
-        """**这就是回炮位被低估的那个量**：环砌满之后，从盒外回后列炮要绕背面那 2 格门。
+        """回炮位被低估的量：环砌满之后，从盒外回后列炮要绕背面那 2 格门。
 
-        切比雪夫把 `(14,24) → (9,25)` 说成 5 步；真实步数是**先绕到背面门口再横穿盒子**。
+        切比雪夫把 `(14,24) → (9,25)` 说成 5 步；真实步数是先绕到背面门口再横穿盒子。
         断言只钉"严格大于"，不钉具体步数 —— 步数是几何的，几何一改这条就得跟着改。
         """
         ring = wall_cells(self.BASE, self.SIZE[0])
@@ -334,7 +330,7 @@ class StepsBetweenTest(unittest.TestCase):
         )
 
     def test_the_door_is_the_only_way_in(self):
-        """同一趟路的另一半：**门那 2 格**（`door_cells`）就是唯一的进出口。
+        """同一趟路的另一半：门那 2 格（`door_cells`）就是唯一的进出口。
 
         把门也堵上 ⇒ -1（盒子里的人出不来、盒外的人进不去）。这条同时钉住
         "门 = 背面中间那 2 格、环永远不闭合"这条不变量。
@@ -350,7 +346,7 @@ class StepsBetweenTest(unittest.TestCase):
 
 
 class PathTest(unittest.TestCase):
-    """寻路：BFS 最短路。**这两个局面上贪心版都会挂** —— 换掉它的理由就在这。"""
+    """寻路：BFS 最短路。这两个局面上贪心版都会挂（贪心只会挑"确实更近"的格子）。"""
 
     #: 合成局面里也得摆个基地，否则 `_ring` 是空的、工人压根不动（矿只服务于砌墙）
     BASE = Pos(20, 20)
@@ -358,7 +354,7 @@ class PathTest(unittest.TestCase):
     def _walk(self, turn: Turn, limit: int) -> tuple[int, Turn]:
         """把回合串起来走，返回 `(实际走了几步, 走完的局面)`。
 
-        **发 `collect` 就算走到了** —— 那正是"贴着矿"的唯一标志。
+        发 `collect` 就算走到了 —— 那正是"贴着矿"的唯一标志。
         """
         for moves in range(limit + 1):
             cmds = plan(turn)
@@ -374,7 +370,7 @@ class PathTest(unittest.TestCase):
     def test_walks_around_a_wall(self):
         """一堵横墙把直路封死，只能绕到墙的右端过去。
 
-        贪心会在 `(4,4)` 停死：那里**没有任何一格更近**（更近的三格全在 y=3 的墙上），
+        贪心会在 `(4,4)` 停死：那里没有任何一格更近（更近的三格全在 y=3 的墙上），
         而它只会挑"确实更近"的格子。BFS 绕得过。
         """
         wall = {Pos(x, 3) for x in range(8)}  # x=0..7 一整行
@@ -392,10 +388,10 @@ class PathTest(unittest.TestCase):
         self.assertEqual(final.roles[0].pos.dist(mine), 1, "绕过去了但没停在矿边")
 
     def test_never_leaves_the_map(self):
-        """地图边界**不在任务书 L85 的阻挡清单里**，得自己挡。
+        """地图边界不在任务书 L85 的阻挡清单里，得自己挡。
 
         整列 `x=1` 封死，工人被关在 `x=0` 这一列；能到达的格子没有一个贴着目标。
-        **去掉边界检查这里会返回 `(-1,4)`** —— 一条走出地图的指令。
+        去掉边界检查这里会返回 `(-1,4)` —— 一条走出地图的指令。
         """
         goal = Pos(0, 1)
         blocked = {Pos(1, y) for y in range(10)}  # 整列封死

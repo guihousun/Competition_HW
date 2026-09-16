@@ -1,10 +1,10 @@
-"""agent/tools/pyexec.py 的用例：本地 Python 执行器（第 45 步）—— **只算数、不见环境**。
+"""agent/tools/pyexec.py 的用例：本地 Python 执行器 —— 只算数、不见环境。
 
-用户口径：只允许计算、无三方包、不能访问环境的任何东西（文件、接口等）。
-真正的硬约束是**超时**：`task_channel` 跑在判题器 5 秒响应预算里（红线），
-`while True` 必须被掐断、当场返回 —— 这个模块的任何失败路径都不许抛异常。
+只允许计算、无三方包、不能访问环境的任何东西（文件、接口等）。真正的硬约束是
+超时：`task_channel` 跑在判题器 5 秒响应预算里（红线），`while True` 必须被掐断、
+当场返回 —— 这个模块的任何失败路径都不许抛异常。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import sys
@@ -63,7 +63,7 @@ class PyExecTest(unittest.TestCase):
                 self.assertTrue(pyexec.run(code).startswith("[拒绝]"), code)
 
     def test_a_runtime_error_is_reported_not_raised(self):
-        """代码里的异常是**产出**，不是我们的异常 —— 冒出去就是整回合退化空指令。"""
+        """代码里的异常是产出，不是我们的异常 —— 冒出去就是整回合退化空指令。"""
         out = pyexec.run("1/0")
         self.assertTrue(out.startswith("[错误]"), out)
         self.assertIn("ZeroDivisionError", out)
@@ -72,7 +72,7 @@ class PyExecTest(unittest.TestCase):
         self.assertTrue(pyexec.run("def :").startswith("[语法错误]"))
 
     def test_a_runaway_loop_is_killed(self):
-        """**红线**：判题器响应预算 5 秒，死循环必须被掐断、当场返回
+        """红线：判题器响应预算 5 秒，死循环必须被掐断、当场返回
         （与判题器沙盒的 `[TIMEOUT]` 同一个词，LLM 认得）。"""
         out = pyexec.run("while True: pass", timeout=0.2)
         self.assertTrue(out.startswith("[TIMEOUT]"), out)
@@ -86,7 +86,7 @@ class PyExecTest(unittest.TestCase):
 
 
 class AgentPythonExecTest(unittest.TestCase):
-    """接线：注册表调度 → 本地执行 → 产出**当场**进会话（tool 消息）→ 返回 `""`。
+    """接线：注册表调度 → 本地执行 → 产出当场进会话（tool 消息）→ 返回 `""`。
 
     "返回值即命令"是铁律 —— python_exec 不产命令，它的价值全在会话里那条 tool 消息
     （下一份 prompt 的窗口里 LLM 看得见自己的调用与产出，下一回合就能作答）。

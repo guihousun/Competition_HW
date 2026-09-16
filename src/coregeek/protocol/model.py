@@ -1,10 +1,9 @@
-"""payload → `game.world.Turn`。**唯一读线上格式的地方。**
+"""payload → `game.world.Turn`。唯一读线上格式的地方。
 
-**容错解析**：字段缺失或类型不对一律退化成默认值 / 丢掉那一条，绝不抛异常 ——
+容错解析：字段缺失或类型不对一律退化成默认值 / 丢掉那一条，绝不抛异常 ——
 判题器是没法调试的黑盒，宁可少认一个角色，也不能让响应管线崩掉。
-
-整张地图**一趟扫描铺出**（`_entries`）。我方角色与武器**混在同一张 `teamOur.roles` 里**
-（没有 `teamOur.weapons` 这个 key），靠 `roleType` 分流：`_character` 认角色、`_weapons` 认三种武器。
+整张地图一趟扫描铺出（`_entries`）；我方角色与武器混在同一张 `teamOur.roles` 里
+（没有 `teamOur.weapons` 这个 key），靠 `roleType` 分流。
 """
 
 from collections.abc import Mapping
@@ -52,11 +51,11 @@ def load(payload: Any) -> Turn | None:
 
 # ── 铺地图 ───────────────────────────────────────────────────────────
 def _entries(payload: dict[str, Any]) -> dict[Pos, str]:
-    """铺矩阵的原料：`{坐标: 类别}`，只装**非空**格。
+    """铺矩阵的原料：`{坐标: 类别}`，只装非空格。
 
-    **写入顺序即覆盖顺序，后写的盖前面**：中立元素先写、单位后写。单位压在矿上时格子显示单位。
-    `roleType` / `neutralType` 一律**原样**写入、不查白名单：未知类别照旧挡路，
-    判错方向只会多挡、不会放行。
+    写入顺序即覆盖顺序：中立元素先写、单位后写（单位压在矿上时格子显示单位）。
+    中立元素的字段名是 `neutralType`（不是 `zoneType`）；`roleType` / `neutralType`
+    一律原样写入、不查白名单：未知类别照旧挡路，判错方向只会多挡、不会放行。
     """
     entries: dict[Pos, str] = {}
 
@@ -74,8 +73,7 @@ def _entries(payload: dict[str, Any]) -> dict[Pos, str]:
 
 def _units(entries: dict[Pos, str], nodes: list[Any], prefix: str) -> None:
     """单位 → 格子。`prefix` 区分来源（我方给空串，敌方 / 机器人给前缀）。
-
-    **基地只写左上角那一格**：2×2 的展开是游戏规则，由 `map.Map` 铺格时统一做。
+    基地只写左上角那一格：2×2 的展开是游戏规则，由 `map.Map` 铺格时统一做。
     """
     for node in nodes:
         kind = node.get("roleType") if isinstance(node, dict) else None
@@ -103,7 +101,7 @@ def _int(value: Any) -> int:
 
 def _pos(node: Any, key: str = "pos") -> Pos | None:
     """`node[key]` → Pos。角色、中立元素、机器人、武器都叫 `pos`；
-    **任务点是唯一例外**（`taskPosition`），所以 `key` 可换。
+    任务点是唯一例外（`taskPosition`），所以 `key` 可换。
     """
     parent = node if isinstance(node, dict) else {}
     raw = parent.get(key)
@@ -127,14 +125,13 @@ def _character(node: Any) -> BaseRole | None:
 
 
 def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
-    """我方武器名册 —— `attack` 唯一的目标表（key 就是这里的 `id`）。
+    """我方武器名册——`attack` 唯一的目标表（key 就是这里的 `id`）。
 
-    武器和角色混在 `teamOur.roles` 里，靠 `roleType` 认（`world.WEAPON_KINDS`）；只扫我方
-    （敌方那三座炮带 `enemy:` 前缀，也不该被我们操控）。两条丢掉的规则都是"别发出非法指令"：
-    **`id < 0`（字段缺失）⇒ 丢**（否则 key 会变成 `"-1"`）、**已毁 ⇒ 丢**（见 `_destroyed`）。
-
-    `attackRange` / `cooldown` 解析不出来 ⇒ `-1`，方向是**故意分开**的：
-    射程 -1 ⇒ 谁都够不着 ⇒ **不开火**；冷却 -1 ⇒ 照打（样例三座炮就都没有这个字段）。
+    武器与角色混在 `teamOur.roles` 里，靠 `roleType` 认（`world.WEAPON_KINDS`），只扫我方
+    （敌方那三座炮带 `enemy:` 前缀，不该被我们操控）。两条丢掉的规则都是"别发出非法指令"：
+    `id < 0`（字段缺失）⇒ 丢（否则 key 会变成 `"-1"`）、已毁 ⇒ 丢（见 `_destroyed`）。
+    `attackRange` / `cooldown` 解析不出来 ⇒ `-1`，方向是故意分开的：
+    射程 -1 ⇒ 谁都够不着 ⇒ 不开火；冷却 -1 ⇒ 照打（样例三座炮都没有这个字段）。
     """
     out = []
     for node in _items(payload, "teamOur", "roles"):
@@ -160,8 +157,8 @@ def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
 
 
 def _walls(payload: dict[str, Any]) -> tuple[Wall, ...]:
-    """我方围墙实体（第 42 步修墙的判据）。与武器同住 `teamOur.roles`、靠 `roleType` 认；
-    **已毁（health == 0）⇒ 丢** —— 那是一格缺口，`_ring` 的候选表会接住重建。
+    """我方围墙实体，修墙线的判据。与武器同住 `teamOur.roles`、靠 `roleType` 认；
+    已毁（health == 0）⇒ 丢——那是一格缺口，`_ring` 的候选表会接住重建。
     health 缺失给 -1（判"未知"，修墙线不为一格读不出血量的墙白跑）。
     """
     out = []
@@ -185,7 +182,7 @@ def _walls(payload: dict[str, Any]) -> tuple[Wall, ...]:
 
 
 def _station_hp(payload: dict[str, Any]) -> tuple[int, int]:
-    """基地 `(health, level)` —— 夜里基地升级券的判据（第 42 步）。找不到 ⇒ (-1, 1)。"""
+    """基地 `(health, level)`——夜里基地升级券的判据。找不到 ⇒ (-1, 1)。"""
     for node in _items(payload, "teamOur", "roles"):
         if isinstance(node, dict) and node.get("roleType") == "station":
             return _int(node.get("health")), max(1, _int(node.get("level")))
@@ -193,7 +190,7 @@ def _station_hp(payload: dict[str, Any]) -> tuple[int, int]:
 
 
 def _news(payload: dict[str, Any]) -> str:
-    """官方消息（`worldNews.officialNews`）—— 矿产事件（塌方/停工）的原文（第 42 步）。
+    """官方消息（`worldNews.officialNews`）—— 矿产事件（塌方/停工）的原文。
     `folkLegends` 是宝藏线索（summonTreasure 那条线），不读。"""
     node = payload.get("worldNews")
     if not isinstance(node, dict):
@@ -206,8 +203,8 @@ def _robots(payload: dict[str, Any]) -> tuple[Robot, ...]:
     """场上全部机器人（`robot.roles`）：全图可见、逐回合全量，白天为空。
 
     只留 `pos` + `health` + `target_team`（打谁只看血量 + 是否打我方）。
-    `target_team` 字段缺失给空串 ⇒ 当成打我方的（安全降级：不打比打错更糟，
-    点 3 优化：火箭射程远，打对方的机器人既浪费火力又帮对方减轻基地压力）。
+    `target_team` 字段缺失给空串 ⇒ 当成打我方的（安全降级：不打比打错更糟——
+    火箭射程远，打对方的机器人既浪费火力又帮对方减轻基地压力）。
     """
     out = []
     for node in _items(payload, "robot", "roles"):
@@ -229,18 +226,13 @@ def _our_team(payload: dict[str, Any]) -> str:
 
 
 def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
-    """本回合**可接取**的己方任务点，坐标取自 `teamOur.playerTasks[].taskPosition`。
+    """本回合可接取的己方任务点，坐标取自 `teamOur.playerTasks[].taskPosition`。
 
-    `playerTasks` 是权威来源：它只含我方那 2 个点，所以不用去 `mapInfo.zones` 认任务点字符、
-    也不用读 `teamOur.type`。字段名是 `taskPosition` 而不是 `pos`。只认**锚点格**就够
-    （走到锚点旁边必然满足"任一格周围一格内"）。
-
-    降级方向**故意不是"少做"**：误接一个冷却中的点只是指令执行失败（不计异常），
-    而误判成"永远接不了"会让整条任务线静默作废。所以 `isValid` **明确为 `False`** 才排除，
-    `coldDownRounds` 缺失给 -1、按 `<= 0` 也算就绪。
-
-    `taskType` / `scoreReward` / `goldReward` / `timeoutRounds` 都不读（两个任务点处理方式
-    完全相同，也没有"值不值得接"的取舍）。
+    `playerTasks` 是权威来源：它只含我方那 2 个点，阵营已滤好，不必去 `mapInfo.zones`
+    认任务点字符。字段名是 `taskPosition` 不是 `pos`；只认锚点格就够（走到锚点旁边
+    必然满足"任一格周围一格内"）。降级方向故意不是"少做"：误接一个冷却中的点只是
+    指令执行失败（不计异常），而误判成"永远接不了"会让整条任务线静默作废 ⇒
+    `isValid` 明确为 `False` 才排除，`coldDownRounds` 缺失给 -1、按 `<= 0` 也算就绪。
     """
     out = []
     for node in _items(payload, "teamOur", "playerTasks"):
@@ -255,9 +247,9 @@ def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
 def _vendor_prices(payload: dict[str, Any]) -> Mapping[str, int]:
     """`vendorShopList` → `{矿种: 收购价}`（元素 `{name, price}`）。
 
-    **不硬编码"铜 > 铁 > 石头"**：那三档只是样例的价目，官方消息会让价格波动。
-    只收 `price >= 0`：`_int` 对字段缺失给 -1，而"负的收购价"不存在，
-    混进来会让挑矿那一步选出一座倒贴钱的矿。名字不是字符串的同样丢掉。
+    不硬编码"铜 > 铁 > 石头"：那三档只是样例的价目，官方消息会让价格波动。
+    只收 `price >= 0`（`_int` 对字段缺失给 -1，而负的收购价不存在，混进来会让挑矿
+    那一步选出一座倒贴钱的矿）。名字不是字符串的同样丢掉。
     """
     out: dict[str, int] = {}
     for node in _items(payload, "vendorShopList"):
@@ -272,8 +264,8 @@ def _vendor_prices(payload: dict[str, Any]) -> Mapping[str, int]:
 def _shop_prices(payload: dict[str, Any]) -> Mapping[str, int]:
     """顶层 `weaponShopList` → `{商品名: 单价}`（与 `_vendor_prices` 同一套解析）。
 
-    升级线按它算"买不买得起"—— 样例实证券1=100/券2=150，但与矿价同一条原则：
-    **不写死**。查不到的商品按 0 算 ⇒ 买不起 ⇒ 不跑腿（故意的降级方向）。
+    升级线按它算"买不买得起"——与矿价同一条原则：不写死（样例实证券1=100/券2=150）。
+    查不到的商品按 0 算 ⇒ 买不起 ⇒ 不跑腿（故意的降级方向）。
     """
     out: dict[str, int] = {}
     for node in _items(payload, "weaponShopList"):
@@ -288,10 +280,10 @@ def _shop_prices(payload: dict[str, Any]) -> Mapping[str, int]:
 def _errors(payload: dict[str, Any]) -> tuple[Error, ...]:
     """顶层 `errors` → 判题器本轮报的错。
 
-    **`errorCode` 解析不出来 ⇒ 整条丢掉**：错误码是读日志时的第一眼信息，
-    一条 `-1：xxx` 会被当成"未知错误 0"去查一个不存在的问题；而"本轮没有错误"
-    本来就是天然的安全值（空元组），少认一条不影响任何指令。
-    `description` 缺失给空串：码本身已经在报错那一行里了。
+    `errorCode` 解析不出来 ⇒ 整条丢掉：错误码是读日志时的第一眼信息，一条 `-1：xxx`
+    会被当成"未知错误 0"去查一个不存在的问题；而"本轮没有错误"本来就是天然的安全值
+    （空元组），少认一条不影响任何指令。`description` 缺失给空串（码本身已经在报错
+    那一行里了）。
     """
     out = []
     for node in _items(payload, "errors"):
@@ -309,9 +301,9 @@ def _action_results(payload: dict[str, Any]) -> tuple[tuple[int, bool], ...]:
     """`lastRoundRoleActionResults` → `((实体 id, 是否合法), …)`。
 
     key 在 JSON 里是字符串：转不成 int 的那条丢掉（留下会报出一个不存在的 `-1` 号单位）。
-    value **只认真正的布尔**，不写 `bool(ok)`：JSON 里的 `"false"` 是**非空字符串**，
-    那一步会把"不合法"读成"合法"，比丢掉更糟 —— 而这份回执的价值就在"谁没通过"。
-    顺序照 payload 原样，排序是呈现的事（`app._log` 打印时做）。
+    value 只认真正的布尔，不写 `bool(ok)`：JSON 里的 `"false"` 是非空字符串，那一步会把
+    "不合法"读成"合法"——而这份回执的价值就在"谁没通过"。顺序照 payload 原样，
+    排序是呈现的事（`app._log` 打印时做）。
     """
     raw = payload.get("lastRoundRoleActionResults")
     if not isinstance(raw, dict):
@@ -338,11 +330,11 @@ def _text(payload: dict[str, Any], key: str) -> str:
 
 
 def _destroyed(node: dict[str, Any]) -> bool:
-    """这一条**明确**声明自己已毁 / 已阵亡吗？`health == 0` 才算。
+    """这一条明确声明自己已毁 / 已阵亡吗？`health == 0` 才算。
 
-    **用 `== 0` 而不是 `<= 0`**：`_int` 对字段缺失给 -1，"声明已毁"与"没这个字段"要分开。
+    用 `== 0` 而不是 `<= 0`：`_int` 对字段缺失给 -1，"声明已毁"与"没这个字段"要分开。
     使用者是 `_character`（别给尸体发指令）与 `_weapons`（别操纵已毁的炮）；
-    机器人不走这里 —— 它的 `health` 在开火时判（`planner._fire`）。
+    机器人不走这里——它的 `health` 在开火时判（`planner._fire`）。
     """
     return _int(node.get("health")) == 0
 
@@ -355,10 +347,10 @@ def _gold(payload: dict[str, Any]) -> int:
 
 
 def _bag(node: dict[str, Any]) -> Mapping[str, int]:
-    """背包 → `{物品名: 件数}`（`backpack` 是**物品名数组**，重复即计数）。
+    """背包 → `{物品名: 件数}`（`backpack` 是物品名数组，重复即计数）。
 
     背包缺失或不是数组 ⇒ 空表 ⇒ 石头 0 块（不砌墙、转去采矿）、一件都卖不掉。
-    **降级方向是"少做"**：宁可少采，不可对着空背包发 `build`。非 `str` 的项丢弃。
+    降级方向是"少做"：宁可少采，不可对着空背包发 `build`。非 `str` 的项丢弃。
     不读 `backPackCapability`（注意大写 P）：一天到不了那个容量上限。
     """
     bag = node.get("backpack")
@@ -374,7 +366,7 @@ def _bag(node: dict[str, Any]) -> Mapping[str, int]:
 def _size(payload: dict[str, Any]) -> tuple[int, int]:
     """地图尺寸 `(width, height)`（取自 `mapInfo`）。
 
-    缺失时 `_int` 给 -1 ⇒ **没有任何格子算在地图内** ⇒ 寻路一步都走不出来、单位不动。
+    缺失时 `_int` 给 -1 ⇒ 没有任何格子算在地图内 ⇒ 寻路一步都走不出来、单位不动。
     这是故意的：拿不到尺寸就别动，比走出地图边界吃一条异常划算。
     """
     info = payload.get("mapInfo")

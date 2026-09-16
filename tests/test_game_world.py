@@ -1,6 +1,6 @@
 """game/world.py 的用例：`Turn.summary()` 的四块版面与上界、昼夜判定。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import sys
@@ -19,19 +19,19 @@ from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
 
 
 def _blocks(summary: str) -> list[str]:
-    """`Turn.summary()` → **非空**行。
+    """`Turn.summary()` → 非空行。
 
-    摘要第 22 步起带**空行分段**（`【回合】 / 【我方】 / 【机器】 / 【可接任务点】` 各占一块，
-    块间空一行），块数**固定**但物理行数是数据相关的（一块里放不下会换行）。
+    摘要按块拼接（`【回合】 / 【我方】 / 【机器】 / 【可接任务点】` 各占一块），
+    块数固定但物理行数是数据相关的（一块里放不下会换行）。
     断言块内容就够 —— 空行只是给人眼看的，钉住它反而会把"某块变长了"误报成格式错。
     """
     return [line for line in summary.splitlines() if line]
 
 
 class TurnSummaryTest(unittest.TestCase):
-    """`Turn.summary()` 的三行摘要。
+    """`Turn.summary()` 的四块摘要。
 
-    它跑在 `app.handle` 的 `try` 里 —— **抛异常 = 整回合退化成空指令**，
+    它跑在 `app.handle` 的 `try` 里 —— 抛异常 = 整回合退化成空指令，
     所以"空局面不炸"与"长度有上界"和内容一样重要。
     """
 
@@ -78,7 +78,7 @@ class TurnSummaryTest(unittest.TestCase):
         self.assertEqual(lines[3], "【可接任务点】 (14,14) (17,17)")
 
     def test_an_empty_turn_still_prints_every_block(self):
-        """空局面：一条事实都没有，但**每一块都得有字**（`无` / `0 台`），不能是空行。"""
+        """空局面：一条事实都没有，但每一块都得有字（`无` / `0 台`），不能是空行。"""
         lines = _blocks(self._turn(roles=(Worker(10010, Pos(5, 23)),)).summary())
         self.assertEqual(len(lines), 4)
         self.assertIn("【武器】 0/1：无", lines[0])
@@ -108,7 +108,7 @@ class TurnSummaryTest(unittest.TestCase):
         self.assertNotIn("r0c0", line)
 
     def test_long_lists_are_capped(self):
-        """机器人是逐回合**全量**推送的 ⇒ 摘要长度必须有上界，超出的只报个数。"""
+        """机器人是逐回合全量推送的 ⇒ 摘要长度必须有上界，超出的只报个数。"""
         turn = self._turn(
             roles=(Worker(10010, Pos(5, 23)),),
             robots=tuple(Robot(Pos(i, 5), 10 * i) for i in range(11)),
@@ -120,7 +120,9 @@ class TurnSummaryTest(unittest.TestCase):
 
 
 class DayNightTest(unittest.TestCase):
-    """日历：`build` 仅白天，判反了就会在夜里发 `build`（一次执行失败）。"""
+    """日历：`build` 仅白天，判反了就会在夜里发 `build`（一次执行失败）。
+
+    `within = (roundNo-1) % 130 + 1`，缺失的回合号是 -1 ⇒ 判成夜里 ⇒ 不建造。"""
 
     def _turn(self, round_no: int) -> Turn:
         return Turn(round_no=round_no, map=Map((41, 32), {}), roles=(), gold=0)

@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. **红线优先于一切优雅。** 见下节——5 次异常即出局，任何设计取舍在这一条面前让步。
 4. 判题环境只有标准库：`pyproject.toml` 的 `dependencies` 保持为空，语法不得超出 3.11。
 5. `logs/` 等运行期产物**绝不入库**。
+6. **代码注释只写"现在"。** 注释/docstring 只回答：是什么、契约（参数/返回/边界）、读代码必须知道的坑与红线。**不写步骤号（"第 N 步"）、决策史（谁拍板、口径、旧版如何、何时改的）——那些只进 `docs/design/code-task.md`**；也不用 `**加粗**`、`⚠️` 这类标记，平实中文。"拍的/未实测"的一句话标注保留。
 
 ## 硬约束
 

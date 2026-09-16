@@ -1,25 +1,12 @@
 """Agent 包：与判题器的 LLM、与它的沙盒打交道的全部。
 
-**唯一的实例 = `AGENT`**，它身上带着跨回合状态（**两处**，都在实例上：「沉淀的 SOP」
-整场存活；「任务内会话」`Context` 题目变了即换新，第 25 步）
-⇒ `planner.task_channel` 每次都得用**同一个**它，不能每回合新建一个
-（新建就等于每次都失忆）。
-
-```
-agent/
-├── agent.py    class Agent：状态（SOP 流程表 + Context）+ 工具表 + chat / hear / tool_call / SOP2Prompt
-├── chat.py     三个谓词 + strip_answers（**纯函数**；模板第 37 步起在 prompt.py）
-├── prompt.py   system 消息的段模板与生成函数（gen_system_prompt / gen_all_tool_prompt / …）
-├── context.py  Context：任务内会话的存储与渲染（**标准 messages JSON**，只依赖标准库；
-│               措辞在 prompt.py / chat.py、状态在 Agent）
-└── tools/      cmd.executeCmd（原样搬命令）/ sop.store（流程表的存储规则）
-```
-
-⚠️ **这个 `__init__.py` 不是空的**：单实例必须有一个确定的归处，包根是唯一不依赖调用方的地方。
-构造在 import 期发生，而 `Agent.__init__` 只赋值空值、不读文件不起线程。
+唯一的实例 = `AGENT`：跨回合状态（SOP 流程表、新闻指纹与价格期望、任务内会话）都在它
+身上 ⇒ `planner.task_channel` 每次都得用同一个它，每回合新建等于失忆。单实例放在
+包根：这是唯一不依赖调用方的归处；构造发生在 import 期，`Agent.__init__` 只赋空值、
+不读文件不起线程。
 """
 
 from .agent import Agent
 
-#: **全项目唯一的 Agent 实例。** 跨回合、跨任务地活着；`planner` 每次都用它。
+#: 全项目唯一的 Agent 实例：跨回合、跨任务地活着。
 AGENT = Agent()

@@ -1,6 +1,6 @@
-"""game/planner.py **经济线**的用例：采矿（可行矿筛选、顺路卖）/ 卖矿 / 升级券线。
+"""game/planner.py 经济线的用例：采矿（可行矿筛选、顺路卖）/ 卖矿 / 升级券线。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。⚠️ 用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import sys
@@ -22,9 +22,9 @@ from coregeek.game.world import Turn, Weapon  # noqa: E402
 
 
 class MineApproachTest(unittest.TestCase):
-    """合成局面：工人真的能走到矿边、开始采，而且不来回抖。**
+    """合成局面：工人真的能走到矿边、开始采，而且不来回抖。
 
-    **必须有基地**：矿只是砌墙的原料，基地没了就没有围墙环 ⇒ 采了也没用，工人干脆不动
+    必须有基地：矿只是砌墙的原料，基地没了就没有围墙环 ⇒ 采了也没用，工人干脆不动
     （`_ring` 返回空）。这个降级方向是有意的，所以 `_turn` 里摆了一个基地。
     """
 
@@ -40,7 +40,7 @@ class MineApproachTest(unittest.TestCase):
         )
 
     def test_worker_walks_to_the_mine_and_then_harvests_in_place(self):
-        """把回合串起来跑，看它**收敛**：走得到矿边，到了就原地采，不再挪。
+        """把回合串起来跑，看它收敛：走得到矿边，到了就原地采，不再挪。
 
         单帧"目标格算得对"证明不了这件事 —— 走歪、绕圈、贴住后反复抖动都是单帧看不出的。
         """
@@ -71,14 +71,14 @@ class MineApproachTest(unittest.TestCase):
 
 
 class SpareOreTest(unittest.TestCase):
-    """墙砌满之后的白天：**去采收购价最高的矿**（`docs/策略指导.md` 那条的后半句）。
+    """墙砌满之后的白天：去采收购价最高的矿。
 
-    「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」—— 那个"然后"是**顺序**：
-    砌墙阶段只认石矿（铜再贵也砌不了墙），**砌完之后**才轮到按价格挑。顺序反了的话墙永远
+    「手里面保持能建造墙的石头量就行，然后选择价格最高的矿」—— 那个"然后"是顺序：
+    砌墙阶段只认石矿（铜再贵也砌不了墙），砌完之后才轮到按价格挑。顺序反了的话墙永远
     砌不上，而症状是"工人一直在采铜、围墙一格没有"。
 
-    价目取自载荷 `vendorShopList`（`Turn.vendor_prices`），**不写死"铜 > 铁 > 石头"**：
-    样例那三档 1/3/5 只是**样例**，任务书 L386 明说官方消息会让价格波动（铁矿塌方 ⇒
+    价目取自载荷 `vendorShopList`（`Turn.vendor_prices`），不写死"铜 > 铁 > 石头"：
+    样例那三档 1/3/5 只是样例，任务书 L386 明说官方消息会让价格波动（铁矿塌方 ⇒
     铁稀缺 ⇒ 收购价上涨）。所以这里专门把顺序翻过来测 —— 谁把铜写死在最前，哪一条就挂。
     """
 
@@ -87,7 +87,7 @@ class SpareOreTest(unittest.TestCase):
     WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
     #: 18 格全砌满 ⇒ `_ring` 空 ⇒ 进入"墙砌完了"那一支
     RING = {c: WALL for c in wall_cells(Pos(10, 24), 41)}
-    #: 一近一远两座矿，**近的便宜、远的贵** —— 远近与贵贱分开，才测得出按哪个排
+    #: 一近一远两座矿，近的便宜、远的贵 —— 远近与贵贱分开，才测得出按哪个排
     NEAR_IRON = Pos(34, 24)
     FAR_COPPER = Pos(20, 24)
     #: 样例的价目（`vendorShopList`）：铜 5 > 铁 3 > 石 1
@@ -125,7 +125,7 @@ class SpareOreTest(unittest.TestCase):
         return Pos(spot["x"], spot["y"])
 
     def _collect_at(self, turn: Turn) -> Pos:
-        """本回合那条 `collect` 瞄的是哪座矿 —— **比"朝哪边走一格"结实得多**。"""
+        """本回合那条 `collect` 瞄的是哪座矿 —— 比"朝哪边走一格"结实得多。"""
         cmd = plan(turn)["1"]
         self.assertEqual(cmd["action"], "collect", "这一回合该是采集，不是别的")
         spot = cmd["targetPos"][0]
@@ -139,7 +139,7 @@ class SpareOreTest(unittest.TestCase):
         self.assertGreater(step.dist(self.NEAR_IRON), start.dist(self.NEAR_IRON), "不该朝铁矿走")
 
     def test_a_market_flip_changes_which_mine_we_walk_to(self):
-        """**铁矿塌方 ⇒ 铁稀缺 ⇒ 收购价涨过铜**：同一个局面，走的方向必须反过来。
+        """铁矿塌方 ⇒ 铁稀缺 ⇒ 收购价涨过铜：同一个局面，走的方向必须反过来。
 
         谁把"铜 > 铁 > 石头"当常量写进代码，这一条就挂 —— 而事件期间那个常量恰好是错的。
         """
@@ -148,7 +148,7 @@ class SpareOreTest(unittest.TestCase):
         self.assertLess(step.dist(self.NEAR_IRON), start.dist(self.NEAR_IRON), "该朝铁矿走")
 
     def test_a_mine_the_vendor_does_not_buy_is_not_worth_a_step(self):
-        """小贩不收的矿**一步都不为它走**（查不到的名字按 0 算）：宁可多走几步去那座收的。
+        """小贩不收的矿一步都不为它走（查不到的名字按 0 算）：宁可多走几步去那座收的。
 
         近的那座铜矿不在价目表里 ⇒ 它的价是 0，而 `_pick_ore` 把价 0 的整座丢掉 ——
         "离得近"不构成理由，卖不出钱的矿走过去也是白走。三座都不收 ⇒ 一条指令都不发
@@ -162,12 +162,11 @@ class SpareOreTest(unittest.TestCase):
                 self.assertEqual(plan(self._turn(start, prices)), {}, "谁也不收 ⇒ 哪儿也不去")
 
     def test_too_late_in_the_day_to_walk_there_and_back(self):
-        """白天不够走个来回了 ⇒ **不去矿上，回炮位**（第 33 步的收工闸门）。
+        """白天不够走个来回了 ⇒ 不去矿上，回炮位（收工闸门）。
 
         临走一头扎进远处的矿、黑天里还在赶路 = 拿火力换矿石。同一个局面只差 `roundNo`，
         `roundNo=60` 时 `day_rounds_left - TIME_MARGIN` = 6，而这一趟来回要 20 回合。
-        ⚠️ 这一支以前是"原地不动"，现在接管它的是收工闸门（本夹具的环是砌满的）
-        —— 远的矿不去了，人就该往回赶（实盘问题 ②）。
+        本夹具的环是砌满的 ⇒ 收工闸门开着，远的矿不去了，人往回赶。
         """
         start = Pos(30, 24)
         early = plan(self._turn(start, self.SAMPLE_PRICES, round_no=1))
@@ -177,11 +176,11 @@ class SpareOreTest(unittest.TestCase):
         self.assertLess(step.dist(self.BASE), start.dist(self.BASE), f"该往回赶：{late}")
 
     def test_the_ring_decides_whether_price_gets_a_vote(self):
-        """**同一个局面**，只差围墙砌没砌满：砌着 ⇒ 只认石矿，砌完了 ⇒ 才按价格挑。
+        """同一个局面，只差围墙砌没砌满：砌着 ⇒ 只认石矿，砌完了 ⇒ 才按价格挑。
 
-        这就是「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」里那个"然后"。
-        两座矿**都贴在工人身边**（一边一座），所以两种口径给的是**一左一右**、无从含糊 ——
-        比"朝哪边走一格"结实：走一格常常同时靠近两座矿，那种写法会**假通过**。
+        这就是「手里面保持能建造墙的石头量就行，然后选择价格最高的矿」里那个"然后"。
+        两座矿都贴在工人身边（一边一座），所以两种口径给的是一左一右、无从含糊 ——
+        比"朝哪边走一格"结实：走一格常常同时靠近两座矿，那种写法会假通过。
         """
         stone, copper = Pos(21, 24), Pos(19, 24)
         start = Pos(20, 24)
@@ -202,22 +201,22 @@ class SpareOreTest(unittest.TestCase):
         )
 
     def test_a_feasible_cheap_mine_beats_an_infeasible_pricy_one(self):
-        """第 29 步修闲置：**先把"走得动、回得来"的矿筛出来、再按价挑** —— 旧版按价
-        挑了最贵的、发现走不回来就整段放弃（"挖好石头就在家里等着"的根源）。
-        回程参照 = **最近的武器位**（夜里要在炮前，机器人到进攻范围前必须站回去）。"""
+        """先把"走得动、回得来"的矿筛出来、再按价挑 —— 只按价挑的话，挑中最贵的
+        又走不回来就整段放弃，工人就闲置了。回程参照 = 最近的武器位
+        （夜里要在炮前，机器人到进攻范围前必须站回去）。"""
         cheap, pricy = Pos(14, 24), Pos(34, 24)
         ores = {cheap: "stone", pricy: "copper"}
         #: round_no=55 ⇒ 白天剩 16，扣余量 5 ⇒ 11：近处石头 1+5=6 走得动，
-        #: 远处铜 19+25=44 走不动 —— 旧版会因此整段放弃（{}）
+        #: 远处铜 19+25=44 走不动 —— 不筛可行性的话会因此整段放弃（{}）
         turn = self._turn(Pos(15, 24), self.SAMPLE_PRICES, ores=ores, round_no=55)
         self.assertEqual(self._collect_at(turn), cheap, "铜来不及回 ⇒ 就近采石头，别闲置")
 
     def test_sells_on_the_way_when_the_vendor_is_close_to_the_route(self):
-        """第 29 步"顺路卖矿"：去矿的路上，小贩绕路 ≤ 2 格 ⇒ 先绕去卖（贴上它的那回合
+        """顺路卖矿：去矿的路上，小贩绕路 ≤ 2 格 ⇒ 先绕去卖（贴上它的那回合
         `_sell_ore` 自然出手），之后再继续去矿。
 
         夹具故意让 `_sell_ore` 自己的"够本门"不成立（1 块铜值 5 < 2×4）—— 顺路这条
-        才会被单独点亮。小贩放在**东南**、矿在**正东**：绕路 4+6-10=0 格，正"在路上"。"""
+        才会被单独点亮。小贩放在东南、矿在正东：绕路 4+6-10=0 格，正"在路上"。"""
         mine = Pos(30, 24)
         vendor = Pos(24, 28)
         entries = _terrain(
@@ -243,11 +242,11 @@ class SpareOreTest(unittest.TestCase):
         )
 
     def test_the_reserved_stone_is_not_worth_a_detour(self):
-        """保底留的那 1 块石头**不值得绕路去卖**（第 33 步）：`_detour_sell` 与 `_sell_ore`
+        """保底留的那 1 块石头不值得绕路去卖：`_detour_sell` 与 `_sell_ore`
         共用 `_best_load` 一个口径 —— 否则会出现"绕到小贩旁边才发现自己不肯卖那 1 块石头"，
         白绕一趟，而且两处口径迟早分家（同一件事的第二份真相）。
 
-        同一个局面只差背包里 **1 块还是 2 块**：2 块 ⇒ 多出来的那块可卖、顺路绕小贩；
+        同一个局面只差背包里 1 块还是 2 块：2 块 ⇒ 多出来的那块可卖、顺路绕小贩；
         1 块 ⇒ 那块留着封正面那个口、谁也不卖，于是直奔矿去。"""
         mine, vendor, start = Pos(30, 24), Pos(24, 28), Pos(20, 24)
 
@@ -275,17 +274,17 @@ class SpareOreTest(unittest.TestCase):
 
 
 class SellOreTest(unittest.TestCase):
-    """墙砌满之后的白天：**把矿背到小贩跟前卖掉**（第 22 步）。
+    """墙砌满之后的白天：把矿背到小贩跟前卖掉。
 
-    与 `SpareOreTest` 是同一条支路上的**先后**：砌满 ⇒ 先卖（`_sell_ore`），
+    与 `SpareOreTest` 是同一条支路上的先后：砌满 ⇒ 先卖（`_sell_ore`），
     卖不动才去采（`_mine_spare_ore`）。所以这里每个局面都砌满，而且必须能说清
     "为什么没去卖" —— 四条门各有一条用例（没货 / 没人收 / 不够本 / 回不来）。
 
-    站位与小贩的关系是这一步的核心事实（任务书 §4.4：「在小贩周围一格内使用」）——
+    站位与小贩的关系是核心事实（任务书 §4.4：「在小贩周围一格内使用」）——
     而小贩格本身挡路，`step_toward` 撞上它自然停在"周围一格"，与采矿同一条契约。
 
-    阈值口径（用户拍板）：**货值 ≥ 往返回合数**（≈ 每回合至少换 1 金币）才动身。
-    那个"1 金币 ≈ 1 回合"是**拍的**，没有文档依据，用例把它钉成可测的行为：
+    阈值口径：货值 ≥ 往返回合数（≈ 每回合至少换 1 金币）才动身。
+    "1 金币 ≈ 1 回合"是拍的、没有文档依据，用例把它钉成可测的行为：
     小贩距离 10 ⇒ 阈值 20 ⇒ 铜（价 5）要攒 4 块。
     """
 
@@ -294,8 +293,8 @@ class SellOreTest(unittest.TestCase):
     RING = {c: WALL for c in wall_cells(Pos(10, 24), 41)}
     #: 小贩 (20,24)：与基地切比雪夫距离 10 ⇒ 来回 20 回合，阈值 20 金币
     VENDOR = Pos(20, 24)
-    #: 卖不动时工人转去采的那座矿 —— **故意放在小贩的反方向**：
-    #: 否则"朝矿走"在距离上也"朝小贩走"，那条用例会假通过（第 8 步踩过同款夹具坑）
+    #: 卖不动时工人转去采的那座矿 —— 故意放在小贩的反方向：
+    #: 否则"朝矿走"在距离上也"朝小贩走"，那条用例会假通过
     ORE = Pos(36, 24)
     #: 样例的价目：铜 5 > 铁 3 > 石 1
     SAMPLE_PRICES = {"stone": 1, "iron": 3, "copper": 5}
@@ -337,18 +336,18 @@ class SellOreTest(unittest.TestCase):
         return cmd
 
     def test_standing_next_to_the_vendor_sells_the_whole_load(self):
-        """**贴着小贩 ⇒ 一次性卖光手上那种矿**（`num` = 全部件数）。
+        """贴着小贩 ⇒ 一次性卖光手上那种矿（`num` = 全部件数）。
 
         `num` 报成 1（默认值）等于把背包里的铜一块一块地卖 —— 一回合一条指令，
-        卖 4 块要 4 个回合，而任务书 §4.4 明说"**支持批量贩卖**"。
+        卖 4 块要 4 个回合，而任务书 §4.4 明说"支持批量贩卖"。
         """
         cmd = self._sold(self._turn(Pos(20, 23), {"copper": 4}))  # 小贩正下方，切比雪夫 1
         self.assertEqual(cmd, {"action": "sell", "name": "copper", "num": 4})
 
     def test_the_pricier_ore_is_sold_first(self):
-        """一次只卖一种 ⇒ 卖**收购价最高的**那种（同价才看件数）。
+        """一次只卖一种 ⇒ 卖收购价最高的那种（同价才看件数）。
 
-        手上铁铜都有时卖铜（5 > 3）。谁把"铜 > 铁 > 石头"写死都**恰好**对得上样例 ——
+        手上铁铜都有时卖铜（5 > 3）。谁把"铜 > 铁 > 石头"写死都恰好对得上样例 ——
         所以下面还有一条把价目翻过来的用例。
         """
         cmd = self._sold(self._turn(Pos(20, 23), {"iron": 9, "copper": 2}))
@@ -363,18 +362,18 @@ class SellOreTest(unittest.TestCase):
         self.assertEqual(cmd["name"], "iron")
 
     def test_spare_stone_gets_sold_too(self):
-        """砌满之后**多余的石头也卖**（用户选定：三种都卖），但**保底留 1 块**。
+        """砌满之后多余的石头也卖，但保底留 1 块。
 
         这一条是"石头为什么敢进 `SELLABLE`"的实证：调用点只在"墙砌完了"那一支
         （`_build_walls` 的 `if not free:`），而墙没砌完时手里的石头一律有用。
-        ⚠️ 留的那 1 块是第 33 步加的（`_best_load`）：收工时手里得有石头才能封上正面那个口
+        留的那 1 块（`_best_load`）：收工时手里得有石头才能封上正面那个口
         （`wall_cells` 的最后一格），封不上就是整夜的一道门。6 块卖 5 块。
         """
         cmd = self._sold(self._turn(Pos(20, 23), {"stone": 6}))
         self.assertEqual(cmd, {"action": "sell", "name": "stone", "num": 5})
 
     def test_a_lone_stone_is_kept_for_the_seal(self):
-        """背包里只有 1 块石头 ⇒ **一件都不卖**（那一块得留着封正面那个口）。
+        """背包里只有 1 块石头 ⇒ 一件都不卖（那一块得留着封正面那个口）。
 
         没有别的货 ⇒ `_best_load` 挑不出来 ⇒ 这一回合不去小贩那儿（改去干别的）。
         """
@@ -384,9 +383,9 @@ class SellOreTest(unittest.TestCase):
         self.assertNotEqual(cmd.get("name"), "stone", f"更不该指名卖石头：{cmd}")
 
     def test_an_idle_pioneer_with_goods_goes_selling(self):
-        """第 29 步：任务点全空（都在冷却/做完）⇒ 开拓者去卖矿（`sell` 可用角色是"全部"）。
+        """任务点全空（都在冷却/做完）⇒ 开拓者去卖矿（`sell` 可用角色是"全部"）。
 
-        ⚠️ 游戏规则限制了这条线的上限：`collect` **仅工人**、**没有转移物品的指令**
+        游戏规则限制了这条线的上限：`collect` 仅工人、没有转移物品的指令
         ⇒ 开拓者背包里通常没矿 —— 结构留着，要等它从任务/宝藏拿到可卖物才真正跑得起来。
         """
         turn = self._turn(
@@ -400,11 +399,11 @@ class SellOreTest(unittest.TestCase):
         self.assertLess(step.dist(self.VENDOR), Pos(30, 24).dist(self.VENDOR), "朝小贩走")
 
     def test_a_full_load_that_does_not_pay_for_the_trip_is_not_worth_walking(self):
-        """货**不够本** ⇒ 一步都不走，留在矿边接着采（阈值 = 2 × 距离 = 20 金币）。
+        """货不够本 ⇒ 一步都不走，留在矿边接着采（阈值 = 2 × 距离 = 20 金币）。
 
         一块铜值 5，走 10 格过去要 10 回合、回来还要 10 —— 这一趟的收益还抵不上
         在那儿多采 3 回合。行为上要能看出来"它没在往小贩那儿走"：这一回合是
-        `move`/`collect` 朝**矿**去，不是朝小贩。
+        `move`/`collect` 朝矿去，不是朝小贩。
         """
         turn = self._turn(self.FAR, {"copper": 1})
         cmd = plan(turn)["1"]
@@ -416,7 +415,7 @@ class SellOreTest(unittest.TestCase):
     def test_a_load_worth_the_trip_gets_walked_to_the_vendor(self):
         """攒够了（4 块铜 = 20 金币 ≥ 阈值 20）⇒ 动身朝小贩走一格。
 
-        ⚠️ 阈值是 `>=` 不是 `>`：4 块铜正好 20，差的这一点会把"恰好攒够"的工人
+        阈值是 `>=` 不是 `>`：4 块铜正好 20，差的这一点会把"恰好攒够"的工人
         永远留在矿边（每一次采集都在重新计算，永远差一块）。
         """
         turn = self._turn(self.FAR, {"copper": 4})
@@ -436,13 +435,13 @@ class SellOreTest(unittest.TestCase):
         self.assertNotEqual(cmd["action"], "sell", cmd)
 
     def test_nobody_buys_it_means_nothing_is_sold(self):
-        """价目表为空 / 小贩不收这种矿 ⇒ **一件都不卖**（与 `_pick_ore` 同一条口径）。
+        """价目表为空 / 小贩不收这种矿 ⇒ 一件都不卖（与 `_pick_ore` 同一条口径）。
 
-        价目表是**逐回合**从 `vendorShopList` 读的：空表意味着"这一回合什么都不收"，
+        价目表是逐回合从 `vendorShopList` 读的：空表意味着"这一回合什么都不收"，
         而不是"按默认价收"。降级方向是少做 —— 宁可多采一趟，不可白送一件矿石出去
         （`num` 报出去就没了，而 `sell` 没有撤销）。
         """
-        #: 空表 ⇒ **一条指令都没有**（不是"发条空指令"）：`_pick_ore` 也按 0 算，
+        #: 空表 ⇒ 一条指令都没有（不是"发条空指令"）：`_pick_ore` 也按 0 算，
         #: 于是连"该去采哪座矿"都答不出来 —— 这正是不写死价格的代价与收益。
         self.assertEqual(plan(self._turn(Pos(20, 23), {"copper": 4}, prices={})), {})
         #: 只收石头、而手上一块石头也没有 ⇒ 铜按 0 算 ⇒ 不是卖矿（转去采那座石矿）
@@ -450,12 +449,12 @@ class SellOreTest(unittest.TestCase):
         self.assertNotEqual(cmd["action"], "sell", cmd)
 
     def test_too_late_in_the_day_to_walk_there_and_back(self):
-        """白天不够"走到小贩 + 从小贩回基地" ⇒ 不卖，改去**回炮位**（第 33 步的收工闸门）。
+        """白天不够"走到小贩 + 从小贩回基地" ⇒ 不卖，改去回炮位（收工闸门）。
 
         夜里必须在炮位上，黑天还在赶路 = 拿火力换矿石。`roundNo=60` ⇒ 白天还剩 11 回合，
         减去 `TIME_MARGIN` 5 只剩 6，而这一趟（10 + 10）根本走不完。
-        ⚠️ 本夹具的环是砌满的（`RING`）⇒ 收工闸门这一回合是开着的，于是"不卖"之后
-        接管的是它 —— 见 `_leave_for_the_post`。闸门没生效时才是"连矿也不去"（空指令）。
+        本夹具的环是砌满的（`RING`）⇒ 收工闸门这一回合开着，"不卖"之后接管的是它
+        —— 见 `_leave_for_the_post`。闸门没生效时才是"连矿也不去"（空指令）。
         """
         sell_early = plan(self._turn(self.FAR, {"copper": 9}))
         self.assertEqual(sell_early["1"]["action"], "move", sell_early)
@@ -465,9 +464,9 @@ class SellOreTest(unittest.TestCase):
         self.assertLess(step.dist(self.BASE), self.FAR.dist(self.BASE), f"该往回赶：{late}")
 
     def test_the_wall_comes_first(self):
-        """**墙没砌完 ⇒ 一块矿都不卖**（哪怕人已经站在小贩旁边）。
+        """墙没砌完 ⇒ 一块矿都不卖（哪怕人已经站在小贩旁边）。
 
-        这就是用户那句「手里面保持能建造墙的石头量就行，**然后**选择价格最高的矿」里
+        这就是「手里面保持能建造墙的石头量就行，然后选择价格最高的矿」里
         那个"然后"，也是 `SELLABLE` 敢把石头收进来的全部理由：砌墙那一支里不存在
         "多余的石头"（`_stones_to_mine` 的上限正是"还差几格墙"）。
         """
@@ -485,15 +484,15 @@ class SellOreTest(unittest.TestCase):
 
 
 class UpgradeLineTest(unittest.TestCase):
-    """第 29 步：买得起就**优先**升级武器（用户拍板）—— 买券 → 走到目标武器 → 用券。
+    """买得起就优先升级武器 —— 买券 → 走到目标武器 → 用券。
 
-    优先链按**群体打击**判（用户授权我判断）：**加特林 > 火箭 > 电磁** ——
+    优先链按群体打击判：加特林 > 火箭 > 电磁 ——
     加特林 +1 颗子弹 = 每回合 +10、无冷却、弹道必命中，两颗可分打两台（90° 锥内），
     一夜 60 回合最多 +600、射程 +2 让它更早接敌；火箭 +1 枚对簇约 +30/齐射，
     但 3 回合冷却一夜只 ~20 轮齐射、依赖扎堆；电磁单目标、能量对满血机器人（≥40 血）
     不穿透 ⇒ 群体价值最低。链：gatling→2 → rocket→2 → gatling→3 → railgun→2 → …
 
-    无状态：拿没拿券看**背包**（买完金变少、包里多一张，两个阶段天然可分）；
+    无状态：拿没拿券看背包（买完金变少、包里多一张，两个阶段天然可分）；
     跑腿者 = 持券的工人，没有持券者 ⇒ 名册上第一个工人（别人照常采/卖）。
     """
 
@@ -513,7 +512,7 @@ class UpgradeLineTest(unittest.TestCase):
         *,
         gold: int = 0,
         bag: dict[str, int] | None = None,
-        pos: Pos = Pos(15, 24),  # 盒子**外面**（穿门绕行会把第一步甩向反方向）
+        pos: Pos = Pos(15, 24),  # 盒子外面（穿门绕行会把第一步甩向反方向）
         round_no: int = 1,
         weapons: tuple[Weapon, ...] | None = None,
         roles: tuple[BaseRole, ...] | None = None,
@@ -538,8 +537,8 @@ class UpgradeLineTest(unittest.TestCase):
         )
 
     def test_walks_to_the_shop_when_the_upgrade_is_affordable(self):
-        """金够、加特林还是 L1 ⇒ 墙砌完后**第一件事是跑商店**（用户拍板"优先升级"，
-        优先于采矿——场上明明有矿也不去）。"""
+        """金够、加特林还是 L1 ⇒ 墙砌完后第一件事是跑商店（优先于采矿 ——
+        场上明明有矿也不去）。"""
         cmd = plan(self._turn(gold=100))["1"]
         self.assertEqual(cmd["action"], "move", "该朝武器商店走，不是去采矿")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
@@ -553,7 +552,7 @@ class UpgradeLineTest(unittest.TestCase):
         )
 
     def test_the_holder_walks_to_the_gatling(self):
-        """持券者直奔**目标武器**（优先链第一个：加特林）—— 终点就是炮位，
+        """持券者直奔目标武器（优先链第一个：加特林）—— 终点就是炮位，
         用完券正好站岗，不用留回程。"""
         cmd = plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(20, 20)))["1"]
         self.assertEqual(cmd["action"], "move")
@@ -595,10 +594,10 @@ class UpgradeLineTest(unittest.TestCase):
         self.assertLess(step.dist(self.ORE), Pos(15, 24).dist(self.ORE), "钱不够 ⇒ 照常采矿")
 
     def test_no_errand_when_the_trip_does_not_fit_the_day(self):
-        """整趟（商店 → 目标武器，含买/用两个动作回合）来不及 ⇒ **不跑腿，回炮位**（第 33 步）。
+        """整趟（商店 → 目标武器，含买/用两个动作回合）来不及 ⇒ 不跑腿，回炮位（收工闸门）。
 
-        对照：同一局面白天还长时是动身的。⚠️ 以前这里是"哪也不去"，现在接管这一回合的是
-        收工闸门（本夹具的环是砌满的）—— 不跑腿的人该往回赶（实盘问题 ②）。
+        对照：同一局面白天还长时是动身的。本夹具的环是砌满的 ⇒ 收工闸门接管这一回合
+        —— 不跑腿的人往回赶。
         """
         self.assertIn("1", plan(self._turn(gold=100, round_no=1)), "白天还长 ⇒ 动身")
         late = plan(self._turn(gold=100, round_no=66))
@@ -624,11 +623,10 @@ class UpgradeLineTest(unittest.TestCase):
 
 
 class OreClaimTest(unittest.TestCase):
-    """**矿格认领**（第 40 步）：A 这回合认领的矿，B 不会再奔它 —— 就近换一座。
+    """矿格认领：A 这回合认领的矿，B 不会再奔它 —— 就近换一座。
 
-    旧口径"不认领矿"（`_pick_ore` 的注释：两人挤同一座矿的不同邻格都能采）在**两人都
-    要石头**时就是抢资源：B 明明有别的石矿可去，却跟着 A 奔同一座，路上互堵、到了白站。
-    认领只在**回合内**的账本上（`ore_taken`），不跨回合。"""
+    不认领的话，两人都要石头时就是抢资源：B 明明有别的石矿可去，却跟着 A 奔同一座，
+    路上互堵、到了白站。认领只在回合内的账本上（`ore_taken`），不跨回合。"""
 
     BASE = Pos(10, 24)
     ORE1 = Pos(4, 24)
@@ -640,7 +638,7 @@ class OreClaimTest(unittest.TestCase):
             self.WEAPONS, {self.BASE: "station", self.ORE1: "stone", self.ORE2: "stone"}
         )
         a = Worker(10010, Pos(4, 23), {})  # 贴着 ORE1
-        b = Worker(10012, Pos(5, 24), {})  # 也贴着 ORE1 —— 旧口径下它会跟着采同一座
+        b = Worker(10012, Pos(5, 24), {})  # 也贴着 ORE1 —— 不认领的话它会跟着采同一座
         grid |= {a.pos: "worker", b.pos: "worker"}
         turn = Turn(
             round_no=1, map=Map((41, 32), grid), roles=(a, b), gold=0, weapons=self.WEAPONS
@@ -663,8 +661,8 @@ class OreClaimTest(unittest.TestCase):
 
 
 class OreValueTest(unittest.TestCase):
-    """挖矿的**性价比**判据（第 42 步）：单位回合价值 = 价 × 新闻修正 ÷ (到矿+采+回炮位)，
-    不再是"价高优先" —— 远的贵矿可能跑不过近的贱矿。石头刚需支线不变（墙只吃石头）。"""
+    """挖矿的性价比判据：单位回合价值 = 价 × 新闻修正 ÷ (到矿+采+回炮位)，
+    不是"价高优先" —— 远的贵矿可能跑不过近的贱矿。石头刚需支线不变（墙只吃石头）。"""
 
     BASE = Pos(10, 24)
     IRON = Pos(14, 8)    # 近：BFS 代价小
@@ -672,7 +670,7 @@ class OreValueTest(unittest.TestCase):
     WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
 
     def setUp(self) -> None:
-        #: hint 是 **AGENT 单实例上的跨回合状态** —— 不清就会泄进后面的用例
+        #: hint 是 AGENT 单实例上的跨回合状态 —— 不清就会泄进后面的用例
         #: （SpareOreTest 的"市场翻转"会拿到本类留下的铜 hint）。
         AGENT.reset()
         self.addCleanup(AGENT.reset)
@@ -691,7 +689,7 @@ class OreValueTest(unittest.TestCase):
         )
 
     def test_a_nearby_cheap_ore_beats_a_far_pricy_one(self):
-        """铁 4 近 vs 铜 5 远：性价比上近铁赢 —— 旧口径"价高优先"会奔铜。"""
+        """铁 4 近 vs 铜 5 远：性价比上近铁赢 —— 只按"价高优先"会奔铜。"""
         worker = Worker(10010, Pos(20, 6), {})
         step = Pos(*plan(self._turn(worker))["10010"]["targetPos"][0].values())
         self.assertLess(step.dist(self.IRON), step.dist(self.COPPER), "朝近铁走")
@@ -710,11 +708,10 @@ class OreValueTest(unittest.TestCase):
 
 
 class PioneerErrandTest(unittest.TestCase):
-    """开拓者的**任务空隙差事**（第 40 步）：无可接任务 ⇒ 领"买券 → 用券"。
+    """开拓者的任务空隙差事：无可接任务 ⇒ 领"买券 → 用券"。
 
-    第 29 步那条"任务点全空 ⇒ 开拓者卖矿"因开拓者没有矿而从未跑通（结构在、暂时空转）
-    —— 本步退役，换成升级线的跑腿。跑腿者优先级 = **持券者**（券在谁包里谁用，没有转移
-    指令）> **真空闲的开拓者**（无可接任务）> 第一个工人。"""
+    跑腿者优先级 = 持券者（券在谁包里谁用，没有转移指令）> 真空闲的开拓者
+    （无可接任务）> 第一个工人。"""
 
     BASE = Pos(10, 24)
     SHOP = Pos(20, 16)

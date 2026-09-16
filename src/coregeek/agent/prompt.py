@@ -1,14 +1,13 @@
 """
-构建system prompt的地方
-调试只用调这个，分为六段：role定位、工具描述、输出格式、示例、沉淀的SOP、注意事项
+构建 system prompt 的地方，分为六段：role定位、工具描述、输出格式、示例、沉淀的SOP、注意事项。
 
-⚠️ **任务 prompt 专注任务**（第 41 步）：压缩教学的搭车协议已作废 —— 摘要由
-**命令轮同发的压缩请求**产出（`COMPRESSION_PROMPT`，只进压缩 prompt、不进 system）。
+任务 prompt 专注任务：摘要由命令轮同发的压缩请求产出（`COMPRESSION_PROMPT`，
+只进压缩 prompt、不进 system）。
 
-⚠️ **两个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT` 的 `{sop}`）正文里
-不许出现别的裸 `{}`**：`str.format` 会把它当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成
-空指令（第 35 步传下来的规矩）。替换值（工具描述、流程正文）里的 `{}` 不会被二次扫描
-—— python 片段太常见了。命令范式用 `$(...)`，安全。
+两个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT` 的 `{sop}`）正文里
+不许出现别的裸 `{}`：`str.format` 会把它当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成
+空指令。替换值（工具描述、流程正文）里的 `{}` 不会被二次扫描 —— python 片段太常见。
+命令范式用 `$(...)`，安全。
 """
 
 import json
@@ -80,8 +79,7 @@ SOP_PROMPT = """
 {sop}
 """
 
-# 5. 示例（第 38 步用户启用：一段"从 problem.txt 到 token"的四步范式）——
-#    它进 `gen_system_prompt` 的 sections，代价是每回合 prompt 多这一段字节（记在字节表里）
+# 5. 示例：一段"从 problem.txt 到 token"的四步范式，进 `gen_system_prompt` 的 sections
 EXAMPLE_PROMPT = """
 # 【输出示例】
 用于需求：解决promble.txt的任务
@@ -107,11 +105,11 @@ ATTENTION = """
 
 
 def gen_system_prompt(tools, sop) -> str:
-    """组装整份 system 消息：六段生效
+    """组装整份 system 消息：六段生效。
 
     `tools` = `Agent` 的工具注册表（名 → (实现, 描述, 参数表)），`sop` = 流程表
-    `{流程名: 正文}`（第 37 步起），两个槽分别填进工具段与 SOP 段。
-    各段 `strip()` 后再拼 —— 三引号串首尾各带一个换行，直接 join 会出现三连空行。
+    `{流程名: 正文}`，两个槽分别填进工具段与 SOP 段。各段 `strip()` 后再拼 ——
+    三引号串首尾各带一个换行，直接 join 会出现三连空行。
     """
     sections = [
         ROLE_PROMPT,
@@ -134,7 +132,7 @@ def gen_all_tool_prompt(tools) -> str:
 
 
 def gen_tool_prompt(tool) -> str:
-    """一个工具一块（**由注册表生成、不手写第二份** —— 手写的描述迟早与调度分家，
+    """一个工具一块（由注册表生成、不手写第二份 —— 手写的描述迟早与调度分家，
     而那种不一致只有实盘上 LLM 报错才看得出来）：
 
         ## ToolName - {toolname}
@@ -164,8 +162,8 @@ def gen_sop_prompt(sop) -> str:
         ## SopName - sop name2
         流程描述
 
-    空表打占位 —— **段头永远都在**（哪怕一条都没沉淀过）：那个槽是 LLM 自己写的
-    目标，看不见槽就不会去用它（第 18 步传下来的规矩）。
+    空表打占位 —— 段头永远都在（哪怕一条都没沉淀过）：那个槽是 LLM 自己写的
+    目标，看不见槽就不会去用它。
     """
     if not sop:
         return SOP_PROMPT.format(sop="（暂无沉淀）")
@@ -173,11 +171,10 @@ def gen_sop_prompt(sop) -> str:
     return SOP_PROMPT.format(sop=flows)
 
 
-#: 压缩请求的产出（`COMPRESSION_PROMPT`，只进压缩 prompt、不进 system）——
-#: 第 43 步起在**回合最末尾的压缩闸门**发（第 47 步收窄：只剩 ③ 命令轮 —— 答案轮
-#: 不压缩，压缩与 `<answer>` 互斥），任务 prompt 专注任务（卸掉了第 39 步搭车的
-#: 881 字节教学）。
-#: 四槽照第 39 步的口径（总目标/关键数据/已完成未完成/下一步），加两条输出纪律：
+#: 压缩请求的指令（`COMPRESSION_PROMPT`，只进压缩 prompt、不进 system）——
+#: 在回合最末尾的压缩闸门发（只剩命令轮；答案轮不压缩，压缩与 `<answer>` 互斥），
+#: 任务 prompt 专注任务。
+#: 四槽：总目标 / 关键数据 / 已完成未完成 / 下一步，加两条输出纪律：
 #: 只输出摘要块；摘要里不带 `<answer>` 对（`answer_of` 挖块之外的又一道保险）。
 COMPRESSION_PROMPT = """# 【上下文压缩】
 你是上下文压缩器。把接下来的对话压成一份摘要，供后续回合替代完整历史使用。摘要必须包含：
@@ -190,10 +187,10 @@ COMPRESSION_PROMPT = """# 【上下文压缩】
 
 
 def gen_compression_prompt(material: str) -> str:
-    """压缩轮的整份 prompt（第 41 步）：**独立指令 + 原始上下文全文**。
+    """压缩轮的整份 prompt：独立指令 + 原始上下文全文。
 
     形状与任务 prompt 同构（标准 messages JSON）—— 判题器的 LLM 按同一种读法处理两者。
-    `material` 由 `Context.material()` 给出：题目 + 全部往来逐字（**原文永久保留**，
+    `material` 由 `Context.material()` 给出：题目 + 全部往来逐字（原文永久保留，
     压缩总从原文重来、不从旧摘要叠；给任务 LLM 的才是压缩后的）。
     """
     return json.dumps(
@@ -206,16 +203,16 @@ def gen_compression_prompt(material: str) -> str:
     )
 
 
-#: 新闻查价的指令（第 42 步）：**只进新闻 prompt、不进任务 system** —— 没任务时
-#: 发出去问"官方消息对矿价的影响"，用任务线之外每游戏日 3 次的额度（Agent 指纹去重）。
-#: 回复约定**裸 `<prices>` 块**（每行 `矿种 方向`），结构化才能进价格期望表。
+#: 新闻查价的指令：只进新闻 prompt、不进任务 system —— 没任务时发出去问
+#: "官方消息对矿价的影响"，用任务线之外每游戏日 3 次的额度（Agent 指纹去重）。
+#: 回复约定裸 `<prices>` 块（每行 `矿种 方向`），结构化才能进价格期望表。
 NEWS_PROMPT = """# 【市场情报】
 读下面的官方消息，判断它对矿产（stone / iron / copper）收购价的影响。只输出一个 <prices> 块，每行一条、格式为 `矿种 方向`（矿种用英文小写；方向只能是 up / down / flat）；消息没提到的矿也要给一行 flat。不要输出任何别的内容。
 """
 
 
 def gen_news_prompt(news: str) -> str:
-    """新闻查价的整份 prompt（第 42 步）：指令 + 官方消息原文。标准 messages JSON。"""
+    """新闻查价的整份 prompt：指令 + 官方消息原文。标准 messages JSON。"""
     return json.dumps(
         [
             {"role": "system", "content": NEWS_PROMPT.strip()},
