@@ -30,11 +30,20 @@ class FrontWallTests(unittest.TestCase):
             self.assertEqual(set(cells[4:10]), expected)
             self.assertFalse(set(cells) & set(brain._exit_cells(turn)))
 
-    def test_spaced_roster_has_three_distinct_transverse_positions(self):
+    def test_spaced_roster_keeps_gaps_and_connected_inner_positions(self):
         for base in (REPORTED, MIRROR):
             turn = Turn.load(board(base=base))
             sites = brain._tower_sites(turn)
-            self.assertEqual(len({p.y for p in sites}), 3)
+            # A slightly offset laser keeps the shared-rocket stand connected.
+            graph = brain._defence_geometry(turn)[2]
+            free = set(graph.cells) - set(sites)
+            reached = {next(iter(free))}
+            pending = list(reached)
+            while pending:
+                for cell in graph.neighbours[pending.pop()]:
+                    if cell in free and cell not in reached:
+                        reached.add(cell); pending.append(cell)
+            self.assertEqual(reached, free)
             self.assertTrue(all(distance(a,b) >= 2 for a,b in combinations(sites,2)))
             self.assertEqual(brain.TOWER_LOADOUT, ('rocket','railgun','rocket'))
 

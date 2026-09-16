@@ -371,20 +371,20 @@ class TowerSiteTests(unittest.TestCase):
     # the approach. Literal mirrored coordinates are independently checked.
     def test_spaced_towers_keep_middle_on_the_east(self):
         sites = sites_of(board())
-        self.assertEqual(sites, [(8, 21), (11, 22), (8, 23)])
+        self.assertEqual(sites, [(8, 20), (11, 20), (8, 22)])
         self.assertEqual(len(set(sites)), 3)
         for x, _y in sites[1:2]:
             self.assertEqual(x, REPORTED[0] + 2, "towers must face the approach")
 
     def test_spaced_towers_keep_middle_on_the_west(self):
         sites = sites_of(board(base=MIRROR))
-        self.assertEqual(sites, [(32, 21), (29, 22), (32, 23)])
+        self.assertEqual(sites, [(32, 21), (29, 23), (32, 23)])
         for x, _y in sites[1:2]:
             self.assertEqual(x, MIRROR[0] - 1, "the west weapon ring is one cell out")
 
     def test_vertical_base_puts_the_towers_on_the_south(self):
         sites = sites_of(board(base=VERTICAL_SOUTH))
-        self.assertEqual(sites, [(20, 29), (21, 26), (22, 29)])
+        self.assertEqual(sites, [(20, 29), (22, 26), (22, 29)])
         for _x, y in sites[1:2]:
             self.assertEqual(y, VERTICAL_SOUTH[1] - 2)
 

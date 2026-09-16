@@ -2354,6 +2354,7 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
                    trapped,
                    -matched,
                    mismatch,
+                   0 if _inner_connected(graph, set(sites) | standing) else 1,
                    0 if _shared_rocket_cells(intended, stands - set(sites)) else 1,
                    sum(distance(a, b) < 2 for a, b in combinations(sites, 2)),
                    len(sites) - len({p.y if plan.approach in ('E', 'W') else p.x for p in sites}),
@@ -2375,6 +2376,21 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
 def _ordered_sites(sites, approach):
     """Across the front: bottom-to-top for E/W, left-to-right for N/S."""
     return tuple(sorted(sites, key=lambda p: (p.y, p.x) if approach in ('E', 'W') else (p.x, p.y)))
+
+
+def _inner_connected(graph, blocked):
+    # Reaching separate rear gateways is not enough: guards may not walk
+    # outside the walls just to get from one interior post to another.
+    free = set(graph.cells) - set(blocked)
+    if not free:
+        return False
+    pending = [next(iter(free))]
+    seen = set(pending)
+    while pending:
+        for cell in graph.neighbours.get(pending.pop(), ()):
+            if cell in free and cell not in seen:
+                seen.add(cell); pending.append(cell)
+    return seen == free
 
 
 def _shared_rocket_cells(intended, stands):

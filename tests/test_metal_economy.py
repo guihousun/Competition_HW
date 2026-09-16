@@ -241,6 +241,9 @@ class MetalCollectionTests(unittest.TestCase):
         site, or the walk towards it. No ore action may be issued instead.
         """
         state = board(towers=2, gold=25)  # ring complete, mine still in reach
+        # The free slot can move when legacy two-rocket fixtures are retained.
+        # Keep the stationary test pioneer off every weapon-ring cell.
+        next(r for r in state['teamOur']['roles'] if r['roleType']=='pioneer')['pos'] = {'x':20,'y':20}
         turn = Turn.load(state)
         sites = brain._tower_sites(turn)
         standing = {w.pos for w in turn.weapons()}
@@ -273,7 +276,9 @@ class MetalCollectionTests(unittest.TestCase):
         else:
             self.fail('worker never reached the missing tower within 30 steps')
         # The mine must not influence the day at all while a tower is missing.
-        without_mine = day_command(board(towers=2, gold=25, ores=()))
+        no_mine = deepcopy(state)
+        no_mine['mapInfo']['zones'] = [z for z in no_mine['mapInfo']['zones'] if z['neutralType'] not in METAL_ZONES]
+        without_mine = day_command(no_mine)
         self.assertEqual(command, without_mine, "the ore must not change this turn")
         self.assertNotEqual(command["action"], "collect")
 
