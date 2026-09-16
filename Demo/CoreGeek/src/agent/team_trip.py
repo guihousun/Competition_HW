@@ -1,8 +1,8 @@
 """Public-state team route contracts (strategy; R01/R02/R03/R06).
 
-Only an actually dispatched trip can constrain construction. Costs for before
-and after overlays use the SAME observation round and absolute deadline. An
-overlay is a planning counterfactual, never confirmation that a move succeeded.
+Only an actually dispatched trip can constrain construction. Overlay pairs use
+the SAME time slice: once the owner's action is selected, its exact conditional
+next-round state and remaining deadline. A shadow is never a success receipt.
 """
 from collections import deque
 from copy import deepcopy
@@ -167,16 +167,59 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     return TripCost(True,actions,budget,'delivery' if held else 'procurement',command)
 
 
+def evaluate_after_action(turn, payload, commitment, command, commands, *, actor_positions=None, added_walls=()):
+    """One shared conditional next-round slice for new AND active trips.
+
+    An emitted first move is fixed, not replaced with a different shortest
+    first step after seeing the teammate's candidate. None means one real wait
+    round. This shadow is never persisted as a successful action receipt.
+    """
+    owner=next((w for w in turn.workers() if w.unit_id==commitment['owner']),None)
+    if owner is None:
+        return TripCost(False,None,commitment['deadline']-turn.round_no-1,'owner_or_target_missing')
+    start=owner.pos
+    after_record=dict(commitment)
+    if command and command.get('action')=='move':
+        owner=replace(owner,pos=Pos.load(command['targetPos'][0]))
+    elif command and command.get('action')=='buy':
+        owner=replace(owner,backpack=owner.backpack+(commitment['item'],))
+    elif command and command.get('action')=='use':
+        after_record['phase']='return'
+    positions={uid:Pos.load(c['targetPos'][0]) for uid,c in commands.items()
+               if uid!=owner.unit_id and c.get('action')=='move'}
+    positions.update(actor_positions or {})
+    positions.pop(owner.unit_id,None)
+    walls={Pos.load(p) for c in commands.values() if c.get('action')=='build'
+           for p in c.get('targetPos',())} | set(added_walls)
+    occupied=turn.blocked(next(w for w in turn.workers() if w.unit_id==owner.unit_id)) | task_cells(turn)
+    if (owner.pos in walls or owner.pos in positions.values()
+            or (owner.pos!=start and (distance(start,owner.pos)!=1 or owner.pos in occupied or not turn.land(owner.pos)))):
+        return TripCost(False,None,commitment['deadline']-turn.round_no-1,'first_action_conflict')
+    after_turn=replace(turn,round_no=turn.round_no+1,
+        is_day=turn.round_no%ROUNDS_PER_DAY<DAY_ROUNDS,
+        gold=available_gold(turn,payload,commands),
+        ours=tuple(owner if u.unit_id==owner.unit_id else u for u in turn.ours))
+    return evaluate_trip(after_turn,payload,after_record,actor_positions=positions,added_walls=walls)
+
+
 class RouteGuard:
     """Bounded per-observation memo, applied to build stands AND emitted steps."""
-    def __init__(self, turn, payload, commitment, commands=()):
+    def __init__(self, turn, payload, commitment, commands=(), *, final=False):
         self.turn, self.payload = turn, payload
         self.commitment = commitment
         self.commands = dict(commands)
-        self.before = evaluate_trip(turn,payload,commitment,commands=self.commands) if commitment else None
+        self.owner_action = self.commands.get(commitment['owner']) if commitment else None
+        self.advance = final or self.owner_action is not None
+        self.before = self.evaluate() if commitment else None
         self.cache = {}
         self.rejected = 0
         self.limit_hit = False
+
+    def evaluate(self, **overlays):
+        if self.advance:
+            return evaluate_after_action(self.turn,self.payload,self.commitment,
+                self.owner_action,self.commands,**overlays)
+        return evaluate_trip(self.turn,self.payload,self.commitment,commands=self.commands,**overlays)
 
     def check(self, owner, stand, walls=()):
         if self.commitment is None or owner == self.commitment['owner']:
@@ -186,8 +229,7 @@ class RouteGuard:
             if len(self.cache) >= MAX_ROUTE_OVERLAYS:
                 self.limit_hit = True
                 return False,0
-            self.cache[key] = evaluate_trip(self.turn,self.payload,self.commitment,
-                actor_positions={owner:stand},added_walls=key[2],commands=self.commands)
+            self.cache[key] = self.evaluate(actor_positions={owner:stand},added_walls=key[2])
         after = self.cache[key]
         allowed = after.feasible
         if self.commitment.get('phase')=='return' and after.actions is not None:
@@ -207,6 +249,7 @@ class RouteGuard:
         return {'active': self.commitment is not None,
                 'target': self.commitment['target'] if self.commitment else None,
                 'before': self.before.report() if self.before else None,
+                'time_slice':'after_fixed_action' if self.advance else 'current_observation',
                 'rejected_candidates': self.rejected,'evaluated_overlays':len(self.cache),
                 'search_limit_hit':self.limit_hit}
 
@@ -383,23 +426,7 @@ class TripFrame:
         Include the exact proposed first step, not a newly recomputed shortcut.
         The real contract still stores the CURRENT bag and target level.
         """
-        owner=next(w for w in self.turn.workers() if w.unit_id==record['owner'])
-        after_record=dict(record)
-        if proposed['action']=='move':
-            owner=replace(owner,pos=Pos.load(proposed['targetPos'][0]))
-        elif proposed['action']=='buy':
-            owner=replace(owner,backpack=owner.backpack+(record['item'],))
-        elif proposed['action']=='use':
-            after_record['phase']='return'
-        positions={uid:Pos.load(c['targetPos'][0]) for uid,c in commands.items()
-                   if uid!=owner.unit_id and c.get('action')=='move'}
-        walls={Pos.load(p) for c in commands.values() if c.get('action')=='build'
-               for p in c.get('targetPos',())}
-        after_turn=replace(self.turn,round_no=self.turn.round_no+1,
-            is_day=self.turn.round_no%ROUNDS_PER_DAY<DAY_ROUNDS,
-            gold=available_gold(self.turn,self.payload,commands),
-            ours=tuple(owner if u.unit_id==owner.unit_id else u for u in self.turn.ours))
-        return evaluate_trip(after_turn,self.payload,after_record,actor_positions=positions,added_walls=walls)
+        return evaluate_after_action(self.turn,self.payload,record,proposed,commands)
 
     def defer_new(self,record,cost):
         if not self._new_deferred:
@@ -433,7 +460,7 @@ class TripFrame:
             if command.get('action') not in ('move','build'):
                 continue
             guard = RouteGuard(self.turn,self.payload,self.purchase,
-                {uid:c for uid,c in result.items() if uid!=worker.unit_id})
+                {uid:c for uid,c in result.items() if uid!=worker.unit_id},final=True)
             if not guard.allows_command(worker,command):
                 result.pop(worker.unit_id,None)
                 self.events.append({'kind':'construction','event':'defer',
