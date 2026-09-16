@@ -775,14 +775,15 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     # mines and stand cells, and every miss is a bounded A* search (R01: the
     # response must stay well inside 5s).
     routes = _RouteCost(turn)
-    def construct(role):
+    def construct(role, *, only_sites=None):
         from . import construction_trip
         landings = set(claimed)
         for issued in commands.values():
             if issued.get('action') in ('move','build'):
                 landings.update(Pos.load(p) for p in issued.get('targetPos',()))
         contract = frame.construction
-        targets = ([Pos.load(p) for p in contract['walls']] if contract else walls_missing)
+        targets = ([Pos.load(p) for p in contract['walls']] if contract else
+                   walls_missing if only_sites is None else only_sites)
         if contract and contract['phase']=='return':
             targets = []
         targets = [p for p in targets if p not in standing_walls and (p not in occupied or p==role.pos)]
@@ -825,6 +826,17 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
             other_errand=bool(errand_owners - {role.unit_id}), routes=routes,
         )
         proposed = commands.get(role.unit_id,{})
+        if (not proposed and role.unit_id not in busy and role.unit_id not in errand_owners
+                and not towers_missing
+                and frame.construction is None
+                and 'construction' not in frame.pending
+                and (frame.purchase is None or frame.purchase['owner'] != role.unit_id)
+                and role.pos in walls_missing):
+            # Ordinary free_walls excludes our occupied cell. Adopt only this
+            # one missing wall, via a proven move/build/return trip; never build
+            # on ourselves or reserve every remaining wall as an endless job.
+            construct(role,only_sites=[role.pos])
+            continue
         if frame.purchase and proposed.get('action') in ('move','build'):
             guard = team_trip.RouteGuard(turn,state,frame.purchase,
                 {uid:c for uid,c in commands.items() if uid!=role.unit_id})

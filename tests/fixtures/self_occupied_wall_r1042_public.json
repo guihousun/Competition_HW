@@ -1,0 +1,589 @@
+{
+  "source_policy_commit": "1b8da86",
+  "source_delivery_commit": "ec1865abdfcbaa899a17999c8eb1d022cd75b8f7",
+  "source": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\issue32\\navigation-team-validation-1b8da86\\hp-audit\\19-candidate-r1042-request.json",
+  "source_file_sha256": "e985485a963512c961d5f5d8cc3937a07c6d8ec10cf88d656ebf681bfec3ba62",
+  "observation_hash": "8d7d44d2c42a013723e7e85bf919f5708e854d3851c4d9b0f5970021093ea871",
+  "planner_state_provenance": "Historical per-round planner dump unavailable. Tests explicitly use a new empty PlannerState; not a claimed replay of the original memory.",
+  "observation": {
+    "errors": [],
+    "lastCmdResult": "",
+    "lastRoundRoleActionResults": {
+      "20010": true,
+      "20012": true
+    },
+    "lastSummonTreasureResult": 0,
+    "llmResp": "",
+    "mapInfo": {
+      "height": 32,
+      "width": 41,
+      "zones": [
+        {
+          "neutralType": "vendor",
+          "pos": {
+            "x": 20,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "weaponShop",
+          "pos": {
+            "x": 25,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint1",
+          "pos": {
+            "x": 13,
+            "y": 28
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint2",
+          "pos": {
+            "x": 26,
+            "y": 9
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint1",
+          "pos": {
+            "x": 23,
+            "y": 11
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint2",
+          "pos": {
+            "x": 35,
+            "y": 23
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 39,
+            "y": 21
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 10,
+            "y": 19
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 17,
+            "y": 26
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 7,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 17,
+            "y": 25
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 22,
+            "y": 2
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 18,
+            "y": 8
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 40,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 21,
+            "y": 30
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 9,
+            "y": 3
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 15,
+            "y": 0
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 5,
+            "y": 16
+          }
+        }
+      ]
+    },
+    "phaseTask": "",
+    "robot": {
+      "roles": []
+    },
+    "roundNo": 1042,
+    "teamEnemy": {
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 10013,
+          "level": 1,
+          "pos": {
+            "x": 5,
+            "y": 26
+          },
+          "roleType": "station"
+        }
+      ]
+    },
+    "teamOur": {
+      "goldNum": 30,
+      "playerTasks": [
+        {
+          "coldDownRounds": 0,
+          "goldReward": 80,
+          "isValid": false,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 23,
+            "y": 11
+          },
+          "taskType": "自进化类1",
+          "timeoutRounds": 25
+        },
+        {
+          "coldDownRounds": 0,
+          "goldReward": 80,
+          "isValid": false,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 35,
+            "y": 23
+          },
+          "taskType": "自进化类2",
+          "timeoutRounds": 25
+        }
+      ],
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1420,
+          "id": 20013,
+          "level": 1,
+          "pos": {
+            "x": 34,
+            "y": 6
+          },
+          "roleType": "station"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone"
+          ],
+          "health": 220,
+          "id": 20010,
+          "level": 1,
+          "pos": {
+            "x": 37,
+            "y": 5
+          },
+          "roleType": "worker"
+        },
+        {
+          "backPackCapability": 40,
+          "backpack": [],
+          "health": 200,
+          "id": 20011,
+          "level": 1,
+          "pos": {
+            "x": 33,
+            "y": 7
+          },
+          "roleType": "pioneer"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone",
+            "stone",
+            "stone"
+          ],
+          "health": 20,
+          "id": 20012,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 4
+          },
+          "roleType": "worker"
+        },
+        {
+          "cooldown": 0,
+          "health": 1380,
+          "id": 20040,
+          "level": 3,
+          "pos": {
+            "x": 33,
+            "y": 4
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 2000,
+          "id": 20041,
+          "level": 3,
+          "pos": {
+            "x": 33,
+            "y": 6
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1500,
+          "id": 20030,
+          "level": 2,
+          "pos": {
+            "x": 36,
+            "y": 4
+          },
+          "roleType": "railgun"
+        },
+        {
+          "cooldown": 0,
+          "health": 320,
+          "id": 41002,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 7
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41004,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 8
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41005,
+          "level": 1,
+          "pos": {
+            "x": 34,
+            "y": 8
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41006,
+          "level": 1,
+          "pos": {
+            "x": 33,
+            "y": 8
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41008,
+          "level": 1,
+          "pos": {
+            "x": 34,
+            "y": 3
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 490,
+          "id": 41009,
+          "level": 1,
+          "pos": {
+            "x": 33,
+            "y": 3
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41010,
+          "level": 1,
+          "pos": {
+            "x": 35,
+            "y": 8
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41011,
+          "level": 1,
+          "pos": {
+            "x": 36,
+            "y": 8
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41012,
+          "level": 1,
+          "pos": {
+            "x": 37,
+            "y": 8
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41013,
+          "level": 1,
+          "pos": {
+            "x": 35,
+            "y": 3
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41014,
+          "level": 1,
+          "pos": {
+            "x": 36,
+            "y": 3
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41015,
+          "level": 1,
+          "pos": {
+            "x": 37,
+            "y": 3
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41016,
+          "level": 1,
+          "pos": {
+            "x": 37,
+            "y": 4
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 41017,
+          "level": 1,
+          "pos": {
+            "x": 37,
+            "y": 7
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 200,
+          "id": 41003,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 6
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 0,
+          "id": 41000,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 4
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 820,
+          "id": 41001,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 5
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 0,
+          "id": 41007,
+          "level": 1,
+          "pos": {
+            "x": 32,
+            "y": 3
+          },
+          "roleType": "wall"
+        }
+      ],
+      "totalScore": 2056,
+      "type": "defender"
+    },
+    "vendorShopList": [
+      {
+        "name": "stone",
+        "price": 1
+      },
+      {
+        "name": "iron",
+        "price": 3
+      },
+      {
+        "name": "copper",
+        "price": 5
+      }
+    ],
+    "weaponShopList": [
+      {
+        "name": "WeaponUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "WeaponUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallUpgradeVoucher1",
+        "price": 20
+      },
+      {
+        "name": "WallUpgradeVoucher2",
+        "price": 30
+      },
+      {
+        "name": "StationUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "StationUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallFixer",
+        "price": 10
+      },
+      {
+        "name": "Medicine",
+        "price": 10
+      },
+      {
+        "name": "DizzyWeapon",
+        "price": 100
+      },
+      {
+        "name": "Bomb",
+        "price": 100
+      },
+      {
+        "name": "SmallRobotSummonOrder",
+        "price": 20
+      },
+      {
+        "name": "MiddleRobotSummonOrder",
+        "price": 30
+      },
+      {
+        "name": "LargeRobotSummonOrder",
+        "price": 100
+      },
+      {
+        "name": "BossRobotSummonOrder",
+        "price": 200
+      },
+      {
+        "name": "AcientTablet",
+        "price": 15
+      },
+      {
+        "name": "StarSand",
+        "price": 15
+      },
+      {
+        "name": "FlameBreath",
+        "price": 15
+      },
+      {
+        "name": "FrostPotion",
+        "price": 15
+      },
+      {
+        "name": "ThornAmulet",
+        "price": 15
+      },
+      {
+        "name": "IronWhistle",
+        "price": 15
+      }
+    ],
+    "worldNews": {
+      "folkLegends": "民间传闻（本地夹具）：祭坛在 (4, 22) 附近，需献祭 FlameBreath、FrostPotion，第 88-128 回合有效",
+      "officialNews": ""
+    }
+  }
+}
