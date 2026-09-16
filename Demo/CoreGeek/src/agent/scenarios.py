@@ -9,6 +9,42 @@ from .wave_data import DEFAULT_PROFILE
 ROBOT_STATS = {'smallRobot': (40, 5, 1), 'middleRobot': (60, 10, 2),
                'largeRobot': (500, 20, 4), 'bossRobot': (800, 40, 10)}
 
+# User reports a central vendor and a shop northeast of it. Exact cells are
+# taken from the immutable request sample, NOT asserted universal official rules.
+CENTRAL_MARKET = {'vendor': Pos(20, 16), 'weaponShop': Pos(25, 20)}
+DEFAULT_MARKET_LAYOUT = 'central-sample-v1'
+LEGACY_MARKET_LAYOUT = 'legacy-random-v0'
+
+
+def _central_market(state):
+    """Move market fixtures only; keep other seeded cells unless they conflict.
+
+    Reserve full two-cell task footprints too. No imported state is migrated:
+    this runs only while constructing a new local scenario.
+    """
+    from .taskworld import point_cells
+    turn = Turn.load(state)
+    reserved = set(CENTRAL_MARKET.values())
+    legal = set(free_cells({**state, 'mapInfo': {**state['mapInfo'], 'zones': []}}, exclude_rings=True))
+    if not reserved <= legal:
+        raise ValueError('central market cells conflict with this fixture map')
+    used = set(reserved)
+    zones = state['mapInfo']['zones']
+    for zone in zones:
+        kind, pos = zone['neutralType'], Pos.load(zone['pos'])
+        if kind in CENTRAL_MARKET:
+            zone['pos'] = CENTRAL_MARKET[kind].dump()
+            continue
+        cells = set(point_cells(kind, pos))
+        if cells & used or not cells <= legal:
+            candidates = sorted(legal - used, key=lambda p: (distance(pos, p), p.x, p.y))
+            pos = next((p for p in candidates if set(point_cells(kind, p)) <= legal - used), None)
+            if pos is None:
+                raise ValueError('no room for non-overlapping neutral fixture')
+            zone['pos'] = pos.dump()
+            cells = set(point_cells(kind, pos))
+        used.update(cells)
+
 
 def observation(state):
     """Never let the competition policy see the local simulator's hidden state.
@@ -26,11 +62,13 @@ def observation(state):
 
 
 def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
-             profile=DEFAULT_PROFILE):
+             profile=DEFAULT_PROFILE, market_layout=DEFAULT_MARKET_LAYOUT):
     seed, pressure = int(seed), int(pressure)
     if side not in ('challenger', 'defender') or not 1 <= pressure <= 3:
         raise ValueError('side must be challenger/defender; pressure must be 1..3')
     profile = wave_data.validate_profile(profile)
+    if market_layout not in (DEFAULT_MARKET_LAYOUT, LEGACY_MARKET_LAYOUT):
+        raise ValueError('unknown market layout')
     rng = random.Random(seed)
     x, y = rng.randint(5, 12), rng.randint(22, 27)
     if side == 'defender':
@@ -78,6 +116,14 @@ def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
                  'defenderTaskPoint1', 'defenderTaskPoint2'] + ['stone']*6 + ['iron']*3 + ['copper']*3:
         p = available.pop()
         state['mapInfo']['zones'].append({'pos': p.dump(), 'neutralType': kind})
+    if market_layout == DEFAULT_MARKET_LAYOUT:
+        _central_market(state)
+    state['_demo']['market_layout'] = {
+        'id': market_layout,
+        'basis': 'user_report_and_request_sample' if market_layout == DEFAULT_MARKET_LAYOUT else 'historical_local_random',
+        'official_coordinates_confirmed': False,
+        'positions': {z['neutralType']: dict(z['pos']) for z in state['mapInfo']['zones']
+                      if z['neutralType'] in CENTRAL_MARKET}}
     # Seed the render identity ledger so the first round already reports moves.
     from .simulator import frame_view
     from . import taskworld, treasure

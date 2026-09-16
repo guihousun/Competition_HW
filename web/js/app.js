@@ -217,7 +217,7 @@
         this.panel.setMode('live', `seed ${seed}`);
         this.panel.status('已就绪');
         const sourceLabel = profile === 'local-pressure' ? `旧压力实验 ${pressure} 档` : '前七夜实测，后3夜为本地假设';
-        this.panel.toast(`新对局：种子 ${seed} · ${side === 'challenger' ? '蓝方' : '红方'} · ${sourceLabel}`, null);
+        this.panel.toast(`新对局：种子 ${seed} · ${side === 'challenger' ? '蓝方' : '红方'} · ${sourceLabel} · 小贩 (20,16)，商店 (25,20)`, null);
         this.renderer.fit(this.world);
         await this.refreshPreview();
         return true;
@@ -425,6 +425,15 @@
       } else {
         note.textContent = '波次来源：前7天附件实测 · 第8–10天未观测，本地假设每夜多5只小型';
         note.className = 'pill local';
+      }
+      const state = this.world && this.world.state;
+      const market = state && state._demo && state._demo.market_layout;
+      if (state) {
+        note.textContent += market && market.id === 'central-sample-v1'
+          ? ' · 商贩：中央样例布局（精确坐标待实机核验）'
+          : market && market.id === 'legacy-random-v0'
+            ? ' · 商贩：历史随机布局'
+            : ' · 商贩位置按当前快照保留';
       }
     }
 

@@ -29,6 +29,10 @@ scoped_review:
   items: [V-001, V-004]
   note: "仅复核怪物来源/位置与波次；其他历史条目及实现快照不冒充本次已核验"
 guide: docs/OFFICIAL_VERIFICATION_GUIDE.md
+market_geometry_review:
+  date: "2026-09-16"
+  items: [V-026]
+  note: "仅更新中央商贩几何；不把其他历史条目视为已复核"
 
 provenance:
   # 官方基线来源（本地镜像，不宣称上游今日未更新）
@@ -561,6 +565,21 @@ verification_items:
       code: "turnactions.apply_battle_items / turnactions.tick_dizzy；market.bomb_targets / market.dizzy_targets"
     question: "眩晕 5 回合是否含施放当回合（当回合机器人是否还能行动）？同回合多张眩晕/炸弹对同一机器人是否叠加、刷新还是各算一次？炸弹伤害是否按命中先后与血量上限截断？"
     evidence_needed: "官方一次眩晕/炸弹后的 abnormalState 与血量变化（含下一回合仍为 dizzy 的边界）"
+    confirmation: null
+
+  - id: V-026
+    title: 中央小贩与右上武器商店的精确坐标及跨地图稳定性
+    priority: P1
+    category: assumption
+    status: pending_official
+    official:
+      requirement: "R02/R06：两类中立点按 mapInfo.zones 识别。用户明确小贩中央、商店在其右上方；正文未给所有地图通用坐标"
+      refs: [request_sample, taskbook, user_supplements]
+    local:
+      behavior: "默认 central-sample-v1：vendor=(20,16)、weaponShop=(25,20)，精确格子取原始请求样例。旧录像/导入不迁移，legacy-random-v0 仅复现历史随机几何；策略始终读实际观测"
+      code: "scenarios.scenario / _central_market；docs/RULE_SUPPLEMENTS.md S05"
+    question: "真实比赛 mapInfo.zones 的 vendor、weaponShop 是否就是这两个坐标？不同地图或半场是否变化？"
+    evidence_needed: "一次脱敏 mapInfo.zones 中两条中立点记录及地图版本；如换图会变，再附另一个地图的这两条记录"
     confirmation: null
 
 # 需在官方材料更新后复核的历史登记（避免把已知实现进展误报为"仍未实现"）
