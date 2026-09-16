@@ -1,0 +1,108 @@
+test_a_b_a_rejected_after_restore_and_json_reordering (test_issue27_feedback_loop.FeedbackTests.test_a_b_a_rejected_after_restore_and_json_reordering) ... ok
+test_compound_crlf_recovery_only_proposes_check (test_issue27_feedback_loop.FeedbackTests.test_compound_crlf_recovery_only_proposes_check) ... ok
+test_http_page_diagnostics_preserve_recovery_and_unknown (test_issue27_feedback_loop.FeedbackTests.test_http_page_diagnostics_preserve_recovery_and_unknown) ... ok
+test_legacy_migration_and_invalid_memory_rejected (test_issue27_feedback_loop.FeedbackTests.test_legacy_migration_and_invalid_memory_rejected) ... ok
+test_new_answer_and_tool_investigation_remain_available (test_issue27_feedback_loop.FeedbackTests.test_new_answer_and_tool_investigation_remain_available) ... ok
+test_real_check_only_recovery_preserves_prefix_side_effects_and_check (test_issue27_feedback_loop.FeedbackTests.test_real_check_only_recovery_preserves_prefix_side_effects_and_check) ... skipped 'actual POSIX recovery'
+test_rejection_memory_has_its_own_prompt_budget (test_issue27_feedback_loop.FeedbackTests.test_rejection_memory_has_its_own_prompt_budget) ... ok
+test_rejection_outlives_short_history_but_not_new_task (test_issue27_feedback_loop.FeedbackTests.test_rejection_outlives_short_history_but_not_new_task) ... ok
+test_router_verified_failure_auto_recovery_is_bounded (test_issue27_feedback_loop.FeedbackTests.test_router_verified_failure_auto_recovery_is_bounded) ... ok
+test_unknown_or_nonadjacent_feedback_does_not_blacklist (test_issue27_feedback_loop.FeedbackTests.test_unknown_or_nonadjacent_feedback_does_not_blacklist) ... ok
+test_both_sides_reject_repeated_answer_through_real_router_and_state (test_issue27_feedback_loop.PipelineFeedbackTests.test_both_sides_reject_repeated_answer_through_real_router_and_state) ... ok
+
+----------------------------------------------------------------------
+Ran 11 tests in 0.412s
+
+OK (skipped=1)
+test_expired_router_operation_can_replan_without_fabricating_a_reply (test_task_agent.TaskAgentTests.test_expired_router_operation_can_replan_without_fabricating_a_reply) ... ok
+test_full_model_tool_loop_and_exact_answer (test_task_agent.TaskAgentTests.test_full_model_tool_loop_and_exact_answer) ... ok
+test_invalid_json_and_forged_evidence_or_official_fields_never_execute (test_task_agent.TaskAgentTests.test_invalid_json_and_forged_evidence_or_official_fields_never_execute) ... ok
+test_offer_preview_and_duplicate_ack_do_not_consume_counts (test_task_agent.TaskAgentTests.test_offer_preview_and_duplicate_ack_do_not_consume_counts) ... ok
+test_old_generation_same_round_and_unverified_receipts_do_not_act (test_task_agent.TaskAgentTests.test_old_generation_same_round_and_unverified_receipts_do_not_act) ... ok
+test_repair_calls_are_bounded_and_task_end_drops_work (test_task_agent.TaskAgentTests.test_repair_calls_are_bounded_and_task_end_drops_work) ... ok
+test_restore_rejects_corrupted_or_unbounded_state (test_task_agent.TaskAgentTests.test_restore_rejects_corrupted_or_unbounded_state) ... ok
+test_wrong_answer_feedback_allows_a_new_plan_not_fake_success (test_task_agent.TaskAgentTests.test_wrong_answer_feedback_allows_a_new_plan_not_fake_success) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 0.007s
+
+OK
+test_callback_failure_does_not_lose_later_summaries (test_ordered_diagnostics.OrderedDiagnosticsTests.test_callback_failure_does_not_lose_later_summaries) ... diagnostics_summary_failed
+ok
+test_later_http_write_cannot_overtake_earlier_summary (test_ordered_diagnostics.OrderedDiagnosticsTests.test_later_http_write_cannot_overtake_earlier_summary) ... ok
+test_slow_logger_does_not_block_response_completion_or_fill_without_bound (test_ordered_diagnostics.OrderedDiagnosticsTests.test_slow_logger_does_not_block_response_completion_or_fill_without_bound) ... diagnostics_queue_dropped count=1
+ok
+test_task_check_association_survives_delayed_earlier_post_write_work (test_ordered_diagnostics.OrderedDiagnosticsTests.test_task_check_association_survives_delayed_earlier_post_write_work) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.026s
+
+OK
+test_absent_or_non_list_errors_stay_unknown_not_zero (test_diagnostics.ErrorAndEnrichmentTests.test_absent_or_non_list_errors_stay_unknown_not_zero) ... ok
+test_bounded_evidence_from_the_actual_request (test_diagnostics.ErrorAndEnrichmentTests.test_bounded_evidence_from_the_actual_request) ... ok
+test_decision_report_is_optional_and_bounded (test_diagnostics.ErrorAndEnrichmentTests.test_decision_report_is_optional_and_bounded) ... ok
+test_empty_error_list_is_an_observed_zero (test_diagnostics.ErrorAndEnrichmentTests.test_empty_error_list_is_an_observed_zero) ... ok
+test_malformed_error_values_count_as_unknown (test_diagnostics.ErrorAndEnrichmentTests.test_malformed_error_values_count_as_unknown) ... ok
+test_missing_target_team_stays_unknown (test_diagnostics.ErrorAndEnrichmentTests.test_missing_target_team_stays_unknown) ... ok
+test_mixed_error_codes_are_categorized_exactly (test_diagnostics.ErrorAndEnrichmentTests.test_mixed_error_codes_are_categorized_exactly) ... ok
+test_task_and_answer_failures_are_not_protocol_errors (test_diagnostics.ErrorAndEnrichmentTests.test_task_and_answer_failures_are_not_protocol_errors) ... ok
+test_missing_manifest_in_repo_checkout_uses_git_commit (test_diagnostics.IdentityTests.test_missing_manifest_in_repo_checkout_uses_git_commit) ... ok
+test_tampered_manifest_is_not_trusted (test_diagnostics.IdentityTests.test_tampered_manifest_is_not_trusted) ... ok
+test_unsafe_manifest_paths_are_rejected_without_echo (test_diagnostics.IdentityTests.test_unsafe_manifest_paths_are_rejected_without_echo) ... ok
+test_verified_manifest_outranks_parent_git_commit (test_diagnostics.IdentityTests.test_verified_manifest_outranks_parent_git_commit) ... ok
+test_boolean_pending_state_and_advice_survive (test_diagnostics.IntegratedDecisionTests.test_boolean_pending_state_and_advice_survive) ... ok
+test_channel_only_response_is_distinguished_from_truly_empty (test_diagnostics.SummaryTests.test_channel_only_response_is_distinguished_from_truly_empty) ... ok
+test_command_tally_keeps_unknown_actions_out_of_named_buckets (test_diagnostics.SummaryTests.test_command_tally_keeps_unknown_actions_out_of_named_buckets) ... ok
+test_emit_is_fail_open (test_diagnostics.SummaryTests.test_emit_is_fail_open) ... ok
+test_failed_action_flags_and_protocol_errors_stay_separate (test_diagnostics.SummaryTests.test_failed_action_flags_and_protocol_errors_stay_separate) ... ok
+test_missing_cooldown_is_not_ready (test_diagnostics.SummaryTests.test_missing_cooldown_is_not_ready) ... ok
+test_missing_health_is_unknown_not_dead (test_diagnostics.SummaryTests.test_missing_health_is_unknown_not_dead) ... ok
+test_missing_robot_data_is_not_cleared_robots (test_diagnostics.SummaryTests.test_missing_robot_data_is_not_cleared_robots) ... ok
+test_nonfinite_health_is_unknown (test_diagnostics.SummaryTests.test_nonfinite_health_is_unknown) ... ok
+test_observed_zero_cooldown_is_ready (test_diagnostics.SummaryTests.test_observed_zero_cooldown_is_ready) ... ok
+test_observed_zero_health_is_dead (test_diagnostics.SummaryTests.test_observed_zero_health_is_dead) ... ok
+test_parse_failure_and_planner_exception_are_labelled (test_diagnostics.SummaryTests.test_parse_failure_and_planner_exception_are_labelled) ... ok
+test_secret_sentinel_never_reaches_the_summary (test_diagnostics.SummaryTests.test_secret_sentinel_never_reaches_the_summary) ... ok
+test_summary_does_not_mutate_the_observation (test_diagnostics.SummaryTests.test_summary_does_not_mutate_the_observation) ... ok
+test_task_items_are_reported_as_inventory_hint_only (test_diagnostics.SummaryTests.test_task_items_are_reported_as_inventory_hint_only) ... ok
+test_diagnostics_failure_cannot_change_http_body (test_diagnostics_review.DiagnosticReviewTests.test_diagnostics_failure_cannot_change_http_body) ... ok
+test_manifest_cannot_omit_identity_fields (test_diagnostics_review.DiagnosticReviewTests.test_manifest_cannot_omit_identity_fields) ... ok
+test_no_invented_controller_pairing (test_diagnostics_review.DiagnosticReviewTests.test_no_invented_controller_pairing) ... ok
+test_nonfinite_base_health_keeps_summary_available (test_diagnostics_review.DiagnosticReviewTests.test_nonfinite_base_health_keeps_summary_available) ... ok
+test_pairing_comes_from_issued_action (test_diagnostics_review.DiagnosticReviewTests.test_pairing_comes_from_issued_action) ... ok
+test_unknown_controller_health_stays_unknown (test_diagnostics_review.DiagnosticReviewTests.test_unknown_controller_health_stays_unknown) ... ok
+test_unversioned_bundle_inside_git_checkout_has_unknown_commit (test_diagnostics_review.DiagnosticReviewTests.test_unversioned_bundle_inside_git_checkout_has_unknown_commit) ... ok
+
+----------------------------------------------------------------------
+Ran 34 tests in 1.444s
+
+OK
+test_check_timeout_is_bounded_and_not_a_pass (test_task_tools.TaskToolsTests.test_check_timeout_is_bounded_and_not_a_pass) ... skipped 'Linux process-group timeout'
+test_crlf_check_preserves_source_and_exit_status (test_task_tools.TaskToolsTests.test_crlf_check_preserves_source_and_exit_status) ... skipped 'Linux check execution'
+test_error_driven_auth_and_parameter_recovery_encodes_unicode (test_task_tools.TaskToolsTests.test_error_driven_auth_and_parameter_recovery_encodes_unicode) ... ok
+test_existing_query_unicode_is_encoded_and_profile_has_no_query (test_task_tools.TaskToolsTests.test_existing_query_unicode_is_encoded_and_profile_has_no_query) ... ok
+test_invalid_arguments_and_unrecognized_command_rejected (test_task_tools.TaskToolsTests.test_invalid_arguments_and_unrecognized_command_rejected) ... ok
+test_list_and_empty_data_are_preserved_without_guessing_answer (test_task_tools.TaskToolsTests.test_list_and_empty_data_are_preserved_without_guessing_answer) ... ok
+test_no_auth_hint_no_guess_and_multiple_business_params_no_rename (test_task_tools.TaskToolsTests.test_no_auth_hint_no_guess_and_multiple_business_params_no_rename) ... ok
+test_redirect_does_not_leak_headers_and_truncation_prevents_profile (test_task_tools.TaskToolsTests.test_redirect_does_not_leak_headers_and_truncation_prevents_profile) ... ok
+test_rendered_shell_http_command_keeps_unicode_parameters (test_task_tools.TaskToolsTests.test_rendered_shell_http_command_keeps_unicode_parameters) ... skipped 'rendered POSIX shell command'
+
+----------------------------------------------------------------------
+Ran 9 tests in 5.326s
+
+OK (skipped=3)
+test_fenced_command_and_bare_verified_token_submit_without_extra_round (test_task_answer_contract.ContractPipelineTests.test_fenced_command_and_bare_verified_token_submit_without_extra_round) ... ok
+test_issue26_instruction_echo_is_rejected_and_corrected_on_both_sides (test_task_answer_contract.ContractPipelineTests.test_issue26_instruction_echo_is_rejected_and_corrected_on_both_sides) ... ok
+test_wrong_shape_replans_locally_without_emitting_invalid_submission (test_task_answer_contract.ContractPipelineTests.test_wrong_shape_replans_locally_without_emitting_invalid_submission) ... ok
+test_api_contract_prevents_scalar_and_missing_fields_not_wrong_numbers (test_task_answer_contract.ContractTests.test_api_contract_prevents_scalar_and_missing_fields_not_wrong_numbers) ... ok
+test_exact_confirmed_syntax_failure_is_not_reissued (test_task_answer_contract.ContractTests.test_exact_confirmed_syntax_failure_is_not_reissued) ... ok
+test_observed_heredoc_family_and_valid_literal_content (test_task_answer_contract.ContractTests.test_observed_heredoc_family_and_valid_literal_content) ... ok
+test_only_named_task_file_not_api_response_examples_defines_contract (test_task_answer_contract.ContractTests.test_only_named_task_file_not_api_response_examples_defines_contract) ... ok
+test_strict_single_fence_keeps_nonce_and_duplicate_key_checks (test_task_answer_contract.ContractTests.test_strict_single_fence_keeps_nonce_and_duplicate_key_checks) ... ok
+test_token_format_repair_requires_actual_successful_check (test_task_answer_contract.ContractTests.test_token_format_repair_requires_actual_successful_check) ... ok
+test_unknown_numeric_and_conflicting_contracts_are_not_invented (test_task_answer_contract.ContractTests.test_unknown_numeric_and_conflicting_contracts_are_not_invented) ... ok
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.460s
+
+OK

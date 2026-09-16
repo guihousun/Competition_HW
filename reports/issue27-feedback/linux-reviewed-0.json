@@ -1,0 +1,345 @@
+{
+  "scope": "Actual tar.gz main3 HTTP; scripted model/virtual tools, not intranet PASS",
+  "source_commit": "1edb4979c206c0bf655e6bf07227fd653c8ed3e3",
+  "archive_sha256": "d76d428d60bc72640b208b280c539ac1b7ce0ddf11f0fe5e6ddb8c1d2e937111",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 101.35530299999118,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 2,
+          "ms": 20.921854999983225,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 3,
+          "ms": 12.986135999994985,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 4,
+          "ms": 11.185161000014432,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 5,
+          "ms": 10.824078999974063,
+          "prompt": false,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            },
+            "10011": {
+              "action": "submitAnswer",
+              "taskAnswer": "{\"token\": \"fixture-token-0\"}"
+            }
+          }
+        },
+        {
+          "round": 6,
+          "ms": 8.480397999960587,
+          "prompt": false,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "outcome_summary": {
+        "counts": {
+          "answer_errors": 0,
+          "checks": 1,
+          "checks_passed": 1,
+          "commands": 2,
+          "prompts": 2,
+          "submissions": 1
+        },
+        "end_reason": "task_text_ended",
+        "end_round": 6,
+        "episode_stats_delta": {
+          "gold": 80,
+          "totalScore": 80
+        },
+        "last_check": {
+          "all_checks_passed": true,
+          "association": "adjacent_observation",
+          "command_round": 3,
+          "exit_code": 0,
+          "round": 4,
+          "status": "passed",
+          "token_seen": true,
+          "token_sha256": "2604aa9ad317d19f4cf728870513e8858425514278ba5c35936d0595246220cb"
+        },
+        "last_submission": {
+          "answer_sha256": "ac9fbb2e88d1fb40cbaf03c76dd42d40a038e4e2ba70a88c9c70c34f6d13923b",
+          "format": "token_object",
+          "matches_last_check_token": true,
+          "role": "10011",
+          "round": 5
+        },
+        "meaning": "已提交，官方判题结果未确认",
+        "observation_gap": false,
+        "official_success_confirmed": false,
+        "reward_attribution": "unknown_other_actions_may_contribute",
+        "start_round": 1,
+        "status": "submitted_unconfirmed",
+        "submission_feedback": {
+          "action_legal": true,
+          "answer_error_kind": null,
+          "answer_error_observed": false,
+          "association": "adjacent_observation",
+          "observed_error_codes": [],
+          "observed_round": 6,
+          "official_success_confirmed": false,
+          "reward_attribution": "unknown_other_actions_may_contribute",
+          "role": "10011",
+          "stats_delta": {
+            "gold": 80,
+            "totalScore": 80
+          },
+          "submission_round": 5
+        }
+      }
+    },
+    {
+      "side": "defender",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 46.8294789999959,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 2,
+          "ms": 9.093272000029629,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 3,
+          "ms": 7.502795999982936,
+          "prompt": false,
+          "command": true,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 4,
+          "ms": 8.640145000015309,
+          "prompt": true,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        },
+        {
+          "round": 5,
+          "ms": 7.681169000022692,
+          "prompt": false,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            },
+            "10011": {
+              "action": "submitAnswer",
+              "taskAnswer": "{\"token\": \"fixture-token-1\"}"
+            }
+          }
+        },
+        {
+          "round": 6,
+          "ms": 7.219469000006029,
+          "prompt": false,
+          "command": false,
+          "actions": {
+            "10010": {
+              "action": "move",
+              "targetPos": [
+                {
+                  "x": 4,
+                  "y": 2
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "outcome_summary": {
+        "counts": {
+          "answer_errors": 0,
+          "checks": 1,
+          "checks_passed": 1,
+          "commands": 2,
+          "prompts": 2,
+          "submissions": 1
+        },
+        "end_reason": "task_text_ended",
+        "end_round": 6,
+        "episode_stats_delta": {
+          "gold": 80,
+          "totalScore": 80
+        },
+        "last_check": {
+          "all_checks_passed": true,
+          "association": "adjacent_observation",
+          "command_round": 3,
+          "exit_code": 0,
+          "round": 4,
+          "status": "passed",
+          "token_seen": true,
+          "token_sha256": "b66f845026be3e62956b2ecc3dd286bd3b73204cd10806929139a1907e4f90a3"
+        },
+        "last_submission": {
+          "answer_sha256": "a7b8febe4ddf3249bb727082c6f6635086294a48080ab64eceb5dad2b5fa7e15",
+          "format": "token_object",
+          "matches_last_check_token": true,
+          "role": "10011",
+          "round": 5
+        },
+        "meaning": "已提交，官方判题结果未确认",
+        "observation_gap": false,
+        "official_success_confirmed": false,
+        "reward_attribution": "unknown_other_actions_may_contribute",
+        "start_round": 1,
+        "status": "submitted_unconfirmed",
+        "submission_feedback": {
+          "action_legal": true,
+          "answer_error_kind": null,
+          "answer_error_observed": false,
+          "association": "adjacent_observation",
+          "observed_error_codes": [],
+          "observed_round": 6,
+          "official_success_confirmed": false,
+          "reward_attribution": "unknown_other_actions_may_contribute",
+          "role": "10011",
+          "stats_delta": {
+            "gold": 80,
+            "totalScore": 80
+          },
+          "submission_round": 5
+        }
+      }
+    }
+  ],
+  "structured_http": false,
+  "fenced_model": true,
+  "check_task": true
+}

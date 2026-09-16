@@ -1,0 +1,70 @@
+{
+  "source_commit": "1edb4979c206c0bf655e6bf07227fd653c8ed3e3",
+  "archive_sha256": "d76d428d60bc72640b208b280c539ac1b7ce0ddf11f0fe5e6ddb8c1d2e937111",
+  "official_pass": false,
+  "scope": "Local runtime/transport/regression tests; synthetic replies and fixtures, no intranet access",
+  "full_suite": {
+    "platform": "WSL Ubuntu Linux",
+    "python": "3.12.3",
+    "tests": 1020,
+    "seconds": 363.89,
+    "skipped": 0,
+    "passed": true
+  },
+  "windows": {
+    "python": "3.11.10",
+    "focused_tests": 76,
+    "skipped_posix_tests": 4,
+    "passed": true
+  },
+  "package_probes": [
+    {
+      "file": "windows-check-0.json",
+      "requests": 12,
+      "max_ms": 146.15689998026937
+    },
+    {
+      "file": "windows-check-1.json",
+      "requests": 12,
+      "max_ms": 160.78889998607337
+    },
+    {
+      "file": "windows-check-2.json",
+      "requests": 12,
+      "max_ms": 148.1639000121504
+    },
+    {
+      "file": "windows-http.json",
+      "requests": 10,
+      "max_ms": 147.0433000358753
+    },
+    {
+      "file": "linux-reviewed-0.json",
+      "requests": 12,
+      "max_ms": 101.35530299999118
+    },
+    {
+      "file": "linux-reviewed-1.json",
+      "requests": 12,
+      "max_ms": 98.59456199995975
+    },
+    {
+      "file": "linux-reviewed-2.json",
+      "requests": 12,
+      "max_ms": 93.64286300001368
+    }
+  ],
+  "files": {
+    "feedback-linux-reviewed.log": "bcae72eb083f0a07ed7b170b8ebb6c3c689e3939b97c219aaae261e0aedf1987",
+    "feedback-windows-reviewed.log": "3106a3f62c9beb6d6f2a9c33406367212f90f984e84d7da095b915cfbee4a620",
+    "windows-check-0.json": "ddee838831db2e524550bfe7be6da8759618f8cc0b490c4579f3d1fd024b9f1a",
+    "windows-check-1.json": "0f03a1c3030fdf6aa31a41c2240661cdde252b402e48eed43b60d4d47fcbba7d",
+    "windows-check-2.json": "5a4a714b3416b1e10269ad4890c69dd3fe206e3858a301e1dc95ff74191fb13f",
+    "windows-http.json": "8d47acd1d30f088246ade96c41e9a64e1b7d39fa4e0a0a5c23b30288ec82a5ee",
+    "linux-reviewed-0.json": "d8f65cc2c9b279d0e1c1841c00f0cb118d497386a694070a7d7f110f9a354c18",
+    "linux-reviewed-1.json": "da1290c25c1c86894d12e5178afa4e7a120fe5535329373aad872dfb164f179b",
+    "linux-reviewed-2.json": "c2e6a1f3c8bb70aea7db110e3c40b93e03a7c52ee3948af333624b3346d04ab7"
+  },
+  "total_package_requests": 82,
+  "evidence_hash_basis": "Committed Git blob bytes; text line endings canonicalized by Git"
+}

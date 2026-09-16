@@ -1,5 +1,5 @@
 {
-  "commit": "e0c9410702dbcf80708e76faa8c4fabc8054eebd",
+  "commit": "1edb4979c206c0bf655e6bf07227fd653c8ed3e3",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -212,6 +212,12 @@
       "source": "Demo/CoreGeek/src/agent/nightwork.py"
     },
     {
+      "bytes": 2225,
+      "path": "CoreGeek/src/agent/ordered_diagnostics.py",
+      "sha256": "b02c4a48ec3ac1a32b26c095a2d0fa038e4c2e23fddd6f7cd59fe3f30868918f",
+      "source": "Demo/CoreGeek/src/agent/ordered_diagnostics.py"
+    },
+    {
       "bytes": 2228,
       "path": "CoreGeek/src/agent/pioneer_safety.py",
       "sha256": "d3401e3db26f0ae6a662a08be68a798fb08569557a50bb2cf75350181971458d",
@@ -254,9 +260,9 @@
       "source": "Demo/CoreGeek/src/agent/scenarios.py"
     },
     {
-      "bytes": 4414,
+      "bytes": 4496,
       "path": "CoreGeek/src/agent/server.py",
-      "sha256": "e17e33f5875b1599ded7f05c202fe03076ca288d8ffab8b34fc57d1d5f9ebd0d",
+      "sha256": "0893310915f2ad1bebb94689c1b29b17846962a1818b32457ed12db2fbbe8a33",
       "source": "submission/server.py"
     },
     {
@@ -266,9 +272,9 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 24292,
+      "bytes": 28751,
       "path": "CoreGeek/src/agent/task_agent.py",
-      "sha256": "c78bc2116ef566cff3e313cc1dc53a3813f159741584e8f09b4a05b37e5cd39a",
+      "sha256": "6314c6e2658abcceea453b892978b34253e692370a2f80e779b3f6c8ac171b8f",
       "source": "Demo/CoreGeek/src/agent/task_agent.py"
     },
     {
@@ -282,6 +288,12 @@
       "path": "CoreGeek/src/agent/task_context.py",
       "sha256": "1b2b425b3a635169ae42ad4b01a0f09359d5316b9e848f1ed253757c0f25b099",
       "source": "Demo/CoreGeek/src/agent/task_context.py"
+    },
+    {
+      "bytes": 4274,
+      "path": "CoreGeek/src/agent/task_feedback.py",
+      "sha256": "32bc84de84542f5929668104147a4c00d89f82934920010ebd8972c633b99914",
+      "source": "Demo/CoreGeek/src/agent/task_feedback.py"
     },
     {
       "bytes": 12916,
@@ -308,9 +320,9 @@
       "source": "Demo/CoreGeek/src/agent/task_skills.py"
     },
     {
-      "bytes": 8799,
+      "bytes": 10312,
       "path": "CoreGeek/src/agent/task_tools.py",
-      "sha256": "72852fe385a11f88d53a376f9bbe3212ed33ee59f33d6e34a1bda98fe325b627",
+      "sha256": "4c89100314103429336a471bc3877035a35c9161a87bffc772971a69d7493779",
       "source": "Demo/CoreGeek/src/agent/task_tools.py"
     },
     {
@@ -332,9 +344,9 @@
       "source": "Demo/CoreGeek/src/agent/taskworld.py"
     },
     {
-      "bytes": 26503,
+      "bytes": 26680,
       "path": "CoreGeek/src/agent/team_agent.py",
-      "sha256": "5f4005f0a3e07134cb6cae235ae12922089782b917335e15db5ac9add55c6d1d",
+      "sha256": "cc2aa88e0acbeffe23851b08d7089f43ed9fdb3d6fb723410d9ebd2caf5156f3",
       "source": "Demo/CoreGeek/src/agent/team_agent.py"
     },
     {
@@ -411,5 +423,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "63924a4c94add6d8074d935a668e67b1265ed4d4a12af7112a6e65589f004119"
+  "source_digest": "99d3e6efaebdd0ffac2b8c7ba42e85d05087a9ecaf9502de0d4a17e131aa8f6f"
 }
