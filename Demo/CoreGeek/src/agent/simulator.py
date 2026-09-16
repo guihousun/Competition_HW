@@ -162,7 +162,7 @@ def _adjacent_building(turn: Turn, origin: Pos) -> Pos | None:
 
 def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
                   blocked: set[Pos]) -> tuple[list[tuple[str, Pos]], list[tuple[str, Pos, str]]]:
-    """Resolve simultaneous role moves (任务书 §4.5.4 第5条).
+    """Resolve simultaneous movement intents (任务书 §4.5.4 第5条).
 
     ``origins`` includes stationary roles; ``blocked`` contains only hard
     obstacles, never dynamic role origins. A hard obstacle wins even when an
@@ -170,6 +170,8 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     then propagate blocked departures. Chains and cycles of three or more
     distinct movers can vacate their cells simultaneously (任务书 §4.2).
     The returned list is a final-position batch, not sequential move commands.
+    The official swap clause names two roles; applying that refusal to robot
+    pairs is a conservative local extension, documented in SIM_JOINT_MOVEMENT.
     """
     occupants: dict[Pos, set[str]] = {}
     for uid, pos in origins.items():
@@ -182,15 +184,15 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
         if target in blocked:
             reasons[uid] = "目标格被永久障碍占用"
         elif len(goals[target]) > 1:
-            reasons[uid] = "目标格被其他角色同时争抢"
+            reasons[uid] = "目标格被其他单位同时争抢"
         elif uid not in origins or target == origins[uid]:
             reasons[uid] = "移动未离开原位置"
     for uid, target in moves.items():
         for other in occupants.get(target, ()):
             if (uid in origins and other != uid and other in moves
                     and moves[other] == origins[uid]):
-                reasons.setdefault(uid, "两名角色互换位置发生碰撞")
-                reasons.setdefault(other, "两名角色互换位置发生碰撞")
+                reasons.setdefault(uid, "两移动单位互换位置发生碰撞")
+                reasons.setdefault(other, "两移动单位互换位置发生碰撞")
     departing = set(moves) - set(reasons)
     while True:
         stopped = {uid for uid in departing
@@ -212,6 +214,128 @@ def _movement_terrain(turn: Turn) -> set[Pos]:
 
 
 from .combat_geometry import intervening_wall as _intervening_wall
+
+
+def _hard_movement_cells(turn: Turn) -> set[Pos]:
+    """Buildings and neutral cells never vacate; enemy players stay stationary."""
+    blocked = _movement_terrain(turn)
+    fixed = (tuple(u for u in turn.ours if u.kind not in ('worker', 'pioneer'))
+             + turn.enemies)
+    for unit in fixed:
+        if unit.health > 0:
+            blocked.update(turn.footprint(unit))
+    return blocked
+
+
+def _settle_joint_moves(state, role_moves: dict[str, Pos], robot_moves: dict[str, Pos]):
+    """Apply one shared collision batch. Robot keys have a separate id space.
+
+    Inputs are already chosen, adjacent intents; neither collisions nor their
+    propagation may trigger a second path choice in this round.
+    """
+    turn = Turn.load(state)
+    own = {str(u['id']): u for u in state['teamOur']['roles']}
+    robots = {str(u['id']): u for u in (state.get('robot') or {}).get('roles') or ()}
+    origins = {str(u.unit_id): u.pos for u in turn.controllable()}
+    origins.update({'robot:' + str(u.robot_id): u.pos
+                    for u in turn.robots if u.health > 0})
+    moves = dict(role_moves)
+    moves.update({'robot:' + uid: target for uid, target in robot_moves.items()})
+    resolved, rejected = resolve_moves(moves, origins, _hard_movement_cells(turn))
+    role_records, robot_records = [], []
+    for key, target in resolved:
+        is_robot = key.startswith('robot:')
+        unit = robots[key[6:]] if is_robot else own[key]
+        # All acceptance decisions above used the same original positions.
+        unit['pos'] = target.dump()
+        if is_robot:
+            robot_records.append({'robot': unit['id'], 'kind': unit.get('roleType'),
+                                  'from': origins[key].dump(), 'to': target.dump()})
+        else:
+            role_records.append({'a': 'move', 'id': unit['id'], 'kind': unit['roleType'],
+                                 'from': origins[key].dump(), 'to': target.dump()})
+    return role_records, robot_records, rejected
+
+
+def _plan_robot_actions(state):
+    """Existing greedy AI, with every intent read from one pre-movement snapshot.
+
+    Acquisition/path tie-breaks are local assumptions, not official AI. Selecting
+    and locking a ranged attack before player movement is also a local timing
+    assumption; the rule text does not specify that cross-action ordering.
+    """
+    turn = Turn.load(state)
+    roles = state['teamOur']['roles']
+    by_id = {str(u['id']): u for u in roles}
+    robots = (state.get('robot') or {}).get('roles') or []
+    hard_blocked = _hard_movement_cells(turn)
+    robot_moves, robot_attacks = {}, []
+    if not turn.is_day:
+        for robot in robots:
+            if robot['health'] <= 0 or robot.get('abnormalState') == 'dizzy':
+                continue
+            # Do not redirect robots explicitly assigned to the other team.
+            if robot.get('targetTeam', state['teamOur'].get('type')) != state['teamOur'].get('type'):
+                continue
+            p = Pos.load(robot['pos'])
+            # Buildings are handled as obstacles, not as unit targets: a robot
+            # attacks the wall in its way rather than "the nearest unit" (which
+            # would often *be* that wall, and would blur two different behaviours
+            # into one record type).
+            units = [u for u in roles if u['health'] > 0
+                     and u['roleType'] not in ATTACKABLE_BUILDING_KINDS
+                     and min(distance(p, c) for c in cells(u)) <= 3]
+            victim = None
+            goal = None
+            if units:
+                victim = min(units, key=lambda u: min(distance(p, c) for c in cells(u)))
+                goal = min(cells(victim), key=lambda c: distance(p, c))
+            else:
+                # S06 user observation: advance on the base, engage nearby roles.
+                # Acquisition radius 3 is a local assumption, not official AI.
+                base = turn.station()
+                goal = (min(turn.footprint(base), key=lambda c: (distance(p, c), abs(p.x-c.x)+abs(p.y-c.y), c.x, c.y))
+                        if base is not None else _nearest_building_cell(turn, p))
+            screening_wall = None
+            if victim is not None and goal is not None and distance(p, goal) <= 3:
+                screening_wall = _intervening_wall(turn, p, goal)
+            if victim is not None and goal is not None and distance(p, goal) <= 3 and screening_wall is None:
+                power = ROBOT_STATS.get(robot.get('roleType'), (40,5,1))[1]
+                robot_attacks.append({'robot': robot['id'], 'kind': robot.get('roleType'),
+                                      'victim': victim['id'], 'damage': power,
+                                      'from': p.dump(), 'to': goal.dump()})
+                continue
+            # No unit in reach: hit whatever building is in the way. 任务书 §4.7.3
+            # has robots attack blocking units *and buildings*, so a wall must be
+            # breakable even when nothing else is nearby.
+            if screening_wall is not None:
+                blocked_by = screening_wall
+            elif goal is not None:
+                blocked_by = _blocking_building(turn, p, goal)
+            else:
+                blocked_by = _adjacent_building(turn, p)
+            if blocked_by is not None:
+                power = ROBOT_STATS.get(robot.get('roleType'), (40,5,1))[1]
+                # Key the damage by the building's unit id: robot records and role
+                # records use different id spaces, and a cell-keyed Counter silently
+                # never matches a unit when the damage is committed.
+                target_building = _building_at(turn, blocked_by)
+                building_unit = by_id.get(str(target_building.unit_id)) if target_building else None
+                if building_unit is None:
+                    continue
+                robot_attacks.append({'robot': robot['id'], 'kind': robot.get('roleType'),
+                                      'building': int(building_unit['id']), 'damage': power,
+                                      'buildingKind': building_unit['roleType'],
+                                      'from': p.dump(), 'to': blocked_by.dump()})
+                continue
+            options = [Pos(p.x + dx, p.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
+            options = [q for q in options if turn.land(q) and q not in hard_blocked
+                       and (goal is None or distance(q, goal) < distance(p, goal))]
+            if options:
+                q = min(options, key=lambda c: (distance(c, goal) if goal is not None else 0,
+                                                c.x, c.y))
+                robot_moves[str(robot['id'])] = q
+    return robot_moves, robot_attacks
 
 
 def step(payload, commands=None, *, external_response=None):
@@ -515,29 +639,6 @@ def step(payload, commands=None, *, external_response=None):
                             'level': int(unit.get('level') or 1), 'from': pos.dump(),
                             'controller': controller['id'], 'salvos': salvos,
                             'source': 'missile'})
-    # Preserve all stationary roles and hard occupancy; only an actual successful
-    # departure can free a role's cell. Buildings built earlier in this settle
-    # pass also block movement. Robots/enemies have no intents in this role pass:
-    # enemy policy is stationary and robot navigation remains a later local
-    # approximation, not an official joint role/robot collision implementation.
-    movement_turn = Turn.load(state)
-    origins = {str(u.unit_id): u.pos for u in movement_turn.controllable()}
-    hard_blocked = terrain | {r.pos for r in movement_turn.robots if r.health > 0}
-    fixed_units = (tuple(u for u in movement_turn.ours
-                         if u.kind not in ('worker', 'pioneer'))
-                   + movement_turn.enemies)
-    for unit in fixed_units:
-        if unit.health > 0:
-            hard_blocked.update(movement_turn.footprint(unit))
-    resolved, rejected = resolve_moves(moves, origins, hard_blocked)
-    for uid, target in resolved:
-        by_id[uid]['pos'] = target.dump()
-        outcomes[uid] = True
-        events.append(f'{uid} 移动至 ({target.x}, {target.y})')
-        actions.append({'a': 'move', 'id': by_id[uid]['id'], 'kind': by_id[uid]['roleType'],
-                        'from': origins[uid].dump(), 'to': target.dump()})
-    for uid, target, why in rejected:
-        events.append(f'{uid} 移动未执行：{why}')
     # Items resolve before robot movement (任务书 §4.6.3 note), so a bomb or a
     # dizzy lands on robots that then lose their turn.
     battle_records = turnactions.apply_battle_items(state, effects)
@@ -547,93 +648,28 @@ def step(payload, commands=None, *, external_response=None):
         else:
             events.append(f"眩晕法宝命中机器人 {record['robot']}，眩晕 {record['rounds']} 回合")
     actions.extend(battle_records)
-    role_damage = Counter()
-    building_damage = Counter()
-    robot_moves = []
-    robot_attacks = []
-    # Sequential greedy robot movement: deliberately conservative and deterministic.
-    if not turn.is_day:
-        refreshed = Turn.load(state)
-        obstacles = set(refreshed.occupied_cells()) | _movement_terrain(refreshed)
-        # 任务书 §4.7.3: "机器人会攻击阻挡其移动的单位（包括角色/建筑）". A robot
-        # blocked by a building therefore attacks *that building* rather than
-        # picking the nearest unit — which is what makes a wall ring a delaying
-        # shield instead of an absolute one, and lets a robot break through to the
-        # base behind it.
-        for robot in robots:
-            if robot['health'] <= 0 or robot.get('abnormalState') == 'dizzy':
-                continue
-            # Do not redirect robots explicitly assigned to the other team.
-            if robot.get('targetTeam', state['teamOur'].get('type')) != state['teamOur'].get('type'):
-                continue
-            p = Pos.load(robot['pos'])
-            # Buildings are handled as obstacles, not as unit targets: a robot
-            # attacks the wall in its way rather than "the nearest unit" (which
-            # would often *be* that wall, and would blur two different behaviours
-            # into one record type).
-            units = [u for u in roles if u['health'] > 0
-                     and u['roleType'] not in ATTACKABLE_BUILDING_KINDS
-                     and min(distance(p, c) for c in cells(u)) <= 3]
-            victim = None
-            goal = None
-            if units:
-                victim = min(units, key=lambda u: min(distance(p, c) for c in cells(u)))
-                goal = min(cells(victim), key=lambda c: distance(p, c))
-            else:
-                # S06 user observation: advance on the base, engage nearby roles.
-                # Acquisition radius 3 is a local assumption, not official AI.
-                base = refreshed.station()
-                goal = (min(refreshed.footprint(base), key=lambda c: (distance(p, c), abs(p.x-c.x)+abs(p.y-c.y), c.x, c.y))
-                        if base is not None else _nearest_building_cell(refreshed, p))
-            screening_wall = None
-            if victim is not None and goal is not None and distance(p, goal) <= 3:
-                screening_wall = _intervening_wall(refreshed, p, goal)
-            if victim is not None and goal is not None and distance(p, goal) <= 3 and screening_wall is None:
-                power = ROBOT_STATS.get(robot.get('roleType'), (40,5,1))[1]
-                role_damage[victim['id']] += power
-                events.append(f"机器人 {robot['id']} 攻击 {victim['id']}，伤害 {power}")
-                robot_attacks.append({'robot': robot['id'], 'kind': robot.get('roleType'),
-                                      'victim': victim['id'], 'damage': power,
-                                      'from': p.dump(), 'to': goal.dump()})
-                continue
-            # No unit in reach: hit whatever building is in the way. 任务书 §4.7.3
-            # has robots attack blocking units *and buildings*, so a wall must be
-            # breakable even when nothing else is nearby.
-            if screening_wall is not None:
-                blocked_by = screening_wall
-            elif goal is not None:
-                blocked_by = _blocking_building(refreshed, p, goal)
-            else:
-                blocked_by = _adjacent_building(refreshed, p)
-            if blocked_by is not None:
-                power = ROBOT_STATS.get(robot.get('roleType'), (40,5,1))[1]
-                # Key the damage by the building's unit id: robot records and role
-                # records use different id spaces, and a cell-keyed Counter silently
-                # never matches a unit when the damage is committed.
-                target_building = _building_at(refreshed, blocked_by)
-                building_unit = by_id.get(str(target_building.unit_id)) if target_building else None
-                if building_unit is None:
-                    continue
-                building_damage[int(building_unit['id'])] += power
-                events.append(f"机器人 {robot['id']} 攻击建筑 {building_unit['id']}，伤害 {power}")
-                robot_attacks.append({'robot': robot['id'], 'kind': robot.get('roleType'),
-                                      'building': int(building_unit['id']), 'damage': power,
-                                      'buildingKind': building_unit['roleType'],
-                                      'from': p.dump(), 'to': blocked_by.dump()})
-                continue
-            options = [Pos(p.x + dx, p.y + dy) for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
-            options = [q for q in options if refreshed.land(q) and q not in obstacles
-                       and (goal is None or distance(q, goal) < distance(p, goal))]
-            if options:
-                q = min(options, key=lambda c: (distance(c, goal) if goal is not None else 0,
-                                                c.x, c.y))
-                obstacles.discard(p)
-                obstacles.add(q)
-                robot['pos'] = q.dump()
-                robot_moves.append({'robot': robot['id'], 'kind': robot.get('roleType'),
-                                    'from': p.dump(), 'to': q.dump()})
-    # Official order: shots resolve at pre-movement positions, damage commits
-    # at turn end. A robot hit lethally can still take its current turn.
+    # Attacks and paths are selected before either side's movement is written.
+    # The AI remains a local assumption; collision outcomes use official R02.
+    robot_intents, robot_attacks = _plan_robot_actions(state)
+    role_damage, building_damage = Counter(), Counter()
+    for record in robot_attacks:
+        if 'victim' in record:
+            role_damage[record['victim']] += record['damage']
+            target_id = record['victim']
+        else:
+            building_damage[record['building']] += record['damage']
+            target_id = record['building']
+        events.append(f"机器人 {record['robot']} 攻击 {target_id}，伤害 {record['damage']}")
+    role_moves, robot_moves, rejected = _settle_joint_moves(state, moves, robot_intents)
+    for record in role_moves:
+        uid = str(record['id'])
+        outcomes[uid] = True
+        events.append(f"{uid} 移动至 ({record['to']['x']}, {record['to']['y']})")
+    actions.extend(role_moves)
+    for uid, target, why in rejected:
+        events.append(f'{uid} 移动未执行：{why}')
+    # Retain existing settlement order: shots read pre-movement positions and
+    # their damage commits at turn end; lethally shot robots still take a turn.
     for unit in roles:
         unit['health'] = max(0, unit['health'] - role_damage[unit['id']] - building_damage[unit['id']])
     building_deaths = [
