@@ -40,6 +40,11 @@ class SharedGunTests(unittest.TestCase):
             if fired:self.assertEqual(cmd[fired[0]]['controllerId'],'2')
             self.assertNotIn(2,cmd)
 
+    def test_daytime_preparation_cannot_fire_at_visible_robots(self):
+        p=guns();p['roundNo']=65
+        turn=Turn.load(p);cmd={};brain._night(turn,cmd,p);brain._fill_ready_weapons(turn,cmd,set())
+        self.assertFalse(any(c['action']=='attack' for c in cmd.values()))
+
     def test_distant_existing_rockets_keep_ordinary_fallback(self):
         p=guns();p['teamOur']['roles'][6]['pos']=dict(x=8,y=23)
         self.assertIsNone(brain._coordinate_rockets(Turn.load(p),{},set()))

@@ -1974,7 +1974,7 @@ def _coordinate_rockets(turn, commands, claimed):
     else:
         claimed.add(stand)
         for gun in guns:
-            targets = _aim_points(turn,gun) if gun.cooldown == 0 else []
+            targets = _aim_points(turn,gun) if not turn.is_day and gun.cooldown == 0 else []
             if targets:
                 commands[gun.unit_id] = attack_command_multi(worker.unit_id,targets)
                 result.update(phase='firing',firing=gun.unit_id)
