@@ -88,17 +88,19 @@ for (const scale of [.3,1]) {
   const [a,b] = boxes;
   assert.ok(!(a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y));
   for(const box of boxes) assert.ok(box.x>=0 && box.y>=0 && box.x+box.w<=900 && box.y+box.h<=600);
-  // Compact contract: 140-155px wide, 42-46px high for an ordinary crew callout.
-  for(const box of boxes) assert.ok(box.w>=140 && box.w<=155, `width ${box.w}`);
-  for(const box of boxes) assert.ok(box.h>=42 && box.h<=46, `height ${box.h}`);
+  // Default labels occupy under one third of the previous plate area.
+  for(const box of boxes) assert.ok(box.w>=80 && box.w<=90, `width ${box.w}`);
+  for(const box of boxes) assert.ok(box.h===22, `height ${box.h}`);
   if(widths) assert.deepEqual(boxes.map(b=>b.w),widths);
   widths = boxes.map(b=>b.w);
 }
-// Identity + ID stay, with a concise HP / backpack line under them.
-assert.ok(text.some(t=>t.s==='工人 #10010' && t.font.startsWith('bold 14px')), 'title line');
-const info = text.find(t=>t.font.startsWith('12px') && /HP|生命/.test(t.s));
-assert.ok(info && /HP 220\/220/.test(info.s) && /包 2\/100/.test(info.s) && !info.s.includes('…'),
-  `concise hp/backpack line with full numbers (${info && info.s})`);
+// Full identity stays, while detailed numbers no longer cover the map.
+assert.ok(text.some(t=>t.s==='工#10010' && t.font.startsWith('bold 12px')));
+assert.ok(!text.some(t=>/HP|生命|背包/.test(t.s)));
+renderer.selected=world.actors[0];
+renderer.drawCrewLabels(ctx,world,{});
+assert.ok(text.some(t=>t.s==='工人 #10010'));
+assert.ok(text.some(t=>/HP 220\/220/.test(t.s) && /包 2\/100/.test(t.s)));
 world.actors = [actor(10010,21)];
 world.actors[0].anim = [{type:'walk',from:{x:20,y:16},to:{x:21,y:16}}];
 anchors.length = 0;
@@ -123,7 +125,11 @@ const pioneer = {id:10011,kind:'pioneer',label:'开拓者',owner:'own',health:20
   pos:{x:20,y:16},rpos:{x:20,y:16},size:1,backpack:[],capacity:40,anim:[]};
 const world = {state:{roundNo:15,phaseTask:'current task',teamOur:{type:'challenger'},
   _demo:{task_world:{points:{challengerTaskPoint1:{active}}}}}, actors:[pioneer], zones:[]};
-const [box] = renderer.drawCrewLabels(ctx,world,{});
+const [compact] = renderer.drawCrewLabels(ctx,world,{});
+assert.equal(compact.w,84);assert.equal(compact.h,28);
+assert.ok(!text.some(t=>t.s==='剩余 20 / 25 轮'));
+fills.length=0;text.length=0;
+const [box] = renderer.drawCrewLabels(ctx,world,{hoverActor:pioneer});
 // Two short lines plus a countdown line and a thin bar, still far below a card.
 assert.ok(box.h>=42 && box.h<=68, `task callout stays short (got ${box.h})`);
 assert.ok(box.w>=140 && box.w<=155, `task callout stays narrow (got ${box.w})`);
@@ -143,6 +149,6 @@ assert.ok(Math.abs(value.w/track.w-.8)<1e-6, 'bar ratio is remaining / total');
 // Without an active task the same callout drops back to the compact two lines.
 world.state.phaseTask = '';
 const [plain] = renderer.drawCrewLabels(ctx,world,{});
-assert.equal(plain.h, 46);
-assert.equal(plain.w, box.w);
+assert.equal(plain.h, 22);
+assert.equal(plain.w, 84);
 """)

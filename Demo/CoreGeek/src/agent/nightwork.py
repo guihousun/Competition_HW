@@ -7,7 +7,7 @@ from collections import Counter
 
 from .coordination import available_gold
 from .grid import next_step
-from . import home_defense, defense_layout
+from . import home_defense, defense_layout, upgrade_itinerary
 from .market import can_upgrade, shop_prices, vendor_prices, VOUCHER_TARGETS
 from .protocol import (Pos, Turn, Unit, WALL, STATION, TOWER_TYPES, MEDICINE,
                        WALL_FIXER, distance, use_command, buy_command,
@@ -29,8 +29,7 @@ def _maintenance(turn, role):
     buildings = sorted((u for u in turn.ours if u.health > 0
                         and distance(role.pos, u.pos) == 1
                         and u.kind in (STATION, WALL) + TOWER_TYPES),
-                       key=lambda u: (0 if u.kind == STATION else 2 if u.kind == WALL else 1,
-                                      _wall_rank(turn, u), u.health, u.unit_id))
+                       key=lambda u: (upgrade_itinerary.priority(u), _wall_rank(turn, u)))
     for building in buildings:
         for item in sorted(VOUCHER_TARGETS):
             if can_upgrade(item, building.kind, building.level):
@@ -123,7 +122,8 @@ def plan(turn: Turn, payload: dict, pairs: tuple) -> dict:
                 if item in held or target in serviced:
                     continue
                 price = prices.get(item)
-                if price is not None and 0 <= price <= available_gold(turn, payload, commands):
+                if (price is not None and 0 <= price <= available_gold(turn, payload, commands)
+                        and upgrade_itinerary.purchase_allowed(turn, payload, item, commands)):
                     commands[role.unit_id] = buy_command(item)
                     held.add(item)
                     break

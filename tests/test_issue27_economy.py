@@ -78,7 +78,7 @@ class UpgradeTests(unittest.TestCase):
             (lambda s:s['mapInfo']['zones'][0].update(neutralType='vendor'),'weapon_shop_not_observed'),
             (lambda s:s.update(roundNo=55),'trip_unreachable_full_or_too_late'),
             (lambda s:s['teamOur']['roles'][5].update(health=0),'keep_last_worker_home'),
-            (lambda s:s['teamOur'].update(goldNum=99),'no_affordable_upgrade')]:
+            (lambda s:s['teamOur'].update(goldNum=99),'saving_for_weapon_upgrade')]:
             state=board();change(state)
             proposal,report=upgrade.plan(Turn.load(state),state,{})
             self.assertIsNone(proposal);self.assertEqual(report['reason'],reason)

@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b1420'/%3E%3Cpath d='M8 22 L16 8 L24 22 Z' fill='%234fe0b4'/%3E%3Ccircle cx='16' cy='19' r='3' fill='%23ffb347'/%3E%3C/svg%3E">
 <title>未来战争 · 策略调试台（本地演示与研发平台）</title>
-<link rel="stylesheet" href="/css/app.css?v=20260916-combat">
-<link rel="stylesheet" href="/css/experience.css?v=20260916-combat">
+<link rel="stylesheet" href="/css/app.css?v=20260916-front">
+<link rel="stylesheet" href="/css/experience.css?v=20260916-front">
 </head>
 <body>
 <!-- Two columns: the console (left, scrolls on its own) and the match (right).
@@ -274,7 +274,7 @@
     <footer class="foot">
       <span>本地实验环境 · 结果用于调试，不代表官方成绩</span>
       <span id="foot-stats" class="muted">空格：暂停 / 继续 · ← →：单轮回看 · F：全图</span>
-      <span id="foot-ver" title="Agent新闻与宝藏证据界面">前端 20260916-combat</span>
+      <span id="foot-ver" title="Agent新闻与宝藏证据界面">前端 20260916-front</span>
     </footer>
   </aside>
 
@@ -348,7 +348,7 @@
   <div class="guide-signals"><p><b>升级与开火</b> 建筑角标 1/2/3 表示真实等级：一级灰色、二级青色强化、三级金色重甲。火箭为橙色弹体与爆炸，电磁炮为蓝白穿透光束；目标圈是指令标记，不是伤害范围。伤害数字来自实际命中记录。</p>
     <p><i class="key-plan"></i><b>黄色虚线</b> 下一轮准备提交的指令，不代表执行成功。在「显示图层」中开启。</p>
     <p><i class="key-action"></i><b>青色实线</b> 已执行移动的方向；攻击指令只显示目标圈。闪光和伤害数字来自已记录的战斗事件。</p>
-    <p><b>角色铭牌</b> 紧凑两行：身份、#角色 ID，以及「生命当前值/上限 · 背包数量/容量」。字号不随地图缩小；完整明细在控制台单位卡里。背包数字是物品数量，不是等级或伤害。</p>
+    <p><b>角色铭牌</b> 默认单行显示 工/拓 + 完整 ID，细条为血量，任务中另有金色进度条。选中或悬停才展开 HP、背包与倒计时，完整明细也可看左侧控制台。</p>
     <p><b>任务时间条</b> 开拓者执行任务时，铭牌多一行剩余轮数和一条细时间条，与控制台一致；这是倒计时，不是解题完成率。结算后另显示实际通过率。</p>
     <p><b>昼夜底色</b> 白天地面与地图外背景为亮色，黄昏偏暖，夜晚转为深蓝；颜色只来自当前回合的昼夜阶段，回放拖动时间轴会恢复对应色调。</p>
     <p><b>血量条</b> 绿 / 黄 / 红表示从健康到濒危。选中单位可查看具体血量、坐标与冷却。</p>
@@ -359,15 +359,15 @@
   <div class="guide-signals"><p><b>观战</b> 开始后自动推进；空格暂停 / 继续，← → 后退 / 前进一轮。</p><p><b>地图</b> 拖动平移、滚轮缩放；点击角色卡放大定位，F 或「全图」恢复全景。</p><p><b>复盘</b> 「回到开头」保留历史；「开始新对局」重新生成。「录像与复盘」可生成、打开和保存整场录像。</p><p><b>坐标</b> 左下角为原点，x 向右、y 向上。图例只解释显示，不改变比赛规则。</p></div>
 </dialog>
 
-<script src="/js/constants.js?v=20260916-combat"></script>
-<script src="/js/viewmodel.js?v=20260916-combat"></script>
-<script src="/js/replay.js?v=20260916-combat"></script>
-<script src="/js/sprites.js?v=20260916-combat"></script>
-<script src="/js/effects.js?v=20260916-combat"></script>
-<script src="/js/renderer.js?v=20260916-combat"></script>
-<script src="/js/panel.js?v=20260916-combat"></script>
-<script src="/js/experience.js?v=20260916-combat"></script>
-<script src="/js/guide.js?v=20260916-combat"></script>
-<script src="/js/app.js?v=20260916-combat"></script>
+<script src="/js/constants.js?v=20260916-front"></script>
+<script src="/js/viewmodel.js?v=20260916-front"></script>
+<script src="/js/replay.js?v=20260916-front"></script>
+<script src="/js/sprites.js?v=20260916-front"></script>
+<script src="/js/effects.js?v=20260916-front"></script>
+<script src="/js/renderer.js?v=20260916-front"></script>
+<script src="/js/panel.js?v=20260916-front"></script>
+<script src="/js/experience.js?v=20260916-front"></script>
+<script src="/js/guide.js?v=20260916-front"></script>
+<script src="/js/app.js?v=20260916-front"></script>
 </body>
 </html>

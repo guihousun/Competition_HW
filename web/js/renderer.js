@@ -132,13 +132,9 @@
     return { index, ...TERRAIN_PALETTES[index] };
   }
 
-  // ---- compact callout contract -------------------------------------------
-  // Ordinary crew callouts are two short lines; an active task may add a
-  // countdown line plus a thin bar but must stay well under a console card.
-  // A fixed 152px plate keeps the whole crew row visually even while staying in
-  // the agreed 140-155px band and leaving room for "生命 220/220 | 包 2/100".
+  // Default: one small identity label. Details expand only on selection/hover.
   const CALLOUT = {
-    width: 152, minWidth: 140, maxWidth: 155,
+    width: 152, compactWidth: 84, compactHeight: 22, compactTaskHeight: 28,
     height: 46, taskHeight: 66, pad: 8,
     titleFont: 'bold 14px "Microsoft YaHei", sans-serif',
     infoFont: '12px "Microsoft YaHei", sans-serif',
@@ -501,12 +497,15 @@
         const onTask = actor.kind === 'pioneer' && task.active;
         const maxHealth = Number(actor.maxHealth) || 1;
         const ratio = U.clamp((Number(actor.health) || 0) / maxHealth, 0, 1);
-        const title = `${actor.label} #${actor.id}`;
+        const same = (other) => other && other.id === actor.id && other.owner === actor.owner;
+        const detailed = actor.selected || same(this.selected) || same(ui && ui.hoverActor);
+        const title = detailed ? `${actor.label} #${actor.id}`
+          : `${actor.kind === 'pioneer' ? '拓' : '工'}#${actor.id}`;
 
         ctx.font = CALLOUT.titleFont;
-        // One fixed plate width: an even crew row, inside the 140-155px contract.
-        const w = CALLOUT.width;
-        const h = onTask ? CALLOUT.taskHeight : CALLOUT.height;
+        // Compact by default; only the focused role gets a full plate.
+        const w = detailed ? CALLOUT.width : CALLOUT.compactWidth;
+        const h = detailed ? (onTask ? CALLOUT.taskHeight : CALLOUT.height) : (onTask ? CALLOUT.compactTaskHeight : CALLOUT.compactHeight);
         const pad = 6;
         const clampBox = (x, y) => ({x: U.clamp(x, pad, Math.max(pad, this.viewport.width - w - pad)),
           y: U.clamp(y, 58, Math.max(58, this.viewport.height - h - 40)), w, h});
@@ -518,16 +517,41 @@
           }
         }
         const overlaps = (a, b) => a.x < b.x + b.w + 6 && a.x + a.w + 6 > b.x && a.y < b.y + b.h + 6 && a.y + a.h + 6 > b.y;
-        const box = candidates.find((c) => !boxes.some((b) => overlaps(c, b))) || candidates[0];
+        // Prefer empty map space instead of covering adjacent guns/walls/crew.
+        const occupied = world.actors.map((unit) => {
+          const at = this.cellToScreen(unit.rpos || unit.pos, world, unit.size);
+          const span = BASE_TILE * this.camera.scale * (unit.size || 1);
+          return {x:at.x-span/2, y:at.y-span/2, w:span, h:span};
+        });
+        const candidatesFree = candidates.filter(c => !boxes.some(b => overlaps(c,b)));
+        const choices = candidatesFree.length ? candidatesFree : candidates;
+        const box = choices.find(c => !occupied.some(b => overlaps(c,b))) || choices[0];
         boxes.push(box);
         const {x, y} = box;
         ctx.strokeStyle = style.accent;
         ctx.lineWidth = 1.5;
-        ctx.beginPath(); ctx.moveTo(point.x, point.y);
-        ctx.lineTo(U.clamp(point.x, x, x + w), U.clamp(point.y, y, y + h)); ctx.stroke();
+        if (detailed) {
+          ctx.beginPath(); ctx.moveTo(point.x, point.y);
+          ctx.lineTo(U.clamp(point.x, x, x + w), U.clamp(point.y, y, y + h)); ctx.stroke();
+        }
         ctx.fillStyle = '#081725f2';
         P.roundRect(ctx, x, y, w, h, 7); ctx.fill(); ctx.stroke();
 
+        if (!detailed) {
+          ctx.font = 'bold 12px "Microsoft YaHei", sans-serif';
+          ctx.fillStyle = ratio <= 0.25 ? style.low : style.title;
+          ctx.fillText(this.truncate(ctx, title, w - 12), x + 6, y + 15);
+          ctx.fillStyle = '#324358'; ctx.fillRect(x + 4, y + 19, w - 8, 2);
+          ctx.fillStyle = ratio <= 0.25 ? style.low : style.accent;
+          ctx.fillRect(x + 4, y + 19, (w - 8) * ratio, 2);
+          if (onTask) {
+            ctx.fillStyle = '#324358'; ctx.fillRect(x + 4, y + 24, w - 8, 3);
+            if (task.ratio != null) {
+              ctx.fillStyle = '#f4cf70'; ctx.fillRect(x + 4, y + 24, (w - 8) * task.ratio, 3);
+            }
+          }
+          continue;
+        }
         const budget = w - CALLOUT.pad * 2;
         const barY = y + h - CALLOUT.barGap - CALLOUT.barHeight;
         let cursorY = y + CALLOUT.titleBaseline;

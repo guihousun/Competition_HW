@@ -4,7 +4,7 @@ One worker travels; one remains home. No hidden map or future wave inputs.
 Costs are path lengths on the currently observed board, plus buy/use rounds.
 """
 from collections import deque
-from .protocol import Pos, WALL, STATION, TOWER_TYPES, distance, buy_command, use_command, move_command
+from .protocol import Pos, WALL, STATION, TOWER_TYPES, MEDICINE, WALL_FIXER, distance, buy_command, use_command, move_command
 from .market import VOUCHER_TARGETS, can_upgrade, shop_prices
 from .coordination import available_gold
 from .defense_layout import wall_priority
@@ -39,13 +39,44 @@ def priority(building):
     elif building.kind in TOWER_TYPES:group=1 if building.level==1 else 2
     elif building.kind==STATION:group=3 if building.level==1 else 4
     else:group=5
-    return group,building.level,building.health,building.unit_id
+    return group,building.level,0 if building.kind == "rocket" else 1,building.health,building.unit_id
+
+
+def weapon_reserve(turn, payload):
+    """Next usable weapon voucher, priced only from the actual shop quote."""
+    if not any(kind == 'weaponShop' for kind in turn.zones.values()):
+        return None
+    prices = shop_prices(payload)
+    for gun in sorted(turn.weapons(), key=priority):
+        for item, price in sorted(prices.items()):
+            if price >= 0 and can_upgrade(item, gun.kind, gun.level):
+                return {'building':gun.unit_id, 'voucher':item, 'gold':price, 'level':gun.level}
+    return None
+
+
+def purchase_allowed(turn, payload, item, commands):
+    reserve = weapon_reserve(turn, payload)
+    if reserve is None or item == reserve['voucher']:
+        return True
+    # Emergency maintenance retains its separate, existing eligibility checks.
+    if item in (WALL_FIXER, MEDICINE):
+        return True
+    base = turn.station()
+    if (base is not None and priority(base)[0] == 0 and can_upgrade(item,base.kind,base.level)):
+        return True
+    price = shop_prices(payload).get(item)
+    if price is None:
+        return False
+    held = {i for role in turn.ours if role.health > 0 for i in role.backpack}
+    held.update(c.get('name') for c in commands.values() if c.get('action') == 'buy')
+    budget = 0 if reserve['voucher'] in held else reserve['gold']
+    return available_gold(turn,payload,commands) - price >= budget
 
 
 def plan(turn, payload, commands, *, start=12, deadline=55):
     shops=sorted((p for p,k in turn.zones.items() if k=='weaponShop'),key=lambda p:(p.x,p.y))
     gold=available_gold(turn,payload,commands)
-    report={'phase':'idle','reason':None,'gold_available':gold,'shop_count':len(shops),
+    report={'phase':'idle','reason':None,'gold_available':gold,'weapon_reserve':weapon_reserve(turn,payload),'shop_count':len(shops),
             'vendor_count':sum(k=='vendor' for k in turn.zones.values())}
     def stop(reason):report['reason']=reason;return None,report
     if not turn.is_day:return stop('night_defence')
@@ -70,10 +101,10 @@ def plan(turn, payload, commands, *, start=12, deadline=55):
         return (worker.unit_id,cmd),report
     # Actual inventory has priority; no shop presence/quote is needed to use it.
     carried=False
-    for worker in workers:
-        for item in sorted(set(worker.backpack)&set(VOUCHER_TARGETS)):
-            carried=True
-            for building in buildings:
+    for building in buildings:
+        for worker in workers:
+            for item in sorted(set(worker.backpack)&set(VOUCHER_TARGETS)):
+                carried=True
                 if not can_upgrade(item,building.kind,building.level):continue
                 if distance(worker.pos,building.pos)<=1:
                     return action(worker,building,item,'use',use_command(item,building.pos))
@@ -94,8 +125,9 @@ def plan(turn, payload, commands, *, start=12, deadline=55):
     held.update(cmd.get('name') for cmd in commands.values() if cmd.get('action')=='buy')
     if held & set(VOUCHER_TARGETS):return stop('voucher_already_in_team')
     candidates=[(b,item,prices[item]) for b in buildings for item in sorted(prices)
-                if can_upgrade(item,b.kind,b.level) and 0<=prices[item]<=gold]
-    if not candidates:return stop('no_affordable_upgrade')
+                if can_upgrade(item,b.kind,b.level) and 0<=prices[item]<=gold
+                and purchase_allowed(turn,payload,item,commands)]
+    if not candidates:return stop('saving_for_weapon_upgrade' if report['weapon_reserve'] and gold < report['weapon_reserve']['gold'] else 'no_affordable_upgrade')
     for building,item,price in candidates:
         options=[]
         for worker in workers:

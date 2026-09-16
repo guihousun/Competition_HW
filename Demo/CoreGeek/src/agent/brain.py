@@ -1589,6 +1589,11 @@ def _should_buy(turn: Turn, state: dict[str, Any]) -> bool:
         return False
     if len(turn.weapons()) < 3:
         return False
+    weapon_budget = upgrade_itinerary.weapon_reserve(turn, state)
+    base = turn.station()
+    emergency = base is not None and upgrade_itinerary.priority(base)[0] == 0
+    if weapon_budget and turn.gold < weapon_budget['gold'] and not emergency:
+        return False  # Keep earning; do not walk to the shop just for cheap wall vouchers.
     reserve = WEAPON_BUILD_COST
     if turn.gold < reserve + min(prices.values()):
         return False
@@ -1678,9 +1683,9 @@ def _shop_choice(turn: Turn, role: Unit, state: dict[str, Any],
                  commands: dict[int, dict[str, Any]]) -> str | None:
     """Pick the most useful affordable item while standing at the weapon shop.
 
-    Priority: upgrade a tower we already stand next to, then a wall upgrade,
-    then a base upgrade, then battlefield reagents. Every candidate must be
-    legal for the building it targets, so a voucher is never wasted.
+    Nearby targets use the same emergency-base/weapon/base/wall priority as
+    the delivery planner. All defensive purchases respect the next quoted
+    weapon voucher reserve; affordability alone cannot promote a cheap wall.
     """
     prices = shop_prices(state)
     gold = available_gold(turn, state, commands)
@@ -1688,9 +1693,9 @@ def _shop_choice(turn: Turn, role: Unit, state: dict[str, Any],
 
     def affordable(name: str) -> bool:
         price = prices.get(name)
-        return price is not None and price <= gold
+        return price is not None and price <= gold and upgrade_itinerary.purchase_allowed(turn, state, name, commands)
 
-    for building in sorted(turn.ours, key=lambda unit: (unit.kind, unit.pos.x, unit.pos.y)):
+    for building in sorted(turn.ours, key=upgrade_itinerary.priority):
         if distance(role.pos, building.pos) > 1:
             continue
         for item in sorted(prices):
@@ -2291,15 +2296,11 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
       a ring that is otherwise open. So a combination is only accepted when every
       inner cell still reaches the outside through the exit.
 
-    When no triple satisfies both, a pair, then a single tower, is used instead of
-    building a wall of towers that fences us in. Combinations are ranked by, in
-    order: feasible first; then more towers; then fewer trapped inner cells; then
-    more operated towers; then fewer sites on the exit guard; then the defence
-    layout's side priority (approach-facing first, flanks next, rear last, and
-    pure-side before corner); then separation and coordinates. The side priority
-    deliberately outranks separation, so three towers face the approach instead of
-    merely spreading out. The pool is at most twelve cells, so the search is a
-    constant-size loop.
+    Prefer feasible triples, preserve existing types, keep all inner stands
+    connected and give both rockets an empty shared stand. Then prefer the
+    rockets on the approach side before spacing and laser placement; the laser
+    may be offset so it does not occupy the shared stand. The pool is at most
+    twelve cells; no future wave or hidden map data enters the ranking.
     """
     station = turn.station()
     if station is None:
@@ -2356,6 +2357,8 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
                    mismatch,
                    0 if _inner_connected(graph, set(sites) | standing) else 1,
                    0 if _shared_rocket_cells(intended, stands - set(sites)) else 1,
+                   sum(defense_layout.side_rank(p, station.pos, plan.side_order)[0]
+                       for p, kind in intended.items() if kind == 'rocket'),
                    sum(distance(a, b) < 2 for a, b in combinations(sites, 2)),
                    len(sites) - len({p.y if plan.approach in ('E', 'W') else p.x for p in sites}),
                    sum(defense_layout.side_rank(p, station.pos, plan.side_order)[0]
