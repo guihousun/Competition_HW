@@ -49,11 +49,12 @@ def tower_step(turn, role, tower, claimed=()):
     return step_inside(turn, role, goals, claimed)
 
 
-def status(turn, commands):
+def status(turn, commands, *, quiet=False):
     if turn.is_day:
         return []
     return [{'worker': r.unit_id,
              'state': ('inside_planned_ring' if inside(turn, r.pos) else
                        'outside_' + commands[r.unit_id]['action'] if r.unit_id in commands
+                       else 'quiet_outside_hold' if quiet
                        else 'return_blocked' if turn.station() else 'base_missing')}
             for r in turn.workers()]

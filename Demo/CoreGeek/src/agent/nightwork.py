@@ -70,22 +70,27 @@ def _front_repair(turn, pairs):
     return {uid: use_command(WALL_FIXER, pos)}
 
 
-def plan(turn: Turn, payload: dict, pairs: tuple) -> dict:
-    """Return extra worker actions; absence leaves the ordinary defence plan in charge."""
+def field_clear(turn, payload):
+    """Explicit current clearance, never a forecast of later waves."""
+    if not isinstance(payload, dict):
+        return False
     robot_info = payload.get('robot')
-    repair = _front_repair(turn, pairs)
-    # Missing observations are not evidence that a wave has been cleared.
     if (turn.is_day or (turn.round_no - 1) % 130 == 70
             or not isinstance(robot_info, dict) or not isinstance(robot_info.get('roles'), list)
             or any(robot.health > 0 for robot in turn.robots)):
+        return False
+    return not any(enemy.health > 0 and enemy.kind in ('worker', 'pioneer')
+                   and any(distance(enemy.pos, worker.pos) <= 8 for worker in turn.workers())
+                   for enemy in turn.enemies)
+
+
+def plan(turn: Turn, payload: dict, pairs: tuple) -> dict:
+    """Return extra worker actions; absence leaves the ordinary defence plan in charge."""
+    repair = _front_repair(turn, pairs)
+    if not field_clear(turn, payload):
         return repair
     workers = turn.workers()
     if not workers:
-        return {}
-    # Visible hostile crew near home is also a reason to keep defending.
-    if any(enemy.health > 0 and enemy.kind in ('worker', 'pioneer')
-           and any(distance(enemy.pos, worker.pos) <= 8 for worker in workers)
-           for enemy in turn.enemies):
         return {}
     commands, serviced = dict(repair), set()
     for command in repair.values():

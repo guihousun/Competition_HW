@@ -1,5 +1,6 @@
 """Hand-set geometry and official actions; no simulator oracle for expectations."""
 import unittest
+from types import SimpleNamespace
 from itertools import combinations
 from copy import deepcopy
 from test_coordination import unit
@@ -65,6 +66,18 @@ class FrontWallTests(unittest.TestCase):
         next(u for u in p['teamOur']['roles'] if u['id']==1)['pos']={'x':14,'y':21}
         commands={};brain._night(Turn.load(p),commands,p)
         self.assertEqual(commands[1]['action'],'move')
+
+    def test_defending_pioneer_also_returns_but_active_task_is_not_forced_out(self):
+        p = battle()
+        role = next(u for u in p['teamOur']['roles'] if u['id'] == 1)
+        role.update(roleType='pioneer', pos={'x':12,'y':23})
+        turn = Turn.load(p); commands = {}
+        brain._night(turn,commands,p)
+        self.assertEqual(commands[1]['action'],'move')
+        cycle = SimpleNamespace(description='active question', phase='solving', ended_round=None)
+        commands = {}
+        brain._night(turn,commands,p,SimpleNamespace(tasks={'cycle':cycle}))
+        self.assertNotIn(1,commands, 'the task pipeline owns the active pioneer')
 
     def test_sealed_ring_does_not_teleport_remove_or_attack_from_outside(self):
         p=board(towers=[(11,21)],walls=[(x,y) for x in range(7,13) for y in range(19,25)

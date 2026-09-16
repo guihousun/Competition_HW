@@ -370,7 +370,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if turn.is_day:
             _DECISION_REPORT.get()['upgrade_itinerary'] = deepcopy(_UPGRADE_REPORT.get())
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
-        _DECISION_REPORT.get()['worker_shelter'] = home_defense.status(turn, commands)
+        _DECISION_REPORT.get()['worker_shelter'] = home_defense.status(
+            turn, commands, quiet=nightwork.field_clear(turn, payload))
         if _sale_signals(turn):
             _DECISION_REPORT.get()['news_economy'] = deepcopy(_sale_signals(turn))
         supervisor_notes = planner_state.tasks.get('supervisor')
@@ -1724,6 +1725,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
            state: dict[str, Any] | None = None, planner_state: Any = None) -> dict | None:
     claimed: set[Pos] = set()
     pairs = _tower_pairs(turn)
+    confine = not nightwork.field_clear(turn, state)
     cycle = getattr(planner_state, 'tasks', {}).get('cycle') if planner_state is not None else None
     committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
     staging = _treasure_night_staging(turn, state, pairs) if state is not None and not committed_task else None
@@ -1733,8 +1735,10 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
             claimed.add(Pos.load(command['targetPos'][0]))
     # Confirmed quiet-night jobs may leave; otherwise return before firing outside.
     outside_workers = set()
-    for worker in turn.workers():
-        if (turn.station() is not None and not home_defense.inside(turn, worker.pos)
+    for worker in turn.controllable():
+        if worker.kind == PIONEER and committed_task:
+            continue
+        if (confine and turn.station() is not None and not home_defense.inside(turn, worker.pos)
                 and worker.unit_id not in extra_work):
             outside_workers.add(worker.unit_id)
             step = home_defense.step_inside(turn, worker, claimed=claimed)
@@ -1757,6 +1761,8 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     if state is not None and _try_battle_items(turn, commands, state):
         pass
     for role, tower in pairs:
+        if role.kind == PIONEER and committed_task:
+            continue
         if role.unit_id in outside_workers:
             continue
         if role.unit_id in commands:
@@ -1770,7 +1776,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
             if targets:
                 commands[tower.unit_id] = attack_command_multi(role.unit_id, targets)
             continue
-        if role.kind == 'worker' and turn.station() is not None:
+        if confine and turn.station() is not None and (role.kind == 'worker' or not committed_task):
             step = home_defense.tower_step(turn, role, tower, claimed)
             if step is not None:
                 claimed.add(step)
@@ -1919,7 +1925,7 @@ def _fill_ready_weapons(turn, commands, excluded):
     if turn.is_day:return
     used={str(c.get('controllerId')) for c in commands.values() if c.get('action')=='attack'}
     roles=[r for r in turn.controllable() if r.unit_id not in excluded and str(r.unit_id) not in used
-           and (r.kind != 'worker' or turn.station() is None or home_defense.inside(turn, r.pos))
+           and (turn.station() is None or home_defense.inside(turn, r.pos))
            and (r.unit_id not in commands or commands[r.unit_id].get('action')=='move')]
     towers=[(t,_aim_points(turn,t)) for t in turn.weapons() if t.cooldown==0 and t.unit_id not in commands]
     towers=[(t,aim) for t,aim in towers if aim]
