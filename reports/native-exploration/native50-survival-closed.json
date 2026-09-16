@@ -1,0 +1,3328 @@
+{
+  "scope": "Only two completed first-blue native 50% games, public rounds/action/feedback; no debrief or controller replay",
+  "comparison": "Same initial public/full hash and game configuration; different arm objectives and persistent native histories are not a controlled weapon-only ablation.",
+  "engine_manifest": {
+    "Demo/CoreGeek/src/agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "Demo/CoreGeek/src/agent/actions.py": "618be20f5de35d42c13b188c921fbafc1ae2569a9223fdeb53d127d60eea8a22",
+    "Demo/CoreGeek/src/agent/ballistics.py": "b7bb235c6c326b3765180f6e51ec78831d1560d2457680b735700d6e2d04345f",
+    "Demo/CoreGeek/src/agent/brain.py": "bb7da4791e61972e801af3395224a1149b1ae30d5a08349ad4f9bbbd1ae15078",
+    "Demo/CoreGeek/src/agent/combat_geometry.py": "f238dfd369c4a84f816335ea963eee4bb23019c573fb16410e87498570ba22da",
+    "Demo/CoreGeek/src/agent/console_digest.py": "b6851a6b5a7779d29bcf57e20d28e57dc759bc8d72d888e23469907bef3ccd37",
+    "Demo/CoreGeek/src/agent/construction_trip.py": "9eff2572752b49cfd24bf11bcf6cc20ed4c7199d41e486dbbae0aac42cf705dd",
+    "Demo/CoreGeek/src/agent/coordination.py": "570fa0db13ea7bc48297dc9f85957a697b27960058d80c6cc6d9a9743e701794",
+    "Demo/CoreGeek/src/agent/debug.py": "e431a98366a6e45603035fab1ec129a6da4a7f54366519f1bd3687a9c0c71dc7",
+    "Demo/CoreGeek/src/agent/deepseek_client.py": "bd9f623ba5c5d1ed9931c97cb8ff7945dde1c0ee13c256f4e1c72c433d8a759f",
+    "Demo/CoreGeek/src/agent/defense_layout.py": "9775fbe6ece8a63555ae30256d60dc46ea1055e1aca4b4f1b7afd8fe560992b1",
+    "Demo/CoreGeek/src/agent/diagnostics.py": "bdc1c2e69bf161780ac17ca434c9be460176ec2dfb8c0b99fc8f5201b03092a1",
+    "Demo/CoreGeek/src/agent/early_economy.py": "d6ca70de220aca003c02f9edd6f74ba7344a12f66e367a707e5066d2cce9840a",
+    "Demo/CoreGeek/src/agent/evidence_memory.py": "ae737d7bd1e2136a4bfc09bb6c834bd41c450ca360b626ed671d179f485c1a35",
+    "Demo/CoreGeek/src/agent/grid.py": "d6863d968b251246284a80f2ddeaf8b4a2dc184fd1ec62e58ab866370a43e4aa",
+    "Demo/CoreGeek/src/agent/home_defense.py": "b7cbecf2bb995ec71ed3b326142d789c65e00bc0d88a2c7cf67e7261fb3fca3e",
+    "Demo/CoreGeek/src/agent/item_reference.py": "b4805ff8dc71ed3f55b326e9f34bfb5f2534bebe99134681dbf2ba26471dfb61",
+    "Demo/CoreGeek/src/agent/llm_router.py": "190cbaf528a6e3d6f7d17a179a4d1c43f7a671fecc28c518aedf87f9870903ef",
+    "Demo/CoreGeek/src/agent/local_llm.py": "7a1381688a832d1697c526bc9c5222273020f72c4ae8c7584687ad7a7fd4a29a",
+    "Demo/CoreGeek/src/agent/local_scripted_model.py": "431e3aa4cf2d4a1f4ba4b813a1b7b1b6da627b354ea2fb3e07fcbb649143344b",
+    "Demo/CoreGeek/src/agent/local_task_cases.py": "8b9b6d7d15e49b30ddf231b8579eda8c8107c084c68d133ba037356a6da9b5ba",
+    "Demo/CoreGeek/src/agent/local_task_sandbox.py": "c9f8d48874cad206ffdda4ea432ec0f5fa9f77e88a6573072d14b0352005fc7f",
+    "Demo/CoreGeek/src/agent/local_world_news.py": "229dd357c2571a000dcc251d5454b378318f6ab7fe6c04644ba56449dba356fe",
+    "Demo/CoreGeek/src/agent/market.py": "8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9",
+    "Demo/CoreGeek/src/agent/match.py": "5e8698d43eded65d5c95a993a4bf7ccf1cde32d864659f83df3b2c99c2d6510f",
+    "Demo/CoreGeek/src/agent/model_json.py": "15ad22129f510cf72228f4b299cf809435d39adf7948a4df3c91f63ab59a6d98",
+    "Demo/CoreGeek/src/agent/news_economy.py": "51ff62079621b3f2ddec00c0c481f420f4756aa6f8ad84356a4cb2c960431071",
+    "Demo/CoreGeek/src/agent/news_ledger.py": "cc78baea87a26b3eb2c03e59d475201aaa11d162eec9eaf612ba05ad184c1510",
+    "Demo/CoreGeek/src/agent/nightwork.py": "b628add9353e1438d0172d1242095698e5d757fd8a5829ba0f8306d2fd0a08f2",
+    "Demo/CoreGeek/src/agent/ordered_diagnostics.py": "b02c4a48ec3ac1a32b26c095a2d0fa038e4c2e23fddd6f7cd59fe3f30868918f",
+    "Demo/CoreGeek/src/agent/pioneer_safety.py": "d3401e3db26f0ae6a662a08be68a798fb08569557a50bb2cf75350181971458d",
+    "Demo/CoreGeek/src/agent/planner.py": "401cac451fc92f55f1ae588ab8318682c733e995a91eddc5252cf06f31d571dd",
+    "Demo/CoreGeek/src/agent/policy_supervisor.py": "fd6de6c6646f226151d7153af2f0dae7644f19a975cf625d3ef8f3f06c30aa8c",
+    "Demo/CoreGeek/src/agent/protocol.py": "ab0afd40b118b307faaf6490921c8b1dfc6edd8668a767731dbe63905a0962c9",
+    "Demo/CoreGeek/src/agent/recordings.py": "29b6b441ed8686be03da9cd7739b0958c8f5b45fdb6f56e20907aa6057dc7cc7",
+    "Demo/CoreGeek/src/agent/repair_supply.py": "77c4eeda20f131850b4e0609f8e547bae2382351d1e1c5bf5fc07d4b49943ecb",
+    "Demo/CoreGeek/src/agent/sandbox.py": "4e4fe042562c0f2ddb498cce7df6713555845ac567297bdb6b979cd22c566321",
+    "Demo/CoreGeek/src/agent/scenarios.py": "01e4c8f767e80a2c80e9ad9cc2c1d7c168a9f608ffd9018dd13cda1877b4318e",
+    "Demo/CoreGeek/src/agent/server.py": "f969abb7f79e3a319c7b788a3bf737e236c5295fe8bba0814628cde4e26a88b8",
+    "Demo/CoreGeek/src/agent/simulator.py": "8a5c1ce3000aec0fc53732d9be70a95883b66cf38c35afeaeaba58a6d70154cf",
+    "Demo/CoreGeek/src/agent/task_agent.py": "f55637fe77368646692fe55036d3bc77925789d34c6ec223fbc3656219e65f2c",
+    "Demo/CoreGeek/src/agent/task_answer_contract.py": "65264c4d761a256f05250011d8ec85dfdf4dcc471aa4fc0201bec12781aa88f5",
+    "Demo/CoreGeek/src/agent/task_context.py": "1b2b425b3a635169ae42ad4b01a0f09359d5316b9e848f1ed253757c0f25b099",
+    "Demo/CoreGeek/src/agent/task_feedback.py": "32bc84de84542f5929668104147a4c00d89f82934920010ebd8972c633b99914",
+    "Demo/CoreGeek/src/agent/task_field_semantics.py": "9fb0798bd8d9cd045091a91f0665bc93cb4ace4f1bee693b96304b4fa0b9d675",
+    "Demo/CoreGeek/src/agent/task_journal.py": "b5a064a1a76ce9108624d6059fe1055ef9729fe084f927cc3f8f963a25edb808",
+    "Demo/CoreGeek/src/agent/task_lifecycle.py": "4ea4780b7fdaef535d26b236e3f21daa1be7f56293e2587572a03bd25e712d18",
+    "Demo/CoreGeek/src/agent/task_progress.py": "35801d7e021ce142f4d3c1226dcf46e3f6d0b766b53ae8d42b569e881d16f020",
+    "Demo/CoreGeek/src/agent/task_skills.py": "3c786ee1c10d936d163c3f5c928053eeb5639a798254fbc832ef462749c465df",
+    "Demo/CoreGeek/src/agent/task_tools.py": "4c89100314103429336a471bc3877035a35c9161a87bffc772971a69d7493779",
+    "Demo/CoreGeek/src/agent/task_workspace.py": "2afc3c54ef28af801717f372870c6ced5acb658af83d8adb80c8d96187aecca3",
+    "Demo/CoreGeek/src/agent/tasks.py": "9805cea015074985ea58f9a452a0e78ed57f1fc8e10e9624403228aef13d3b1d",
+    "Demo/CoreGeek/src/agent/taskworld.py": "f1ac2ab564eb730a70b597148f540e5a2ba15ee4a2703a75b7445b22790ff893",
+    "Demo/CoreGeek/src/agent/team_agent.py": "cc2aa88e0acbeffe23851b08d7089f43ed9fdb3d6fb723410d9ebd2caf5156f3",
+    "Demo/CoreGeek/src/agent/telemetry.py": "ba33d27b3c0addd88a569bb4edceb2778ebb6c068bf2e472d2883beedbca8fa1",
+    "Demo/CoreGeek/src/agent/treasure.py": "3ea358a764697769bbbb77a80bd1818eabf3a48d46badf5045e615cc9573002d",
+    "Demo/CoreGeek/src/agent/turnactions.py": "85553cdb74dad8cae71d7db00c644bdb4dae7d6b47e5298303a1ebef6ce9bf22",
+    "Demo/CoreGeek/src/agent/twomatch.py": "c3e894080bb2044a6f16581953d8bd36171b0ef3e2c1f8ea99519ddee2e89189",
+    "Demo/CoreGeek/src/agent/upgrade_itinerary.py": "b776879b6a8b4c16dbc5c98b92637ac754a1596a0d279e25f238d8a819ccf731",
+    "Demo/CoreGeek/src/agent/vision.py": "a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4",
+    "Demo/CoreGeek/src/agent/wave_data.py": "0415267c69ff21fd26153664a077d4722dc6989071d1208075f13404d05d942f",
+    "Demo/CoreGeek/src/agent/world_agent.py": "7dc69bb287b911f038870d15cbe542263ad01ec6b1beed07bbd9014cc5116381",
+    "Demo/CoreGeek/src/agent/world_context.py": "2d77280f4b2ce83e9e15bea1c2c64b55625e700951a1d12b633b923d0bbcc7fd",
+    "Demo/CoreGeek/src/agent/world_memory.py": "c565daeaaa33517d55b6d7bcc14e0ca9e71a389da754c4f431a8aa2309aced5b",
+    "benchmark.py": "de569416b521665128239b394cb3dacf9ff2ee452b39569dcf5ed55aed9e9a95",
+    "docs/AGENT_CANDIDATE.md": "2af84a48fc907dcce3876f86c154453af7d7c49a94c577b37dfb61b35c4734ca",
+    "docs/BASE_ATTACK_FIX.md": "4365f6a28d20d16f02bd6aee0180e1fcc697c008a31157dfa53858efd2a6bfb6",
+    "docs/CHANGES.md": "05d265269dec0e8d296972963fbd04f25979491fbeae839a76eea18e436dbc98",
+    "docs/COMBAT_VISUALS.md": "6f86aedfa111fe12ecf13154b11621fb43604219b5c273e2ded31ba87895df0d",
+    "docs/CONSOLE_LOGGING.md": "05a471a93ebf510b68a2eff7805941bb4473ba5980daba8b60d8501b0fff6b5c",
+    "docs/DEFENCE_EXPERIMENT.md": "d15271e85b5475390f28b2ccc8c216d23c0647a2ac8fc438b82f6681d64b5fbe",
+    "docs/DEMO.md": "44f9a8f854aa7c2c4b189ca7edf4d954820a22a0ea01cdc5d1eff14cc67dbc02",
+    "docs/DEVELOPMENT_RULES.md": "6f7918101e070ca1c0cf27b636019ab53afa88008358ff74122332ae1cb18a37",
+    "docs/FRONT_WALL_INTERIOR.md": "976ba3663d6956a832ff2402655ee2149efaa695deaa936f85d2a5c760e668f8",
+    "docs/INTRANET_CANDIDATE_20260915.md": "f3398b20ac43c607bb4681744abe02833acf0a9c36ba28ceabe7efb3aed0d3f2",
+    "docs/INTRANET_ISSUE21_CANDIDATE.md": "24543f3f9e0f1d828859fa055e1576b9d95b03256d45c5ea931736859f88d0c7",
+    "docs/INTRANET_ISSUE24_CANDIDATE.md": "9b4e59962d893ebe104ca26f8067da2c962ee3ca5a166571f90dbf1cda4101d8",
+    "docs/INTRANET_ISSUE25_CANDIDATE.md": "a8289b62a1001fd486933d3deea03c24e3f40e2d2f12dd3bc73dd7dbfdebe204",
+    "docs/INTRANET_ISSUE27_CANDIDATE.md": "f08ad1de5d8ee55b15a15ef67257c2ee8ee8ead7be79d8172fab97d418112970",
+    "docs/ISSUE_10_DIAGNOSIS.md": "013e917ba17c38c9845dc11623eed2be58fd205b4537e69f0bd78fad578a5381",
+    "docs/ISSUE_12_DEFENCE.md": "277ceb4d3169b4c2529d89620b7307b4c40f73e8cffc0f11b862f4ba75ced1a8",
+    "docs/ISSUE_30_31_REPLAY_REVIEW.md": "51fb672fa7b343d585ddcc78008ef5102740891b3a30ee4d012493c7ec9b4e38",
+    "docs/LLM_SPEC.md": "54bf7bf22153137ba7db85f861e66bd1b2020284e3062ce75bacef36eec6dcd8",
+    "docs/LOCAL_LLM.md": "0d9269a8218b10f8a9f5b9ca8e5f80235a58486bf3a78080c2cde1afd4a150e0",
+    "docs/METAL_ECONOMY.md": "3878c20636bfe9b9cdbd4fc556d8aecfda7efba885b7f53df027d3db364692aa",
+    "docs/NIGHT_WORK.md": "4f15a1c9c31c98b318ce3f6edf7240fef1b29959f44d60c6992500475c8244de",
+    "docs/OFFICIAL_VERIFICATION_GUIDE.md": "6c4ebed985f48f06c0b57dd868dd0d695df05443aa904b1fe21c5f970cbf2673",
+    "docs/POLICY_ARCHITECTURE.md": "4f1dd76cc4df2067abc974d254ab57d2e13184fe80526119063b27b56ec52a51",
+    "docs/REPLAY.md": "7bdf3c335dc4dae4ea0ccd28f357b4fea4dd73845072c5a0665751b25b29680d",
+    "docs/RULE_SUPPLEMENTS.md": "55add86b5dcefd634ead0a5ac7eca9af9ae082d318a5f6da31c6e2349b6afdb9",
+    "docs/SUBMISSION_TESTING.md": "924977febb51d7d61dcd92f0a44459224d2b62f167a88492a287b24ab3d4815c",
+    "docs/TASK_METHODS_FROM_FEEDBACK.md": "06c0ac25dcde37710b1f45f561e531524d0889438cb605cb6198b26b43092672",
+    "docs/TASK_OUTCOME_LOGS.md": "61e923d3f99e1d7fbec2d68075321387d9edb2c274a01d83e6eee2a69a3fda91",
+    "docs/TEAM_COORDINATION.md": "a60dcf99be29201f92c7525b0422e1a6e0635237389cee561271387856f71274",
+    "docs/TRACE_LOGGING.md": "5eca564038dace0593a26a6defde2bb289c9b7d7b454e606c6de7669bf607a87",
+    "docs/UI_ASSET_VERSION.md": "96a01cd2465e4ed8fb488147e4f08e3baa55a8d986fa350dab2da483777c1e54",
+    "docs/UI_STABILITY.md": "f8743a2f48fdb15ed5657db14ffc5e29787c17a94e63fbc0ca521ee0f1f0577d",
+    "docs/VIEWER.md": "e3d5fdd575a9abe6e2de7e864378fea8efb39970bc4e6597f2bbe6d6e4295b08",
+    "docs/VIEWING_GUIDE.md": "ba3460a7a468843413af0e4373a01488d808bd7fed3d86dbcda130a0a7bce634",
+    "docs/WORLD_NEWS_FEEDBACK.md": "fac1603cb1bc801cacac427c8376930ca10eee7e7f3a69cdfc6574626703fe58",
+    "docs/任务书.md": "c548e2c66b85a71d52c60f23929b5af38caae1fc9908f8f2e5ddd0c457893d3e",
+    "docs/接口文档.md": "931a65d09f881b30644225ca8d6b1bfbc7b2bea7b4f6ce50d1f70cf858cb144d",
+    "experiments/react_lab/game.py": "b8c3ea4da3ca81f596e6fe58acff32281549ddab712b387a0b27dad13abf7aac",
+    "experiments/react_lab/plans.py": "748f36e1714d8a5cbd5382266dbc226da40ffd8276c9d0b29189df1bae978643",
+    "experiments/react_lab/reactive.py": "d1018871d54d1fe9edec9083ed269e085fa38e11fc8954fa27906fb814f84264",
+    "experiments/react_lab/rules.md": "ee618d5bf1dcf1c19918489b999c7cfd362e56ebe5a3deeac5b1c914d44c1af2",
+    "experiments/react_lab/task_stress.py": "faa53068178e5091fb696f0bf342f63df9b96b05136bec2728f8c55233a5598c"
+  },
+  "source_checks": {
+    "react-failure50": {
+      "protected_files_equal": 107,
+      "differences": [],
+      "full_fingerprint": "0c7f5320ebbd0b6c440a98c4f673824cbcba18296424c27571a012ceca4251ce"
+    },
+    "react-failure50-v2": {
+      "protected_files_equal": 107,
+      "differences": [],
+      "full_fingerprint": "ea30770d173dd87cb75f6c9e0cc4cf15907ab6b99be480d3674f0e26ba72c4f3"
+    },
+    "react-failure50-v3": {
+      "protected_files_equal": 107,
+      "differences": [],
+      "full_fingerprint": "11337385397b46a4eeecff57e1e4a51a377c7005766d17dca4436b56dbb754ea"
+    }
+  },
+  "hard_occupancy_caveat": {
+    "rule": "任务书地图规则：己方/敌方建筑（含武器工事）阻挡角色移动；R02",
+    "implementation_gap": "Frozen simulator.step passes only moving actors to resolve_moves origins and neutral terrain as blocked; static buildings/idle units omitted.",
+    "scope": "131 survival and 2 mixed accepted moves into already-live static buildings; extra findings beyond recorded audit_errors, not a sum of official penalties. No corrected-engine score replay performed."
+  },
+  "local_full_audit_sha256": "0ae1e53ca729552e69c17a8cbb7d5a0eaa1f82cb95cc1d944ca7fbd6b32af0fb",
+  "cases": [
+    {
+      "arm": "survival",
+      "summary": {
+        "audit_errors": [
+          "unsupported action",
+          "local build ring",
+          "accept without an own task point in range",
+          "voucher without adjacency",
+          "nonadjacent action",
+          "attack range/count",
+          "use item not in backpack",
+          "invalid controller/time/cooldown",
+          "invalid controller/time/cooldown",
+          "nonweapon attack",
+          "invalid controller/time/cooldown",
+          "nonweapon attack",
+          "nonadjacent action",
+          "invalid controller/time/cooldown",
+          "nonadjacent action",
+          "nonadjacent action",
+          "nonadjacent action",
+          "invalid controller/time/cooldown",
+          "wrong role",
+          "use item not in backpack"
+        ],
+        "base_hp": 0,
+        "case": {
+          "limit": 1300,
+          "pressure": 1,
+          "profile": "observed-seven-days",
+          "seed": 1,
+          "side": "challenger",
+          "task_stress": {
+            "failure_rate": 0.5,
+            "gold_reward": 80,
+            "tasks_per_point": 3
+          }
+        },
+        "execution_failures": 23,
+        "full_survival": false,
+        "initial_hash": "49acdbc6c18604ad0f2b806c1aa5b25e3efdb9c2d396568547ee102ccb04fdd8",
+        "model_seconds": 6243.946999999869,
+        "role_deaths": 1,
+        "rounds": 1293,
+        "score": 919,
+        "score_parts": {
+          "kills": 133,
+          "other_tasks_and_treasure": 336,
+          "survival": 450
+        },
+        "task_metrics": {
+          "active_task_at_end": null,
+          "assigned_failure_rate": 0.5,
+          "observed_failed_tasks": 3,
+          "observed_task_failure_rate": 0.5,
+          "requested_failure_rate": 0.5,
+          "task_outcomes": [
+            {
+              "accepted_round": 23,
+              "ended_round": 48,
+              "reason": "超时",
+              "rewards": {}
+            },
+            {
+              "accepted_round": 152,
+              "ended_round": 154,
+              "reason": "completed",
+              "rewards": {
+                "bestRate": 1.0,
+                "gold": 80,
+                "rate": 1.0,
+                "score": 112
+              }
+            },
+            {
+              "accepted_round": 194,
+              "ended_round": 202,
+              "reason": "离开任务点范围",
+              "rewards": {}
+            },
+            {
+              "accepted_round": 226,
+              "ended_round": 228,
+              "reason": "completed",
+              "rewards": {
+                "bestRate": 1.0,
+                "gold": 80,
+                "rate": 1.0,
+                "score": 112
+              }
+            },
+            {
+              "accepted_round": 292,
+              "ended_round": 294,
+              "reason": "completed",
+              "rewards": {
+                "bestRate": 1.0,
+                "gold": 80,
+                "rate": 1.0,
+                "score": 112
+              }
+            },
+            {
+              "accepted_round": 414,
+              "ended_round": 439,
+              "reason": "超时",
+              "rewards": {}
+            }
+          ],
+          "tasks_ended": 6
+        },
+        "terminal": true
+      },
+      "summary_sha256": "cda683748b1acf3559cdd968a8cddc8b826be425e6decdf79e28076a68d8bfd0",
+      "config_sha256": "10cef6b11c59913472a5c5c288bb4eacc72d0d94f6eeacf9a2c89ef283e068f8",
+      "identity_source_fingerprint": "ea30770d173dd87cb75f6c9e0cc4cf15907ab6b99be480d3674f0e26ba72c4f3",
+      "checks": {
+        "observation_hashes": 1293,
+        "adjacent_after_hashes": 1292,
+        "inventory_checked": true,
+        "summary_audit_errors": 20,
+        "feedback_failed_actions": 23
+      },
+      "first_observation_hash": "e7a3f99b9fa57d9219115517bb2d9da6be284fbf7f330dc4380465c45cb939ff",
+      "task_gold": 240,
+      "sale_gold": 295,
+      "spending": 605,
+      "initial_gold": 75,
+      "last_observed_gold": 5,
+      "collect_counts": {
+        "stone": 31,
+        "copper": 41,
+        "iron": 30
+      },
+      "audit_error_counts": {
+        "unsupported action": 1,
+        "local build ring": 1,
+        "accept without an own task point in range": 1,
+        "voucher without adjacency": 1,
+        "nonadjacent action": 5,
+        "attack range/count": 1,
+        "use item not in backpack": 2,
+        "invalid controller/time/cooldown": 5,
+        "nonweapon attack": 2,
+        "wrong role": 1
+      },
+      "nights": [
+        {
+          "day": 1,
+          "rounds": [
+            71,
+            130
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 11,
+            "hp": 11000,
+            "levels": {
+              "1": 11
+            },
+            "front": [
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 1500,
+          "fixer": {
+            "day": 0,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 48
+            },
+            "10012": {
+              "10032": 48
+            },
+            "10010": {
+              "10030": 45
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 12,
+          "kills": 28,
+          "last_preaction_robots": 13,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 2,
+          "rounds": [
+            201,
+            260
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 15,
+            "hp": 17000,
+            "levels": {
+              "1": 11,
+              "2": 4
+            },
+            "front": [
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 1500,
+          "fixer": {
+            "day": 0,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 4,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 194,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40003,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 25
+              },
+              "before": [
+                1,
+                270
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 195,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                1,
+                490
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 196,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40004,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                1,
+                560
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 199,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40002,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 23
+              },
+              "before": [
+                1,
+                840
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 24
+              }
+            }
+          ],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10012": {
+              "10031": 48
+            },
+            "10010": {
+              "10030": 45
+            }
+          },
+          "max_simultaneous_operators": 2,
+          "no_attack_rounds": 12,
+          "kills": 27,
+          "last_preaction_robots": 27,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 3,
+          "rounds": [
+            331,
+            390
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 18,
+            "hp": 21285,
+            "levels": {
+              "1": 14,
+              "3": 3,
+              "2": 1
+            },
+            "front": [
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 3,
+                "hp": 2000
+              },
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 2,
+                "hp": 1285
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 3,
+                "hp": 2000
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 2000
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 1500,
+          "fixer": {
+            "day": 0,
+            "night": 3
+          },
+          "wall_upgrade": {
+            "day": 3,
+            "night": 1
+          },
+          "uses": [
+            {
+              "round": 292,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher2",
+              "target_id": 40003,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 25
+              },
+              "before": [
+                2,
+                315
+              ],
+              "after": [
+                3,
+                2000
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 293,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher2",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                725
+              ],
+              "after": [
+                3,
+                2000
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 329,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher2",
+              "target_id": 40004,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                2,
+                1060
+              ],
+              "after": [
+                3,
+                2000
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 356,
+              "phase": "night",
+              "role": "10011",
+              "item": "WallFixer",
+              "target_id": 40012,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 27
+              },
+              "before": [
+                1,
+                600
+              ],
+              "after": [
+                1,
+                1000
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 28
+              }
+            },
+            {
+              "round": 356,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallUpgradeVoucher2",
+              "target_id": 40002,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 23
+              },
+              "before": [
+                2,
+                1085
+              ],
+              "after": [
+                3,
+                1980
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 24
+              }
+            },
+            {
+              "round": 361,
+              "phase": "night",
+              "role": "10011",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                3,
+                1150
+              ],
+              "after": [
+                3,
+                1910
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 378,
+              "phase": "night",
+              "role": "10011",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                3,
+                470
+              ],
+              "after": [
+                3,
+                1910
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 40
+            },
+            "10012": {
+              "10032": 47
+            },
+            "10010": {
+              "10030": 36
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 12,
+          "kills": 20,
+          "last_preaction_robots": 49,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 4,
+          "rounds": [
+            461,
+            520
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 19,
+            "hp": 21230,
+            "levels": {
+              "1": 15,
+              "3": 4
+            },
+            "front": [
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 3,
+                "hp": 830
+              },
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 3,
+                "hp": 1640
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 3,
+                "hp": 2000
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 1920
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 910
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 1,
+                "hp": 930
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 1260,
+          "fixer": {
+            "day": 0,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 2
+          },
+          "uses": [
+            {
+              "round": 465,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40012,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 27
+              },
+              "before": [
+                1,
+                910
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 26
+              }
+            },
+            {
+              "round": 467,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40014,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 28
+              },
+              "before": [
+                1,
+                930
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 27
+              }
+            }
+          ],
+          "wall_losses": [
+            {
+              "round": 496,
+              "id": 40001,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 24
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10012": {
+              "10031": 23,
+              "10032": 3
+            },
+            "10010": {
+              "10030": 40
+            }
+          },
+          "max_simultaneous_operators": 2,
+          "no_attack_rounds": 17,
+          "kills": 6,
+          "last_preaction_robots": 65,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 5,
+          "rounds": [
+            591,
+            650
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 19,
+            "hp": 19360,
+            "levels": {
+              "1": 13,
+              "3": 3,
+              "2": 3
+            },
+            "front": [
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 3,
+                "hp": 720
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 3,
+                "hp": 720
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 1070
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 2,
+                "hp": 1210
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 2,
+                "hp": 1240
+              },
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 2,
+                "hp": 1500
+              }
+            ]
+          },
+          "base_start": 1260,
+          "base_end": 1260,
+          "fixer": {
+            "day": 0,
+            "night": 4
+          },
+          "wall_upgrade": {
+            "day": 1,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 583,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallUpgradeVoucher1",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                1,
+                1000
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 11,
+                "y": 24
+              }
+            },
+            {
+              "round": 620,
+              "phase": "night",
+              "role": "10011",
+              "item": "WallFixer",
+              "target_id": 40004,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                3,
+                790
+              ],
+              "after": [
+                3,
+                1980
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 27
+              }
+            },
+            {
+              "round": 620,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40002,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 23
+              },
+              "before": [
+                3,
+                140
+              ],
+              "after": [
+                3,
+                1900
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 23
+              }
+            },
+            {
+              "round": 628,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40012,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 27
+              },
+              "before": [
+                2,
+                205
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 10,
+                "y": 26
+              }
+            },
+            {
+              "round": 638,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                175
+              ],
+              "after": [
+                2,
+                1440
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 46
+            },
+            "10012": {
+              "10032": 37
+            },
+            "10010": {
+              "10030": 45
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 12,
+          "kills": 10,
+          "last_preaction_robots": 74,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 6,
+          "rounds": [
+            721,
+            780
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 19,
+            "hp": 17600,
+            "levels": {
+              "1": 13,
+              "3": 3,
+              "2": 3
+            },
+            "front": [
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 3,
+                "hp": 450
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 3,
+                "hp": 490
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 1100
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 2,
+                "hp": 950
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 2,
+                "hp": 990
+              },
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 2,
+                "hp": 720
+              }
+            ]
+          },
+          "base_start": 1260,
+          "base_end": 1260,
+          "fixer": {
+            "day": 0,
+            "night": 5
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 741,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40003,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 25
+              },
+              "before": [
+                3,
+                290
+              ],
+              "after": [
+                3,
+                1960
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 743,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40002,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 23
+              },
+              "before": [
+                3,
+                170
+              ],
+              "after": [
+                3,
+                1920
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 24
+              }
+            },
+            {
+              "round": 744,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                380
+              ],
+              "after": [
+                2,
+                1450
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 24
+              }
+            },
+            {
+              "round": 767,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40004,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                3,
+                560
+              ],
+              "after": [
+                3,
+                1980
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 768,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                530
+              ],
+              "after": [
+                2,
+                1460
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 48
+            },
+            "10010": {
+              "10032": 41
+            },
+            "10012": {
+              "10030": 45
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 12,
+          "kills": 10,
+          "last_preaction_robots": 85,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 7,
+          "rounds": [
+            851,
+            910
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 19,
+            "hp": 18290,
+            "levels": {
+              "1": 13,
+              "3": 3,
+              "2": 3
+            },
+            "front": [
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 3,
+                "hp": 760
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 3,
+                "hp": 460
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 1720
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 2,
+                "hp": 920
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 2,
+                "hp": 550
+              },
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 2,
+                "hp": 980
+              }
+            ]
+          },
+          "base_start": 1260,
+          "base_end": 1260,
+          "fixer": {
+            "day": 0,
+            "night": 4
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 868,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40003,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 25
+              },
+              "before": [
+                3,
+                360
+              ],
+              "after": [
+                3,
+                1950
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 869,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                800
+              ],
+              "after": [
+                2,
+                1440
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 882,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40002,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 23
+              },
+              "before": [
+                3,
+                100
+              ],
+              "after": [
+                3,
+                1900
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 24
+              }
+            },
+            {
+              "round": 893,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                60
+              ],
+              "after": [
+                2,
+                1440
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [
+            {
+              "round": 909,
+              "id": 40003,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 25
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 48
+            },
+            "10010": {
+              "10032": 42
+            },
+            "10012": {
+              "10030": 44
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 12,
+          "kills": 10,
+          "last_preaction_robots": 90,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 8,
+          "rounds": [
+            981,
+            1040
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 20,
+            "hp": 20820,
+            "levels": {
+              "1": 15,
+              "3": 2,
+              "2": 3
+            },
+            "front": [
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 3,
+                "hp": 1140
+              },
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 880
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 2,
+                "hp": 900
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1260,
+          "base_end": 1260,
+          "fixer": {
+            "day": 2,
+            "night": 3
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 916,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40014,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 28
+              },
+              "before": [
+                2,
+                110
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 28
+              }
+            },
+            {
+              "round": 925,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                420
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 23
+              }
+            },
+            {
+              "round": 1005,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40003,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 25
+              },
+              "before": [
+                1,
+                550
+              ],
+              "after": [
+                1,
+                950
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 1017,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40002,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 23
+              },
+              "before": [
+                3,
+                230
+              ],
+              "after": [
+                3,
+                1850
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 23
+              }
+            },
+            {
+              "round": 1018,
+              "phase": "night",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                260
+              ],
+              "after": [
+                2,
+                1450
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 23
+              }
+            }
+          ],
+          "wall_losses": [
+            {
+              "round": 1031,
+              "id": 40002,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 23
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 47
+            },
+            "10010": {
+              "10032": 34
+            },
+            "10012": {
+              "10030": 45
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 12,
+          "kills": 10,
+          "last_preaction_robots": 95,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 9,
+          "rounds": [
+            1111,
+            1170
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            },
+            {
+              "id": 10032,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 590,
+              "pos": {
+                "x": 9,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 20,
+            "hp": 17160,
+            "levels": {
+              "1": 16,
+              "3": 1,
+              "2": 3
+            },
+            "front": [
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 280
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 2,
+                "hp": 430
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 2,
+                "hp": 870
+              },
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 2,
+                "hp": 460
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 220
+              },
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1260,
+          "base_end": 1080,
+          "fixer": {
+            "day": 0,
+            "night": 3
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 1134,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40004,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                3,
+                140
+              ],
+              "after": [
+                3,
+                1980
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 1135,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40001,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 24
+              },
+              "before": [
+                2,
+                190
+              ],
+              "after": [
+                2,
+                1470
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            },
+            {
+              "round": 1136,
+              "phase": "night",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40003,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 25
+              },
+              "before": [
+                1,
+                220
+              ],
+              "after": [
+                1,
+                1000
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [
+            {
+              "round": 1134,
+              "id": 40002,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 23
+              }
+            },
+            {
+              "round": 1142,
+              "id": 40009,
+              "type": "wall",
+              "pos": {
+                "x": 9,
+                "y": 23
+              }
+            },
+            {
+              "round": 1155,
+              "id": 40001,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 24
+              }
+            },
+            {
+              "round": 1161,
+              "id": 40003,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 25
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10011": {
+              "10031": 40
+            },
+            "10012": {
+              "10032": 31
+            },
+            "10010": {
+              "10030": 24
+            }
+          },
+          "max_simultaneous_operators": 3,
+          "no_attack_rounds": 13,
+          "kills": 10,
+          "last_preaction_robots": 95,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 10,
+          "rounds": [
+            1241,
+            1293
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10031,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 9,
+                "y": 26
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 20,
+            "hp": 21680,
+            "levels": {
+              "1": 17,
+              "3": 1,
+              "2": 2
+            },
+            "front": [
+              {
+                "id": 40004,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 3,
+                "hp": 2000
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40014,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 2,
+                "hp": 1500
+              },
+              {
+                "id": 40001,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40002,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40003,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1080,
+          "base_end": 0,
+          "fixer": {
+            "day": 3,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 1237,
+              "phase": "day",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40012,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 27
+              },
+              "before": [
+                2,
+                340
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 27
+              }
+            },
+            {
+              "round": 1238,
+              "phase": "day",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40014,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 28
+              },
+              "before": [
+                2,
+                530
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 27
+              }
+            },
+            {
+              "round": 1239,
+              "phase": "day",
+              "role": "10010",
+              "item": "WallFixer",
+              "target_id": 40004,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                3,
+                1180
+              ],
+              "after": [
+                3,
+                2000
+              ],
+              "worker_pos": {
+                "x": 9,
+                "y": 27
+              }
+            }
+          ],
+          "wall_losses": [
+            {
+              "round": 1281,
+              "id": 40001,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 23
+              }
+            },
+            {
+              "round": 1281,
+              "id": 40002,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 24
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10010": {
+              "10031": 32
+            },
+            "10012": {
+              "10030": 37
+            }
+          },
+          "max_simultaneous_operators": 2,
+          "no_attack_rounds": 13,
+          "kills": 2,
+          "last_preaction_robots": 105,
+          "last_wall_transition_unobserved": true
+        }
+      ],
+      "station_levels_observed": [
+        1
+      ],
+      "first_base_damage": 508,
+      "accepted_moves_into_static_live_buildings_count": 131,
+      "maintenance_uses_from_building_overlap_count": 14
+    },
+    {
+      "arm": "solo_mixed",
+      "summary": {
+        "audit_errors": [
+          "nonadjacent action",
+          "nonadjacent action",
+          "nonadjacent action",
+          "nonadjacent action",
+          "wrong role",
+          "voucher wrong level",
+          "nonadjacent action",
+          "invalid controller/time/cooldown"
+        ],
+        "base_hp": 0,
+        "case": {
+          "limit": 1300,
+          "pressure": 1,
+          "profile": "observed-seven-days",
+          "seed": 1,
+          "side": "challenger",
+          "task_stress": {
+            "failure_rate": 0.5,
+            "gold_reward": 80,
+            "tasks_per_point": 3
+          }
+        },
+        "execution_failures": 11,
+        "full_survival": false,
+        "initial_hash": "49acdbc6c18604ad0f2b806c1aa5b25e3efdb9c2d396568547ee102ccb04fdd8",
+        "model_seconds": 2647.8229999998584,
+        "role_deaths": 2,
+        "rounds": 512,
+        "score": 588,
+        "score_parts": {
+          "kills": 192,
+          "other_tasks_and_treasure": 336,
+          "survival": 60
+        },
+        "task_metrics": {
+          "active_task_at_end": null,
+          "assigned_failure_rate": 0.5,
+          "observed_failed_tasks": 3,
+          "observed_task_failure_rate": 0.5,
+          "requested_failure_rate": 0.5,
+          "task_outcomes": [
+            {
+              "accepted_round": 23,
+              "ended_round": 28,
+              "reason": "离开任务点范围",
+              "rewards": {}
+            },
+            {
+              "accepted_round": 54,
+              "ended_round": 56,
+              "reason": "completed",
+              "rewards": {
+                "bestRate": 1.0,
+                "gold": 80,
+                "rate": 1.0,
+                "score": 112
+              }
+            },
+            {
+              "accepted_round": 93,
+              "ended_round": 99,
+              "reason": "离开任务点范围",
+              "rewards": {}
+            },
+            {
+              "accepted_round": 132,
+              "ended_round": 134,
+              "reason": "completed",
+              "rewards": {
+                "bestRate": 1.0,
+                "gold": 80,
+                "rate": 1.0,
+                "score": 112
+              }
+            },
+            {
+              "accepted_round": 164,
+              "ended_round": 166,
+              "reason": "completed",
+              "rewards": {
+                "bestRate": 1.0,
+                "gold": 80,
+                "rate": 1.0,
+                "score": 112
+              }
+            },
+            {
+              "accepted_round": 295,
+              "ended_round": 297,
+              "reason": "离开任务点范围",
+              "rewards": {}
+            }
+          ],
+          "tasks_ended": 6
+        },
+        "terminal": true
+      },
+      "summary_sha256": "d3a304bddd10a93772842c4f09dbf28c1a7fbac97089c2a7fc7b4279c37e3196",
+      "config_sha256": "0c7db93697900c758664c9b9e01e328fb69c8b37339e15e97435856aec2a8b7a",
+      "identity_source_fingerprint": "11337385397b46a4eeecff57e1e4a51a377c7005766d17dca4436b56dbb754ea",
+      "checks": {
+        "observation_hashes": 512,
+        "adjacent_after_hashes": 511,
+        "inventory_checked": true,
+        "summary_audit_errors": 8,
+        "feedback_failed_actions": 11
+      },
+      "first_observation_hash": "e7a3f99b9fa57d9219115517bb2d9da6be284fbf7f330dc4380465c45cb939ff",
+      "task_gold": 240,
+      "sale_gold": 0,
+      "spending": 315,
+      "initial_gold": 75,
+      "last_observed_gold": 0,
+      "collect_counts": {
+        "stone": 30
+      },
+      "audit_error_counts": {
+        "nonadjacent action": 5,
+        "wrong role": 1,
+        "voucher wrong level": 1,
+        "invalid controller/time/cooldown": 1
+      },
+      "nights": [
+        {
+          "day": 1,
+          "rounds": [
+            71,
+            130
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10040,
+              "roleType": "rocket",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            },
+            {
+              "id": 10041,
+              "roleType": "rocket",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 6,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 10,
+            "hp": 10000,
+            "levels": {
+              "1": 10
+            },
+            "front": [
+              {
+                "id": 40005,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40006,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40007,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40008,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40009,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 1500,
+          "fixer": {
+            "day": 0,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10010": {
+              "10040": 13,
+              "10041": 13,
+              "10030": 22
+            }
+          },
+          "max_simultaneous_operators": 1,
+          "no_attack_rounds": 12,
+          "kills": 35,
+          "last_preaction_robots": 5,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 2,
+          "rounds": [
+            201,
+            260
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 2,
+              "health": 1500,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10040,
+              "roleType": "rocket",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            },
+            {
+              "id": 10041,
+              "roleType": "rocket",
+              "level": 2,
+              "health": 1500,
+              "pos": {
+                "x": 6,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 12,
+            "hp": 11310,
+            "levels": {
+              "1": 12
+            },
+            "front": [
+              {
+                "id": 40005,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 790
+              },
+              {
+                "id": 40006,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 1,
+                "hp": 860
+              },
+              {
+                "id": 40007,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 815
+              },
+              {
+                "id": 40008,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 1,
+                "hp": 845
+              },
+              {
+                "id": 40009,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 1500,
+          "fixer": {
+            "day": 0,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 197,
+              "phase": "day",
+              "role": "10012",
+              "item": "WeaponUpgradeVoucher1",
+              "target_id": 10030,
+              "target_type": "railgun",
+              "target_pos": {
+                "x": 6,
+                "y": 25
+              },
+              "before": [
+                1,
+                1000
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 5,
+                "y": 25
+              }
+            },
+            {
+              "round": 198,
+              "phase": "day",
+              "role": "10012",
+              "item": "WeaponUpgradeVoucher1",
+              "target_id": 10041,
+              "target_type": "rocket",
+              "target_pos": {
+                "x": 6,
+                "y": 24
+              },
+              "before": [
+                1,
+                1000
+              ],
+              "after": [
+                2,
+                1500
+              ],
+              "worker_pos": {
+                "x": 5,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [],
+          "shots_by_operator": {
+            "10010": {
+              "10041": 12,
+              "10040": 11,
+              "10030": 20
+            }
+          },
+          "max_simultaneous_operators": 1,
+          "no_attack_rounds": 17,
+          "kills": 55,
+          "last_preaction_robots": 0,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 3,
+          "rounds": [
+            331,
+            390
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 2,
+              "health": 1500,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10040,
+              "roleType": "rocket",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            },
+            {
+              "id": 10041,
+              "roleType": "rocket",
+              "level": 2,
+              "health": 1500,
+              "pos": {
+                "x": 6,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 19,
+            "hp": 17870,
+            "levels": {
+              "1": 19
+            },
+            "front": [
+              {
+                "id": 40005,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 665
+              },
+              {
+                "id": 40006,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 1,
+                "hp": 725
+              },
+              {
+                "id": 40007,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 480
+              },
+              {
+                "id": 40008,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40009,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 1500,
+          "base_end": 800,
+          "fixer": {
+            "day": 1,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [
+            {
+              "round": 303,
+              "phase": "day",
+              "role": "10012",
+              "item": "WallFixer",
+              "target_id": 40008,
+              "target_type": "wall",
+              "target_pos": {
+                "x": 10,
+                "y": 26
+              },
+              "before": [
+                1,
+                550
+              ],
+              "after": [
+                1,
+                1000
+              ],
+              "worker_pos": {
+                "x": 11,
+                "y": 25
+              }
+            }
+          ],
+          "wall_losses": [
+            {
+              "round": 362,
+              "id": 40007,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 25
+              }
+            },
+            {
+              "round": 383,
+              "id": 40006,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 24
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10010": {
+              "10041": 7,
+              "10040": 6,
+              "10030": 15
+            },
+            "10012": {
+              "10030": 17,
+              "10041": 4
+            }
+          },
+          "max_simultaneous_operators": 1,
+          "no_attack_rounds": 11,
+          "kills": 51,
+          "last_preaction_robots": 25,
+          "last_wall_transition_unobserved": false
+        },
+        {
+          "day": 4,
+          "rounds": [
+            461,
+            512
+          ],
+          "guns_start": [
+            {
+              "id": 10030,
+              "roleType": "railgun",
+              "level": 2,
+              "health": 1500,
+              "pos": {
+                "x": 6,
+                "y": 25
+              }
+            },
+            {
+              "id": 10040,
+              "roleType": "rocket",
+              "level": 1,
+              "health": 1000,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            },
+            {
+              "id": 10041,
+              "roleType": "rocket",
+              "level": 2,
+              "health": 1500,
+              "pos": {
+                "x": 6,
+                "y": 24
+              }
+            }
+          ],
+          "walls_start": {
+            "count": 19,
+            "hp": 16845,
+            "levels": {
+              "1": 19
+            },
+            "front": [
+              {
+                "id": 40005,
+                "pos": {
+                  "x": 10,
+                  "y": 23
+                },
+                "level": 1,
+                "hp": 105
+              },
+              {
+                "id": 40008,
+                "pos": {
+                  "x": 10,
+                  "y": 26
+                },
+                "level": 1,
+                "hp": 120
+              },
+              {
+                "id": 40009,
+                "pos": {
+                  "x": 10,
+                  "y": 27
+                },
+                "level": 1,
+                "hp": 810
+              },
+              {
+                "id": 40012,
+                "pos": {
+                  "x": 10,
+                  "y": 28
+                },
+                "level": 1,
+                "hp": 810
+              },
+              {
+                "id": 40006,
+                "pos": {
+                  "x": 10,
+                  "y": 24
+                },
+                "level": 1,
+                "hp": 1000
+              },
+              {
+                "id": 40007,
+                "pos": {
+                  "x": 10,
+                  "y": 25
+                },
+                "level": 1,
+                "hp": 1000
+              }
+            ]
+          },
+          "base_start": 800,
+          "base_end": 0,
+          "fixer": {
+            "day": 0,
+            "night": 0
+          },
+          "wall_upgrade": {
+            "day": 0,
+            "night": 0
+          },
+          "uses": [],
+          "wall_losses": [
+            {
+              "round": 478,
+              "id": 40005,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 23
+              }
+            },
+            {
+              "round": 485,
+              "id": 40008,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 26
+              }
+            },
+            {
+              "round": 491,
+              "id": 40006,
+              "type": "wall",
+              "pos": {
+                "x": 10,
+                "y": 24
+              }
+            }
+          ],
+          "shots_by_operator": {
+            "10010": {
+              "10040": 6
+            },
+            "10012": {
+              "10030": 32,
+              "10041": 7
+            }
+          },
+          "max_simultaneous_operators": 2,
+          "no_attack_rounds": 12,
+          "kills": 51,
+          "last_preaction_robots": 40,
+          "last_wall_transition_unobserved": true
+        }
+      ],
+      "station_levels_observed": [
+        1
+      ],
+      "first_base_damage": 371,
+      "accepted_moves_into_static_live_buildings_count": 2,
+      "maintenance_uses_from_building_overlap_count": 0
+    }
+  ]
+}
