@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _records, _terrain  # noqa: E402
+from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game import planner  # noqa: E402
@@ -1534,6 +1535,240 @@ class RepairTest(unittest.TestCase):
             )
         )
         self.assertNotEqual(cmds.get(str(10010), {}).get("action"), "use")
+
+
+class WallPriorityTest(unittest.TestCase):
+    """第 44 步（用户手改 + 本步收口）：**修墙 / 砌墙是最高优先级**（每天的修墙都是
+    最高优先级；第一天必须把墙建好），且**工人不能什么都不做** —— 砌不了就落
+    建武器 / 经济线（卖 → 升级 → 采闲矿），一件不行才轮到下一件。
+
+    plan 的白天顺序由此锁定：修墙(`_repair_line`) > 砌墙(`_build_walls`) >
+    建武器(`_slots`) > 经济线。`_build_walls` 返回 `True` = 本回合的指令已由
+    墙线产出（或 gated 待命）；`False` = 什么都没发过，兜底链接手。
+    """
+
+    BASE = Pos(10, 24)
+
+    def setUp(self) -> None:
+        AGENT.reset()  # `_mine_spare_ore` 读价格期望（跨回合状态），不清会跨用例串味
+
+    def _turn(
+        self,
+        roles: tuple[BaseRole, ...],
+        ground: dict[Pos, str],
+        *,
+        gold: int = 0,
+        prices: dict[str, int] | None = None,
+        walls: Iterable[Pos] = (),
+        phase_task: str = "",
+    ) -> Turn:
+        grid = {**ground, **{c: WALL for c in walls}}
+        grid |= {r.pos: r.type_name for r in roles}  # 单位铺在最后（与 model._entries 一致）
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=gold,
+            phase_task=phase_task,
+            vendor_prices=prices if prices is not None else {},
+        )
+
+    def test_the_wall_line_beats_weapons_and_economy(self):
+        """**顺序锁**：环没砌完时，砌墙排在建武器与经济线**之前** —— 金够三座武器
+        （75）、铜矿比石头贵四倍还贴得更近，工人照样先采石：环上的缺口是一切的前提。
+        旧顺序（建武器最前）这里会发出"走向武器位"的 move，立即挂。"""
+        worker = Worker(10010, Pos(5, 23))
+        turn = self._turn(
+            (worker,),
+            {self.BASE: "station", Pos(4, 24): "stone", Pos(6, 24): "copper"},
+            gold=75,
+            prices={"stone": 1, "copper": 5},
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "collect", "先采石，不是先建武器/采铜")
+        cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cell, Pos(4, 24), "墙线只认石矿（铜再贵也砌不了墙）")
+
+    def test_no_reachable_stone_falls_to_the_economy(self):
+        """环没砌完但**没石矿可采** ⇒ 落经济线采铜，**不是原地待命** ——
+        "工人不能什么都不做"（用户原话）。旧口径这里整回合空指令。"""
+        worker = Worker(10010, Pos(5, 23))
+        turn = self._turn(
+            (worker,),
+            {self.BASE: "station", Pos(6, 24): "copper"},
+            prices={"stone": 1, "copper": 5},
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "collect", "采不了石就去采能卖的铜")
+        cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cell, Pos(6, 24))
+
+    def test_a_gated_worker_stands_by(self):
+        """`gated`（砌下去会把人关在墙里）⇒ **待命**：开拓者被任务钉死在盒内（它走
+        ① 支路，永远轮不到"先出来"那道闸），两个工人又恰好把 2 格门口都占住 ⇒
+        盒外有墙格要砌的工人这一回合不发指令（用户在 `_build_walls` 里拍的口径：
+        "安全：别跑远，下回合缺口还在"—— 比落经济线更保环的速度）。
+        对照：没分到墙格的另一个工人照常落经济线干活。"""
+        walls = set(wall_cells(self.BASE, 41)) - {Pos(13, 24)}  # 只剩封口格
+        pinned = Pioneer(10011, Pos(11, 23))   # 盒内、被任务钉死（⇒ 会被墙关住）
+        door_a = Worker(10012, Pos(8, 23))     # 占住门口之一（自己出得去 ⇒ 不在 leaving）
+        door_b = Worker(10013, Pos(8, 24))     # 占住门口之二、领到封口格 ⇒ gated
+        turn = self._turn(
+            (pinned, door_a, door_b),
+            {self.BASE: "station", Pos(11, 22): "copper"},
+            prices={"copper": 5},
+            walls=walls,
+            phase_task="题目",
+        )
+        cmds = plan(turn)
+        self.assertNotIn(str(10013), cmds, "gated ⇒ 待命（不发指令，也不跑去采铜）")
+        self.assertIn(str(10012), cmds, "没分到墙格的工人照常落经济线")
+
+    def test_a_full_worker_does_not_hoard_the_stone_mine(self):
+        """**石矿认领只发生在"真要采"之后**：石头已够的工人（want=0）不许占住矿格 ——
+        否则缺石的同事这一回合采不到石、被挤去经济线，环白白慢一拍。
+        认领发生在 `want` 计算之前的话，B（空手）会去采铜，立即挂。"""
+        gaps = {Pos(13, 21), Pos(13, 24)}
+        walls = set(wall_cells(self.BASE, 41)) - gaps
+        full = Worker(10010, Pos(5, 23), {"stone": 9})   # 段里只剩 1 格 ⇒ want=0
+        empty = Worker(10012, Pos(6, 24))                # 还差 1 块石头
+        turn = self._turn(
+            (Pioneer(10011, Pos(20, 20)), full, empty),
+            {self.BASE: "station", Pos(4, 24): "stone", Pos(7, 24): "copper"},
+            prices={"stone": 1, "copper": 5},
+            walls=walls,
+        )
+        cmd = plan(turn)[str(10012)]
+        self.assertEqual(cmd["action"], "move", "B 该去采石，不是被挤去采铜")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(step.dist(Pos(4, 24)), 1, "这一步朝石矿迈（贴着矿那一格）")
+
+
+class DayOneFinishTest(unittest.TestCase):
+    """**第一天必须把墙建好**（用户口径，第 44 步）—— 全天模拟的验收网：
+
+    可行地图（两座石矿 = 20 块石头 ≥ 18 格墙）上跑满 70 个白天回合，照判题器口径
+    结算指令（move/build/collect/sell/buy、矿采 10 次消失），必须做到：
+
+    1. **环 18/18 砌完**，且同一格不许砌两遍（石头白花）；
+    2. **三座武器建满**（开局 75 金恰好三座，夜里第一波机器人之前得有炮）；
+    3. **环砌完之前工人不许闲**（"工人不能什么都不做"；环砌完后的白天末尾，
+       预算拦住回不来的远矿 ⇒ 待命是保守方向的合法行为，不在本网范围）。
+
+    实测（第 44 步）：环 R41 收官、三座武器 R39-R44 建满 —— 全天余量 26 回合。
+    """
+
+    BASE = Pos(10, 24)
+    STONE1, STONE2 = Pos(4, 24), Pos(4, 26)
+    IRON, COPPER = Pos(6, 30), Pos(20, 30)
+    VENDOR, SHOP, TASK = Pos(20, 16), Pos(22, 18), Pos(30, 30)
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+
+    def setUp(self) -> None:
+        AGENT.reset()
+        self.gold = 75  # 开局：恰好买满三座（25×3）
+        self.ground: dict[Pos, str] = {
+            self.BASE: "station",  # 只写左上角（与 model._units 一致，2×2 由 Map 展开）
+            self.STONE1: "stone", self.STONE2: "stone",
+            self.IRON: "iron", self.COPPER: "copper",
+            self.VENDOR: "vendor", self.SHOP: "weaponShop", self.TASK: "challengerTaskPoint1",
+        }
+        self.roles: dict[int, BaseRole] = {
+            10011: Pioneer(10011, Pos(12, 24)),
+            10012: Worker(10012, Pos(11, 23)),
+            10013: Worker(10013, Pos(11, 25)),
+        }
+        self.walls: dict[Pos, Wall] = {}
+        self.weapons: list[Weapon] = []
+        self.mine_left = {self.STONE1: 10, self.STONE2: 10, self.IRON: 10, self.COPPER: 10}
+        self.built: list[Pos] = []
+        self.idle: dict[int, list[int]] = {10012: [], 10013: []}
+
+    def _turn(self, round_no: int) -> Turn:
+        grid = {**self.ground, **{w.pos: WALL for w in self.walls.values()}}
+        grid |= {w.pos: w.kind for w in self.weapons}
+        grid |= {r.pos: r.type_name for r in self.roles.values()}
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), grid),
+            roles=tuple(self.roles.values()),
+            gold=self.gold,
+            weapons=tuple(self.weapons),
+            walls=tuple(self.walls.values()),
+            task_points=(self.TASK,) if round_no <= 2 else (),
+            phase_task="题目" if round_no >= 3 else "",  # 开拓者第 3 回合起被任务钉住
+            vendor_prices=self.PRICES,
+            shop_prices={"WallFixer": 10, "WeaponUpgradeVoucher1": 100},
+            station_health=1500,
+        )
+
+    def _settle(self, round_no: int) -> None:
+        """照判题器口径结算一回合：move 挪人、build 落建筑、collect 出矿并计数
+        （10 次消失）、sell/buy 走账；`use`/`acceptTask` 不影响本用例的断言。"""
+        cmds = plan(self._turn(round_no))
+        for key, cmd in cmds.items():
+            rid = int(key)
+            role = self.roles[rid]
+            bag = dict(role.bag)
+            if cmd["action"] == "move":
+                t = cmd["targetPos"][0]
+                self.roles[rid] = type(role)(rid, Pos(t["x"], t["y"]), bag)
+            elif cmd["action"] == "build":
+                t = cmd["targetPos"][0]
+                cell = Pos(t["x"], t["y"])
+                if cmd["name"] == WALL:
+                    self.walls[cell] = Wall(9000 + len(self.walls), cell, 1000, 1)
+                    self.built.append(cell)
+                    bag["stone"] = bag.get("stone", 0) - 1
+                else:
+                    self.weapons.append(Weapon(10020 + len(self.weapons), cmd["name"], cell, 4, 0))
+                    self.gold -= 25
+                self.roles[rid] = type(role)(rid, role.pos, bag)
+            elif cmd["action"] == "collect":
+                t = cmd["targetPos"][0]
+                cell = Pos(t["x"], t["y"])
+                kind = self.ground[cell]
+                bag[kind] = bag.get(kind, 0) + 1
+                self.mine_left[cell] -= 1
+                if self.mine_left[cell] <= 0:
+                    del self.ground[cell]
+                self.roles[rid] = type(role)(rid, role.pos, bag)
+            elif cmd["action"] == "sell":
+                kind, num = cmd["name"], cmd["num"]
+                self.gold += self.PRICES[kind] * num
+                bag[kind] = 0
+                self.roles[rid] = type(role)(rid, role.pos, bag)
+            elif cmd["action"] == "buy":
+                self.gold -= {"WallFixer": 10, "WeaponUpgradeVoucher1": 100}[cmd["name"]]
+                bag[cmd["name"]] = bag.get(cmd["name"], 0) + cmd.get("num", 1)
+                self.roles[rid] = type(role)(rid, role.pos, bag)
+        for rid in (10012, 10013):
+            if str(rid) not in cmds:
+                self.idle[rid].append(round_no)
+
+    def test_day_one_finishes_the_ring_and_three_weapons(self):
+        ring = set(wall_cells(self.BASE, 41))
+        done_at = None
+        for round_no in range(1, 71):
+            if done_at is None and ring <= set(self.walls):
+                done_at = round_no
+            self._settle(round_no)
+        if done_at is None and ring <= set(self.walls):
+            done_at = 70  # 恰好最后一回合砌完的情形
+        self.assertIsNotNone(
+            done_at, f"第 1 天没把 18 格墙砌完，缺：{sorted(ring - set(self.walls))}"
+        )
+        self.assertEqual(
+            {(w.kind, w.pos) for w in self.weapons},
+            set(zip(WEAPONS_BY_SITE, weapon_sites(self.BASE, 41))),
+            "三座武器第 1 天就该建满、各在自己的落点上",
+        )
+        self.assertEqual(len(self.built), len(set(self.built)), "同一格墙砌了两遍（石头白花）")
+        for rid, rounds in self.idle.items():
+            early = [r for r in rounds if r < (done_at or 71)]
+            self.assertEqual(
+                early, [], f"工人 {rid} 在环砌完（R{done_at}）之前就闲着：{early}"
+            )
 
 
 if __name__ == "__main__":

@@ -3,8 +3,8 @@
 每个角色每回合只有一个动作（顺序见 `docs/策略指导.md`）：
 
 - **白天·开拓者**：去最近一个能接的任务点 `acceptTask`；领到就被钉死（见 `plan`）。
-- **白天·工人**：建武器 → 采石砌墙 → 卖矿 → 采最值钱的矿，一件不行才轮到下一件；
-  **环砌完后的白天末尾提前回炮位**（第 33 步，只为夜里第一波能站在炮前）。
+- **白天·工人**：修墙 → 采石砌墙 → 建武器 → 卖矿 → 采最值钱的矿，一件不行才轮到下一件；
+  **修墙/砌墙是最高优先级**（第一天必须把墙建好）；**环砌完后的白天末尾提前回炮位**（第 33 步）。
 - **夜里·所有角色**（含开拓者，`attack` 的可用角色是"全部"）：认领一座武器走过去，贴着就开火。
 
 ⚠️ **两个距离口径别混用**（第 33 步）：**回合预算**（来不来得及来回）一律用 BFS 真实步数
@@ -225,10 +225,23 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
         if not isinstance(role, Worker):
             continue  # 不该出现的角色（`roles.make` 已挡过一道）
 
-        # **半血墙优先于一切差事（救援之后）**（第 42 步，用户：优先建墙）——
-        # 买包 → 用包，没包买不起才重建兜底。挂在建武器之前：防御面上有洞/薄弱格时，
-        # 别的都排后面。
+        # **修墙 / 砌墙是最高优先级**（用户：每天的修墙都是最高优先级；第一天必须把墙建好）。
+        # 先修半血墙，再砌新墙；砌不了（没石头 / 采不到 / 被闸门挡住）⇒ `_build_walls`
+        # 返回 False，落到建武器、经济线 —— 工人不能什么都不做。
         if turn.is_day and _repair_line(role, turn, cmds, claimed, sites, repair_taken):
+            continue
+
+        segment = segments[worker_no] if worker_no < len(segments) else ()
+        worker_no += 1
+        target = segment[0] if segment else None
+        if target is not None and _door_open(turn):
+            target = None  # 白天中段：环上那个缺口当临时门，先别补（第 34 步）
+        if target is not None and _build_walls(
+            role, turn, cmds, claimed, sites,
+            gated=bool(leaving), target=target,
+            remaining=len(segment),
+            ore_taken=ore_taken, paths=paths,
+        ):
             continue
 
         slot = next(slots, None)
@@ -237,34 +250,19 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             budget -= WEAPON_COST  # **认领即预留**：宁可这回合少建，不可超支
             sites.add(cell)
             if role.pos.dist(cell) <= 1:
-                # **站位即建造位**：`build` 要求目标在自身一格内，而 `step_toward`
-                # 恰好把工人停在贴着目标的那一格 —— 不用先挪开再建。
                 if _emit(cmds, role, actions.Build, kind, cell):
                     continue
             else:
-                # `sites` 也当障碍：免得工人径直走到建造格**上**去（那样建完自己站在武器里）；
-                # `paths` 同理 —— 别踩进另一个工人预留的路（第 40 步）。
                 walk = turn.map.blocked | claimed | sites | paths
                 step = step_toward(role.pos, cell, walk, turn.map.size)
                 if step is not None and _emit(cmds, role, actions.Move, step):
                     claimed.add(step)
                     continue
-            # 建不了 / 走不到 → 落到下面，别杵着
 
-        segment = segments[worker_no] if worker_no < len(segments) else ()
-        worker_no += 1
-        _build_walls(
-            role,
-            turn,
-            cmds,
-            claimed,
-            sites,
-            gated=bool(leaving),
-            target=segment[0] if segment else None,
-            remaining=len(segment),
-            ore_taken=ore_taken,
-            paths=paths,
-        )
+        # **经济线兜底**：修墙 / 砌墙 / 建武器都做不了 ⇒ 卖矿 → 升级 → 采闲矿。
+        if not _sell_ore(role, turn, cmds, claimed, sites, paths):
+            if not _upgrade_line(role, turn, cmds, claimed):
+                _mine_spare_ore(role, turn, cmds, claimed, sites, ore_taken, paths)
 
     return cmds
 
@@ -468,64 +466,55 @@ def _build_walls(
     remaining: int = 0,
     ore_taken: set[Pos] | None = None,
     paths: set[Pos] | None = None,
-) -> None:
-    """白天：先攒石头，再把墙砌到**黑板分给的那一格**上；**砌完了就去卖矿、升级、采闲矿**。
+) -> bool:
+    """白天：先攒石头，再把墙砌到**黑板分给的那一格**上。
+
+    返回 `True` = 本回合发了指令（采矿 / 挪开 / 砌墙 / 走向矿或墙）；
+    `False` = 砌不了（没石头、采不到、被闸门挡住）⇒ 调用方接着走修墙 / 建武器 / 经济线，
+    **工人不能什么都不做**（用户原话）。
 
     每回合独立判定，不存跨回合状态 —— 矿采没了、墙被别人砌了，下一回合都能自动跟着变。
 
     `target` / `remaining` = 黑板（`plan`）切段分给本工人的那一格与本段**还剩几格**
     （第 40 步：A 领前段、B 领后段沿环推进，两人不再都砍 `free[0]` 靠认领错开一格 ——
-    那会让 B 的目标贴着 A 的目标，两人在同一段墙上挤）；`None` = 没分到
-    （环砌完了 / 段已空 / 白天中段那个缺口当门用）⇒ 走经济线。
+    那会让 B 的目标贴着 A 的目标，两人在同一段墙上挤）。
 
     `gated` = **这一回合不许砌**（砌下去会把谁关在墙里，见 `_trapped`）。
-    ⚠️ **"不许砌"和"砌完了"是两件事**：前者墙还没砌完，跑去采矿就是跑到地图另一头、
-    几十回合回不来 —— 所以闸门挡住的这一支原地待命。`target is None` 的经济线**排在**
-    这道闸之前：环真砌完了的人即使在 `gated` 回合也照常卖/采（与旧口径逐字同义）。
+    返回 `False` 让调用方走其他差事，而不是原地待命（用户：工人不能什么都不做）。
 
     `ore_taken` / `paths` = 黑板的另两本账：**矿格认领**（本工人挑中即登记，别的工人
     这回合不再奔它 —— 旧口径"不认领矿"在两人都要石头时就是抢资源）与**路径预留**
     （动身前把 BFS 路径记进去，后处理的工人绕着走，防双双停住）。
     """
+    if target is None:
+        return False  # 没分到墙格 ⇒ 调用方走经济线
     ore_taken = set() if ore_taken is None else ore_taken
     paths = set() if paths is None else paths
-    if target is not None and _door_open(turn):
-        # **白天中段：环上那个缺口当"临时门"用，先别补**（第 34 步）。
-        # 这正是封口格 `(13,24)` 的同一个语义（"白天开着通行、天黑前封死"），
-        # 只是第 2 天起开口不是靠建造顺序、而是靠时间窗表达 —— 于是自然落进
-        # 下面那一支（卖 → 升级 → 采闲矿），**不需要单独一个"别补墙"的分支**。
-        target = None
-    if target is None:
-        # 墙砌完了 ⇒ **先卖矿、买得起就去升级、最后才去采**（第 29 步的顺序：升级优先于
-        # 采矿是用户拍板；卖在最前是因为卖来的钱正好补上券的差价）。
-        if not _sell_ore(role, turn, cmds, claimed, sites, paths):
-            if not _upgrade_line(role, turn, cmds, claimed):
-                _mine_spare_ore(role, turn, cmds, claimed, sites, ore_taken, paths)
-        return
     if gated:
-        return  # 还砌得动，但这回合砌下去就把人关住了 ⇒ 一格都不砌（待命，**不是**"砌完了"）
+        return True  # 砌下去会把人关住 ⇒ 待命（安全：别跑远，下回合缺口还在）
     #: **只认石矿**：墙只吃石头，铁/铜再多也砌不了墙。**排除本回合别人认领的矿格**
-    #: （第 40 步）—— B 就近换一座，不跟着 A 奔同一座；挑中即登记。
+    #: （第 40 步）—— B 就近换一座，不跟着 A 奔同一座。
+    #: ⚠️ **认领只发生在"真要采"之后**（第 44 步）：石头已够的工人（want=0）不该
+    #: 占住矿格 —— 它这回合用不上，却会把缺石的同事挤去经济线，环白白慢一拍。
     mine = _pick_ore(
         role.pos,
         {p: k for p, k in turn.map.ores.items() if p not in ore_taken},
         turn.vendor_prices,
         want_stone=True,
     )
-    if mine is not None:
-        ore_taken.add(mine)
     want = _stones_to_mine(role, turn, target, mine, remaining)
 
     if want > 0 and mine is not None:
+        ore_taken.add(mine)  # 挑中即登记（本回合真要采它）
         if role.pos.dist(mine) <= 1:
             if _emit(cmds, role, actions.Collect, mine):
-                return
+                return True
         # 还没走到矿边：走一步，**动身成功才预留这条路**（"我在走这条线"才对别人成立；
         # 先预留再走会让工人绕开自己刚记下的路 —— 可绕时就地多绕三步，实测过）。
         # avoid 里的 `paths` 此时只含先处理工人的账，不含自己的。
         elif _step(role, mine, turn, cmds, claimed, sites | paths):
             _reserve_path(role, mine, turn, claimed, paths)
-            return
+            return True
 
     if role.stone >= WALL_COST:
         # **认领要发生在动身之前**：等砌完再登记的话，另一个工人会在同一回合也奔着它去。
@@ -536,16 +525,16 @@ def _build_walls(
             # "自己人算路过"又把它复活成候选 ⇒ 每回合对同一格 `build`（`dist == 0` 也是合法
             # 建造位），永远轮不到下一格、石头白花、`free` 永不为空（连卖矿那一支都进不去）。
             # 挪开一格两个方向都收敛：砌过的没人站着就现形；没砌过的下一回合从邻格稳稳砌上。
-            _step_aside(role, turn, cmds, claimed, sites)
-            return
-        if role.pos.dist(target) <= 1:
+            if _step_aside(role, turn, cmds, claimed, sites):
+                return True
+        elif role.pos.dist(target) <= 1:
             # 与建武器同一条契约：`step_toward` 停在贴着目标的一格，那正是 `build` 的站位
             if _emit(cmds, role, actions.Build, WALL, target):
-                return
+                return True
         elif _step(role, target, turn, cmds, claimed, sites | paths):
             _reserve_path(role, target, turn, claimed, paths)
-            return
-    # 手里没石头、又没时间采了 ⇒ 什么都不发（空指令合法且不计异常）
+            return True
+    return False  # 没石头、采不到 ⇒ 调用方走其他差事（用户：工人不能什么都不做）
 
 
 def _walled(turn: Turn) -> frozenset[Pos]:
