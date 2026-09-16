@@ -253,9 +253,25 @@ class MetalCollectionTests(unittest.TestCase):
         target = Pos.load(command["targetPos"][0])
         site = missing[0]
         worker = next(u for u in turn.workers() if u.unit_id == 10010)
-        self.assertLess(brain._route_cost(turn, target, site),
-                        brain._route_cost(turn, worker.pos, site),
-                        "the step must make the site closer")
+        # A rear/flank slot can require a detour towards its accessible stand,
+        # rather than strictly reducing distance to the building cell each step.
+        # Verify bounded arrival, legal moves and the actual build instead.
+        walking = deepcopy(state)
+        for _ in range(30):
+            action = day_command(walking)
+            self.assertIn(action['action'], ('move', 'build'))
+            current = Turn.load(walking)
+            mover = next(u for u in current.workers() if u.unit_id == 10010)
+            landing = Pos.load(action['targetPos'][0])
+            self.assertEqual(distance(mover.pos, landing), 1)
+            if action['action'] == 'build':
+                self.assertIn(landing, missing)
+                self.assertIn(action['name'], ('rocket','railgun','gatling'))
+                break
+            self.assertNotIn(landing, current.blocked(mover))
+            next(u for u in walking['teamOur']['roles'] if u['id']==10010)['pos']=landing.dump()
+        else:
+            self.fail('worker never reached the missing tower within 30 steps')
         # The mine must not influence the day at all while a tower is missing.
         without_mine = day_command(board(towers=2, gold=25, ores=()))
         self.assertEqual(command, without_mine, "the ore must not change this turn")

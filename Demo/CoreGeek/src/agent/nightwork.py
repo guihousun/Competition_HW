@@ -7,6 +7,7 @@ from collections import Counter
 
 from .coordination import available_gold
 from .grid import next_step
+from . import home_defense, defense_layout
 from .market import can_upgrade, shop_prices, vendor_prices, VOUCHER_TARGETS
 from .protocol import (Pos, Turn, Unit, WALL, STATION, TOWER_TYPES, MEDICINE,
                        WALL_FIXER, distance, use_command, buy_command,
@@ -29,7 +30,7 @@ def _maintenance(turn, role):
                         and distance(role.pos, u.pos) == 1
                         and u.kind in (STATION, WALL) + TOWER_TYPES),
                        key=lambda u: (0 if u.kind == STATION else 2 if u.kind == WALL else 1,
-                                      u.health, u.unit_id))
+                                      _wall_rank(turn, u), u.health, u.unit_id))
     for building in buildings:
         for item in sorted(VOUCHER_TARGETS):
             if can_upgrade(item, building.kind, building.level):
@@ -39,14 +40,45 @@ def _maintenance(turn, role):
             yield WALL_FIXER, building.pos
 
 
+def _wall_rank(turn, building):
+    base = turn.station()
+    return (defense_layout.wall_priority(building.pos, base.pos, turn.width, turn.height)[0]
+            if base and building.kind == WALL else 0)
+
+
+def _front_repair(turn, pairs):
+    """One adjacent repair from inside; another worker must stay on its gun."""
+    if turn.is_day or turn.station() is None:
+        return {}
+    ready = [r for r, t in pairs if r.kind == 'worker'
+             and home_defense.inside(turn, r.pos) and distance(r.pos, t.pos) <= 1]
+    if len(ready) < 2:
+        return {}
+    options = []
+    for worker in ready:
+        if WALL_FIXER not in worker.backpack:
+            continue
+        for wall in turn.walls():
+            full = (1000, 1500, 2000)[min(3, max(1, wall.level)) - 1]
+            if (0 < wall.health <= .7 * full and distance(worker.pos, wall.pos) == 1
+                    and _wall_rank(turn, wall) <= 1):
+                options.append((_wall_rank(turn, wall), wall.health / full,
+                                wall.unit_id, worker.unit_id, wall.pos))
+    if not options:
+        return {}
+    _, _, _, uid, pos = min(options)
+    return {uid: use_command(WALL_FIXER, pos)}
+
+
 def plan(turn: Turn, payload: dict, pairs: tuple) -> dict:
     """Return extra worker actions; absence leaves the ordinary defence plan in charge."""
     robot_info = payload.get('robot')
+    repair = _front_repair(turn, pairs)
     # Missing observations are not evidence that a wave has been cleared.
     if (turn.is_day or (turn.round_no - 1) % 130 == 70
             or not isinstance(robot_info, dict) or not isinstance(robot_info.get('roles'), list)
             or any(robot.health > 0 for robot in turn.robots)):
-        return {}
+        return repair
     workers = turn.workers()
     if not workers:
         return {}
@@ -55,10 +87,14 @@ def plan(turn: Turn, payload: dict, pairs: tuple) -> dict:
            and any(distance(enemy.pos, worker.pos) <= 8 for worker in workers)
            for enemy in turn.enemies):
         return {}
-    commands, serviced = {}, set()
+    commands, serviced = dict(repair), set()
+    for command in repair.values():
+        serviced.add(Pos.load(command['targetPos'][0]))
     prices = shop_prices(payload)
     held = {item for worker in workers for item in worker.backpack}
     for role in workers:
+        if role.unit_id in commands:
+            continue
         options = list(_maintenance(turn, role))
         for item, target in options:
             if item in role.backpack and (target is None or target not in serviced):

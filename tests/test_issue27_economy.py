@@ -103,10 +103,11 @@ class UpgradeTests(unittest.TestCase):
 
 class ReadinessTests(unittest.TestCase):
     def test_mixed_default_and_idle_worker_fills_ready_adjacent_weapon(self):
-        self.assertEqual(brain.TOWER_LOADOUT,('rocket','rocket','railgun'))
+        self.assertEqual(brain.TOWER_LOADOUT,('rocket','railgun','rocket'))
         state=board();state['roundNo']=71
         roles=state['teamOur']['roles'];roles[1]['cooldown']=2;roles[2]['cooldown']=2
-        roles[3]['pos']={'x':8,'y':4}
+        roles[3]['pos']={'x':5,'y':5}
+        roles[4]['pos']={'x':5,'y':4}  # interior controller
         state['robot']={'roles':[{'id':900,'pos':{'x':10,'y':4},'health':100,'roleType':'smallRobot','targetTeam':'challenger'}]}
         turn=Turn.load(state);commands={}
         brain._fill_ready_weapons(turn,commands,set())

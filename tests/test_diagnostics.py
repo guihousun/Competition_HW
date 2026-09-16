@@ -350,7 +350,7 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(record["manifest"]["state"], "absent")
         self.assertEqual(record["commit_source"], "git_checkout")
         self.assertRegex(record["code_commit"] or "", r"^[0-9a-f]{40}$")
-        self.assertEqual(record["policy"]["tower_loadout"], ["rocket", "rocket", "railgun"])
+        self.assertEqual(record["policy"]["tower_loadout"], ["rocket", "railgun", "rocket"])
 
 
 if __name__ == "__main__":

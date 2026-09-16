@@ -7,6 +7,7 @@ from collections import deque
 from .protocol import Pos, WALL, STATION, TOWER_TYPES, distance, buy_command, use_command, move_command
 from .market import VOUCHER_TARGETS, can_upgrade, shop_prices
 from .coordination import available_gold
+from .defense_layout import wall_priority
 
 
 def routes(turn, role, start):
@@ -35,8 +36,8 @@ def priority(building):
     # Tactical priorities, never modified official prices/health/levels.
     if building.kind==STATION and building.health < (1500,3000,4500)[min(3,max(1,building.level))-1]*.6:
         group=0
-    elif building.kind in TOWER_TYPES:group=1 if building.level==1 else 3
-    elif building.kind==STATION:group=2 if building.level==1 else 4
+    elif building.kind in TOWER_TYPES:group=1 if building.level==1 else 2
+    elif building.kind==STATION:group=3 if building.level==1 else 4
     else:group=5
     return group,building.level,building.health,building.unit_id
 
@@ -51,7 +52,11 @@ def plan(turn, payload, commands, *, start=12, deadline=55):
     index=(turn.round_no-1)%130
     if index>=deadline:return stop('return_before_night')
     workers=[w for w in turn.workers() if w.unit_id not in commands]
-    buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3 and b.kind in (STATION,WALL)+TOWER_TYPES),key=priority)
+    base = turn.station()
+    def building_priority(b):
+        rank = wall_priority(b.pos, base.pos, turn.width, turn.height)[0] if base and b.kind == WALL else 0
+        return priority(b)[:1] + (rank,) + priority(b)[1:]
+    buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3 and b.kind in (STATION,WALL)+TOWER_TYPES),key=building_priority)
     # Bound planning cost on crowded wall maps; retain all base/tower targets.
     buildings=[b for b in buildings if b.kind!=WALL]+[b for b in buildings if b.kind==WALL][:4]
     cache={}

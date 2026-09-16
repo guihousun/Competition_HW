@@ -383,11 +383,28 @@ def layout(base_pos: Pos, width: int, height: int, *,
     ring = tuple(cell for side in (SOUTH, NORTH, WEST, EAST) for cell in grouped[side])
     exit_cells = choose_exit(base_pos, side_order, land=in_bounds, standing_walls=walls)
     opening = set(exit_cells)
-    wall_order = tuple(cell for side in side_order
-                       for cell in grouped[side] if cell not in opening)
+    wall_order = tuple(sorted((cell for cell in ring if cell not in opening),
+                             key=lambda cell: wall_priority(cell, base_pos, width, height)))
     usable = exit_is_usable(base_pos, exit_cells, in_bounds, standing_walls=walls)
     return Layout(approach=approach, side_order=side_order, ring=ring,
                   exit_cells=exit_cells, wall_order=wall_order, exit_usable=usable)
+
+
+def wall_priority(cell: Pos, base_pos: Pos, width: int, height: int) -> tuple:
+    """Front edge, both forward half-flanks, both rear half-flanks, rear edge."""
+    approach = primary_approach(base_pos, width, height)
+    sides = SIDE_ORDER[approach]
+    # Match the existing partition: corners belong to the horizontal rows.
+    side = next((s for s in (NORTH, SOUTH, EAST, WEST)
+                 if cell in _edge_cells(base_pos, s)), None)
+    rank = sides.index(side) if side in sides else 4
+    xmin, xmax, ymin, ymax = footprint_bounds(base_pos)
+    forward = {EAST: 2 * cell.x - xmin - xmax,
+               WEST: xmin + xmax - 2 * cell.x,
+               NORTH: 2 * cell.y - ymin - ymax,
+               SOUTH: ymin + ymax - 2 * cell.y}[approach]
+    tier = 0 if rank == 0 else (1 if forward > 0 else 2) if rank in (1, 2) else 3
+    return tier, rank, cell.x, cell.y
 
 
 def side_of(cell: Pos, base_pos: Pos) -> tuple[str, ...]:

@@ -7,6 +7,7 @@ import os
 
 from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
+from . import home_defense
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
 from .market import (
@@ -40,7 +41,7 @@ from .protocol import (
     station_footprint,
 )
 
-TOWER_LOADOUT = ("rocket", "rocket", "railgun")
+TOWER_LOADOUT = ("rocket", "railgun", "rocket")
 # Stone carried per wall run. Above the surplus threshold, so that a worker that
 # has filled up while the wall ring is unfinished still visits the vendor with
 # the excess instead of hoarding it.
@@ -369,6 +370,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if turn.is_day:
             _DECISION_REPORT.get()['upgrade_itinerary'] = deepcopy(_UPGRADE_REPORT.get())
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
+        _DECISION_REPORT.get()['worker_shelter'] = home_defense.status(turn, commands)
         if _sale_signals(turn):
             _DECISION_REPORT.get()['news_economy'] = deepcopy(_sale_signals(turn))
         supervisor_notes = planner_state.tasks.get('supervisor')
@@ -1181,8 +1183,7 @@ def _worker_day(
     )
     if (towers_missing and available_gold(turn, state, commands) >= WEAPON_BUILD_COST
             and len(turn.weapons()) + planned < 3):
-        # Slots reorder as towers are retained; choose the missing type by count,
-        # not by that moving slot index. Otherwise mixed loadouts duplicate a type.
+        # Assign types along the defence line, with a quota fallback for old guns.
         built = Counter(unit.kind for unit in turn.weapons())
         built.update(cmd['name'] for cmd in commands.values()
                      if cmd.get('action') == 'build' and cmd.get('name') in TOWER_LOADOUT)
@@ -1192,8 +1193,10 @@ def _worker_day(
             return
         for index, site in enumerate(sites):
             if site in towers_missing and site not in claimed:
+                preferred = TOWER_LOADOUT[index]
+                kind = preferred if built[preferred] < desired[preferred] else missing_kind
                 _build_or_walk(
-                    turn, role, site, missing_kind, claimed, commands,
+                    turn, role, site, kind, claimed, commands,
                 )
                 towers_missing.remove(site)
                 busy.add(role.unit_id)
@@ -1724,9 +1727,23 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     cycle = getattr(planner_state, 'tasks', {}).get('cycle') if planner_state is not None else None
     committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
     staging = _treasure_night_staging(turn, state, pairs) if state is not None and not committed_task else None
+    extra_work = nightwork.plan(turn, state, pairs) if state is not None and staging is None else {}
+    for command in extra_work.values():
+        if command.get('action') == 'move':
+            claimed.add(Pos.load(command['targetPos'][0]))
+    # Confirmed quiet-night jobs may leave; otherwise return before firing outside.
+    outside_workers = set()
+    for worker in turn.workers():
+        if (turn.station() is not None and not home_defense.inside(turn, worker.pos)
+                and worker.unit_id not in extra_work):
+            outside_workers.add(worker.unit_id)
+            step = home_defense.step_inside(turn, worker, claimed=claimed)
+            if step is not None:
+                claimed.add(step)
+                commands[worker.unit_id] = move_command(step)
     if state is not None:
         if staging is None:
-            for uid, command in nightwork.plan(turn, state, pairs).items():
+            for uid, command in extra_work.items():
                 commands.setdefault(uid, command)
         elif staging['command'] is not None:
             commands.setdefault(staging['owner'], staging['command'])
@@ -1740,6 +1757,8 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     if state is not None and _try_battle_items(turn, commands, state):
         pass
     for role, tower in pairs:
+        if role.unit_id in outside_workers:
+            continue
         if role.unit_id in commands:
             continue
         if staging is not None and staging['hold'] and role.unit_id == staging['owner']:
@@ -1751,7 +1770,12 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
             if targets:
                 commands[tower.unit_id] = attack_command_multi(role.unit_id, targets)
             continue
-        step = _step_toward(turn, role, tower.pos, claimed)
+        if role.kind == 'worker' and turn.station() is not None:
+            step = home_defense.tower_step(turn, role, tower, claimed)
+            if step is not None:
+                claimed.add(step)
+        else:
+            step = _step_toward(turn, role, tower.pos, claimed)
         if step is not None:
             commands[role.unit_id] = move_command(step)
     return staging
@@ -1895,6 +1919,7 @@ def _fill_ready_weapons(turn, commands, excluded):
     if turn.is_day:return
     used={str(c.get('controllerId')) for c in commands.values() if c.get('action')=='attack'}
     roles=[r for r in turn.controllable() if r.unit_id not in excluded and str(r.unit_id) not in used
+           and (r.kind != 'worker' or turn.station() is None or home_defense.inside(turn, r.pos))
            and (r.unit_id not in commands or commands[r.unit_id].get('action')=='move')]
     towers=[(t,_aim_points(turn,t)) for t in turn.weapons() if t.cooldown==0 and t.unit_id not in commands]
     towers=[(t,aim) for t,aim in towers if aim]
@@ -2208,7 +2233,8 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
                  if u.health > 0 and u.kind not in ('worker', 'pioneer')
                  for p in turn.footprint(u)}
     fixed = tuple(u.pos for u in turn.weapons())
-    sites_key = (geo_key, frozenset(permanent), fixed)
+    sites_key = (geo_key, frozenset(permanent),
+                 tuple((u.pos, u.kind) for u in turn.weapons()), TOWER_LOADOUT)
     hit = _TOWER_SITES_CACHE.get(sites_key)
     if hit is not None:
         return hit
@@ -2241,21 +2267,34 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
             spread = min((distance(a, b) for a, b in combinations(sites, 2)), default=0)
             order = tuple((pos.x, pos.y) for pos in combo)
             feasible = matched == len(sites) and connected
+            ordered = _ordered_sites(sites, plan.approach)
+            intended = dict(zip(ordered, TOWER_LOADOUT))
+            mismatch = sum(intended.get(u.pos) != u.kind for u in turn.weapons())
             key = (0 if feasible else 1,
                    -size if feasible else 0,
                    trapped,
                    -matched,
+                   mismatch,
+                   sum(distance(a, b) < 2 for a, b in combinations(sites, 2)),
+                   len(sites) - len({p.y if plan.approach in ('E', 'W') else p.x for p in sites}),
+                   sum(defense_layout.side_rank(p, station.pos, plan.side_order)[0]
+                       for p, kind in intended.items() if kind == 'railgun'),
                    sum(1 for pos in combo if pos in guard),
                    side_key,
                    -spread,
                    order)
             if best_key is None or key < best_key:
                 best_key, best_sites = key, sites
-    result = tuple(best_sites[:3])
+    result = _ordered_sites(best_sites[:3], plan.approach)
     if len(_TOWER_SITES_CACHE) >= _TOWER_SITES_CACHE_LIMIT:
         _TOWER_SITES_CACHE.clear()
     _TOWER_SITES_CACHE[sites_key] = result
     return result
+
+
+def _ordered_sites(sites, approach):
+    """Across the front: bottom-to-top for E/W, left-to-right for N/S."""
+    return tuple(sorted(sites, key=lambda p: (p.y, p.x) if approach in ('E', 'W') else (p.x, p.y)))
 
 
 def _controller_cells(turn: Turn, station_pos: Pos, terrain: set[Pos]) -> set[Pos]:
