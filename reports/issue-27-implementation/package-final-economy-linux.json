@@ -1,0 +1,208 @@
+{
+  "source_commit": "8fa062536ecc20ba30d813136d20a6c8559eca8b",
+  "archive_sha256": "dfaa60730376b1b99a25afadb4fc32c45d28aeb39de108291dfcb4afe4d260ec",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "requests": 16,
+      "events": [
+        {
+          "round": 20,
+          "action": "buy",
+          "item": "WeaponUpgradeVoucher1",
+          "gold": 100
+        },
+        {
+          "round": 28,
+          "action": "use",
+          "item": "WeaponUpgradeVoucher1"
+        }
+      ],
+      "max_http_ms": 197.5857240000005,
+      "passed": true,
+      "trading_catalog": {
+        "currency": "gold",
+        "effect_source": "\u4efb\u52a1\u4e66v1.0(2026-09-09) \u00a74.5.1/\u00a74.6.1/\u00a74.6.3",
+        "location_source": "mapInfo.zones",
+        "locations_observed": true,
+        "price_source": "\u672c\u8f6e\u5e73\u53f0\u5546\u54c1\u5217\u8868",
+        "shop_constraints": "\u6309\u5e73\u53f0\u5f53\u524d\u5546\u54c1\u4e0e\u62a5\u4ef7\u8d2d\u4e70\uff1b\u91d1\u5e01\u6216\u80cc\u5305\u7a7a\u95f4\u4e0d\u8db3\u4f1a\u5931\u8d25\uff1b\u5546\u5e97\u7269\u54c1\u4e0d\u53ef\u9000\u5356\u3002\u5347\u7ea7\u6700\u9ad8Lv3\uff0c\u975e\u6cd5\u5347\u7ea7\u5931\u8d25\u4e0d\u6d88\u8017\u5238\u3002",
+        "vendorShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "effect": "\u53ef\u6309\u672c\u8f6e\u5c0f\u8d29\u62a5\u4ef7\u5356\u51fa\u6362\u91d1\u5e01\uff1b\u5efa\u9020\u4e00\u5ea7\u56f4\u5899\u6d88\u80171\u4e2a\u77f3\u5934\uff0c\u62c6\u5899\u4e0d\u8fd4\u8fd8\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u77f3\u5934",
+              "name": "stone",
+              "price": 1
+            },
+            {
+              "effect": "\u53ef\u6309\u672c\u8f6e\u5c0f\u8d29\u62a5\u4ef7\u5356\u51fa\u6362\u91d1\u5e01\uff1b\u56de\u6536\u4ef7\u683c\u53ef\u968f\u4e16\u754c\u65b0\u95fb\u53d8\u5316\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u94c1\u77ff",
+              "name": "iron",
+              "price": 3
+            },
+            {
+              "effect": "\u53ef\u6309\u672c\u8f6e\u5c0f\u8d29\u62a5\u4ef7\u5356\u51fa\u6362\u91d1\u5e01\uff1b\u56de\u6536\u4ef7\u683c\u53ef\u968f\u4e16\u754c\u65b0\u95fb\u53d8\u5316\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u94dc\u77ff",
+              "name": "copper",
+              "price": 5
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u5c0f\u8d29\uff1a\u6536\u8d2d\u77ff\u77f3",
+          "merchant_type": "vendor",
+          "positions": [],
+          "positions_count": 0,
+          "positions_truncated": false
+        },
+        "weaponShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "effect": "\u6b66\u5668Lv1\u2192Lv2\u5e76\u56de\u6ee1\u88401500\uff1b\u706b\u7bad\u5c04\u7a0b10\u219215\u3001\u5bfc\u5f391\u21922\u679a\uff1b\u7535\u78c1\u70ae\u5c04\u7a0b6\u21928\u3001\u7a7f\u900f\u80fd\u91cf10\u219220\uff1b\u52a0\u7279\u6797\u5c04\u7a0b3\u21925\u3001\u5b50\u5f391\u21922\u53d1\u3002\u9700\u5728\u76ee\u6807\u5468\u56f41\u683c\u5185\u4f7f\u7528\u5e76\u6307\u5b9a\u5750\u6807\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u6b66\u5668\u5347\u7ea7\u52381",
+              "name": "WeaponUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "effect": "\u57fa\u5730Lv1\u2192Lv2\uff0c\u8840\u91cf\u4e0a\u96501500\u21923000\u5e76\u56de\u6ee1\u8840\uff1b\u9700\u5728\u76ee\u6807\u5468\u56f41\u683c\u5185\u4f7f\u7528\u5e76\u6307\u5b9a\u5750\u6807\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u57fa\u5730\u5347\u7ea7\u52381",
+              "name": "StationUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "effect": "\u6307\u5b9a\u5355\u5ea7\u5899Lv1\u2192Lv2\uff0c\u8840\u91cf\u4e0a\u96501000\u21921500\u5e76\u56de\u6ee1\u8840\uff1b\u9700\u5728\u76ee\u6807\u5468\u56f41\u683c\u5185\u4f7f\u7528\u5e76\u6307\u5b9a\u5750\u6807\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u56f4\u5899\u5347\u7ea7\u52381",
+              "name": "WallUpgradeVoucher1",
+              "price": 20
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u6b66\u5668\u5546\u5e97\uff1a\u51fa\u552e\u5546\u54c1",
+          "merchant_type": "weaponShop",
+          "positions": [
+            {
+              "x": 15,
+              "y": 5
+            }
+          ],
+          "positions_count": 1,
+          "positions_truncated": false
+        }
+      }
+    },
+    {
+      "side": "defender",
+      "requests": 16,
+      "events": [
+        {
+          "round": 20,
+          "action": "buy",
+          "item": "WeaponUpgradeVoucher1",
+          "gold": 100
+        },
+        {
+          "round": 28,
+          "action": "use",
+          "item": "WeaponUpgradeVoucher1"
+        }
+      ],
+      "max_http_ms": 162.72407499999986,
+      "passed": true,
+      "trading_catalog": {
+        "currency": "gold",
+        "effect_source": "\u4efb\u52a1\u4e66v1.0(2026-09-09) \u00a74.5.1/\u00a74.6.1/\u00a74.6.3",
+        "location_source": "mapInfo.zones",
+        "locations_observed": true,
+        "price_source": "\u672c\u8f6e\u5e73\u53f0\u5546\u54c1\u5217\u8868",
+        "shop_constraints": "\u6309\u5e73\u53f0\u5f53\u524d\u5546\u54c1\u4e0e\u62a5\u4ef7\u8d2d\u4e70\uff1b\u91d1\u5e01\u6216\u80cc\u5305\u7a7a\u95f4\u4e0d\u8db3\u4f1a\u5931\u8d25\uff1b\u5546\u5e97\u7269\u54c1\u4e0d\u53ef\u9000\u5356\u3002\u5347\u7ea7\u6700\u9ad8Lv3\uff0c\u975e\u6cd5\u5347\u7ea7\u5931\u8d25\u4e0d\u6d88\u8017\u5238\u3002",
+        "vendorShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "effect": "\u53ef\u6309\u672c\u8f6e\u5c0f\u8d29\u62a5\u4ef7\u5356\u51fa\u6362\u91d1\u5e01\uff1b\u5efa\u9020\u4e00\u5ea7\u56f4\u5899\u6d88\u80171\u4e2a\u77f3\u5934\uff0c\u62c6\u5899\u4e0d\u8fd4\u8fd8\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u77f3\u5934",
+              "name": "stone",
+              "price": 1
+            },
+            {
+              "effect": "\u53ef\u6309\u672c\u8f6e\u5c0f\u8d29\u62a5\u4ef7\u5356\u51fa\u6362\u91d1\u5e01\uff1b\u56de\u6536\u4ef7\u683c\u53ef\u968f\u4e16\u754c\u65b0\u95fb\u53d8\u5316\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u94c1\u77ff",
+              "name": "iron",
+              "price": 3
+            },
+            {
+              "effect": "\u53ef\u6309\u672c\u8f6e\u5c0f\u8d29\u62a5\u4ef7\u5356\u51fa\u6362\u91d1\u5e01\uff1b\u56de\u6536\u4ef7\u683c\u53ef\u968f\u4e16\u754c\u65b0\u95fb\u53d8\u5316\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u94dc\u77ff",
+              "name": "copper",
+              "price": 5
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u5c0f\u8d29\uff1a\u6536\u8d2d\u77ff\u77f3",
+          "merchant_type": "vendor",
+          "positions": [],
+          "positions_count": 0,
+          "positions_truncated": false
+        },
+        "weaponShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "effect": "\u6b66\u5668Lv1\u2192Lv2\u5e76\u56de\u6ee1\u88401500\uff1b\u706b\u7bad\u5c04\u7a0b10\u219215\u3001\u5bfc\u5f391\u21922\u679a\uff1b\u7535\u78c1\u70ae\u5c04\u7a0b6\u21928\u3001\u7a7f\u900f\u80fd\u91cf10\u219220\uff1b\u52a0\u7279\u6797\u5c04\u7a0b3\u21925\u3001\u5b50\u5f391\u21922\u53d1\u3002\u9700\u5728\u76ee\u6807\u5468\u56f41\u683c\u5185\u4f7f\u7528\u5e76\u6307\u5b9a\u5750\u6807\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u6b66\u5668\u5347\u7ea7\u52381",
+              "name": "WeaponUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "effect": "\u57fa\u5730Lv1\u2192Lv2\uff0c\u8840\u91cf\u4e0a\u96501500\u21923000\u5e76\u56de\u6ee1\u8840\uff1b\u9700\u5728\u76ee\u6807\u5468\u56f41\u683c\u5185\u4f7f\u7528\u5e76\u6307\u5b9a\u5750\u6807\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u57fa\u5730\u5347\u7ea7\u52381",
+              "name": "StationUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "effect": "\u6307\u5b9a\u5355\u5ea7\u5899Lv1\u2192Lv2\uff0c\u8840\u91cf\u4e0a\u96501000\u21921500\u5e76\u56de\u6ee1\u8840\uff1b\u9700\u5728\u76ee\u6807\u5468\u56f41\u683c\u5185\u4f7f\u7528\u5e76\u6307\u5b9a\u5750\u6807\u3002",
+              "effect_status": "official_baseline",
+              "label": "\u56f4\u5899\u5347\u7ea7\u52381",
+              "name": "WallUpgradeVoucher1",
+              "price": 20
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u6b66\u5668\u5546\u5e97\uff1a\u51fa\u552e\u5546\u54c1",
+          "merchant_type": "weaponShop",
+          "positions": [
+            {
+              "x": 25,
+              "y": 5
+            }
+          ],
+          "positions_count": 1,
+          "positions_truncated": false
+        }
+      }
+    }
+  ],
+  "scope": "Actual archive main3 HTTP; independent synthetic mirrored board and local buy/use settlement, not official platform PASS"
+}

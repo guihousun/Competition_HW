@@ -1,0 +1,16 @@
+{
+  "python": "3.11.10",
+  "patterns": [
+    "test_task_journal.py",
+    "test_issue27_economy.py",
+    "test_task_answer_contract.py",
+    "test_task_tools.py",
+    "test_task_workspace.py",
+    "test_task_pipeline_linux.py"
+  ],
+  "tests": 48,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "passed": true
+}

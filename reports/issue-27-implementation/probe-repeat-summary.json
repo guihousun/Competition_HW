@@ -1,0 +1,14 @@
+{
+  "initial_failure": {
+    "kind": "check_count_assertion",
+    "service_log_captured": false,
+    "root_cause": "unconfirmed"
+  },
+  "repeat_count": 5,
+  "all_repeats_passed": true,
+  "source_commits": [
+    "8fa062536ecc20ba30d813136d20a6c8559eca8b"
+  ],
+  "max_http_ms": 104.99019996495917,
+  "scope": "Five targeted re-runs after a non-reproduced assertion; not proof that asynchronous logging cannot lose observations"
+}

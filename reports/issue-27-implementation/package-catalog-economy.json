@@ -1,0 +1,166 @@
+{
+  "source_commit": "1bbd36dcc4a5864674ca5e8bb265fd0de712e183",
+  "archive_sha256": "3adb92e6b27275c93cf371f0d147deff751c3d5d2521ee718aafb367c46d941f",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "requests": 16,
+      "events": [
+        {
+          "round": 20,
+          "action": "buy",
+          "item": "WeaponUpgradeVoucher1",
+          "gold": 100
+        },
+        {
+          "round": 28,
+          "action": "use",
+          "item": "WeaponUpgradeVoucher1"
+        }
+      ],
+      "max_http_ms": 238.43550001038238,
+      "passed": true,
+      "trading_catalog": {
+        "currency": "gold",
+        "location_source": "mapInfo.zones",
+        "locations_observed": true,
+        "vendorShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "name": "stone",
+              "price": 1
+            },
+            {
+              "name": "iron",
+              "price": 3
+            },
+            {
+              "name": "copper",
+              "price": 5
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u5c0f\u8d29\uff1a\u6536\u8d2d\u77ff\u77f3",
+          "merchant_type": "vendor",
+          "positions": [],
+          "positions_count": 0,
+          "positions_truncated": false
+        },
+        "weaponShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "name": "WeaponUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "name": "StationUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "name": "WallUpgradeVoucher1",
+              "price": 20
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u6b66\u5668\u5546\u5e97\uff1a\u51fa\u552e\u5546\u54c1",
+          "merchant_type": "weaponShop",
+          "positions": [
+            {
+              "x": 15,
+              "y": 5
+            }
+          ],
+          "positions_count": 1,
+          "positions_truncated": false
+        }
+      }
+    },
+    {
+      "side": "defender",
+      "requests": 16,
+      "events": [
+        {
+          "round": 20,
+          "action": "buy",
+          "item": "WeaponUpgradeVoucher1",
+          "gold": 100
+        },
+        {
+          "round": 28,
+          "action": "use",
+          "item": "WeaponUpgradeVoucher1"
+        }
+      ],
+      "max_http_ms": 218.29250000882894,
+      "passed": true,
+      "trading_catalog": {
+        "currency": "gold",
+        "location_source": "mapInfo.zones",
+        "locations_observed": true,
+        "vendorShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "name": "stone",
+              "price": 1
+            },
+            {
+              "name": "iron",
+              "price": 3
+            },
+            {
+              "name": "copper",
+              "price": 5
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u5c0f\u8d29\uff1a\u6536\u8d2d\u77ff\u77f3",
+          "merchant_type": "vendor",
+          "positions": [],
+          "positions_count": 0,
+          "positions_truncated": false
+        },
+        "weaponShopList": {
+          "field_present": true,
+          "item_count": 3,
+          "items": [
+            {
+              "name": "WeaponUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "name": "StationUpgradeVoucher1",
+              "price": 100
+            },
+            {
+              "name": "WallUpgradeVoucher1",
+              "price": 20
+            }
+          ],
+          "items_truncated": false,
+          "list_observed": true,
+          "meaning": "\u6b66\u5668\u5546\u5e97\uff1a\u51fa\u552e\u5546\u54c1",
+          "merchant_type": "weaponShop",
+          "positions": [
+            {
+              "x": 25,
+              "y": 5
+            }
+          ],
+          "positions_count": 1,
+          "positions_truncated": false
+        }
+      }
+    }
+  ],
+  "scope": "Actual archive main3 HTTP; independent synthetic mirrored board and local buy/use settlement, not official platform PASS"
+}

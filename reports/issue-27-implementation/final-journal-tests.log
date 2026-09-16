@@ -1,0 +1,17 @@
+test_actual_http_bytes_unchanged_when_trace_fails (test_task_journal.TaskJournalTests.test_actual_http_bytes_unchanged_when_trace_fails) ... ok
+test_agent_stop_reason_and_counts_change_without_repeating_idle (test_task_journal.TaskJournalTests.test_agent_stop_reason_and_counts_change_without_repeating_idle) ... ok
+test_bounded_streams_and_long_content_redacted_before_truncation (test_task_journal.TaskJournalTests.test_bounded_streams_and_long_content_redacted_before_truncation) ... ok
+test_catalog_effects_are_sourced_without_inventing_unknown_items (test_task_journal.TaskJournalTests.test_catalog_effects_are_sourced_without_inventing_unknown_items) ... ok
+test_console_without_trace_and_off_or_broken_sink_are_safe (test_task_journal.TaskJournalTests.test_console_without_trace_and_off_or_broken_sink_are_safe) ... ok
+test_gap_reset_and_teams_do_not_share_context (test_task_journal.TaskJournalTests.test_gap_reset_and_teams_do_not_share_context) ... ok
+test_offline_export_keeps_full_task_text_and_trace_quality_without_maps (test_task_journal.TaskJournalTests.test_offline_export_keeps_full_task_text_and_trace_quality_without_maps) ... ok
+test_question_model_tool_answer_and_end_are_visible_without_inferred_success (test_task_journal.TaskJournalTests.test_question_model_tool_answer_and_end_are_visible_without_inferred_success) ... ok
+test_repeated_results_are_suppressed_but_new_identical_requests_are_not (test_task_journal.TaskJournalTests.test_repeated_results_are_suppressed_but_new_identical_requests_are_not) ... ok
+test_trading_catalog_distinguishes_missing_empty_and_invalid (test_task_journal.TaskJournalTests.test_trading_catalog_distinguishes_missing_empty_and_invalid) ... ok
+test_trading_catalog_is_bounded_and_keeps_new_games_separate (test_task_journal.TaskJournalTests.test_trading_catalog_is_bounded_and_keeps_new_games_separate) ... ok
+test_trading_catalog_lists_observed_positions_prices_and_changes_only (test_task_journal.TaskJournalTests.test_trading_catalog_lists_observed_positions_prices_and_changes_only) ... ok
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.569s
+
+OK

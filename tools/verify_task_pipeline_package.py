@@ -111,7 +111,7 @@ with tempfile.TemporaryDirectory() as tmp:
                     outcome=json.loads(event['content']['text'])
                     assert not event['content']['truncated']
                     assert outcome['status']=='submitted_unconfirmed' and not outcome['official_success_confirmed']
-                    assert outcome['counts']['checks_passed']==1 and outcome['counts']['submissions']==1
+                    assert outcome['counts']['checks_passed']==1 and outcome['counts']['submissions']==1, outcome
                     assert outcome['last_submission']['matches_last_check_token']
                     assert outcome['submission_feedback']['action_legal'] is True
                     assert outcome['submission_feedback']['stats_delta']=={'gold':80,'totalScore':80}
@@ -120,6 +120,9 @@ with tempfile.TemporaryDirectory() as tmp:
             process.terminate()
             try: process.wait(timeout=10)
             except subprocess.TimeoutExpired: process.kill();process.wait()
+            if sys.exc_info()[0] is not None:
+                output.parent.mkdir(parents=True,exist_ok=True)
+                output.with_suffix('.failure-service.log').write_bytes((Path(tmp)/'service.log').read_bytes())
 report={'scope':'Actual tar.gz main3 HTTP; scripted model/virtual tools, not intranet PASS',
     'source_commit':source,'archive_sha256':expected,'passed':len(rows)==2,'cases':rows,
     'structured_http':a.structured_http,'fenced_model':a.fenced_model,'check_task':a.check_task}

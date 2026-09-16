@@ -1,8 +1,8 @@
 # Issue27：混合防守与升级采购回测
 
-包内源码：`32b1c609e94b70ce87f6c30020c89fa587f9294e`。公司仍使用固定 `codex/sgh`，git pull后上传根目录CoreGeek.tar.gz。
+包内源码：`8fa062536ecc20ba30d813136d20a6c8559eca8b`（含商品目录与具体效果补丁）。公司仍使用固定 `codex/sgh`，git pull后上传根目录CoreGeek.tar.gz。
 
-包SHA256：`37708c1630761ac8c9b369c4cd24e176776122e3f72b2c752c103971de0aa2ce`。
+包SHA256：`dfaa60730376b1b99a25afadb4fc32c45d28aeb39de108291dfcb4afe4d260ec`。
 
 ## 这轮行为
 
