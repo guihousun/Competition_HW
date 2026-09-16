@@ -4,6 +4,7 @@ import json
 import posixpath
 import re
 from .task_workspace import file_reference
+from . import task_field_semantics
 
 
 def _unique(pairs):
@@ -28,6 +29,7 @@ def derive(text, source):
     # arbitrary JSON object from an API example or the task background.
     anchors=list(re.finditer(r'(?:答案(?:的)?格式|提交(?:答案)?(?:的)?格式|输出格式|answer\s+format|形式)\s*[:：]',text,re.I))
     anchors+=list(re.finditer(r'^#{1,6}\s*(?:提交(?:要求|规则|格式|形式)|答案(?:要求|格式)|输出(?:要求|格式|示例)|answer\s+format)\s*[:：]?\s*$',text,re.I|re.M))
+    anchors+=list(re.finditer(r'提交(?:以下|如下)?\s*JSON\s*格式[^\n:：]{0,30}[:：]',text,re.I))
     for anchor in anchors:
         tail=text[anchor.end():anchor.end()+4000].lstrip()
         tail=re.split(r'\n#{1,6}\s',tail,maxsplit=1)[0]
@@ -38,14 +40,22 @@ def derive(text, source):
         if not tail.startswith('{'):continue
         try:
             sample,_=json.JSONDecoder(object_pairs_hook=_unique).raw_decode(tail)
-        except (ValueError, RecursionError):continue
+        except (ValueError, RecursionError):
+            try:sample,_=json.JSONDecoder(object_pairs_hook=_unique).raw_decode(task_field_semantics.template_json(tail))
+            except (ValueError,RecursionError):continue
         if not isinstance(sample,dict) or not sample or len(sample)>16:continue
         if any(not isinstance(k,str) or len(k)>80 for k in sample):continue
         types={k:type(v).__name__ for k,v in sample.items()}
         if types not in shapes:shapes.append(types)
     contract={'source_id':source,'source_sha256':hashlib.sha256(text.encode()).hexdigest()}
     if len(shapes)==1:
-        return {**contract,'kind':'object','fields':shapes[0]}
+        semantics,conflicts=task_field_semantics.descriptions(text,shapes[0])
+        if conflicts:return {**contract,'kind':'ambiguous','fields':{},'semantic_conflicts':conflicts}
+        result={**contract,'kind':'object','fields':shapes[0]}
+        if semantics:result['semantics']=semantics
+        if (set(shapes[0])=={'token'} and re.search(r'(?:运行|执行|run|execute)\s*`?(?:\./)?check\b',text,re.I)):
+            result['requires_check_token']=True
+        return result
     if len(shapes)>1:
         return {**contract,'kind':'ambiguous','fields':{}}
     if re.search(r'JSON\s*(?:对象|object)|(?:对象|object)\s*JSON',text,re.I):
@@ -130,6 +140,12 @@ def validate(answer, contract, documents):
             if kind=='NoneType':continue  # null example does not establish a type
             if type(value[key]).__name__!=kind:
                 return False,answer,'字段'+key+'应为'+kind+'，请按当前题目和真实数据修正'
+        if contract.get('requires_check_token'):
+            token=checked_token(documents)
+            if token is None or value.get('token')!=token:
+                return False,answer,'本题要求当前成功check返回的TOKEN；不能提交历史token、示例或未经本任务校验的值'
+        error=task_field_semantics.record_name_error(value,contract,documents)
+        if error:return False,answer,error
     return True,answer,'structure valid; official grading not inferred'
 
 
