@@ -48,10 +48,10 @@ class DefenceDeliveryTests(unittest.TestCase):
                     self.assertEqual(len(towers),3)
                     self.assertIsNotNone(first_wall)
                     if side=='challenger':
-                        self.assertTrue(all(r['pos']['x']>base['x']+1 for r in towers if r['roleType']=='railgun'))
+                        self.assertTrue(all(r['pos']['x']>base['x']+1 for r in towers if r['roleType']=='rocket'))
                         self.assertEqual(first_wall['x'],base['x']+3)
                     else:
-                        self.assertTrue(all(r['pos']['x']<base['x'] for r in towers if r['roleType']=='railgun'))
+                        self.assertTrue(all(r['pos']['x']<base['x'] for r in towers if r['roleType']=='rocket'))
                         self.assertEqual(first_wall['x'],base['x']-2)
         finally:
             http.shutdown();http.server_close();thread.join(timeout=3)

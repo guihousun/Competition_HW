@@ -20,6 +20,7 @@ from .market import (
 )
 from .protocol import (
     BOMB,
+    DAY_ROUNDS,
     MEDICINE,
     PIONEER,
     Pos,
@@ -48,6 +49,7 @@ TOWER_LOADOUT = ("rocket", "railgun", "rocket")
 STONE_BATCH = 10
 # How close we want the shop/vendor work to happen before dusk (R02: 70+60).
 RETURN_BEFORE_NIGHT = 55
+UPGRADE_RETURN_MARGIN = 3  # strategy buffer; the observed trip must fit before night
 # Economy window: after the first towers are up, a worker may walk to the
 # vendor/shop. The trip can span days, because the neutral points are randomly
 # placed and may sit far from the base; an errand is abandoned in the evening so
@@ -657,6 +659,13 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     _UPGRADE_REPORT.set({'phase':'idle','reason':'return_before_night'})
     # Return before night instead of waiting until robots arrive.
     if (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
+        # A priced upgrade trip uses its actual round-trip budget, not the
+        # generic early-return cutoff that used to strand it before buying.
+        upgrade, report = upgrade_itinerary.plan(turn, state, commands,
+            start=0, deadline=DAY_ROUNDS - UPGRADE_RETURN_MARGIN)
+        _UPGRADE_REPORT.set(report)
+        if upgrade:
+            commands[upgrade[0]] = upgrade[1]
         _night(turn, commands, state)
         return
     sites = _tower_sites(turn)
@@ -695,7 +704,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         # pioneer, so the task walk does not walk it back to the task point.
         state["_treasureRound"] = turn.round_no if reserved else None
     upgrade, upgrade_report = upgrade_itinerary.plan(turn,state,commands,
-        start=ECONOMY_WINDOW_START,deadline=RETURN_BEFORE_NIGHT)
+        start=0,deadline=DAY_ROUNDS - UPGRADE_RETURN_MARGIN)
     _UPGRADE_REPORT.set(upgrade_report)
     if upgrade:
         owner, command = upgrade
@@ -1761,7 +1770,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
         if worker.kind == PIONEER and committed_task:
             continue
         if (confine and turn.station() is not None and not home_defense.inside(turn, worker.pos)
-                and worker.unit_id not in extra_work):
+                and worker.unit_id not in extra_work and worker.unit_id not in commands):
             outside_workers.add(worker.unit_id)
             step = home_defense.step_inside(turn, worker, claimed=claimed)
             if step is not None:

@@ -11,6 +11,23 @@ class WeaponBudgetTests(unittest.TestCase):
         p['teamOur']['roles'].append(unit(30,'wall',3,6))
         return p
 
+    def test_funded_upgrade_can_depart_at_dawn_before_regular_mining_window(self):
+        p=self.wall_board(100);p['roundNo']=1;commands={}
+        brain._day(Turn.load(p),commands,p)
+        report=brain._UPGRADE_REPORT.get()
+        self.assertEqual(report['phase'],'to_shop')
+        self.assertEqual(report['voucher'],WV)
+
+    def test_carried_voucher_delivery_survives_generic_dusk_return(self):
+        p=self.wall_board(0);p['roundNo']=56
+        worker=next(r for r in p['teamOur']['roles'] if r['id']==11)
+        worker['pos']={'x':7,'y':3};worker['backpack']=[WV]
+        commands={};brain._day(Turn.load(p),commands,p)
+        self.assertEqual(commands[11]['action'],'use')
+        self.assertEqual(commands[11]['name'],WV)
+        p['roundNo']=68;commands={};brain._day(Turn.load(p),commands,p)
+        self.assertFalse(any(c['action']=='buy' for c in commands.values()))
+
     def test_save_instead_of_buying_cheap_wall_and_begin_weapon_trip_at_100(self):
         p=self.wall_board()
         proposal,report=upgrade.plan(Turn.load(p),p,{})

@@ -38,13 +38,13 @@ class BaselineTests(unittest.TestCase):
         self.assertLessEqual(len(builds), 1)
         for build in builds:
             self.assertIn(build["name"], ("gatling", "railgun", "rocket"))
-        # Issue 12: the planned slots face the expected approach (east here), so
+        # Issue 12: the two rocket slots face the expected approach (east here), so
         # the worker may walk to the site before building; either way the target
         # must be a front-side weapon-ring cell.
         sites = brain._tower_sites(turn)
         self.assertTrue(sites, "a missing tower must still be planned")
         station_x = turn.station().pos.x
-        for site in sites[1:2]:
+        for site in sites[::2]:
             self.assertGreater(site.x, station_x + 1,
                                "tower slots must face the approach (issue 12)")
         if not builds:
