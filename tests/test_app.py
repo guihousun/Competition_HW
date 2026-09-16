@@ -22,9 +22,9 @@ from coregeek.protocol import actions, model  # noqa: E402
 from coregeek.utils import LOG_TEXT_MAX  # noqa: E402
 
 
-#: 官方样例（roundNo=85）的落点。样例是夜里，三个角色（含开拓者）都朝最近的一座
-#: 未被认领的炮走一格：10010 在 (5,23) → (9,24)；10012 在 (10,16) → (9,24) 已被认领 ⇒ (10,25)；
-#: 10011 在 (10,12) → 前两座都被认领 ⇒ (9,25)。夜里 `build`/`collect` 一条都不该有。
+#: 官方样例（roundNo=85）的落点。样例是夜里，三个角色（含开拓者）各朝最近一座未被
+#: 认领的炮走一格：10010→(9,24)；10012→(10,25)（(9,24) 已被认领）；10011→(9,25)。
+#: 夜里 `build`/`collect` 一条都不该有。
 EXPECTED_MOVES = {"10010": [6, 22], "10012": [9, 17], "10011": [9, 13]}
 
 
@@ -40,8 +40,8 @@ class HandleTest(unittest.TestCase):
     """端到端：`app.handle` 是红线所在，改坏了要立刻知道。"""
 
     def setUp(self) -> None:
-        #: SOP 是单实例上的跨回合状态，不清就会跨用例串味：
-        #: 前一条用例存进去的 SOP 会出现在后一条的 prompt 里。
+        # SOP 是单实例上的跨回合状态，不清就会跨用例串味（上一条用例存的 SOP 会
+        # 出现在下一条的 prompt 里）。
         AGENT.reset()
 
     def _handle(self, raw: bytes) -> dict:
@@ -57,8 +57,7 @@ class HandleTest(unittest.TestCase):
         )
         # 样例是夜里：三个角色都只走一格，没有 build / collect（`build` 仅白天）
         self.assertEqual({v["action"] for v in cmds.values()}, {"move"})
-        # 三个角色离三座炮都还有十几格 ⇒ 本回合一发都不该有（没人贴着炮，
-        # `_fire` 根本不会被调到），于是 key 全落在角色 id 上、没有一个是武器 id
+        # 三个角色离三座炮都还有十几格 ⇒ 没人贴着炮、`_fire` 不会被调到 ⇒ key 全是角色 id
         self.assertEqual(set(cmds), {"10010", "10011", "10012"})
 
     def test_bad_json_falls_back_to_empty_commands(self):
@@ -67,40 +66,38 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
     def test_every_round_logs_the_summary_then_the_actions(self):
-        """每回合的复盘日志：先局面（摘要）、再动作、再判题器的回执（顺序是重点）。
-        局面 = 摘要单条（图例与整张地图不在日志里，这里顺带钉住"地图确实不在了"）。
+        """每回合的复盘日志：先局面（摘要）、再动作、再判题器的回执（顺序是重点）；
+        局面 = 摘要单条（顺带钉住"图例与整张地图确实不在日志里"）。
 
-        `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那几条。样例自带一条
-        假错误与两条假未通过（`CLAUDE.md` 已声明别当真实信号读），但这里的记录条数
-        是真实断言：回执那两条各自"有事才吭声"，所以样例这种局面是 5 条
-        （banner + 摘要 + 动作 + 报错 + 回执），而一个干净回合只有 3 条（下面那条用例）。
+        `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那几条。样例自带一条假
+        错误与两条假未通过（`CLAUDE.md` 已声明别当真实信号读），但记录条数是真实断言：
+        回执那两条各自"有事才吭声"，所以样例这种局面 5 条、干净回合 3 条（下条用例）。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
-        #: "没任务 + 有官方消息"会发新闻查价 prompt —— 本类测的是日志版面，
-        #: 样例自带的 worldNews 清掉，"没有新闻的回合"才是这几条的本意。
+        # "没任务 + 有官方消息"会发新闻查价 prompt —— 本类测的是日志版面，样例自带的
+        # worldNews 清掉，"没有新闻的回合"才是这几条的本意。
         raw["worldNews"] = {"officialNews": ""}
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        #: 五条：banner + 摘要 + 动作 + 报错 + 回执。banner 是 `handle` 打的、
-        #: 不归 `_log` 管 —— 数记录数时最容易漏的就是它。
+        # 五条：banner + 摘要 + 动作 + 报错 + 回执。banner 是 `handle` 打的、不归 `_log` 管
+        # —— 数记录数时最容易漏的就是它。
         banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
         self.assertEqual(banner, f"{'#' * 35}第85回合{'#' * 35}")
         lines = head.splitlines()
-        #: 摘要 4 块（各占一行）+ 摘要头前面留给 `logging` 前缀的那个空行
+        # 摘要 4 块（各占一行）+ 摘要头前面留给 `logging` 前缀的那个空行
         self.assertEqual(len(lines), 1 + 4)
-        #: 回合号在最前 —— 时间戳就加在这一行上（摘要头一块前面那个空行不带时间戳）
+        # 回合号在最前 —— 时间戳就加在这一行上（摘要头前面那个空行不带时间戳）
         self.assertEqual(lines[1].split("｜")[0].rstrip(), "【回合】 85（夜里）")
         self.assertIn("【金币】 20", lines[1])
-        #: 地图与图例不在日志里：图例那行、以及地图那圈 `—` 边框都不该再出现
+        # 地图与图例不在日志里：图例那行、以及地图那圈 `—` 边框都不该再出现
         self.assertNotIn("【图例】：", head)
         self.assertNotIn("—" * 43, head, "地图的标尺行不该再出现")
         self.assertEqual(
             acts, "【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
         )
         self.assertEqual(errors, "【判题器报错】：2：xxx")
-        #: 按 id 排序（不照 payload 的顺序）：`{10010: false, 10030: false}` 在样例里
-        #: 恰好就是升序，靠样例测不出这一条 —— 所以下面那条解析用例专门打乱一次顺序。
-        #: 样例那份回执里有 7 个实体 —— 全都打，不再只列未通过的两个
+        # 按 id 排序（不照 payload 的顺序）：样例那份恰好就是升序，靠样例测不出这一条 ——
+        # 所以下面那条解析用例专门打乱一次顺序。样例回执里 7 个实体全打，不再只列未通过的。
         self.assertEqual(
             failed,
             "【上回合合法性】：10010=False | 10011=True | 10012=True | 10013=True"
@@ -108,8 +105,9 @@ class HandleTest(unittest.TestCase):
         )
 
     def test_a_clean_round_logs_only_the_summary_and_the_actions(self):
-        """回执那两条有事才吭声 —— 干净回合一条都不该多打（日志字节是有预算的）。
-        与上面那条用例合起来才钉得住"触发条件"：只测样例的话，全打也算过。
+        """回执那两条有事才吭声 —— 干净回合一条都不该多打（日志字节是有预算的）；与上条
+        用例合起来才钉得住"触发条件"（只测样例的话，全打也算过）。
+
         banner 是那第三条（`handle` 打的，不归 `_log` 管）：它每回合都出现、不能省 ——
         分段符省了，几 MB 的日志就没法按回合切。
         """
@@ -127,11 +125,9 @@ class HandleTest(unittest.TestCase):
     def test_the_receipt_line_lists_every_entity_sorted(self):
         """回执那一行列全部实体、按 id 升序（含 `True` 的那些）。
 
-        - 全都打：判题器只回它收到的那几条，所以"这条压根没发指令"与"发了但没过"
-          在只列未通过名单时长得一模一样，而下一步该怎么做完全相反。
-          `10011=True` 必须出现在行里。
-        - 升序：样例那份恰好就是升序，上面那条用例测不出这一点 —— 顺序一旦随
-          payload 走，同一种局面会打出两种日志，翻日志时对不上号。
+        全打：判题器只回它收到的那几条 ⇒ "压根没发指令"与"发了但没过"在只列未通过名单时
+        长得一样，而下一步做法完全相反。升序：顺序一旦随 payload 走，同一种局面会打出两种
+        日志 —— 样例那份恰好升序，测不出这一点，所以下面专门重排一次。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["errors"] = []
@@ -143,8 +139,8 @@ class HandleTest(unittest.TestCase):
             caught.records[-1].getMessage(),
             "【上回合合法性】：10010=False | 10011=True | 10030=False",
         )
-        #: 全通过也照样打：触发条件是"有回执"，不是"有未通过" ——
-        #: 一行全 `True` 正是"这回合发出去的都合法"的唯一证据。
+        # 全通过也照样打：触发条件是"有回执"，不是"有未通过" —— 一行全 `True` 正是
+        # "这回合发出去的都合法"的唯一证据。
         raw["lastRoundRoleActionResults"] = {"10010": True, "10011": True}
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
@@ -153,8 +149,8 @@ class HandleTest(unittest.TestCase):
         )
 
     def test_the_task_line_shows_the_whole_text_and_marks_any_truncation(self):
-        """任务日志必须能看见全文：短文本原样打全；超长时截到 `LOG_TEXT_MAX`
-        并明说被截了、原文共多少字（静默截断会让"任务一直失败"无从查起）。
+        """任务日志必须能看见全文：短文本原样打全；超长时截到 `LOG_TEXT_MAX` 并明说被截了、
+        原文共多少字（静默截断会让"任务一直失败"无从查起）。
 
         `assertLogs` 必须收 root：任务行由 `planner` 自己打（`coregeek.game.planner`），
         只盯 `coregeek.app` 会把整块漏掉 —— 与 SOP 那条同一个坑。
@@ -181,8 +177,8 @@ class HandleTest(unittest.TestCase):
         task, ask = asked_after_sending()
         self.assertIn("【本轮任务】：短题目", task)
         self.assertIn("【上一轮模型回复】：无", task)
-        #: `prompt` 打出来（messages JSON）：模板头、工具清单、「沉淀的 SOP」那个槽、
-        #: 题目原文全在里面 —— 实盘上只有这里看得见（本地 e2e 的"LLM"是我们自己写的）。
+        # `prompt` 打出来（messages JSON）：模板头、工具清单、「沉淀的 SOP」那个槽、题目
+        # 原文全在里面 —— 实盘上只有这里看得见（本地 e2e 的"LLM"是我们自己写的）。
         self.assertTrue(ask.startswith(ASK), ask[:20])
         messages = json.loads(ask[len(ASK):])  # 短题 ⇒ 没到上限，整串都在这行里
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
@@ -196,9 +192,9 @@ class HandleTest(unittest.TestCase):
         ):
             self.assertIn(piece, messages[0]["content"])
 
-        #: 判题器答了 ⇒ 回复那一格才有内容，而且不再提问。答案轮只交答案：
-        #: prompt 槽完全空着（压缩与 `<answer>` 互斥 —— 压缩回复会占住下一轮的
-        #: `llmResp` 槽，答案被判错时纠错分支拿不到答案原文）
+        # 判题器答了 ⇒ 回复那一格才有内容，而且不再提问。答案轮只交答案：prompt 槽完全
+        # 空着（压缩与 `<answer>` 互斥 —— 压缩回复会占住下一轮的 `llmResp` 槽，
+        # 答案被判错时纠错分支拿不到答案原文）
         task, ask = asked_after_sending(llmResp="答案")
         self.assertIn("【上一轮模型回复】：答案", task)
         self.assertEqual(ask, "", "答案轮不提问也不压缩（第 47 步）")
@@ -209,17 +205,18 @@ class HandleTest(unittest.TestCase):
         self.assertNotIn("题" * (LOG_TEXT_MAX + 1), task)
         self.assertIn(f"共 {LOG_TEXT_MAX + 7} 字", task)
 
-        #: 任务刚结束的那一回合是唯一一次能看见"判题器最后答了什么"的机会
-        #: （`phase_task` 已经空了）—— 所以触发条件里带着 `llm_resp`，不能只判任务。
+        # 任务刚结束的那一回合是唯一一次能看见"判题器最后答了什么"的机会（`phase_task`
+        # 已经空了）—— 所以触发条件里带着 `llm_resp`，不能只判任务。
         task, _ = asked_after_sending(phaseTask="")
         self.assertIn("【本轮任务】：无", task)
         self.assertIn("【上一轮模型回复】：答案", task)
 
     def test_a_long_answer_in_the_actions_line_passes_through(self):
-        """`submitAnswer` 的 `taskAnswer` 是 LLM 给的自由文本：基本不截
-        （`LOG_TEXT_MAX`=40000）—— 9000 字的答案原文全量进日志，只有过了上限才截、且留痕。
-        这条走真链路（`answer_of` → `submitAnswer` → `describe`）—— 上面那条用例
-        证明"`describe` 会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
+        """`submitAnswer` 的 `taskAnswer` 是 LLM 给的自由文本，基本不截 —— `LOG_TEXT_MAX`
+        已是 40000：9000 字的答案原文全量进日志，只有过了上限才截、且留痕。
+
+        这条走真链路（`answer_of` → `submitAnswer` → `describe`）：上面那条证明"`describe`
+        会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -237,7 +234,7 @@ class HandleTest(unittest.TestCase):
         self.assertIn("答" * 9000, acts[0], "9000 字 < 40000 ⇒ 原文全量进日志")
         self.assertNotIn("（共", acts[0])
 
-        #: 过了上限才截，而且必须留痕
+        # 过了上限才截，而且必须留痕
         raw["llmResp"] = "<answer>" + "答" * (LOG_TEXT_MAX + 10) + "</answer>"
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
@@ -248,12 +245,10 @@ class HandleTest(unittest.TestCase):
         self.assertNotIn("答" * (LOG_TEXT_MAX + 1), acts[0], "截掉的是尾巴，不是头")
 
     def test_the_prompt_line_keeps_its_own_limit(self):
-        """提问行单独截在 `LOG_PROMPT_MAX` —— 它是唯一还截断的一行
-        （`LOG_TEXT_MAX` 已是 40000）。
+        """提问行单独截在 `LOG_PROMPT_MAX` —— 它是唯一还截断的一行（`LOG_TEXT_MAX` 已是 40000）。
 
-        prompt 是拼出来的（`prompt.py` 的段模板 + 会话往来），会话部分在任务行里已有全文，
-        这一行只需要看得见模板头与「沉淀的SOP」那个槽 ⇒ 就近取 100000。
-        超长必须留痕、且有界。
+        prompt 是拼出来的（段模板 + 会话往来），会话部分在任务行里已有全文，这一行只需要
+        看得见模板头与「沉淀的SOP」那个槽 ⇒ 就近取 100000。超长必须留痕、且有界。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -262,9 +257,8 @@ class HandleTest(unittest.TestCase):
         raw["llmResp"] = ""  # 没答过 ⇒ 这一回合提问
         raw["phaseTask"] = "题" * LOG_PROMPT_MAX
         AGENT.reset()
-        #: `planner` 组装出来的那一份（同一道题的首问）。算完再清一次，
-        #: 让 `_handle` 里那次 chat 也是这道题的首问 —— 上下文是累积的，不清的话
-        #: 它会多出一句「请继续。」，全长就对不上了。
+        # `planner` 组装出来的那一份（同一道题的首问）。算完再清一次，让 `_handle` 里那次
+        # chat 也是这道题的首问 —— 上下文是累积的，不清的话它会多出一句「请继续。」。
         full = AGENT.chat(raw["phaseTask"])
         AGENT.reset()
         with self.assertLogs("coregeek.app", level="INFO") as caught:
@@ -278,8 +272,8 @@ class HandleTest(unittest.TestCase):
             LOG_PROMPT_MAX + len(f"…（共 {len(full)} 字）"),
             "提问那一格该是『上限字 + 留痕那句话』—— 超长必须留痕、且有界",
         )
-        #: prompt 是 messages JSON：截断从头截，开头一定是 system 消息
-        #: （content 直接以 `# 【ROLE定位】` 开头）
+        # prompt 是 messages JSON：截断从头截，开头一定是 system 消息（content 直接以
+        # `# 【ROLE定位】` 开头）
         self.assertTrue(
             asked.startswith('[{"role":"system","content":"# 【ROLE定位】'), asked[:40]
         )
@@ -288,10 +282,9 @@ class HandleTest(unittest.TestCase):
     def test_attack_through_the_real_payload_path(self):
         """端到端唯一一条：从真实 payload 到线上报文。
 
-        用样例改成"夜里、一个工人贴着炮、射程内一只机器人"，验证两件只有整条链路
-        才看得见的事：`roleCommandMap` 的 key 是武器 id（不是角色 id），`controllerId`
-        才是角色 id。写反的话判题器看到的是"角色 10010 在操炮"，而角色 id 根本不是武器，
-        属于"指令非法"（红线）。单测 `to_wire()` 看不出这一点。
+        样例改成"夜里、一个工人贴着炮、射程内一只机器人"。验两件只有整条链路才看得见
+        的事：`roleCommandMap` 的 key 是武器 id（不是角色 id），`controllerId` 才是角色。
+        写反 ⇒ 判题器看到"角色在操炮"，属于"指令非法"（红线）；单测 `to_wire()` 看不出。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 85  # 夜
@@ -312,10 +305,9 @@ class HandleTest(unittest.TestCase):
     def test_describe_survives_a_command_without_a_target(self):
         """`acceptTask` / `submitAnswer` 没有 `targetPos` —— `describe` 必须活得过它们。
 
-        `describe` 跑在 `app.handle` 的 `try` 里（`app._log`），一个 `IndexError` 会让
-        整回合退化成空指令 —— 开拓者领了任务却什么都没答，极难排查。
-        字段是通用摊开的（有什么打什么），这类动作天然踩不到雷；这条用例留着当
-        守门员：谁要回头去手写字段清单，先在这里挂一次。
+        `describe` 跑在 `app.handle` 的 `try` 里，一个 `IndexError` 会让整回合退化成空
+        指令（开拓者领了任务却什么都没答，极难排查）。字段是通用摊开的 ⇒ 这类动作天然
+        踩不到雷；守门：谁要回头手写字段清单，先在这里挂一次。
         """
         self.assertEqual(
             actions.describe({"10011": {"action": "acceptTask"}}, clip=_clip), "10011 acceptTask"
@@ -330,9 +322,8 @@ class HandleTest(unittest.TestCase):
     def test_describe_prints_every_field_of_every_command(self):
         """通用摊开：一条指令有什么字段就打什么，一个都不许漏。
 
-        手写清单的坏处是漏字段不会有人发现 —— 日志少打一个 `controllerId`，
-        看着完全正常（事后复盘只能瞎猜）。`attack` 那三个字段里，武器 id 是 key、
-        操控者在 `controllerId`，同样一眼能看出来。
+        手写清单的坏处是漏字段不会有人发现（日志少打一个 `controllerId`，看着完全正常，
+        事后复盘只能瞎猜）。`attack` 那三个字段里，key 是武器 id、操控者在 `controllerId`。
         """
         self.assertEqual(
             actions.describe(
@@ -352,7 +343,7 @@ class HandleTest(unittest.TestCase):
             ),
             "10020 attack controllerId=10010 (4,4)；10012 build name=wall (13,23)",
         )
-        #: `targetPos` 是数组（`attack` 的等级 >1 时多格）：多格用 `、` 连，别只打头一个
+        # `targetPos` 是数组（`attack` 的等级 >1 时多格）：多格用 `、` 连，别只打头一个
         self.assertEqual(
             actions.describe(
                 {
@@ -370,10 +361,9 @@ class HandleTest(unittest.TestCase):
     def test_describe_clips_free_text_through_the_injected_clip(self):
         """自由文本（`taskAnswer`）一律过调用方递进来的 `clip`。
 
-        `describe` 不需要知道哪个字段是自由文本 —— 字符串值全过一遍就够了。
-        截断规则（上限 + `…（共 N 字）` 那句留痕）全项目只有 `app._clip` 一份：
-        `protocol` 不能 import `app`（依赖方向反了），所以是把规则递进来、
-        不是在这儿复制一份。这条用例传一个假 clip，正好钉住"没复制"。
+        `describe` 不需要知道哪个字段是自由文本 —— 字符串值全过一遍就够了。截断规则
+        （上限 + `…（共 N 字）` 那句留痕）全项目只有 `app._clip` 一份（`protocol` 不能
+        import `app`，依赖方向反了）⇒ 把规则递进来、不在这儿复制；传个假 clip 正好钉住。
         """
         seen = []
 
@@ -390,10 +380,9 @@ class HandleTest(unittest.TestCase):
     def test_the_task_loop_through_handle(self):
         """端到端走完整条工具调用回路 —— 问 → 跑命令 → 回灌结果 → 交答案。
 
-        这条是把整台状态机钉死的唯一一条：它同时钉住 `model` 读对了三个顶层字段
-        （`phaseTask` / `llmResp` / `lastCmdResult`）、`app` 把 `prompt` 与 `executeCmd`
-        分头装进了响应、以及开拓者服任务期间一步不动（动了任务就作废）。
-        单看某一条判据的用例都测不出"三个字段的接线到底通没通"。
+        这条把整台状态机钉死：`model` 读对三个顶层字段（`phaseTask` / `llmResp` /
+        `lastCmdResult`）、`app` 把 `prompt` 与 `executeCmd` 分头装进响应、开拓者服任务
+        期间一步不动。单看某一条判据的用例测不出"三个字段的接线通没通"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1  # 白天：开拓者本来在正常地去任务点，现在应当被钉住
@@ -406,8 +395,8 @@ class HandleTest(unittest.TestCase):
 
         def ask() -> dict:
             body = self._handle(json.dumps(raw).encode("utf-8"))
-            #: 开拓者被钉死在任务点上：它可以 `submitAnswer`，但一步都不能挪
-            #: （离开任务点周围一格任务立刻作废，任务书 L379）
+            # 开拓者被钉死在任务点上：它可以 `submitAnswer`，但一步都不能挪（离开任务点
+            # 周围一格任务立刻作废，任务书 L379）
             pioneer = body["roleCommandMap"].get("10011")
             self.assertNotEqual(pioneer and pioneer["action"], "move", pioneer)
             return body
@@ -444,9 +433,8 @@ class HandleTest(unittest.TestCase):
         self.assertIn("[exitCode:0]\n2", messages[3]["content"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ④ LLM 给出答案 ⇒ 只交 `<answer>` 里的内容（不是整段回复）；
-        #    答案轮只交答案：prompt 与 executeCmd 全空 —— 不压缩（压缩与 `<answer>` 互斥）
-        #    （清掉 `lastCmdResult`：文档说"未发命令时为空字符串"，上一轮我们没发命令）
+        # ④ LLM 给出答案 ⇒ 只交 `<answer>` 里的内容（不是整段回复），prompt 与 executeCmd
+        #    全空（压缩与 `<answer>` 互斥）。清 `lastCmdResult`：上一轮我们没发命令
         raw["lastCmdResult"] = ""
         raw["llmResp"] = "<answer>晴 26 度</answer>"
         body = ask()
@@ -457,12 +445,10 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body["prompt"], "", "答案轮不提问也不压缩（第 47 步）")
         self.assertEqual(body["executeCmd"], "")
 
-        # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，同时照旧提交
-        #    （两条通道独立：提问在推进，而按接口文档 L140 取"通过率最高"、重交零成本）
-        #    会话里有两份"它说过的话"，各归各的：assistant 消息收整段原文（带标签 ——
-        #    它真说过的话），纠错块收的必须是交上去的那一份（`answer_of` 解包后的、
-        #    不带标签），后面还挂着判题器自己的原话 —— 前者带标签的话 LLM 会以为
-        #    自己交了一堆标签，去改一个并不存在的问题。
+        # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，同时照旧提交（两条通道独立；
+        #    接口文档 L140 取"通过率最高"，重交零成本）。会话里两份"它说过的话"各归各的：
+        #    assistant 消息收整段原文（带标签，它真说过的话），纠错块收的必须是交上去的
+        #    那一份（`answer_of` 解包后的）—— 给错前者，LLM 会去改一个并不存在的问题。
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
         messages = json.loads(body["prompt"])
@@ -489,12 +475,11 @@ class HandleTest(unittest.TestCase):
         )
 
     def test_the_sandbox_line_only_appears_with_a_result(self):
-        """沙盒行只在真有回执时出现 —— 「没发命令就一定是空串」是文档写死的
-        （接口文档 L33），所以"有沙盒行" ⟺ "上一轮真跑过一条命令"，这个对账关系要守住。
+        """沙盒行只在真有回执时出现 —— "没发命令就一定是空串"是文档写死的（接口文档 L33），
+        所以"有沙盒行" ⟺ "上一轮真跑过一条命令"，这个对账关系要守住。
 
-        提问回合与发命令那一回合一条都不该多打：发命令那一回合不打，是因为命令原文
-        已经在上面任务行的"上一轮模型回复"里了 —— 同一回合、同一条字符串，不抄第二遍。
-        这条日志由 `planner` 打 ⇒ `assertLogs` 得收 root。
+        提问回合与发命令回合都不该多打：后者不打是因为命令原文已在任务行的"上一轮模型
+        回复"里了 —— 同一回合、同一条字符串不抄第二遍。这行由 `planner` 打 ⇒ 收 root。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -511,10 +496,10 @@ class HandleTest(unittest.TestCase):
                 self._handle(json.dumps(raw).encode("utf-8"))
             return [r.getMessage() for r in caught.records]
 
-        #: 发命令那一回合：任务行说明了一切，没有沙盒行
+        # 发命令那一回合：任务行说明了一切，没有沙盒行
         self.assertFalse([m for m in messages() if m.startswith(SANDBOX)])
 
-        #: 有回执那一回合：多出一条沙盒行，且回执原文在里面
+        # 有回执那一回合：多出一条沙盒行，且回执原文在里面
         raw["llmResp"] = ""
         raw["lastCmdResult"] = "[exitCode:0]\nhello"
         sandbox = [m for m in messages() if m.startswith(SANDBOX)]
@@ -522,12 +507,11 @@ class HandleTest(unittest.TestCase):
         self.assertIn("hello", sandbox[0])
 
     def test_a_long_sandbox_result_only_clips_at_the_cap(self):
-        """沙盒输出可能到 64KB（接口文档 L33）：基本不截（`LOG_TEXT_MAX`=40000）——
-        9000 字原文全量进日志，只有过了上限才截，且截断必须留痕。
+        """沙盒输出可能到 64KB（接口文档 L33），而 `LOG_TEXT_MAX`=40000：9000 字原文全量
+        进日志，只有过了上限才截，且截断必须留痕。
 
-        `…（共 N 字）` 那句把"命令没输出"与"命令吐了 6 万字、你只看得到头"分开，
-        后者正是最该立刻看见的事故形态。回灌给 LLM 的仍是全文 —— 两个下游
-        要的东西不同：一个要正确性，一个要人眼看得下。
+        `…（共 N 字）` 那句把"命令没输出"与"命令吐了 6 万字、你只看得到头"分开，后者正是
+        最该立刻看见的事故形态。回灌给 LLM 的仍是全文 —— 一个要正确性，一个要人眼看得下。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -545,7 +529,7 @@ class HandleTest(unittest.TestCase):
         self.assertIn("y" * 9000, sandbox[0], "9000 字 < 40000 ⇒ 原文全量进日志")
         self.assertNotIn("（共", sandbox[0])
 
-        #: 过了上限才截，而且必须留痕
+        # 过了上限才截，而且必须留痕
         raw["lastCmdResult"] = "y" * (LOG_TEXT_MAX + 10)
         with self.assertLogs(level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
@@ -556,14 +540,12 @@ class HandleTest(unittest.TestCase):
         self.assertNotIn("y" * (LOG_TEXT_MAX + 1), sandbox[0], "截掉的是尾巴，不是头")
 
     def test_a_clean_round_stays_small(self):
-        """硬约束 5 的结构性守卫：大字段基本不截（`LOG_TEXT_MAX`=40000）之后，
-        守得住的只有结构部分 —— 没有大字段的回合必须仍然小（摘要有自己的上界
-        `SUMMARY_MAX_ITEMS`、动作行一回合最多几个角色、banner 一行）。这个守卫抓的是
-        "又加进来一个每回合都打的大块" —— 那类结构性膨胀一来就是几百字节起步。
+        """硬约束 5 的结构性守卫：大字段基本不截之后，守得住的只有结构部分 —— 没有大字段
+        的回合必须仍然小（摘要有自己的上界 `SUMMARY_MAX_ITEMS`、动作行最多几个角色、
+        banner 一行）。它抓的是"又加进来一个每回合都打的大块"—— 那类膨胀几百字节起步。
 
-        `assertLogs` 必须收 root（不写 logger 名）：SOP 那条走
-        `coregeek.agent.tools.sop`、任务行与沙盒行走 `coregeek.game.planner`，
-        只盯 `coregeek.app` 的话它们绕开本守卫。
+        `assertLogs` 必须收 root：SOP 那条走 `coregeek.agent.tools.sop`、任务行与沙盒行
+        走 `coregeek.game.planner`，只盯 `coregeek.app` 它们就绕开本守卫。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1

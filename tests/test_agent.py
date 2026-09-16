@@ -23,12 +23,9 @@ from coregeek.app import handle  # noqa: E402
 class AgentToolCallTest(unittest.TestCase):
     """工具注册表与顶层调度 `Agent.tool_call`。
 
-    `setUp` 造的是 `AGENT` 之外的新实例（状态住在实例上 ⇒ 天然干净），不需要复位 ——
-    复位是给必须走包根单例的那些用例准备的（`HandleTest` / `TaskChannelTest`）。
-
     注册表给每个工具声明 `((参数名, 用途), …)`；`tool_call` 收 `[(参数名, 原文), …]`，
     只收具名参数：认不出的名字忽略、声明的参数一个不少且非空才放行 `impl(**resolved)`。
-    描述的生成在 `prompt.gen_all_tool_prompt`。
+    `setUp` 造的是 `AGENT` 之外的新实例（状态住在实例上 ⇒ 天然干净），不需要复位。
     """
 
     def setUp(self) -> None:
@@ -98,7 +95,7 @@ class AgentToolCallTest(unittest.TestCase):
 
         返回值直接进响应顶层的 `executeCmd` ⇒ 返回非空就是往沙盒丢一条不存在的命令。
         顺带钉闸门的位置：空白参数在 `tool_call` 就被挡下 ⇒ 清不掉已存的流程
-        （`sop` 传空白串的语义是"删掉那条"；校验下沉到工具里就会一次误调用动到流程表）。
+        （`sop` 传空白串的语义是"删掉那条"）。
         """
         self.assertEqual(
             self.agent.tool_call(
@@ -111,13 +108,13 @@ class AgentToolCallTest(unittest.TestCase):
             self.agent.tool_call("SOP2Prompt", [("name", "找任务书"), ("sop", "  ")]), ""
         )
         self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls"}, "空白参数清不掉流程 —— 闸门在工具之前")
-        #: 不认识的参数名不参与闸门：name/sop 都在就放行
+        # 不认识的参数名不参与闸门：name/sop 都在就放行
         self.assertEqual(
             self.agent.tool_call("SOP2Prompt", [("name", "读题"), ("sop", "第二步"), ("答案", "x")]),
             "",
         )
         self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
-        #: 声明的参数缺一个（这里是 `name`）⇒ 整次调用作废，流程表一个字节都别动
+        # 声明的参数缺一个（这里是 `name`）⇒ 整次调用作废，流程表一个字节都别动
         self.assertEqual(self.agent.tool_call("SOP2Prompt", [("sop", "第三步")]), "")
         self.assertEqual(self.agent.tool_call("SOP2Prompt", []), "")
         self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
@@ -125,9 +122,8 @@ class AgentToolCallTest(unittest.TestCase):
     def test_a_sop_containing_the_answer_tags_is_scrubbed_on_the_way_in(self):
         """`sop` 里成对的 `<answer>…</answer>` 入库前挖掉：沉淀正文讲的正是
         "答案怎么写" ⇒ 几乎必然带这对标签，不挖就会进后续每一份 prompt。
-        挖掉、不是作废整次调用（沉淀是这个工具的全部价值），挖了几处进日志 ——
-        那是"LLM 又把答案格式写进 SOP 了"的唯一信号。与 `answer_of` 的"先挖工具块"
-        叠起来才是"答案不会被 SOP 污染"的完整保证（端到端见
+        挖掉、不是作废整次调用，挖了几处进日志（"LLM 又把答案格式写进 SOP 了"的信号）。
+        与 `answer_of` 的"先挖工具块"叠起来才是"答案不被 SOP 污染"的完整保证（端到端见
         `TaskChannelTest.test_a_literal_in_the_sop_does_not_poison_the_submitted_answer`）。
         """
         with self.assertLogs(level="INFO") as logs:
@@ -143,13 +139,13 @@ class AgentToolCallTest(unittest.TestCase):
             )
         self.assertEqual(self.agent.sop, {"答题格式": "先 ls。答案写成  的形状。"})
         self.assertIn("剔除 1 处 <answer> 段", "\n".join(r.getMessage() for r in logs.records))
-        #: 多处 / 空块都算"这对串"，一次挖干净
+        # 多处 / 空块都算"这对串"，一次挖干净
         self.agent.tool_call(
             "SOP2Prompt", [("name", "答题格式"), ("sop", "<answer></answer>先 ls<answer>x</answer>")]
         )
         self.assertEqual(self.agent.sop, {"答题格式": "先 ls"})
-        #: 半截的标记（有开无闭）不挖 —— `answer_of` 认的也是成对块，
-        #: 半截标记在正文里只是普通文字（挖它等于替 LLM 改正文）
+        # 半截的标记（有开无闭）不挖 —— `answer_of` 认的也是成对块，
+        # 半截标记在正文里只是普通文字（挖它等于替 LLM 改正文）
         self.agent.tool_call("SOP2Prompt", [("name", "答题格式"), ("sop", "写 <answer> 但没有闭标签")])
         self.assertEqual(self.agent.sop, {"答题格式": "写 <answer> 但没有闭标签"})
 
@@ -201,9 +197,8 @@ class AgentToolCallTest(unittest.TestCase):
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """加一个工具只改一处（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。
 
-        注入一个假工具来钉这条性质（把描述写死成字面量的实现会在这里露馅）。
-        注入的是本类 setUp 里那个新实例的表（工具表是实例属性）⇒ 不需要清理，
-        实例是这条用例私有的。
+        注入一个假工具来钉这条性质（把描述写死成字面量的实现会在这里露馅）；注入的是
+        本类 setUp 那个新实例的表（工具表是实例属性）⇒ 不需要清理。
         """
         self.agent._tools["测试用工具"] = (
             lambda **kw: f"命令:{kw['参数']}",
@@ -219,9 +214,8 @@ class AgentToolCallTest(unittest.TestCase):
 class AdoptSummaryTest(unittest.TestCase):
     """压缩轮摘要的落库：`adopt_summary` 是唯一入口。
 
-    摘要由命令轮同发的压缩请求产出（裸 `<summary>` 回复），经 `adopt_summary`
-    进 `Context.summary`。任务回复里若出现零星 `<summary>`（LLM 的习惯残留）
-    一律忽略 —— 那不是我们请求的东西。
+    摘要由命令轮同发的压缩请求产出（裸 `<summary>` 回复）；任务回复里零星出现的
+    `<summary>`（LLM 的习惯残留）一律忽略 —— 那不是我们请求的东西。
     """
 
     def setUp(self) -> None:

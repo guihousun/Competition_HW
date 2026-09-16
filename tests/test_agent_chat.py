@@ -21,10 +21,9 @@ from coregeek.game.planner import task_channel  # noqa: E402
 class ToolReplyParseTest(unittest.TestCase):
     """`tool_of`：解析工具调用。严格（与 `looks_like_tool` 故意相反）。
 
-    协议只认嵌套形状（参数是 `<tool_param>` 里的具名元素）：属性式
-    `<tool_param name="…">`、裸 `<tool_param>值</tool_param>`、裸 `<tool>cmd</tool>`
-    都不再是工具调用 —— 落重问（`looks_like_tool` 判宽接住）。返回
-    `(工具名, [(参数名, 原文), …])`，参数名永远不是 None ⇒ `Agent.tool_call` 只收具名参数。
+    只认嵌套形状（参数是 `<tool_param>` 里的具名元素）：属性式、裸 `<tool_param>值`、
+    裸 `<tool>cmd</tool>` 都不再是工具调用 —— 落重问（`looks_like_tool` 判宽接住）。
+    返回 `(工具名, [(参数名, 原文), …])`，参数名永远不是 None。
     """
 
     def test_a_full_call_gives_the_name_and_the_params(self):
@@ -210,10 +209,8 @@ class AnswerParseTest(unittest.TestCase):
     def test_a_literal_in_the_sop_is_not_the_answer(self):
         """工具块里面的 `<answer>` 一律不算答案 —— 这一条是防 SOP 污染的全部理由。
 
-        `SOP2Prompt` 沉淀的正文讲的往往正是"答案要用 `<answer>` 包" ⇒ 里面几乎必然
-        出现字面量 `<answer>…</answer>`。不先挖掉工具块就扫，扫到的正是 SOP 里那一段
-        ⇒ 错答案被当成答案交上去，而且日志上完全看不出来。挖掉之后那一段压根
-        够不着：分不清"真答案"与"SOP 里的示例"时，宁可不交。
+        沉淀正文讲的往往正是"答案要用 `<answer>` 包" ⇒ 里面几乎必然出现字面量；不先挖掉
+        工具块就扫，扫到的正是 SOP 里那一段，错答案被交上去且日志上看不出来。所以先挖。
         """
         reply = (
             "<tool><tool_name>SOP2Prompt</tool_name>"
@@ -221,16 +218,15 @@ class AnswerParseTest(unittest.TestCase):
             "<sop>答案要写成 <answer>假答案</answer> 的形状</sop></tool_param></tool>"
         )
         self.assertEqual(answer_of(reply), "")
-        #: 真答案落在块外 ⇒ 照旧认（挖完剩下的正好是它）
+        # 真答案落在块外 ⇒ 照旧认（挖完剩下的正好是它）
         self.assertEqual(answer_of(reply + "\n<answer>真答案</answer>"), "真答案")
 
     def test_an_answer_outside_the_tool_block_is_the_only_place_it_counts(self):
         """`<answer>` 落在 `<tool>` 块之外是唯一认它的地方。
 
-        `SOP2Prompt` 沉淀与作答是两件事：工具块沉淀、块外的 `<answer>` 作答。
-        块内那对标签分不清是答案还是 SOP 里的示例 ⇒ 一律不算，那一回合不提交、
-        落回重问（丢一回合，不碰红线）。"""
-        #: 唯一认的形状
+        沉淀与作答是两件事：工具块沉淀、块外的 `<answer>` 作答。块内那对标签分不清是
+        答案还是 SOP 里的示例 ⇒ 一律不算，那一回合不提交、落回重问（丢一回合，不碰红线）。"""
+        # 唯一认的形状
         self.assertEqual(
             answer_of(
                 "<tool><tool_name>SOP2Prompt</tool_name>"
@@ -239,13 +235,13 @@ class AnswerParseTest(unittest.TestCase):
             ),
             "晴 26 度",
         )
-        #: 答案写进参数块里（各种姿势）：块内一律不算，块外也没有 ⇒ 这一回合不提交
+        # 答案写进参数块里（各种姿势）：块内一律不算，块外也没有 ⇒ 这一回合不提交
         for reply in (
             "<tool><tool_name>SOP2Prompt</tool_name>"
             "<tool_param><name>方法</name><sop>沉淀</sop><answer>晴 26 度</answer></tool_param></tool>",
-            #: 半截的参数块（内层有开无闭）⇒ 整次调用不成立，块内那点字够不着
+            # 半截的参数块（内层有开无闭）⇒ 整次调用不成立，块内那点字够不着
             "<tool><tool_name>SOP2Prompt</tool_name><tool_param><answer>晴 26 度</tool_param></tool>",
-            #: 值是空白 ⇒ 与"没给"同义
+            # 值是空白 ⇒ 与"没给"同义
             "<tool><tool_name>SOP2Prompt</tool_name><tool_param><answer>   </answer></tool_param></tool>",
         ):
             with self.subTest(reply=reply):
@@ -261,7 +257,7 @@ class AnswerParseTest(unittest.TestCase):
             "<answer>真答案</answer>"
         )
         self.assertEqual(answer_of(reply), "真答案")
-        #: 摘要里塞了假答案、块外没有 ⇒ 不交（宁缺勿错 —— 判题器取通过率最高的一份）
+        # 摘要里塞了假答案、块外没有 ⇒ 不交（宁缺勿错 —— 判题器取通过率最高的一份）
         self.assertEqual(answer_of(reply[: reply.index("\n<answer>")]), "")
 
     def test_structural_blocks_are_all_stripped_before_the_scan(self):

@@ -7,21 +7,15 @@
   武器是最高优先级（份额有缺且钱不够 ⇒ 筹资：卖货/采贵矿）；环砌完后的白天末尾提前回炮位。
 - 夜里·所有角色（含开拓者，`attack` 的可用角色是"全部"）：认领一座武器走过去，贴着就开火。
 
-两个距离口径别混用：回合预算（来不来得及来回）一律用 BFS 真实步数
-（`steps_between`，绕障，-1 = 走不到）；选点/贴着用切比雪夫 `Pos.dist`
-（`dist <= 1` 是"站在建造位/采集位/炮位旁"的判据，不是步数）。射程与溅射也是切比雪夫 —— 那是规则。
+两个距离口径别混用：回合预算（来不来得及来回）一律用 BFS 真实步数（`steps_between`，绕障，
+-1 = 走不到）；选点/贴着用切比雪夫 `Pos.dist`（`dist <= 1` 是"站在建造位/采集位/炮位旁"的
+判据，不是步数）。射程与溅射也是切比雪夫 —— 那是规则。
 
-围墙是 18 格、背面只留中间 2 格：环几乎闭合之后，进出只剩环内那几条走廊 ⇒
-① 回炮位/回工地的真实步数远大于直线（BFS 那条口径的来源）；
-② "谁站在走廊格上"会频繁影响判据 —— `_walled` 因此把自己人只在门口算成障碍（见它的 docstring）。
+返回 `{角色ID: 指令}`（key 用字符串）；`attack` 是唯一的例外 —— 它的 key 是武器 id，操控者在
+`controllerId` 里。
 
-返回 `{角色ID: 指令}`，key 用字符串（JSON 对象的 key 本来就是字符串）；
-`attack` 是唯一的例外 —— 它的 key 是武器 id，操控者在 `controllerId` 里。
-
-任务线不在这个返回值里：`task_channel(turn)` 单独产出 `(prompt, executeCmd)`。
-"跟 LLM 说什么、怎么解析回复"在 `coregeek/agent/`；用的是包根那个单实例
-`AGENT`（它身上带着两处跨回合状态：「沉淀的 SOP」整场存活；「任务内会话」`Context`
-题目变了即换新）。
+任务线不在这个返回值里：`task_channel(turn)` 单独产出 `(prompt, executeCmd)`；"跟 LLM 说
+什么、怎么解析回复"在 `coregeek/agent/`，用的是包根那个单实例 `AGENT`。
 """
 
 import logging
@@ -51,13 +45,12 @@ from .world import ROUNDS_PER_DAY, Robot, Turn, Weapon
 LOGGER = logging.getLogger(__name__)
 
 #: 三座武器的种类，下标与 `grid.weapon_sites()` 的落点一一对应：前排上方相邻两格放 2 座火箭、
-#: 前排下方一格放加特林。两火箭相邻 ⇒ 一个角色站在它们内侧那一格能同时贴着两座，利用火箭
-#: 3 回合冷却交替开火 —— 2 个角色即可操作 3 座武器。放弃电磁炮：单目标、能量对满血
-#: 机器人（≥40 血）不穿透，群体价值最低；双火箭的溅射在机器人挤在墙根时收益极高。
+#: 前排下方一格放加特林。两火箭相邻 ⇒ 一个角色站在它们内侧那一格能同时贴着两座，利用 3 回合
+#: 冷却交替开火 —— 2 个角色即可操作 3 座武器。放弃电磁炮：单目标、能量不穿透、群体价值最低。
 WEAPONS_BY_SITE = ("rocket", "rocket", "gatling")
 
 #: 三种武器的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；电磁狙击炮能量 10
-#: （沿弹道穿透、逐台扣减）；火箭中心 20、落点周围 8 格溅射 10（指哪打哪、L1 只有一枚）。
+#: （沿弹道穿透、逐台扣减）；火箭中心 20、落点周围 8 格溅射 10（指哪打哪、L1 一枚）。
 #: 机器人四种血量 40/60/500/800 全都 ≥ 20 ⇒ L1 对满血机器人不可能过量伤害。
 GATLING_SHOT = 10
 RAILGUN_ENERGY = 10
@@ -82,8 +75,8 @@ TIME_MARGIN = 5
 SELLABLE = (STONE, IRON, COPPER)
 
 #: 升级优先链：`(武器类别, 目标等级)`，先命中先用。加特林最优先 —— 无冷却、每回合必开火，
-#: +1 颗子弹 = 每回合 +10、两颗可分打两台，射程 +2 更早接敌；双火箭次之 —— +1 枚导弹
-#: 对簇约 +30/齐射（3 回合冷却，依赖机器人扎堆）。同类出现两次 ⇒ 两座火箭都升得到。
+#: +1 颗子弹 = 每回合 +10、两颗可分打两台，射程 +2 更早接敌；双火箭次之 —— +1 枚导弹对簇
+#: 约 +30/齐射（3 回合冷却、依赖扎堆）。同类出现两次 ⇒ 两座火箭都升得到。
 UPGRADE_CHAIN = (
     ("gatling", 2),
     ("rocket", 2),
@@ -102,9 +95,9 @@ STATION_VOUCHERS = ("StationUpgradeVoucher1", "StationUpgradeVoucher2")
 #: 围墙修复包：10 金、目标墙回满血。
 WALLFIXER = "WallFixer"
 
-#: 建筑满血基准：修墙的"半血"判据与夜里基地升级的"残血"判据用。基地 1500/3000/4500 是
-#: 表格实证；墙 L2/L3 的 1500/2000 按每级 +500 推断（表格被图片截断，待实盘校准）——
-#: 推断偏小的方向是"晚修"，安全。
+#: 建筑满血基准：修墙的"半血"判据与夜里基地升级的"残血"判据用。基地 1500/3000/4500 是表格
+#: 实证；墙 L2/L3 的 1500/2000 按每级 +500 推断（表格被图片截断，待实盘校准）—— 推断偏小的
+#: 方向是"晚修"，安全。
 WALL_MAX_HP = {1: 1000, 2: 1500, 3: 2000}
 STATION_MAX_HP = {1: 1500, 2: 3000, 3: 4500}
 
@@ -115,14 +108,13 @@ NIGHT_WANDER = 8
 #: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
 DETOUR_MAX = 2
 
-#: 拆墙的门槛（步）：开洞能省下这么多步以上才值得拆。只算这一趟的收益，而拆 + 补的账 ≈
-#: 拆 1 + 补 1 + 再采一块补回去的石头 ≈ 2 回合（拆掉的那块不回收）⇒ 单向 4 回合上下 ——
-#: 5 是单趟回本点（工人一天出/回各过一趟就赚）。拍的，唯一的调参旋钮。
+#: 拆墙的门槛（步）：开洞能省下这么多步以上才值得拆。拆 + 补的账 ≈ 2 回合（拆掉的那块不
+#: 回收）⇒ 单向 4 回合上下，5 是单趟回本点（工人一天出/回各过一趟就赚）。拍的，唯一旋钮。
 HOLE_MIN_SAVING = 5
 
-#: 白天还剩这么多回合以上才允许拆（门要开得够久才回本）；剩这么多回合以内必须补上。
-#: 两个窗口不相交 ⇒ 一天最多拆一次 —— 这才是防"拆了补、补了拆"净亏的真正机制
-#: （不是上面那个门槛）。两个数都是拍的。
+#: 白天还剩这么多回合以上才允许拆（门要开得够久才回本）；剩这么多回合以内必须补上。两个
+#: 窗口不相交 ⇒ 一天最多拆一次 —— 这才是防"拆了补、补了拆"净亏的真正机制（不是那个门槛）。
+#: 两个数都是拍的。
 HOLE_MIN_LEFT = 30
 HOLE_PATCH_LEFT = 15
 
@@ -130,11 +122,10 @@ HOLE_PATCH_LEFT = 15
 class _Move(NamedTuple):
     """第二段待解的走路意图。
 
-    goal 型 = "朝 goal 挪一格"（BFS + 软避让，由 `_walk_out` 解）；provider 型 =
-    没有目标的走法（迈出盒子 / 挪开自己），第二段拿"当时的落子账"现算一个落脚格。
-    `avoid` = 第一段已知的软避让（本回合认领的建造格）；`with_paths` = 解的时候把
-    已预留的路径也并进软避让；`reserve` = 动身成功后把整条路记进预留账
-    （矿 / 卖矿 / 砌墙这些差事要 —— 后解的同事整条让开，防双双停住）。
+    goal 型 = "朝 goal 挪一格"（BFS + 软避让，由 `_walk_out` 解）；provider 型 = 没有目标
+    的走法（迈出盒子 / 挪开自己），第二段拿"当时的落子账"现算落脚格。`avoid` = 第一段已知
+    的软避让；`with_paths` = 解的时候把已预留的路径也并进软避让；`reserve` = 动身成功后把
+    整条路记进预留账（矿 / 卖矿 / 砌墙这些差事要 —— 后解的同事整条让开，防双双停住）。
     """
 
     role: BaseRole
@@ -146,10 +137,9 @@ class _Move(NamedTuple):
 
 
 class _Queue:
-    """第一段的输出收集器：能直接干的 act 当场落 `cmds`，走路只记成意图
-    （`moves`），路径留给第二段统一解。`claimed` 是第一段的决策账 —— 只记
-    `remove` 的落点（`_dig` / `_rescue` 的"本回合已拆过墙"判据靠它）；
-    走路的落子账在第二段（`_walk_out`）里，两本账不混。
+    """第一段的输出收集器：能直接干的 act 当场落 `cmds`，走路只记成意图（`moves`），路径留给
+    第二段统一解。`claimed` 是第一段的决策账 —— 只记 `remove` 的落点（`_dig` / `_rescue` 的
+    "本回合已拆过墙"判据靠它）；走路的落子账在第二段（`_walk_out`）里，两本账不混。
     """
 
     def __init__(self, turn: Turn) -> None:
@@ -168,9 +158,9 @@ class _Queue:
         reserve: bool = False,
         dig: bool = True,
     ) -> bool:
-        """记一条"role 要走到 goal 去"。False = 硬障碍就走不到（调用方接着试
-        下一个差事）；True = 意图已排，或这一步当场改成了拆墙（`_dig` 钩子在
-        这里：拆墙是当场能定的 act，"一天最多一个洞"的账决策段就得看见）。"""
+        """记一条"role 要走到 goal 去"。False = 硬障碍就走不到（调用方接着试下一个差事）；
+        True = 意图已排，或这一步当场改成了拆墙（`_dig` 钩子在这里：拆墙是当场能定的 act，
+        "一天最多一个洞"的账决策段就得看见）。"""
         walk = self.turn.map.blocked | self.claimed | avoid
         if dig and _dig(role, goal, self.turn, self.cmds, self.claimed, walk):
             return True
@@ -185,15 +175,12 @@ class _Queue:
 
 
 def plan(turn: Turn) -> dict[str, dict[str, Any]]:
-    """两段式决策：
-    第一段 `_intents` 逐角色出"初步行为"（能直接干的当场落指令、
-    要走路的只交 `(角色, 目标)` 意图）
-    第二段 `_walk_out` 按同一顺序批量解
-    走路意图 —— BFS 落一格、记落子账与路径预留账，后解的让开先落的。
+    """两段式决策：`_intents` 逐角色出"初步行为"（能直接干的当场落指令、要走路的只交
+    `(角色, 目标)` 意图），`_walk_out` 按同一顺序批量解走路意图（BFS 落一格、记落子账与路径
+    预留账，后解的让开先落的）。
 
-    黑板（建造格 / 矿格 / 炮位 / 修墙格认领、金币预留、环缺口切段）是第一段的
-    决策账，逐角色顺序累计 —— 角色间的协调发生在决策层；第二段只协调格子。
-    两段都不跨回合。
+    黑板（建造格 / 矿格 / 炮位 / 修墙格认领、金币预留、环缺口切段）是第一段的决策账，逐角色
+    顺序累计 —— 角色间的协调发生在决策层；第二段只协调格子。两段都不跨回合。
     """
     q, sites = _intents(turn)
     _walk_out(turn, q, sites)
@@ -201,33 +188,32 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
 
 
 def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
-    """第一段：逐角色出"初步行为"。act 直接落 `q.cmds`；走路的交 `q.step` /
-    `q.beside`（不在这时算路）。黑板都是回合内的决策账：`sites` 建造格、
-    `taken` 炮位、`repair_taken` 待修墙格、`ore_taken` 矿格、`budget` 金币
-    （认领即预留）、`segments` 环缺口切段 —— 逐角色顺序累计，不跨回合。
+    """第一段：逐角色出"初步行为"。act 直接落 `q.cmds`；走路的交 `q.step` / `q.beside`（不在
+    这时算路）。黑板都是回合内的决策账：`sites` 建造格、`taken` 炮位、`repair_taken` 待修墙格、
+    `ore_taken` 矿格、`budget` 金币（认领即预留）、`segments` 环缺口切段 —— 逐角色顺序累计，
+    不跨回合。
     """
     q = _Queue(turn)
     cmds = q.cmds
     sites: set[Pos] = set()
-    #: 已被认领的武器（夜里一人只能操一座）
+    # 已被认领的武器（夜里一人只能操一座）
     taken: set[Pos] = set()
-    #: 本回合各机器人已被许掉的伤害（多炮协防的账：先开火的记上，后开的按剩余血挑目标）
+    # 本回合各机器人已被许掉的伤害（多炮协防的账：先开火的记上，后开的按剩余血挑目标）
     assigned: dict[Pos, int] = {}
     repair_taken: set[Pos] = set()
     budget = turn.gold
-    #: 武器缺口（份额有缺且落点为空的名额）：建武器最优先的判据，也是筹资线的开关。
+    # 武器缺口（份额有缺且落点为空的名额）：建武器最优先的判据，也是筹资线的开关。
     pending = list(_slots(turn))
     slots = iter(pending)
     weapon_gap = bool(pending)
-    #: 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
+    # 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
     box = box_cells(turn.map.station) if turn.map.station else frozenset()
-    #: 砌满墙就会被关在盒子里的人：闸门 (2) 按人放行，闸门 (1) 随 `gated` 传给 `_build_walls`
+    # 砌满墙就会被关在盒子里的人：闸门 (2) 按人放行，闸门 (1) 随 `gated` 传给 `_build_walls`
     leaving = _trapped(turn, box)
 
-    #: 环缺口按在场工人数切段（A 领前段、B 领后段沿环同向推进，后段任何一格都
-    #: 不低于前段剩下的，优先级保住；一个工人 ⇒ 整段）；`ore_taken` 矿格认领让
-    #: B 就近换一座、不跟 A 奔同一座。黑板每回合从 `Turn` 现算、不跨回合 ——
-    #: 跨回合记忆一旦卡住会静默关掉整条线。
+    # 环缺口按在场工人数切段（A 领前段、B 领后段沿环同向推进 ⇒ 后段任何一格都不低于前段
+    # 剩下的，优先级保住；一个工人 ⇒ 整段）；`ore_taken` 矿格认领让 B 就近换一座、不跟 A
+    # 奔同一座。黑板每回合从 `Turn` 现算 —— 跨回合记忆一旦卡住会静默关掉整条线。
     workers_no = [r for r in turn.roles if isinstance(r, Worker)]
     gaps = _ring(turn)
     bounds = [len(gaps) * i // max(len(workers_no), 1) for i in range(len(workers_no) + 1)]
@@ -236,16 +222,15 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
     ore_taken: set[Pos] = set()
 
     for role in turn.roles:
-        # 服任务中的开拓者：钉死。离开任务点周围一格任务立即作废，所以它连夜里都不回炮位。
-        # 判据用载荷事实（`phase_task`），不是自己记的"谁领了任务"。放在循环最前面：与昼夜无关。
+        # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，所以它连夜里都不回炮位）。
+        # 判据是载荷事实 `phase_task`，不是自己记的"谁领了任务"；放在循环最前面，与昼夜无关。
         if isinstance(role, Pioneer) and turn.phase_task:
             _answer_task(role, turn, cmds)
             continue
 
-        # 要被关住的人先出来：判据是 `leaving`。先按静态障碍判能不能出去 ——
-        # 出不去（= 已经被关死了，比如门让机器人堵满）⇒ 不占这一支，落到后面
-        # 的 `_rescue` 去拆墙自救（工人自己也走那条路）；出得去 ⇒ 交一个
-        # provider 意图，第二段拿"当时的落子账"挑不相撞的那一步。
+        # 要被关住的人先出来（判据 `leaving`）：静态障碍下出得去 ⇒ 交一个 provider 意图，
+        # 第二段拿当时的落子账挑不相撞的那一步；出不去（已经被关死了，比如门让机器人堵满）
+        # ⇒ 不占这一支，落到后面的 `_rescue` 去拆墙自救（工人自己也走那条路）。
         if turn.is_day and role.id in leaving:
             if step_outside(role.pos, box, turn.map.blocked, turn.map.size) is not None:
                 q.beside(
@@ -256,16 +241,15 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
                 )
                 continue
 
-        # 有人被关在盒子里 ⇒ 工人去拆一格放人。与上面那道闸门是预防 vs 补救的关系：
-        # 闸门管"还没砌完时别把谁关进去"，这一支管"已经被关住了怎么办"（门让机器人堵死
-        # 是闸门拦不住的）。放在收工闸门之前：放人比回炮位要紧，它自带时间门。
+        # 有人被关在盒子里 ⇒ 工人去拆一格放人。与上面那道闸门是预防 vs 补救的关系（门让机器人
+        # 堵死是闸门拦不住的）。放在收工闸门之前：放人比回炮位要紧，它自带时间门。
         if turn.is_day and _rescue(role, turn, q, box):
             continue
 
         if not turn.is_day:
-            # 夜里：① 持基地券且基地残血（< 满血 1/4）⇒ 贴基地 `use` 升级（升级 + 回满血
-            # 一次到位，当回合放弃开火）；② 视野里有机器人 ⇒ 回炮位开火；③ 怪清完 ⇒
-            # 工人出门近矿经济（近矿限制，build/remove 夜里非法、绝不发）；开拓者待命回炮位。
+            # 夜里：① 持基地券且基地残血（< 满血 1/4）⇒ 贴基地 `use` 升级（升级 + 回满血一次
+            # 到位，当回合放弃开火）；② 视野里有机器人 ⇒ 回炮位开火；③ 怪清完 ⇒ 工人出门近矿
+            # 经济（近矿限制，build/remove 夜里非法、绝不发），开拓者待命回炮位。
             if _upgrade_station(role, turn, q):
                 continue
             if not turn.robots and isinstance(role, Worker):
@@ -275,9 +259,8 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             continue
 
         # 白天收工：环砌完了 ⇒ 只在"离夜里第一波只剩回程步数"时才回家（判据在
-        # `_leave_for_the_post` 里）。补墙优先于收工，环没砌完时这一支不生效 —— 那时
-        # 人继续砌/采石，`_stones_to_mine` 的 BFS 预算自己会拦住来不及的远矿。
-        # 这一支只发 move，绝不能复用 `_defend` —— 它会发 attack，白天发就是非法指令。
+        # `_leave_for_the_post` 里）。补墙优先于收工，环没砌完时这一支不生效；这一支只发
+        # move，绝不能复用 `_defend` —— 它会发 attack，白天发就是非法指令。
         if not _ring(turn) and _leave_for_the_post(role, turn, q, taken):
             continue
 
@@ -285,8 +268,8 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             if turn.task_points:
                 _take_task(role, turn, q)
             else:
-                # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事（武器齐了才跑）；
-                # 卖矿兜底（接住它从任务/宝藏拿到可卖物的情形）；没货 ⇒ 待命。
+                # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事（武器齐了才跑）；卖矿兜底
+                # （接住它从任务/宝藏拿到可卖物的情形）；没货 ⇒ 待命。
                 if not weapon_gap and not _upgrade_line(role, turn, q):
                     _sell_ore(role, turn, q, frozenset())
             continue
@@ -300,8 +283,8 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
         if target is not None and _door_open(turn):
             target = None  # 白天中段：环上那个缺口当临时门，先别补
 
-        # 建武器最优先（口径：无论哪一天，武器没了先建）：份额有缺且钱够 ⇒ 建/走向
-        # 落点。造武器与墙无关，不参与下面的安全闸门，也不走拆墙抄近路（dig=False）。
+        # 建武器最优先（口径：无论哪一天，武器没了先建）：份额有缺且钱够 ⇒ 建/走向落点。
+        # 造武器与墙无关，不参与下面的安全闸门，也不走拆墙抄近路（dig=False）。
         slot = next(slots, None)
         if slot is not None and budget >= WEAPON_COST:
             kind, cell = slot
@@ -317,8 +300,8 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
         if _repair_line(role, turn, q, sites, repair_taken):
             continue
 
-        # 安全闸门：墙格在手而砌下去会把人关住 ⇒ 待命（不发指令也不筹资 ——
-        # 别跑远，下回合缺口还在；`_build_walls` 里还有同一道闸兜底）。
+        # 安全闸门：墙格在手而砌下去会把人关住 ⇒ 待命（不发指令也不筹资 —— 别跑远，下回合
+        # 缺口还在；`_build_walls` 里还有同一道闸兜底）。
         if target is not None and leaving:
             continue
 
@@ -334,9 +317,9 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
                 q.step(role, target, avoid=frozenset(sites), with_paths=True)
             continue
 
-        # 筹资：武器还有缺但钱不够、且筹资可行（有小贩、有价可卖，见 `_can_fund`）
-        # ⇒ 整条墙线让位，先卖背包里的货、再采最值钱的矿 —— 凑够 25 金币回来建
-        # （火力缺口比墙急；凑不成的地图上墙仍是剩下最值得干的事）。
+        # 筹资：武器还有缺但钱不够、且筹资可行（有小贩有价可卖，见 `_can_fund`）⇒ 整条墙线
+        # 让位，先卖背包里的货、再采最值钱的矿凑 25 金币（火力缺口比墙急；凑不成的地图上墙
+        # 仍是剩下最值得干的事）。
         if weapon_gap and budget < WEAPON_COST and _can_fund(turn):
             if not _sell_ore(role, turn, q, sites, with_paths=True):
                 _mine_spare_ore(role, turn, q, sites, ore_taken)
@@ -362,12 +345,11 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 def _walk_out(turn: Turn, q: _Queue, sites: set[Pos]) -> None:
     """第二段：按第一段的顺序解走路意图（批量算路、逐个落子）。
 
-    落子账 `claimed` 与路径预留账 `paths` 都在这里按意图顺序累计：先解的先落
-    子，后解的 BFS 把已落的子当硬障碍、把已预留的路当软避让（绕不开就退回
-    硬障碍照走 —— 让路的代价不能是原地卡死）。provider 型意图拿"此刻的落子
-    账"现算落脚格，算不出 None ⇒ 这一回合不动（空指令合法）。普通意图静态
-    走得通、却被本回合的落子堵死 ⇒ 同样待命 —— 极罕见，宁可少走一步不赌
-    碰撞（§4.5.4：移动碰撞双双停住）。
+    落子账 `claimed` 与路径预留账 `paths` 都在这里按意图顺序累计：先解的先落子，后解的 BFS
+    把已落的子当硬障碍、把已预留的路当软避让（绕不开就退回硬障碍照走 —— 让路的代价不能是
+    原地卡死）。provider 型意图拿"此刻的落子账"现算落脚格，算不出 ⇒ 这一回合不动（空指令
+    合法）。普通意图静态走得通、却被本回合的落子堵死 ⇒ 同样待命 —— 极罕见，宁可少走一步不
+    赌碰撞（§4.5.4：移动碰撞双双停住）。
     """
     claimed: set[Pos] = set()
     paths: set[Pos] = set()
@@ -391,8 +373,7 @@ def _walk_out(turn: Turn, q: _Queue, sites: set[Pos]) -> None:
 
 
 def task_channel(turn: Turn) -> tuple[str, str]:
-    """处理本回合任务的 `(prompt, executeCmd)` —— 响应顶层那两个字段的唯一来源。
-    """
+    """处理本回合任务的 `(prompt, executeCmd)` —— 响应顶层那两个字段的唯一来源。"""
 
     # 打印任务信息和模型回复的日志
     if turn.phase_task or turn.llm_resp:
@@ -411,18 +392,18 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 价格影响信息
     prices = is_prices_reply(llmReply)
     if summary is not None:
-        # 赋值给 AGENT 的摘要信息，供后续使用
+        # 摘要进 AGENT（不进会话表）
         AGENT.adopt_summary(summary)
         llmReply = ""
     elif prices is not None:
-        # 修正价格信息，赋值给 AGENT 的价格提示，供后续使用
+        # 价格期望进 AGENT（不进会话表）
         AGENT.adopt_price_hints(prices)
         llmReply = ""
     else:
-        # 记录模型回复到会话中，供后续使用
+        # 其余回复记进会话
         AGENT.hear(llmReply)  
 
-    # 不在任务回合，进行新闻查询
+    # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）
     if not turn.phase_task:
         return AGENT.news_question(turn.news), ""
 
@@ -434,9 +415,9 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 解析工具调用
     call = tool_of(llmReply)
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
-    #: 判题器本轮报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件。
+    # 判题器本轮报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件
     rejected = any(e.code == 2 for e in turn.errors)
-    #: 判题器的原话：黑盒里唯一能回答"错在哪一项"的东西。
+    # 判题器的原话：黑盒里唯一能回答"错在哪一项"的东西
     why = "；".join(e.description for e in turn.errors if e.code == 2 and e.description)
 
     # 构建错误信息提示
@@ -447,22 +428,22 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         retry = f"【判题器反馈】：{why}" if why else "（判题器未说明错在哪一项）"
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（必须压在 ③ 前）
-        # 有CMD执行结果，给大模型发
+        # 有回执 ⇒ 回灌结果
         prompt, cmd = AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
     elif command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽留给链尾的压缩闸门
-        # 有CMD命令，直接交给沙盒执行
+        # 有命令 ⇒ 交给沙盒
         prompt, cmd = "", command
     elif retry:
-        # 错了，构建错误命令
+        # 答错了 ⇒ 带纠错重问
         prompt, cmd = AGENT.chat(turn.phase_task, retry=retry), ""
     elif answer:  
         # 拿到了答案 ⇒ 只交答案：不发模型请求、也不压缩
         return "", ""
     else:  
-        # 第一次提问，只把题目问出去（
+        # 首问：把题目问出去
         prompt, cmd = AGENT.chat(turn.phase_task), ""
 
-    # 任务阶段 && 非答案轮次 && 非命令占用，进行上下文压缩请求
+    # 链尾压缩闸门：只剩命令轮会到这里
     if not answer and prompt == "":
         prompt = AGENT.compression_request()
     return prompt, cmd
@@ -471,8 +452,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
     """本回合可以开建的 `(武器类别, 落点)`，按优先级排；没名额就一个都不产出。
 
-    三道门槛：白天（`build` 仅白天）、份额 = `len(roles)`、落点是空的（建在已有武器上
-    会把它覆盖成 level1，25 金币打水漂还降级）。基地没了 ⇒ 不建（安全降级）。
+    三道门槛：白天（`build` 仅白天）、份额 = `len(roles)`、落点是空的（建在已有武器上会把它
+    覆盖成 level1，25 金币打水漂还降级）。基地没了 ⇒ 不建（安全降级）。
     """
     if not turn.is_day:
         return
@@ -485,9 +466,9 @@ def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
         return
 
     blocked = turn.map.blocked
-    #: 落点与种类绑死（`WEAPONS_BY_SITE` 与 `weapon_sites` 下标一一对应），只滤"落点是空的"。
-    #: 不按 `kind not in have` 过滤 —— 有 2 座同种火箭，那道过滤会跳过第二座。
-    #: 已有武器的格子在 `blocked` 里 ⇒ `cell not in blocked` 自然不会在上面重建（覆盖成 L1）。
+    # 落点与种类绑死（`WEAPONS_BY_SITE` 与 `weapon_sites` 下标一一对应），只滤"落点是空的"：
+    # 不按 `kind not in have` 过滤（有 2 座同种火箭，那道过滤会跳过第二座）；已有武器的格子
+    # 在 `blocked` 里 ⇒ 不会在它上面重建（覆盖成 L1）。
     yield from [
         (kind, cell)
         for kind, cell in zip(WEAPONS_BY_SITE, weapon_sites(station, turn.map.size[0]))
@@ -510,10 +491,9 @@ def _take_task(
 ) -> None:
     """白天：走到最近一个能接的任务点旁边，贴着就 `acceptTask`。
 
-    与 `build` / `collect` 同一条契约：任务点挡路，`step_toward` 天然停在贴着它的一格，
-    而那正是"周围一格内"。只认锚点格就够（锚点本身就是任务点的一格）。
-    一个能接的点都没有（都在冷却 / 已做完）⇒ 什么都不发，不去冷却中的点蹲守。
-    领到任务之后本函数就再也进不来了：`_intents` 最前面那道分支会先一步接管。
+    与 `build` / `collect` 同一条契约：任务点挡路，`step_toward` 天然停在贴着它的一格，而那
+    正是"周围一格内"。一个能接的点都没有（都在冷却 / 已做完）⇒ 什么都不发，不去蹲守。领到
+    之后本函数就再也进不来了（`_intents` 最前面那道分支会先一步接管）。
     """
     if not turn.task_points:
         return
@@ -527,13 +507,12 @@ def _take_task(
 
 
 def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) -> None:
-    """服任务中：把手上的答案原样交上去。这里从来不移动（挪出任务点周围一格任务即作废）。
+    """服任务中：把手上的答案原样交上去。这里从来不移动（挪出去任务即作废）。
 
-    答案 = `answer_of(llmResp)`：先挖掉工具块、认块外 `<answer>…</answer>` 里的内容，
-    再不然原文即答案（工具块内的 `<answer>` 一律不算 —— 多半是 SOP 正文里的示例）。
-    空答案不发（可能被判成"字段缺失" = 指令非法，红线）。每回合都交：判题器按
-    "提交过的通过率最高的答案"算分，反复提交是预期用法。工具调用绝不能当答案交上去，
-    且交的这一份必须与 `task_channel` 判据 ④ 骂的那份同源。
+    答案 = `answer_of(llmResp)`：先挖掉工具块、认块外 `<answer>…</answer>` 里的内容，再不然
+    原文即答案（工具块内的一律不算 —— 多半是 SOP 正文里的示例）。空答案不发（可能被判成
+    "字段缺失" = 指令非法，红线）。每回合都交：判题器按"提交过的通过率最高的答案"算分。
+    工具调用绝不能当答案交上去，且交的这份必须与 `task_channel` 判据 ④ 骂的那份同源。
     """
     answer = answer_of(turn.llm_resp)
     if answer:
@@ -551,25 +530,21 @@ def _build_walls(
     remaining: int = 0,
     ore_taken: set[Pos] | None = None,
 ) -> bool:
-    """白天：先攒石头，再把墙砌到黑板分给的那一格上。
+    """白天：先攒石头，再把墙砌到黑板分给的那一格上。返回 `True` = 本回合发了指令
+    （采矿 / 挪开 / 砌墙 / 走向矿或墙）；`False` = 砌不了（没石头、采不到、被闸门挡住）⇒
+    调用方接着走经济线 —— 工人不能什么都不做。每回合独立判定、不存跨回合状态：矿采没了、
+    墙被别人砌了，下一回合都能自动跟着变。
 
-    返回 `True` = 本回合发了指令（采矿 / 挪开 / 砌墙 / 走向矿或墙）；
-    `False` = 砌不了（没石头、采不到、被闸门挡住）⇒ 调用方接着走建武器、经济线 ——
-    工人不能什么都不做。每回合独立判定，不存跨回合状态 —— 矿采没了、墙被别人砌了，
-    下一回合都能自动跟着变。
-
-    `target` / `remaining` = 黑板（`_intents`）切段分给本工人的那一格与本段还剩几格
-    （A 领前段、B 领后段沿环推进，两人不再挤同一段墙）。`gated` = 这一回合不许砌
-    （砌下去会把谁关在墙里，见 `_trapped`）。`ore_taken` = 黑板的矿格认领账。
+    `target` / `remaining` = 黑板切段分给本工人的那一格与本段还剩几格（A 领前段、B 领后段，
+    两人不挤同一段墙）。`gated` = 这一回合不许砌（砌下去会把谁关在墙里，见 `_trapped`）。
     """
     if target is None:
         return False  # 没分到墙格 ⇒ 调用方走经济线
     ore_taken = set() if ore_taken is None else ore_taken
     if gated:
         return True  # 砌下去会把人关住 ⇒ 待命（安全：别跑远，下回合缺口还在）
-    #: 只认石矿：墙只吃石头，铁/铜再多也砌不了墙。排除本回合别人认领的矿格 —— B 就近
-    #: 换一座，不跟着 A 奔同一座。认领只发生在"真要采"之后（want > 0）：石头已够的
-    #: 工人不该占住矿格 —— 它这回合用不上，却会把缺石的同事挤去经济线。
+    # 只认石矿：墙只吃石头，铁/铜再多也砌不了墙。排除本回合别人认领的矿格（B 就近换一座）。
+    # 认领只发生在"真要采"之后（want > 0）：石头已够的工人不该占住矿格 —— 它这回合用不上。
     mine = _pick_ore(
         role.pos,
         {p: k for p, k in turn.map.ores.items() if p not in ore_taken},
@@ -583,8 +558,8 @@ def _build_walls(
         if role.pos.dist(mine) <= 1:
             if _emit(q.cmds, role, actions.Collect, mine):
                 return True
-        # 还没走到矿边：排一条走路意图，动身成功后由第二段把整条路记进预留账
-        # （先预留再走会让工人绕开自己刚记下的路 —— 可绕时就地多绕三步）。
+        # 还没走到矿边：排一条走路意图，动身成功后由第二段把整条路记进预留账（先预留再走
+        # 会让工人绕开自己刚记下的路 —— 可绕时就地多绕三步）。
         elif q.step(role, mine, avoid=frozenset(sites), with_paths=True, reserve=True):
             return True
 
@@ -593,10 +568,9 @@ def _build_walls(
         sites.add(target)
         if role.pos == target:
             # 站在目标格上就先挪开一格、这一回合不砌：人站在墙上时那一格在网格里只剩
-            # "worker"（单位铺在最后，墙被盖掉）⇒ 看不出砌过没有，而 `_ring` 的
-            # "自己人算路过"又把它复活成候选 ⇒ 每回合对同一格 `build`（`dist == 0`
-            # 也是合法建造位），石头白花。挪开一格两个方向都收敛：砌过的没人站着就
-            # 现形；没砌的下一回合从邻格稳稳砌上。
+            # "worker"（单位铺在最后，墙被盖掉）⇒ 看不出砌过没有，而 `_ring` 的"自己人算
+            # 路过"又把它复活成候选 ⇒ 每回合对同一格 `build`，石头白花。挪开一格两个方向
+            # 都收敛：砌过的没人站着就现形；没砌的下一回合从邻格稳稳砌上。
             q.beside(
                 role,
                 lambda claimed, r=role, av=frozenset(sites): _aside_cell(r, turn, claimed, av),
@@ -614,35 +588,30 @@ def _build_walls(
 def _walled(turn: Turn) -> frozenset[Pos]:
     """"假设墙砌满"时的障碍集：现已挡路的照原样 + 全部 18 格墙。
 
-    闸门问的是将来 —— 现在走得出去不代表砌完还走得出去。补救通道（`remove` + `_rescue`）
-    不构成撤销这道闸门的理由：闸门是预防（零成本、砌墙那一刻就避开），`_rescue` 是补救
-    （1 回合 + 1 块不退的石头 + 一整天的洞），两者并存。
+    闸门问的是将来 —— 现在走得出去不代表砌完还走得出去。补救通道（`remove` + `_rescue`）不
+    构成撤销它的理由：闸门是预防（零成本），`_rescue` 是补救（1 回合 + 1 块不退的石头）。
 
-    自己人算不算障碍，只看门那 2 格（与 `_ring` 的"自己人一律算路过"故意相反，但也不是
-    一律算障碍）：那 18 格墙里没有任何建筑 ⇒ 能堵门的只有单位，"自己人站在格子上"这个
-    问题只在门口有意义；环内那 16 格（基地 + 武器环）站着的自己人是过路的。若一律算
-    障碍：环一闭合进出只剩走廊，"一个工人正好站在走廊格上"变成常事 ⇒ 走廊另一头的工人
-    被判成"砌满就出不去"、闸门把他送出去一格，下一回合他又回来砌墙 —— 两人来回踱步、
-    一整天不砌墙。真正会关人的局面照样接得住。
-    守门：test_a_colleague_in_the_door_still_holds_the_wall_back。
+    自己人算不算障碍只看门那 2 格（与 `_ring` 的"自己人一律算路过"故意相反）：那 18 格墙里
+    没有建筑 ⇒ 能堵门的只有单位，"自己人站在格子上"只在门口有意义；环内那 16 格站着的自己
+    人是过路的。一律算障碍会让走廊另一头的工人被判成"砌满就出不去"⇒ 两人来回踱步、一整天
+    不砌墙（实测）。守门：`test_a_colleague_in_the_door_still_holds_the_wall_back`。
     """
     station = turn.map.station
     if station is None:
         return frozenset()
     blocked = turn.map.blocked
-    #: 自己人站在门那 2 格上的照旧算障碍；站在别处的从障碍里摘掉（见 docstring）
+    # 自己人站在门那 2 格上的照旧算障碍；站在别处的从障碍里摘掉（见 docstring）
     door = set(door_cells(station, turn.map.size[0]))
     mine = {r.pos for r in turn.roles} - door
     return (blocked - mine) | set(wall_cells(station, turn.map.size[0]))
 
 
 def _trapped(turn: Turn, box: frozenset[Pos]) -> frozenset[str]:
-    """砌满这一圈墙之后就走不出去了的我方角色 id；没有就空集。
+    """砌满这一圈墙之后就出不去的我方角色 id；没有就空集。
 
-    判据是"整面墙"不是"某一格"：障碍集里永远有全部 18 格墙，真发生就是整面墙一起发生
-    ⇒ 调用方要的是一个布尔量（该不该砌）。返回 id 是因为配套的闸门 (2) 得知道谁先
-    出来，逐角色问 `step_outside` 才对"站在自己那格上的人"天然正确。
-    门只有 2 格 ⇒ 能堵门的单位只要 2 个 ⇒ 这条判据相当常真的命中。
+    判据是"整面墙"不是"某一格"（障碍集里永远有全部 18 格墙）⇒ 调用方要的是一个布尔量。返回
+    id 是因为配套的闸门 (2) 得知道谁先出来。门只有 2 格 ⇒ 能堵门的单位只要 2 个 ⇒ 这条判据
+    相当常真的命中。
     """
     station = turn.map.station
     if station is None or not box:
@@ -651,8 +620,8 @@ def _trapped(turn: Turn, box: frozenset[Pos]) -> frozenset[str]:
     return frozenset(
         r.id
         for r in turn.roles
-        # `r.pos in box` 这一半不能省：`step_outside` 对"本来就在外面"也返回 None，
-        # 不看这一半会把所有在盒外干活的角色判成被关住（于是墙一格都不砌）。
+        # `r.pos in box` 这一半不能省：`step_outside` 对"本来就在外面"也返回 None，不看这一半
+        # 会把所有在盒外干活的角色判成被关住（于是墙一格都不砌）。
         if r.pos in box and step_outside(r.pos, box, walled, turn.map.size) is None
     )
 
@@ -660,16 +629,16 @@ def _trapped(turn: Turn, box: frozenset[Pos]) -> frozenset[str]:
 def _ring(turn: Turn) -> tuple[Pos, ...]:
     """按优先级排的围墙格；基地没了 ⇒ 空。
 
-    既不在 `wall_cells` 里、也不挡路的格才算候选 —— 但自己人站的那一格除外。
-    工人站在待砌的墙格上只是路过，若把它划掉，另一个工人的 `free[0]` 会整体后移、
-    等那人一挪窝目标又变回来 —— 两个工人在两格之间对着改目标，一格都砌不上。
+    既不在 `wall_cells` 里、也不挡路的格才算候选 —— 但自己人站的那一格除外。工人站在待砌的
+    墙格上只是路过，若把它划掉，另一个工人的 `free[0]` 会整体后移、等那人一挪窝目标又变回来
+    —— 两个工人在两格之间对着改目标，一格都砌不上。
 
     这里只管"哪些格能砌"（几何 + 占用），"这一回合还砌不砌"是 `_trapped` 的事，两者正交。
     """
     station = turn.map.station
     if station is None:
         return ()
-    #: 我方角色当前站的格（角色能走的都在这）
+    # 我方角色当前站的格（角色能走的都在这）
     mine = {r.pos for r in turn.roles}
     return tuple(
         c for c in wall_cells(station, turn.map.size[0]) if c not in turn.map.blocked or c in mine
@@ -680,13 +649,11 @@ def _ring(turn: Turn) -> tuple[Pos, ...]:
 def _after_first_day(turn: Turn) -> bool:
     """是不是第 2 天及以后 —— 整套"临时门"机制成立的前提。
 
-    环上"孤零零一个缺口"这一个状态，既是"刚挖的洞"、也是"还差一格没砌"—— 地图上
-    逐字节同形，任何无状态判据都分不开，只能靠时间：第 1 天环在建，缺口是真的没砌；
-    第 2 天起环开局必然是满的 ⇒ 环上一切缺口只可能来自我们自己的 `remove`。没有这一条，
-    第 1 天砌到只剩中段某一格时那格会被当成"洞"推迟到当天末尾、白天再也不补。
-    守门：test_a_worker_on_the_last_cell_still_finishes_the_ring。
-    代价：第 1 天没砌完的残局，次日起会被误读成"门"、推迟到当天末尾才补（末尾一定补，
-    见 `HOLE_PATCH_LEFT`）。
+    环上"孤零零一个缺口"既是"刚挖的洞"、也是"还差一格没砌"，地图上逐字节同形，任何无状态
+    判据都分不开，只能靠时间：第 1 天缺口是真的没砌；第 2 天起环开局必然是满的 ⇒ 环上一切
+    缺口只可能来自我们自己的 `remove`。没有它，第 1 天砌到只剩中段某一格时那格会被当成"洞"
+    推迟到当天末尾、白天再也不补。守门：`test_a_worker_on_the_last_cell_still_finishes_the_ring`。
+    代价：第 1 天没砌完的残局，次日起会被误读成"门"、推迟到当天末尾才补（末尾一定补）。
     """
     return turn.round_no > ROUNDS_PER_DAY
 
@@ -709,20 +676,16 @@ def _dig(
 ) -> bool:
     """工人贴着一格墙、而拆了它能少走 `HOLE_MIN_SAVING` 步以上 ⇒ 这一回合拆它。
 
-    钩在 `_Queue.step` 里：那是所有"走路"差事（采矿 / 卖矿 / 顺路卖 / 升级 / 砌墙 /
-    回炮位）排意图的公共出口 ⇒ 一处覆盖全部调用点。"出不来"不用第二套逻辑：出不去 ⇒
-    到差事目标的步数是 -1，而这里对 `now < 0` 的处理本来就是"拆了能到就更该拆"——
-    "出不来"与"绕太远"在这一个函数里合流。
+    钩在 `_Queue.step` 里（所有"走路"差事排意图的公共出口）⇒ 一处覆盖全部调用点。"出不来"
+    不用第二套逻辑：出不去 ⇒ 到差事目标的步数是 -1，而这里对 `now < 0` 的处理本来就是"拆了
+    能到就更该拆"—— 两者在这个函数里合流。
 
-    `now < 0` 这一支实际很少进得来（各差事在排意图之前已把走不到的目标滤掉，
-    人在盒里出不来会先被 `_rescue` 接管），但 `walk` 比差事自己算的那份多
-    `claimed` / `avoid` 两样 ⇒ 差事算得通、到这里却不通是可能的 —— 删掉它的
-    代价是"工人安静地不动"，别当死代码顺手删。被任务钉死的开拓者（走 ① 支路）与
-    非工人不用它，那由 `_rescue` 管。
+    `now < 0` 这一支很少进得来（各差事排意图前已滤掉走不到的目标、人在盒里出不来会先被
+    `_rescue` 接管），但 `walk` 比差事自己算的那份多 `claimed` / `avoid` 两样 ⇒ 差事算得通、
+    到这里不通是可能的 —— 删掉它的代价是"工人安静地不动"，别当死代码顺手删。
 
-    候选只取当前已经贴着的墙格（`remove` 的站位要求就是这么定的）。刻意不做"走到最优的
-    那一格再拆"：会引入"在路上"的中间态（目标每回合重算 ⇒ 来回抖），且省下的步数没有
-    扣掉走过去的回合 ⇒ 系统性高估收益。
+    候选只取当前已经贴着的墙格（`remove` 的站位要求）。刻意不做"走到最优的那一格再拆"：会
+    引入"在路上"的中间态（目标每回合重算 ⇒ 来回抖），且省下的步数没扣掉走过去的回合。
     """
     if not turn.is_day or not isinstance(role, Worker):
         return False
@@ -730,7 +693,7 @@ def _dig(
     if station is None or not _after_first_day(turn):
         return False
     wall = wall_cells(station, turn.map.size[0])
-    #: 环已砌满（⇒ 同时最多一个洞）；`claimed` 里出现墙格 ⇒ 本回合已经有人拆过了
+    # 环已砌满（⇒ 同时最多一个洞）；`claimed` 里出现墙格 ⇒ 本回合已经有人拆过了
     if _ring(turn) or claimed & set(wall):
         return False
     if role.stone < WALL_COST or turn.day_rounds_left <= HOLE_MIN_LEFT:
@@ -752,7 +715,7 @@ def _dig(
             best = (after, cell)
     if best is None:
         return False
-    #: 登记被拆的那一格（它本来就在 `blocked` 里 ⇒ 对别人的寻路是空操作，但能挡住同回合的第二个工人）
+    # 登记被拆的那一格（它本来就在 `blocked` 里 ⇒ 对别人的寻路是空操作，但能挡住同回合的第二个工人）
     claimed.add(best[1])
     return _emit(cmds, role, actions.Remove, best[1])
 
@@ -760,9 +723,9 @@ def _dig(
 def _stuck_inside(turn: Turn, box: frozenset[Pos]) -> tuple[BaseRole, ...]:
     """现在真的走不出盒子的人；没有就空元组。
 
-    与 `_trapped` 的区别是用"现在"的障碍而不是"假设砌满"：闸门问的是将来（预防），
-    这里问的是眼下（补救），两者并存。自己人一律不算障碍：同事站在门格上只是路过、
-    下一回合就走 —— 把他算成障碍会白拆一次（1 回合 + 1 块不退的石头）。
+    与 `_trapped` 的区别是用"现在"的障碍而不是"假设砌满"：闸门是预防，这里是补救，两者并存。
+    自己人一律不算障碍 —— 同事站在门格上只是路过，把他算成障碍会白拆一次（1 回合 + 1 块不退
+    的石头）。
     """
     if not box:
         return ()
@@ -781,15 +744,13 @@ def _rescue(
 ) -> bool:
     """有人被关在盒子里 ⇒ 工人去拆一格放人。
 
-    与 `_dig` 的分工：`_dig` 治"自己要去的地方到不了"，这里治"谁（或自己）出不来"。
-    工人被关住时也走这里、而且先走这里（`_rescue` 在 `plan` 里排在白天所有差事之前）；
-    `_dig` 的 `now < 0` 那一支因此是第二道（留给"差事目标不通、但人还出得去"）。
-    被任务钉死的开拓者走 ① 支路 `continue`、永远到不了这里，非靠别人救不可。
+    与 `_dig` 的分工：`_dig` 治"自己要去的地方到不了"，这里治"谁（或自己）出不来"。工人被关住
+    时也走这里、而且先走这里（`_rescue` 排在白天所有差事之前）；`_dig` 的 `now < 0` 那一支因此
+    是第二道（留给"差事目标不通、但人还出得去"）。被任务钉死的开拓者非靠别人救不可。
 
-    开哪一格：开了之后真能让某个被困的人迈出去、且离救援者最近的那一格（并列取坐标序，
-    可复现）。判据用"不开洞 + 本回合已认领的落脚格"，与 `_dig` 同一套账。门被机器人
-    堵死时命中；被同事堵住时 `_stuck_inside` 先一步把人放出来了（自己人不算障碍）⇒
-    这里不命中 —— 那正是"不白拆一次"的意思。
+    开哪一格：开了之后真能让某个被困的人迈出去、且离救援者最近的那一格（并列取坐标序）。门被
+    机器人堵死时命中；被同事堵住时 `_stuck_inside` 先一步把人放出来了 ⇒ 这里不命中 —— 那正是
+    "不白拆一次"的意思。
     """
     if not turn.is_day or not isinstance(role, Worker) or not box:
         return False
@@ -815,20 +776,19 @@ def _rescue(
         return False
     site = min(free)[1]
     if role.pos.dist(site) <= 1:
-        #: 登记被拆的那一格：挡住同回合的第二个工人（对寻路是空操作，它本来就在 `blocked` 里）
+        # 登记被拆的那一格：挡住同回合的第二个工人（对寻路是空操作，它本来就在 `blocked` 里）
         q.claimed.add(site)
         return _emit(q.cmds, role, actions.Remove, site)
-    #: 走 `q.step` 会再进一次 `_dig`（同一个目标，多半不命中：省不到 5 步）—— 两条路都只是
-    #: "朝那一格挪一格"，贴近了下一回合自然就拆。
+    # 走 `q.step` 会再进一次 `_dig`（同一个目标，多半不命中：省不到 5 步）—— 两条路都只是
+    # "朝那一格挪一格"，贴近了下一回合自然就拆。
     return q.step(role, site)
 
 
 def _half_walls(turn: Turn) -> tuple[Pos, ...]:
     """血量不足一半的已砌墙，按坐标序（可复现）。
 
-    满血基准按等级查 `WALL_MAX_HP`（升级后回满血）。health 缺失（-1）⇒ 未知 ⇒ 不修
-    （不为一格读不出血量的墙白跑）；已毁（0）的墙在 `model._walls` 就丢了 —— 那是一格
-    缺口，归 `_ring` 管重建。
+    满血基准按等级查 `WALL_MAX_HP`（升级后回满血）。health 缺失（-1）⇒ 未知 ⇒ 不修；已毁（0）
+    的墙在 `model._walls` 就丢了 —— 那是一格缺口，归 `_ring` 管重建。
     """
     return tuple(
         w.pos
@@ -846,16 +806,14 @@ def _repair_line(
 ) -> bool:
     """半血墙的修复差事（包优先、重建兜底）。返回 `True` = 这一轮归它了。
 
-    与 `_upgrade_line` 同构的两阶段（拿没拿包看背包，跨夜保留）：
-
     ① 持包：走到最近的半血墙（认领在动身之前，两个修墙工人不挤同一面），贴着就
-       `use WallFixer`（目标 = 墙坐标；墙回满血、不塌、1 回合 + 10 金 —— 全面占优
-       推倒重建的 2 石头 + 2 回合 + 洞开 2 回合）；
+       `use WallFixer`（目标 = 墙坐标；墙回满血、不塌，1 回合 + 10 金 —— 全面占优推倒重建的
+       2 石头 + 2 回合 + 洞开 2 回合）；
     ② 没包：商店可达、价目里有它、金币够 ⇒ 走去商店 `Buy`；
-    ③ 没包也买不了 ⇒ 重建兜底：贴着半血墙且有石头 ⇒ `remove`（下一回合那格自然进
-       `_ring`、走建造）。天黑前砌不回来的洞等于白开 —— 沿用 `_dig` 的时间门。
+    ③ 没包也买不了 ⇒ 重建兜底：贴着半血墙且有石头 ⇒ `remove`（下一回合那格自然进 `_ring`）。
+       天黑前砌不回来的洞等于白开 —— 沿用 `_dig` 的时间门。
 
-    只在白天跑（修墙是防御工事的一部分，与 build 同一条昼夜口径）。
+    只在白天跑（与 `build` 同一条昼夜口径）。
     """
     broken = _half_walls(turn)
     if not broken:
@@ -897,16 +855,15 @@ def _repair_line(
 def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, free: int) -> int:
     """这一趟还该采几块石头 —— 按回合预算每回合现算。
 
-    记 `s` = 手里的石头、`k` = 还要采的块数，整件事的回合数：
+    记 `s` = 手里的石头、`k` = 还要采的块数：
 
         走到矿 + 采 k 块 + 从矿走回工地 + 砌 s+k 座的"挪一格 + 建造"
-        = d_mine + d_wall + 2s − 1 + 3k        # 到达工地那一步已贴着首格，故 −1
+        = d_mine + d_wall + 2s − 1 + 3k        # 到达工地那一步已贴着首格
                                             # ⇒ 每多采一块净花 3 回合
 
-    令它 ≤ `白天还剩的回合 − TIME_MARGIN`，解出 k，再与"还差几格墙"取小（没有转移
-    物品的指令，多采的石头给不了别人，只防采得离谱，不必精确分账）。距离一律用 BFS
-    真实步数：回工地常要绕整面围墙、从背面那 2 格门进来，切比雪夫会把 10+ 步说成
-    3 步。-1（走不到）⇒ 一块都别采（宁可这回合不动，不可把人留在墙外过夜）。
+    令它 ≤ `白天还剩的回合 − TIME_MARGIN` 解出 k，再与"还差几格墙"取小（没有转移物品的指令，
+    多采的石头给不了别人）。距离一律用 BFS 真实步数：回工地常要绕整面围墙、从背面那 2 格门
+    进来，切比雪夫会把 10+ 步说成 3 步。-1（走不到）⇒ 一块都别采（宁可这回合不动）。
     """
     if mine is None:
         return 0
@@ -929,19 +886,18 @@ def _sell_ore(
 ) -> bool:
     """把小贩肯收的矿背过去换金币。这一回合没去卖就返回 `False`（调用方接着去采）。
 
-    卖的可用角色是全部（§4.4）—— 工人（墙砌完后的主线）与开拓者（任务点全空时）都走
-    这里。四条门，任一条不成立就 `False`：
+    卖的可用角色是全部（§4.4）—— 工人（墙砌完后）与开拓者（任务点全空时）都走这里。四条门，
+    任一条不成立就 `False`：
 
     ① 有货：`_best_load` 从 `SELLABLE` 里挑收购价最高的一种；
     ② 有小贩且走得到（`Map.vendors` 空、或一个都走不到就无处可卖）；
-    ③ 够本：已经不贴着才算 —— 货值 < 往返回合数（`2 × 步数`）就留在矿边接着采
-       （已经站在小贩旁边时这趟路早付过了，不再拦）；"1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮；
+    ③ 够本：已经不贴着才算 —— 货值 < 往返回合数（`2 × 步数`）就留在矿边接着采（贴着时这趟路
+       早付过了）；"1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮；
     ④ 回得来：`走到小贩 + 从小贩回基地 ≤ 白天剩余 − TIME_MARGIN`（夜里必须在炮位上）。
 
-    距离一律用 BFS 真实步数（小贩常在盒子外，回基地要绕背面那道门）；-1（走不到）一律
-    当"这趟不去"。站位是 `sell` 要求的"小贩周围一格内"，与小贩格本身挡路正好对上
-    （`step_toward` 自然停在一格外）。一回合只能发一条指令 ⇒ 一次只卖一种矿，
-    `num` = 手上那种矿的全部件数（卖光）。
+    距离一律 BFS 真实步数（小贩常在盒子外，回基地要绕背面那道门）；-1 一律当"这趟不去"。站位
+    是 `sell` 要求的"小贩周围一格内"，与小贩格本身挡路正好对上。一回合只能发一条指令 ⇒ 一次
+    只卖一种矿，`num` = 手上那种的全部件数（卖光）。
     """
     station = turn.map.station
     kind, num = _best_load(role, turn.vendor_prices)
@@ -969,12 +925,12 @@ def _sell_ore(
 def _best_load(role: Worker, prices: Mapping[str, int]) -> tuple[str, int]:
     """挑这一趟卖哪种矿：收购价最高的，同价取件数多的；挑不出来 ⇒ `("", 0)`。
 
-    价 ≤ 0 或件数为 0 的矿跳过：小贩不收（价目表里没有也算不收）的矿换不来金币；
-    价目表为空 ⇒ 一件都不卖。名字参与比较只是为了让并列可复现。
+    价 ≤ 0 或件数为 0 的矿跳过（小贩不收的矿换不来金币）；价目表为空 ⇒ 一件都不卖。名字参与
+    比较只是为了让并列可复现。
 
-    石头保底留 1 块不卖：收工时手里得有石头才能把正面那个口封上（`wall_cells` 的
-    最后一格），封不上就是整夜的一道门。只有 1 块 ⇒ 这一趟不卖石头（另外两种矿照卖）。
-    "墙砌完了才卖石头"的规则保证了这 1 块买不到墙，它的用途只有封口。
+    石头保底留 1 块不卖：收工时手里得有石头才能把正面那个口封上（`wall_cells` 的最后一格），
+    封不上就是整夜的一道门。只有 1 块 ⇒ 这一趟不卖石头（另外两种矿照卖）。"墙砌完了才卖石头"
+    的规则保证了这 1 块买不到墙，它的用途只有封口。
     """
     loads = [
         (prices.get(kind, 0), role.bag.get(kind, 0) - (1 if kind == STONE else 0), kind)
@@ -997,21 +953,20 @@ def _mine_spare_ore(
 ) -> None:
     """墙砌完了 ⇒ 白天不再闲着：就近采买得动、回得来的矿。
 
-    先把"走得动、回得来"的矿筛出来、再按性价比挑：`价 × 新闻修正 ÷ (到矿 + 采一块 +
-    回炮位)`，单位回合价值最高 —— 近的贱矿可能跑赢远的贵矿。回程参照 = 最近的武器位
-    （夜里要在炮前，机器人到进攻范围前必须站回去；没有武器才用基地）。新闻修正是
-    `AGENT.price_hint`（跨回合状态，退化 = 偏好偏一天，不碰红线）。先看 `_detour_buy`
-    （修墙缺包 / 升级缺券），再 `_detour_sell`。夜里（`near > 0`）：怪清完才出门，
-    `max(到矿, 回炮位) ≤ near` 的近矿限制 —— 机器人列表是视野过滤的，"清完"只是
-    看不见，出得了事要回得了家。距离一律 BFS 真实步数；-1（走不到）的矿直接作废。
+    先把"走得动、回得来"的矿筛出来、再按性价比挑：`价 × 新闻修正 ÷ (到矿 + 采一块 + 回炮位)`，
+    单位回合价值最高 —— 近的贱矿可能跑赢远的贵矿。回程参照 = 最近的武器位（没有武器才用基地）。
+    新闻修正是 `AGENT.price_hint`（跨回合状态，退化 = 偏好偏一天）。先看 `_detour_buy`（修墙
+    缺包 / 升级缺券），再 `_detour_sell`。夜里（`near > 0`）：怪清完才出门，`max(到矿, 回炮位)
+    ≤ near` 的近矿限制 —— 机器人列表是视野过滤的，"清完"只是看不见，出得了事要回得了家。
+    距离一律 BFS 真实步数；-1（走不到）的矿直接作废。
     """
     ore_taken = set() if ore_taken is None else ore_taken
     station = turn.map.station
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
     budget = turn.day_rounds_left - TIME_MARGIN
     walk, size = turn.map.blocked, turn.map.size
-    #: 先筛可行（走过去 + 回得来），再按性价比挑。BFS 是"命中目标即停"的，开销跟距离
-    #: 相关、不是整张图 —— 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒。
+    # 先筛可行（走过去 + 回得来），再按性价比挑。BFS 是"命中目标即停"的，开销跟距离相关、
+    # 不是整张图 —— 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒。
     feasible: dict[Pos, tuple[str, int, int]] = {}
     for p, kind in turn.map.ores.items():
         if p in ore_taken:
@@ -1053,9 +1008,8 @@ def _mine_spare_ore(
 def _shopping_list(role: Worker, turn: Turn) -> str | None:
     """这一趟该顺路买什么 ⇒ 商品名；什么都不缺 ⇒ `None`。
 
-    只在买得起时才列：钱不够绕过去也白绕。优先级：WallFixer（有半血墙且包里没包 ——
-    10 金回满血，防御面有薄弱格）> 升级链下一张券（升级线要用；别人包里已有一张就
-    不再买 —— 券在谁包里谁用，没有转移指令，囤两张是白花金币）。
+    只在买得起时才列：钱不够绕过去也白绕。优先级：WallFixer（有半血墙且包里没包 —— 10 金回满
+    血）> 升级链下一张券（别人包里已有一张就不再买 —— 没有转移指令，囤两张是白花金币）。
     """
     prices = turn.shop_prices
     if (
@@ -1079,8 +1033,8 @@ def _detour_buy(
     """去差事的路上顺路买：绕 2 格内有商店、且购物单上有东西 ⇒ 先朝商店迈一步。
 
     贴上商店的那回合 `Buy`（下一回合走 `use` / 升级线），之后再继续去差事。绕路账与
-    `_detour_sell` 同一套（`via + after - direct ≤ DETOUR_MAX`）；-1（走不到）的绕法
-    直接放弃。已经贴着差事目标就别绕了（这一回合该干活）。
+    `_detour_sell` 同一套（`via + after - direct ≤ DETOUR_MAX`）；-1（走不到）的绕法直接放弃。
+    已经贴着差事目标就别绕了（这一回合该干活）。
     """
     want = _shopping_list(role, turn)
     if want is None or role.pos.dist(goal) <= 1:
@@ -1104,12 +1058,11 @@ def _detour_sell(
 ) -> bool:
     """去矿的路上顺路卖矿：绕去小贩比直走多花 ≤ `DETOUR_MAX` 格 ⇒ 先朝小贩迈一步。
 
-    贴上小贩的那一回合同一条链里更早的 `_sell_ore` 自然把货出手（贴着跳过够本门），
-    卖完没货、绕路条件消失，下一回合继续去矿。已经贴着矿就别绕了（这一回合该采）。
+    贴上小贩的那一回合同一条链里更早的 `_sell_ore` 自然把货出手（贴着跳过够本门），卖完没货、
+    绕路条件消失，下一回合继续去矿。已经贴着矿就别绕了（这一回合该采）。
 
-    "有没有可卖的货"用 `_best_load` 判、不在这里重抄一遍：那边有"石头保底留 1 块"的
-    口径，抄一遍就会出现"绕小贩去卖那 1 块石头、到了却不肯卖"—— 白绕一趟，且两处
-    口径迟早分家。距离一律 BFS 真实步数（与 `_sell_ore` 同口径）；-1（走不到）的
+    "有没有可卖的货"用 `_best_load` 判、不在这里重抄一遍：那边有"石头保底留 1 块"的口径，抄
+    一遍就会出现"绕去卖那 1 块石头、到了却不肯卖"—— 白绕一趟。距离一律 BFS 真实步数；-1 的
     绕法直接放弃。
     """
     if role.pos.dist(mine) <= 1:
@@ -1133,22 +1086,18 @@ def _detour_sell(
 def _upgrade_line(
     role: BaseRole, turn: Turn, q: _Queue
 ) -> bool:
-    """墙砌完后的第二优先：买券 → 走到目标武器 → 用券。这一回合没发指令就返回
-    `False`（调用方接着去采矿）。
+    """墙砌完后的第二优先：买券 → 走到目标武器 → 用券。这一回合没发指令就返回 `False`。
 
-    无状态：拿没拿券看背包（买完金变少、包里多一张，两个阶段天然可分，跨夜不丢）。
-    跑腿者 = 持券的那个角色（券在谁包里谁用 —— 没有转移物品的指令；开拓者也能持券：
-    它空闲时买下、被任务钉走就躺到下个空隙）> 真空闲的开拓者（无可接任务 —— 有任务
-    在的话它马上会被钉死，跑腿该让给工人）> 名册上第一个工人（别的工人照常卖/采）。
-    只在白天跑（夜里 `_defend` 会把人接回炮位，明早预算重算、接着走）。
-    距离一律用 BFS 真实步数：商店/炮位都在盒子内外两侧，整趟要绕门；
-    -1（走不到）一律当天不去，明天重算。
+    无状态：拿没拿券看背包（买完金变少、包里多一张，两个阶段天然可分，跨夜不丢）。跑腿者 =
+    持券的那个角色（券在谁包里谁用 —— 没有转移物品的指令；开拓者也能持券）> 真空闲的开拓者
+    > 名册上第一个工人。只在白天跑（夜里 `_defend` 会把人接回炮位，明早预算重算、接着走）。
+    距离一律 BFS 真实步数：商店/炮位在盒子内外两侧，整趟要绕门；-1 一律当天不去。
     """
     workers = [r for r in turn.roles if isinstance(r, Worker)]
     holder = next(
         (r for r in turn.roles if any(name in r.bag for name in VOUCHER.values())), None
     )
-    #: 真空闲 = 无可接任务 —— 有任务在的话开拓者马上会被钉死，跑腿该让给工人。
+    # 真空闲 = 无可接任务 —— 有任务在的话开拓者马上会被钉死，跑腿该让给工人
     idle = (
         None if turn.task_points else next((r for r in turn.roles if isinstance(r, Pioneer)), None)
     )
@@ -1210,11 +1159,10 @@ def _reserve_path(
 ) -> None:
     """把"从 `role.pos` 走到 `goal` 的 BFS 路径"的中间格记进 `paths`（路径预留）。
 
-    后解的走路意图把 `paths` 当软避让 ⇒ 选路时整条让开，而不是撞上前一个工人的
-    本回合这一格才让 —— 盒子里走廊就那么几条，双双停住一回合是纯亏
-    （任务书 §4.5.4：移动碰撞双双不动）。避让是软的：绕不开时退回硬障碍
-    照走（擦肩好过卡死）。算路只用 `blocked | claimed`、不含 `paths` 自己 —— 否则
-    第二个工人的预留会绕开第一个的预留、越绕越远。图就 41×32，64 步是兜底上限。
+    后解的走路意图把 `paths` 当软避让 ⇒ 选路时整条让开，而不是撞上前一个工人的本回合这一格
+    才让 —— 盒子里走廊就那几条，双双停住一回合是纯亏（任务书 §4.5.4：移动碰撞双双不动）。
+    避让是软的：绕不开时退回硬障碍照走（擦肩好过卡死）。算路只用 `blocked | claimed`、不含
+    `paths` 自己 —— 否则第二个工人的预留会绕开第一个的、越绕越远。41×32 的图，64 步是上限。
     """
     pos, walk, size = role.pos, turn.map.blocked | claimed, turn.map.size
     for _ in range(64):
@@ -1233,11 +1181,10 @@ def _pick_ore(
     """挑一座矿。两种口径：
 
     - `want_stone`（石头还不够砌完剩下的墙）⇒ 只认石矿、取最近的（铁/铜砌不了墙）；
-    - 否则 ⇒ 三种矿按小贩收购价从高到低，同价再取近的。价目表里没有的矿种按 0 算
-      ⇒ 小贩不收的矿不值得为它多走一步（空价目表也就自然落成"谁也不采"）。
+    - 否则 ⇒ 三种矿按小贩收购价从高到低，同价再取近的。价目表里没有的矿种按 0 算 ⇒ 小贩不收
+      的矿不值得为它多走一步（空价目表也就自然落成"谁也不采"）。
 
-    价格逐回合从载荷读、不写死"铜 > 铁 > 石头"（那只是样例的价目，官方消息会让它波动）。
-    并列按坐标排：先后不能取决于 payload 里的顺序，否则用例复现不了。
+    价格逐回合从载荷读、不写死"铜 > 铁 > 石头"。并列按坐标排：先后不能取决于 payload 顺序。
     不认领矿：两个工人挤同一座矿的不同邻格都能采，只有"冲进同一格"才是白扔动作（`claimed` 挡着）。
     """
     if want_stone:
@@ -1246,7 +1193,7 @@ def _pick_ore(
             key=lambda p: (pos.dist(p), p),
             default=None,
         )
-    #: `(取负的价, 距离, 坐标)` —— 价排第一，`min` 出来就是"价最高、同价取近的、再同取坐标最小"
+    # `(取负的价, 距离, 坐标)` —— 价排第一，`min` 出来就是"价最高、同价取近的、再同取坐标最小"
     best = min(
         ((-prices.get(kind, 0), pos.dist(p), p) for p, kind in ores.items()),
         default=None,
@@ -1263,25 +1210,20 @@ def _leave_for_the_post(
 ) -> bool:
     """白天收工：离夜里的第一波只剩回程步数了就回炮位；这一回合到此为止 ⇒ `True`。
 
-    为什么白天就得动身：机器人在夜里第一个回合就全部出现，而回炮位常常要绕整面围墙、
-    从背面那 2 格门进来、再横穿盒子 —— 在正面墙外干活时，直线三四步、BFS 十几步
-    ⇒ 不提前出发，开局那几个回合就是白丢的。
+    白天就得动身：机器人在夜里第一个回合就全部出现，而回炮位常常要绕整面围墙、从背面那 2 格
+    门进来、再横穿盒子 —— 在正面墙外干活时直线三四步、BFS 十几步。与 `_defend` 的唯一区别是
+    它不调 `_fire`：`attack` 仅黑夜（§4.4），白天发就是非法指令、5 次出局。选炮口径一致。
 
-    与 `_defend` 的唯一区别是它不调 `_fire`：`attack` 仅黑夜（§4.4），白天发就是
-    非法指令、5 次出局。选炮口径与它一致（最近且没人认领、贴着就认领、不换炮）。
+    先看时间、再看位置：判据是"到最近那座炮的 BFS 步数 ≥ 白天还剩的回合 − 1"（− 1 = 留 1
+    回合余量，拍的）；已经贴着那座炮时步数是 0，于是只有白天最后一回合才轮得到"在岗待命"。
+    少了时间这一道，"到岗就待命"会让早上正好站在炮边的工人整天不动。
 
-    先看时间、再看位置：还早 ⇒ 一律不打断白天的活。少了这一道，"到岗就待命"会让
-    早上正好站在炮边的工人（升级线、卖矿都可能把人在那儿放下）整天不动。判据是
-    "到最近那座炮的 BFS 步数 ≥ 白天还剩的回合 − 1"（− 1 = 留 1 回合余量，拍的）；
-    已经贴着那座炮时步数是 0，于是只有白天最后一回合才轮得到"在岗待命"。
-
-    返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；
-    `False` = 还来得及干活（或没有可去的炮），照常走白天的活。
+    返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；`False` =
+    还来得及干活（或没有可去的炮）。
     """
     walk, size = turn.map.blocked, turn.map.size
-    #: 最近、还没人认领、而且真走得到的那座炮 —— 一趟判定就够：最近的都赶不上，
-    #: 更远的更赶不上。BFS -1（不可达）剔掉，切比雪夫给不出这个值。已经贴着某座 ⇒
-    #: 步数 0（`steps_between` 的约定），与"还差 3 步"是同一个刻度。
+    # 最近、还没人认领、而且真走得到的那座炮 —— 一趟判定就够：最近的都赶不上，更远的更赶不上。
+    # BFS -1（不可达）剔掉，切比雪夫给不出这个值；已经贴着 ⇒ 步数 0，与"还差 3 步"同一刻度。
     hops = [
         (steps_between(role.pos, weapon.pos, walk, size), weapon.pos)
         for weapon in turn.weapons
@@ -1304,11 +1246,9 @@ def _leave_for_the_post(
 def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
     """把武器分成操作组：同一组的武器由同一个角色操作。
 
-    当前阵形 = 2 火箭（相邻）+ 1 加特林 ⇒ 两组：`(rocket1, rocket2)` 和 `(gatling,)`。
-    两火箭相邻 ⇒ 一个角色站在它们内侧那一格就能同时贴着两座，利用 3 回合冷却交替开火
-    —— 2 个角色即可操作 3 座武器。分组依据是 `weapon_sites` 的下标（0,1 = 火箭对；
-    2 = 加特林），不按场上已有武器的种类猜（种类重复时猜不准）。某座还没建出来 ⇒
-    那一组就只含已建的。
+    当前阵形 = 2 火箭（相邻）+ 1 加特林 ⇒ 两组：`(rocket1, rocket2)` 和 `(gatling,)`。分组依据
+    是 `weapon_sites` 的下标（0,1 = 火箭对；2 = 加特林），不按场上已有武器的种类猜（种类重复
+    时猜不准）。某座还没建出来 ⇒ 那一组就只含已建的。
     """
     station = turn.map.station
     sites = weapon_sites(station, turn.map.size[0]) if station is not None else ()
@@ -1320,8 +1260,8 @@ def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
         if group:
             groups.append(group)
             grouped.update(w.pos for w in group)
-    #: 不在 `weapon_sites` 里的武器（测试手搭的位置 / 被摧毁后重建的偏移）⇒ 单独成组，
-    #: 降级为"一人操一座"，避免测试里手搭的炮没人认领。
+    # 不在 `weapon_sites` 里的武器（测试手搭的位置 / 摧毁后重建的偏移）⇒ 单独成组，降级为
+    # "一人操一座"，避免测试里手搭的炮没人认领。
     for w in turn.weapons:
         if w.pos not in grouped:
             groups.append((w,))
@@ -1357,12 +1297,11 @@ def _defend(
 ) -> None:
     """夜里：认领一组还没被本回合别人认领的武器，走到操作位，开火。所有角色都走这里。
 
-    回合号缺失（`round_no < 0`）时一发不发：`is_day` 把缺失的回合号判成夜里，那个
-    降级方向对"白天不许建造"安全、对 `attack` 就反了（白天开火非法）。
+    回合号缺失（`round_no < 0`）时一发不发：`is_day` 把缺失的回合号判成夜里，那个降级方向对
+    "白天不许建造"安全、对 `attack` 就反了（白天开火非法）。
 
-    选组：最近且没人认领的（组内任一座被认领 = 整组被认领），贴着任一座就认领整组
-    并开火；不换组 —— 每回合重挑会让角色在炮位之间来回走。场上没有武器 / 都够不着
-    ⇒ 不动（空指令合法且不计异常）。
+    选组：最近且没人认领的（组内任一座被认领 = 整组被认领），贴着任一座就认领整组并开火；
+    不换组 —— 每回合重挑会让角色在炮位之间来回走。场上没有武器 / 都够不着 ⇒ 不动。
     """
     if turn.round_no < 0:
         return
@@ -1373,9 +1312,8 @@ def _defend(
         spots = _operator_spots(group, turn.map.blocked, turn.map.size)
         if not spots:
             continue
-        # 已经贴着组内某座 ⇒ 认领整组开火。就绪的炮按回合号轮转：payload 不带
-        # cooldown 时组内两座都算就绪，只按 id 挑会永远只发一座、另一座整晚哑火；
-        # 冷却中的殿后 —— cooldown 字段在场时它优先（`_fire` 里还有一道同样的闸）。
+        # 已经贴着组内某座 ⇒ 认领整组开火。就绪的炮按回合号轮转：payload 不带 cooldown 时组内
+        # 两座都算就绪，只按 id 挑会永远只发一座、另一座整晚哑火；冷却中的殿后。
         adjacent = [w for w in group if role.pos.dist(w.pos) <= 1]
         if adjacent:
             for w in group:
@@ -1401,12 +1339,11 @@ def _defend(
 def _upgrade_station(
     role: BaseRole, turn: Turn, q: _Queue
 ) -> bool:
-    """夜里基地升级：持基地券 + 基地血量 < 满血 1/4（按等级查 `STATION_MAX_HP`：
-    1500/3000/4500）⇒ 贴基地 `use`。返回 `True` = 这一轮归它了（走了或用了）。
+    """夜里基地升级：持基地券 + 基地血量 < 满血 1/4 ⇒ 贴基地 `use`。`True` = 这一轮归它了。
 
-    夜里人在盒内炮位、基地就在盒心 —— 站位天然满足"周围一格内"，最多走一两步。
-    升级 + 回满血一次到位，是要塌的基地最好的救兵；走过去/用券的那个回合放弃开火
-    —— 只在基地真残血时才值得。station_health 缺失（-1）⇒ 未知 ⇒ 不动。
+    按等级查 `STATION_MAX_HP`（1500/3000/4500）。夜里人在盒内炮位、基地就在盒心 —— 站位天然
+    满足"周围一格内"，最多走一两步。升级 + 回满血一次到位，是要塌的基地最好的救兵；走过去/用
+    券的那个回合放弃开火 —— 只在基地真残血时才值得。station_health 缺失（-1）⇒ 未知 ⇒ 不动。
     """
     voucher = next((v for v in STATION_VOUCHERS if v in role.bag), None)
     if voucher is None or turn.station_health < 0:
@@ -1422,16 +1359,12 @@ def _upgrade_station(
 
 
 def _foe_robots(turn: Turn) -> tuple[Robot, ...]:
-    """打我方基地的机器人。过滤规则：
+    """打我方基地的机器人；`our_team` 为空（字段缺失）⇒ 不过滤，全部照打（安全降级）。
 
-    - `our_team` 为空（字段缺失）⇒ 不过滤，全部照打（安全降级）；
     - `robot.target_team` 为空 ⇒ 当成打我方的（照打）；
-    - `robot.target_team == our_team` ⇒ 打我方的（照打）；
-    - 其他（明确打对方）⇒ 跳过。
-
-    跳过"打对方的机器人"：它们不威胁我方基地，打它们既浪费本回合的火力、又帮对方
-    减轻基地压力（让对方机器人去推对方基地对我们有利）。火箭射程远（L3 全图）尤其
-    需要这道过滤，否则经常把导弹砸到对方半场的机器人簇里。
+    - `== our_team` ⇒ 打我方的（照打）；
+    - 其他（明确打对方）⇒ 跳过：它们不威胁我方基地，打它们既浪费本回合火力、又帮对方减轻基地
+      压力。火箭射程远（L3 全图）尤其需要这道过滤，否则经常把导弹砸到对方半场的机器人簇里。
     """
     our = turn.our_team
     if not our:
@@ -1448,25 +1381,21 @@ def _fire(
     cmds: dict[str, dict[str, Any]],
     assigned: dict[Pos, int],
 ) -> bool:
-    """贴着炮了：按最大伤害落点开火（方针：打死所有机器人）。打不了就什么都不发
-    （空指令合法且不计异常）。
+    """贴着炮了：按最大伤害落点开火（方针：打死所有机器人）。打不了就什么都不发。
 
     - 冷却中不打（`cooldown > 0`）。字段缺失时不算冷却（解析成 -1）—— 否则整晚一炮不开；
-    - 火箭（`_rocket_site`）：落点任选（导弹指哪打哪）⇒ 中心 20 + 溅射 10 全场算账，
-      取总分最高的落点 —— 落进机器人簇里、落在最肥的那台身上；
-    - 加特林 / 电磁（`_beam_site`）：弹道武器 ⇒ 落点打在某台机器人身上（终点必在
-      弹道上 ⇒ 必命中；途中更近的先接住，那也是命中）。取有效伤害最高的，并列打近的；
-    - `assigned` 记账：先开火的炮把估计伤害记在机器人身上，后开的按剩余血算 ——
-      不挤同一个将死的目标。估计有偏差（加特林实际命中的是弹道上最近的那台，
-      可能不是终点那台），代价只是次优、不会非法；
-    - 机器人 `health` 缺失（-1）时按"还活着"算：打空处只是执行失败，而"一律不打"
-      会让整晚一炮不开。
+    - 火箭（`_rocket_site`）：落点任选 ⇒ 中心 20 + 溅射 10 全场算账，取总分最高的落点；
+    - 加特林 / 电磁（`_beam_site`）：弹道武器 ⇒ 落点打在某台机器人身上（终点必在弹道上 ⇒ 必
+      命中；途中更近的先接住，那也是命中）。取有效伤害最高的，并列打近的；
+    - `assigned` 记账：先开火的炮把估计伤害记在机器人身上，后开的按剩余血算 —— 不挤同一个将死
+      的目标。估计有偏差（加特林实际命中的是弹道上最近那台），代价只是次优、不会非法；
+    - 机器人 `health` 缺失（-1）时按"还活着"算：打空处只是执行失败，而"一律不打"会让整晚一炮
+      不开。
     """
     if weapon.cooldown > 0:
         return False
-    # 只打打我方的机器人：`our_team` 缺失或 `target_team` 缺失 ⇒ 照打（安全降级）；
-    # `target_team` 明确是对方阵营 ⇒ 跳过（打它们既浪费火力、又帮对方减轻基地压力，
-    # 火箭射程远尤其需要这道过滤）。
+    # 只打打我方的机器人：`our_team` 缺失或 `target_team` 缺失 ⇒ 照打（安全降级）；明确是对方
+    # 阵营 ⇒ 跳过（打它们既浪费火力、又帮对方减轻基地压力）。
     foes = _foe_robots(turn)
     if not foes:
         return False
@@ -1491,9 +1420,9 @@ def _beam_site(
 ) -> Robot | None:
     """加特林/电磁的目标：有效伤害最高的那台（并列打近的、再并列按坐标序）。
 
-    "有效伤害" = min(伤害, 剩余血)：L1 的 10 点对满血机器人（≥40 血）等额，差别只在
-    将死者 —— 别把整发浪费在已被打得差不多的人身上（`assigned` 是本回合先开火的炮
-    记的账）。够得着的目标全是将死的（有效 ≤ 0）⇒ 不打。
+    "有效伤害" = min(伤害, 剩余血)：L1 的 10 点对满血机器人（≥40 血）等额，差别只在将死者
+    —— 别把整发浪费在已被打得差不多的人身上（`assigned` = 本回合先开火的炮记的账）。够得着的
+    目标全是将死的（有效 ≤ 0）⇒ 不打。
     """
     shot = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
 
@@ -1556,11 +1485,10 @@ def _aside_cell(
 ) -> Pos | None:
     """挪开自己：从脚下这一格挑一个可走的邻格；八面都走不了 ⇒ None。
 
-    没有"目标"的走法（唯一的用途见 `_build_walls` 站在待砌墙格上的那一支），
-    所以不走 `step_toward`——它的契约是"贴着 goal 即到"，对任意邻格都返回 None。
-    挪到建造格上等于换个格子接着站，所以 `avoid`（建造格）照避；`claimed`
-    （本回合别人已落的脚格）由第二段传进来。方向顺序无所谓：任何一个可走的
-    邻格都等价（挪开一步就够了）。
+    没有"目标"的走法（唯一用途见 `_build_walls` 站在待砌墙格上的那一支），所以不走
+    `step_toward`——它的契约是"贴着 goal 即到"，对任意邻格都返回 None。挪到建造格上等于换个
+    格子接着站，所以 `avoid`（建造格）照避；`claimed`（别人已落的脚格）由第二段传进来。
+    方向顺序无所谓：任何一个可走的邻格都等价（挪开一步就够了）。
     """
     walk = turn.map.blocked | claimed | avoid
     width, height = turn.map.size
@@ -1580,11 +1508,9 @@ def _emit(
 ) -> bool:
     """造一条指令放进 `cmds`，成功返回 True。
 
-    默认挂在 `str(role.id)` 下，只有 `attack` 例外（key 是武器 id，操控者在
-    `controllerId` 里）⇒ 开一个 keyword-only 的口子，只有 `_fire` 那一处传 `key`。
-
-    越权（`PermissionError`）只丢这一条并告警，不连坐同回合其他角色 —— 抛出去会变成
-    "每回合空指令 ⇒ 全队冻结一整局"，且现象难排查。
+    默认挂在 `str(role.id)` 下，只有 `attack` 例外（key 是武器 id，操控者在 `controllerId` 里）
+    ⇒ 开一个 keyword-only 的口子，只有 `_fire` 那一处传 `key`。越权（`PermissionError`）只丢
+    这一条并告警，不连坐同回合其他角色 —— 抛出去会变成"每回合空指令 ⇒ 全队冻结一整局"。
     """
     try:
         cmds[key if key is not None else str(role.id)] = cls(role.type_name, *args).to_wire()

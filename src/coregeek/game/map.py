@@ -1,9 +1,9 @@
 """地图：一张 `width×height` 的格子矩阵，每格只装一个类别；格子非空即挡路。
 
-寻路只问 `blocked`、不问格子里是什么（未知类别也照样挡路——判错方向只会多挡、不会放行）。
-`station` 是可建造环的原点（接口文档里没有可建造区字段，只能这样推）。`ores` 是
-矿点 → 矿种；`vendors` / `shops` 是卖矿 / 买券的目标点（小贩与商店是格子不是单位，
-只能从网格认）。血量/等级/射程/冷却不进来 —— 那些落在 `world.Weapon` 名册上。
+寻路只问 `blocked`、不问格子里是什么（未知类别也照样挡路 —— 判错方向只会多挡、不会
+放行）。`station` 是可建造环的原点（接口文档里没有可建造区字段，只能这样推）。`ores` 是
+矿点 → 矿种；`vendors` / `shops` 是卖矿 / 买券的目标点。血量/等级/射程/冷却不进来 ——
+那些落在 `world.Weapon` 名册上。
 """
 
 from collections.abc import Mapping
@@ -15,21 +15,19 @@ from .grid import Pos, base_cells
 EMPTY = ""
 
 #: 敌方单位 / 机器人的类别前缀。必须区分敌我：两方都有 `wall` / `worker` / `station`。
-#: 敌方角色是逐回合观测：离开视野就消失，消失 ≠ 被摧毁。
+#: 敌方角色是逐回合观测 —— 离开视野就消失，消失 ≠ 被摧毁。
 ENEMY_PREFIX = "enemy:"
 ROBOT_PREFIX = "robot:"
 
 #: 三种矿的名字（与 `neutralType` / `vendorShopList.name` / 背包里的物品名同一套词）。
-#: 石矿是围墙唯一的料源，铁/铜目前只有"卖给小贩"一个用途。
-#: 小贩/武器商店/任务点不是矿，但一样挡路。
+#: 石矿是围墙唯一的料源，铁/铜目前只有"卖给小贩"一个用途；小贩/商店/任务点不是矿但一样挡路。
 STONE = "stone"
 IRON = "iron"
 COPPER = "copper"
 ORE_KINDS = frozenset({STONE, IRON, COPPER})
 
 #: 基地、小贩与武器商店（都是 `neutralType` 里的类别名）。基地是 2×2，`pos` 只给左上角；
-#: 小贩是卖矿的目标点（`vendors`）、武器商店是买券的目标点（`shops`）—— 都是格子
-#: 不是单位，只能从网格认，且一样挡路。
+#: 后两个是卖矿（`vendors`）/ 买券（`shops`）的目标点 —— 都是格子不是单位，且一样挡路。
 STATION = "station"
 VENDOR = "vendor"
 WEAPON_SHOP = "weaponShop"
@@ -46,8 +44,8 @@ _RENDER_SIDED: dict[str, tuple[str, str]] = {
     "pioneer": ("p", "P"),
 }
 
-#: 中立元素 → 字符。没有敌我之分，不参与大小写规则（`weaponShop` 用 `$` 而不是大写 `V`）。
-#: 四个任务点分 `1`/`2`/`3`/`4`：`zones` 里两队任务点同时存在，同号会撞车。
+#: 中立元素 → 字符。没有敌我之分，不参与大小写规则（`weaponShop` 用 `$` 而不是大写 `V`）；
+#: 四个任务点分 `1`/`2`/`3`/`4`（`zones` 里两队任务点同时存在，同号会撞车）。
 _RENDER_NEUTRAL: dict[str, str] = {
     STONE: "o",
     IRON: "i",
@@ -66,9 +64,9 @@ _ROBOT_CHAR = "x"
 #: 表外类别。在网格里照样挡路，只是画不出来。
 _UNKNOWN_CHAR = "?"
 
-#: 类别 → 中文名。只有这一份，`LEGEND` 由它生成。
-#: 四个任务点按阵营命名而不是"我方/敌方"：`1`/`2` 是挑战方、`3`/`4` 是防守方，
-#: 两者在 `zones` 里同时存在；我方可接的那两个点在 `Turn.task_points`。
+#: 类别 → 中文名。只有这一份，`LEGEND` 由它生成。四个任务点按阵营命名而不是"我方/敌方"：
+#: `1`/`2` 是挑战方、`3`/`4` 是防守方（两者在 `zones` 里同时存在）；我方可接的那两个点在
+#: `Turn.task_points`。
 _NAMES: dict[str, str] = {
     STATION: "基地",
     "gatling": "加特林",
@@ -98,9 +96,8 @@ def _inside(pos: Pos, size: tuple[int, int]) -> bool:
 
 
 def _char(kind: str) -> str:
-    """类别 → 打印用的单个字符。恒返回 1 个字符（兜底是 `?`，不是 `""`）——
-    这是 `render()` 列能对齐的唯一保证。这张表是有损的（机器人不分敌我与体型）：
-    `cells` 才是真相，`render()` 只给人看。空格子打印成空格。
+    """类别 → 打印用的单个字符，兜底 `?`。恒返回 1 个字符 —— `render()` 列能对齐的唯一
+    保证。这张表是有损的（机器人不分敌我与体型）：`cells` 才是真相，空格子打印成空格。
     """
     if not kind:
         return " "
@@ -116,10 +113,9 @@ def _char(kind: str) -> str:
 def _legend() -> str:
     """字符对照表：`图例：s=基地 g=加特林 …`。从 `_NAMES` 生成，不手写第二份。
 
-    后五项不在 `_NAMES` 里 —— 它们是 `_char` 的兜底与两条约定：机器人 / 空地 / 未知 /
-    "大写 = 敌方" / `%`（墙是大小写规则的唯一例外）。空地那一项写的是字面量
-    `空格=空地`：直接拼 `_char('')` 会得到 `" =空地"`，看着像少打了一个字符。
-    定义在 `_char` 之后：模块级要调它，顺序不能反。
+    后五项不在 `_NAMES` 里 —— 它们是 `_char` 的兜底与两条约定（机器人/空地/未知、
+    "大写 = 敌方"、`%`）。空地那一项写的是字面量 `空格=空地`：直接拼 `_char('')` 会得到
+    `" =空地"`，看着像少打了一个字符。定义在 `_char` 之后：模块级要调它，顺序不能反。
     """
     items = [f"{_char(kind)}={name}" for kind, name in _NAMES.items()]
     items += ["x=机器人", "空格=空地", "?=未知", "大写=敌方", "%=敌方围墙"]
@@ -127,7 +123,7 @@ def _legend() -> str:
         " ".join(items[i : i + _LEGEND_PER_LINE])
         for i in range(0, len(items), _LEGEND_PER_LINE)
     ]
-    #: 续行缩进到与"图例："同宽，看起来是一个块
+    # 续行缩进到与"图例："同宽，看起来是一个块
     return "\n".join([f"【图例】：{chunks[0]}", *(f"      {c}" for c in chunks[1:])])
 
 
@@ -140,9 +136,9 @@ class Map:
     def __init__(self, size: tuple[int, int], entries: Mapping[Pos, str]) -> None:
         """`size` = `(width, height)`；`entries` = 非空格子 `{坐标: 类别}`（稀疏）。
 
-        稠密矩阵在这里铺，调用方只报"这个坐标是什么类别"，铺矩阵只有这一处实现。
-        矩阵按 `[y][x]` 索引、y 向上（原点在左下角）；代价只是 `render()` 里 `reversed()` 一次。
-        尺寸无效（≤0）时矩阵为空 ⇒ `blocked` 也是空集 ⇒ 寻路无格可走 ⇒ 单位不动（故意的降级）。
+        稠密矩阵在这里铺，调用方只报"这个坐标是什么类别"，铺矩阵只有这一处实现。矩阵按
+        `[y][x]` 索引、y 向上（原点在左下角）；代价只是 `render()` 里 `reversed()` 一次。
+        尺寸无效（≤0）⇒ 矩阵与 `blocked` 都为空 ⇒ 寻路无格可走 ⇒ 单位不动（故意的降级）。
         """
         width, height = size
         self.size = (width, height)
@@ -161,8 +157,8 @@ class Map:
                 # 越界坐标静默丢弃：payload 说墙在地图外时，信地图不信它
                 grid[pos.y][pos.x] = kind
 
-        # 基地是 2×2 而 pos 只给左上角；展开放在铺格之后，让基地铺满四格并盖住
-        # 任何声称站在基地里的单位（payload 自相矛盾时，宁可信基地）。
+        # 基地是 2×2 而 pos 只给左上角；展开放在铺格之后 ⇒ 基地盖住任何声称站在基地里的
+        # 单位（payload 自相矛盾时，宁可信基地）。
         station: Pos | None = None
         for pos, kind in entries.items():
             if kind not in (STATION, ENEMY_PREFIX + STATION):
@@ -199,9 +195,9 @@ class Map:
     def render(self) -> str:
         """可打印的整块：上下各一行 `—` 标尺 + `height` 行 × `width` 列网格。
 
-        行自上而下 = y 由大到小（y 向上而终端从上往下印，这里必须翻一次）。
-        每行 = `│` + `width` 个字符 + `|`，宽度必须与两条标尺一致（差一列整图错位）。
-        尺寸非法（`cells` 为空）⇒ 空串（`app._log` 那一行退化成空行，而不是抛异常）。
+        行自上而下 = y 由大到小（y 向上而终端从上往下印，这里必须翻一次）；每行 = `│` +
+        `width` 个字符 + `|`，宽度必须与两条标尺一致（差一列整图错位）。尺寸非法（`cells`
+        为空）⇒ 空串（`app._log` 那行退化成空行，而不是抛异常）。
         """
         # `not self.cells` 而不是 `self.size`：前者才是"没有一格可画"的真判据。
         if not self.cells:
@@ -214,5 +210,5 @@ class Map:
             for y in range(height - 1, -1, -1)
         ]
         rows += ["—" * (width + 2)]  # 下标尺
-        #: 各行不等长无所谓（列对齐靠前缀等宽，不是行长相等），所以不 `rstrip`
+        # 各行不等长无所谓（列对齐靠前缀等宽，不是行长相等），所以不 `rstrip`
         return "\n".join(rows)

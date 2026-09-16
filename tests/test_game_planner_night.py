@@ -21,11 +21,10 @@ from coregeek.protocol import model  # noqa: E402
 
 
 class NightWeaponTest(unittest.TestCase):
-    """夜里：所有角色（含开拓者）回炮位、开火打最大伤害落点（方针：打死所有机器人，
-    不挑残血补刀）。
+    """夜里：所有角色（含开拓者）回炮位、开火打最大伤害落点（方针是打死所有机器人）。
 
-    `attack` 仅黑夜可用、`build`/`collect` 仅工人（任务书 §4.4），所以夜里
-    除了 `move` 就只该有 `attack`。
+    `attack` 仅黑夜可用、`build`/`collect` 仅工人（任务书 §4.4）⇒ 夜里除了 `move`
+    就只该有 `attack`。
     """
 
     BASE = Pos(10, 24)
@@ -41,11 +40,11 @@ class NightWeaponTest(unittest.TestCase):
         robots: tuple[Robot, ...] | None = None,
         round_no: int | None = None,
     ) -> Turn:
-        # `weapons=None` 才是"用默认的两座"；不能用 `or` —— 空元组也是假值，
-        # 那样 `test_no_weapons_means_nothing_to_do` 会静默拿到两座武器、白测一场。
+        # `weapons=None` 才是"用默认的两座"；用 `or` 的话空元组是假值，那条"没武器"的
+        # 用例会静默拿到两座武器、白测一场。
         weapons = self._guns(self.NEAR, self.FAR) if weapons is None else weapons
-        # `robots=None`（默认）给一台在场机器人：怪清完的夜里工人会走经济线 ——
-        # 本类测的是防守线，得让防守分支真的命中（`robots=()` 可显式给空）。
+        # `robots=None` 给一台在场机器人：清完的夜里工人会走经济线，而本类测的是防守线，
+        # 得让防守分支真的命中（`robots=()` 可显式给空）。
         robots = (Robot(pos=Pos(16, 26), health=40),) if robots is None else robots
         return Turn(
             round_no=self.NIGHT if round_no is None else round_no,
@@ -57,8 +56,8 @@ class NightWeaponTest(unittest.TestCase):
         )
 
     def _guns(self, *cells: Pos) -> tuple[Weapon, ...]:
-        """按样例的 L1 加特林造记录（射程 4、无冷却），id 从 `GUN` 起编号 ——
-        断言里要能一眼看出"开火的是哪一座"，所以第一座就取 `GUN`。"""
+        """按样例的 L1 加特林造记录（射程 4、无冷却），id 从 `GUN` 起编号 —— 断言里要能
+        一眼看出"开火的是哪一座"，所以第一座就取 `GUN`。"""
         return tuple(
             Weapon(id=self.GUN + i, kind="gatling", pos=cell, attack_range=self.REACH, cooldown=0)
             for i, cell in enumerate(cells)
@@ -164,11 +163,11 @@ class NightWeaponTest(unittest.TestCase):
         self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 25}], "10 血那只够不着，只能打 900 的")
 
     def test_the_rocket_lands_for_maximum_splash(self):
-        """火箭的最大伤害落点：中心 20 + 周围 8 格溅射 10（任务书 §4.5.4）
-        ⇒ 落进机器人簇里、落在最肥的那台身上 —— 而不是挑残血的。
+        """火箭的最大伤害落点：中心 20 + 周围 8 格溅射 10（任务书 §4.5.4）⇒ 落进簇里、
+        落在最肥的那台身上，而不是挑残血的。
 
-        簇：(13,25) 40 血与 (14,25) 8 血相邻。落 (13,25) = 20+8=28 分；落 (14,25) =
-        8+10=18 分 ⇒ 落在 40 血那台身上。"""
+        例：(13,25) 40 血与 (14,25) 8 血相邻 —— 落 (13,25) 得 28 分、落 (14,25) 得 18 分。
+        """
         cmd = self._only_cmd(
             self._manned(
                 Robot(Pos(13, 25), 40),
@@ -197,12 +196,12 @@ class NightWeaponTest(unittest.TestCase):
         )
 
     def test_two_guns_do_not_pile_onto_a_dying_robot(self):
-        """同回合记账：先开火的炮把伤害记在账上（`assigned`），后开的按剩余血挑
-        —— 两座炮不挤同一个将死的目标（方针是打死所有，不集火补刀）。
+        """同回合记账（`assigned`）：先开火的把伤害记在账上，后开的按剩余血挑 ⇒ 两座炮不挤
+        同一个将死的目标（方针是打死所有，不集火补刀）。
 
-        两座加特林（射程 4）都能打到 (11,24) 12 血与 (9,26) 40 血；1 号炮先开（打近的
-        (11,24)，记 10 点）⇒ 2 号炮看到它只剩 2 血（有效 2 < 10）⇒ 转打 40 血那只。
-        没有记账的话两座都会去打 12 血的"残血"。"""
+        例：两座射程 4 的加特林都能打到 (11,24)（12 血）与 (9,26)（40 血），1 号先开记 10 点
+        ⇒ 2 号看到前者只剩 2 血，转打 40 血那只；没有记账的话两座都去打 12 血那只。
+        """
         guns = self._guns(Pos(12, 25), Pos(9, 22))
         turn = self._turn(
             Worker(1, Pos(12, 24)),  # 贴着 1 号炮
@@ -319,9 +318,9 @@ from coregeek.protocol import model  # noqa: E402
 class NightEconomyTest(unittest.TestCase):
     """夜里怪清完（视野内无机器人）⇒ 工人出门近矿经济。
 
-    机器人列表是视野过滤的 —— "清完"只是看不见；近矿限制（回炮位 BFS ≤
-    `NIGHT_WANDER`）让工人出得了事也回得了家。build/remove 夜里非法，
-    夜间经济只发 collect / move / sell。"""
+    机器人列表是视野过滤的 —— "清完"只是看不见；近矿限制（回炮位 BFS ≤ `NIGHT_WANDER`）
+    让工人出得了事也回得了家。夜间经济只发 collect / move / sell（build/remove 夜里非法）。
+    """
 
     BASE = Pos(10, 24)
     WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)
@@ -390,9 +389,9 @@ class NightEconomyTest(unittest.TestCase):
 
 
 class StationUpgradeTest(unittest.TestCase):
-    """夜里的基地升级：持基地券 + 基地血量 < 满血 1/4
-    ⇒ 贴基地 `use`（升级 + 回满血一次到位，1500/3000/4500 是任务书表格实证）。
-    就算视野里有机器人也升 —— 基地要塌了这是救命的（升级当回合放弃开火）。"""
+    """夜里的基地升级：持基地券 + 基地血量 < 满血 1/4 ⇒ 贴基地 `use`（升级 + 回满血一次到位，
+    1500/3000/4500 是任务书表格实证）。就算有机器人在场也升 —— 基地要塌了这是救命的
+    （升级当回合放弃开火）。"""
 
     BASE = Pos(10, 24)
     WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)

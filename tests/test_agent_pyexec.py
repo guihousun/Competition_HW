@@ -1,8 +1,7 @@
 """agent/tools/pyexec.py 的用例：本地 Python 执行器 —— 只算数、不见环境。
 
-只允许计算、无三方包、不能访问环境的任何东西（文件、接口等）。真正的硬约束是
-超时：`task_channel` 跑在判题器 5 秒响应预算里（红线），`while True` 必须被掐断、
-当场返回 —— 这个模块的任何失败路径都不许抛异常。
+白名单只放纯计算模块（判题环境本就只有标准库）；真正的硬约束是超时 —— 它跑在判题器
+5 秒响应预算里（红线），任何失败路径都不许抛异常。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -31,7 +30,7 @@ class PyExecTest(unittest.TestCase):
         self.assertEqual(pyexec.run("print('a')\nprint('b')"), "a\nb")
 
     def test_statements_only_print(self):
-        """多语句走 exec：只有 print 的输出（单表达式才回值，这是描述里教过的形状）。"""
+        """多语句走 exec：只有 print 的输出（单表达式才回值，描述里教过的形状）。"""
         self.assertEqual(pyexec.run("print(2)\n3+4"), "2")
 
     def test_allowed_imports_compute(self):
@@ -88,8 +87,8 @@ class PyExecTest(unittest.TestCase):
 class AgentPythonExecTest(unittest.TestCase):
     """接线：注册表调度 → 本地执行 → 产出当场进会话（tool 消息）→ 返回 `""`。
 
-    "返回值即命令"是铁律 —— python_exec 不产命令，它的价值全在会话里那条 tool 消息
-    （下一份 prompt 的窗口里 LLM 看得见自己的调用与产出，下一回合就能作答）。
+    "返回值即命令"是铁律 —— 它的价值全在会话里那条 tool 消息：下一份 prompt 的窗口里
+    LLM 看得见自己的调用与产出，下一回合就能作答。
     """
 
     def setUp(self) -> None:

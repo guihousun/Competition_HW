@@ -21,18 +21,17 @@ from coregeek.agent.context import Context  # noqa: E402
 class ContextTest(unittest.TestCase):
     """`Context` —— 任务内会话上下文，渲染成标准 messages JSON。
 
-    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串；它是一个
-    JSON 数组 `[{"role": "system"/"user"/"assistant", "content": ...}]`。
-    这里钉 Context 本身：构造即问、进表规则、粘住去重、全量保真。跨回合接线在
-    `ChatPromptTest`，判据链接线在 `TaskChannelTest`，端到端在
-    `HandleTest.test_the_task_loop_through_handle`。
+    判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串 ⇒ 渲染成
+    `[{"role": "system"/"user"/"assistant", "content": ...}]`。这里钉 Context 本身
+    （构造即问、进表规则、粘住去重、全量保真）；跨回合接线在 `ChatPromptTest`、
+    判据链在 `TaskChannelTest`、端到端在 `HandleTest.test_the_task_loop_through_handle`。
     """
 
     SYSTEM = "# Agent定位\n（占位 header）"
 
     def setUp(self) -> None:
         self.ctx = Context("请查询北京天气")
-        #: system 由 Agent 每次发送前刷新，这里给个占位证明它进 JSON
+        # system 由 Agent 每次发送前刷新，这里给个占位证明它进 JSON
         self.ctx.system = self.SYSTEM
 
     def messages(self) -> list[dict]:
@@ -79,9 +78,8 @@ class ContextTest(unittest.TestCase):
 
     def test_feed_adds_the_two_titled_blocks(self):
         """回灌轮按 role 分条：结果 = `tool` 消息、纠错 = `user` 消息 ——
-        标题留在 content 里当内容标签（沙盒输出是任意文本，没标签分不清哪段是什么）。
-        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`。"做完了吗"的决策指引
-        在 system 里（常驻规则），不跟着每条结果走。"""
+        标题留在 content 里当内容标签（沙盒输出是任意文本，没标签分不清哪段是什么）；
+        命令输出是工具的产出、不是人类指令 ⇒ 不能标成 `user`。"""
         self.ctx.feed("[exitCode:0]\n2", "晴 26 度")
         self.assertEqual(
             [m["role"] for m in self.messages()],

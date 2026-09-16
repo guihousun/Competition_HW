@@ -1,42 +1,35 @@
-"""`SOP2Prompt` 的存储规则：流程表 —— 同名覆盖、异名追加、条数上限、
-单条截断、内容没变就静默、变化时留一行日志。
+"""`SOP2Prompt` 的存储规则：同名覆盖、异名追加、条数上限、单条截断、内容没变就静默。
 
-状态不在这里：流程表住在 `Agent` 实例上（`Agent._sop`），本模块只留规则 ——
-`store(current, name, sop)` 是纯的，给旧表与新流程、返回新表，状态由调用方持有。
-`LOGGER` 留在这里是有意的：logger 名 `coregeek.agent.tools.sop` 是日志侧认的名字。
+状态不在这里（流程表住在 `Agent._sop` 上）：`store` 是纯的，给旧表返回新表。`LOGGER`
+留在这里是有意的 —— logger 名 `coregeek.agent.tools.sop` 是日志侧认的名字。
 """
 
 import logging
 
 LOGGER = logging.getLogger(__name__)
 
-#: 单条流程的字数上限，超了保头截断（prompt 是每回合都发的，没有上限的流程会在
-#: 几百回合里一路长成"每回合多发几千字"）。1000 是拍的、待实盘校准。
-#: 条数另由 `SOP_FLOWS_MAX` 管。
+#: 单条流程的字数上限，超了保头截断（prompt 每回合都发，没上限的流程会一路长成
+#: "每回合多发几千字"）。1000 是拍的、待实盘校准。条数另由 `SOP_FLOWS_MAX` 管。
 SOP_MAX = 1000
 
-#: 流程条数上限，超了丢最旧的（新经验优先）—— 拍的、待实盘校准。
-#: 防膨胀的另一半：单条有 `SOP_MAX`、条数有它，流程表最坏 `SOP_MAX × SOP_FLOWS_MAX` 字。
+#: 流程条数上限，超了丢最旧的（新经验优先）—— 拍的、待实盘校准。流程表最坏
+#: `SOP_MAX × SOP_FLOWS_MAX` 字。
 SOP_FLOWS_MAX = 5
 
 
 def store(
     current: dict[str, str], name: str, sop: str, *, stripped: int = 0
 ) -> dict[str, str]:
-    """存/改一条流程，返回新表（入参不动）。空文本 = 删掉那条；内容没变 ⇒
-    原样返回旧表、一个字都不打。
+    """存/改一条流程，返回新表（入参不动）。空文本 = 删掉那条；内容没变 ⇒ 原样返回旧表、
+    一个字都不打。
 
-    - 同名覆盖（dict 赋值，位置不动）："上一版不对/不完整"由 LLM 重写同名流程表达；
-    - 异名追加：不同的经验各存各的；
-    - 超 `SOP_FLOWS_MAX` 条丢最旧：丢了谁进日志 —— 静默丢流程会让"怎么少了一条"
-      无从查起。
+    同名覆盖（位置不动）＝ LLM 用重写同名流程表达"上一版不对"；异名追加；超
+    `SOP_FLOWS_MAX` 条丢最旧、丢了谁进日志 —— 静默丢流程会让"怎么少了一条"无从查起。
+    内容没变就不吭声：`llm_resp` 粘住时 LLM 会把同一段反复喂进来，每回合打一行是白花
+    stdout 预算，而"又存了一遍同样的东西"不算"有事"。
 
-    内容没变就不吭声：LLM 把同一段流程反复喂进来时（`llm_resp` 粘住的典型症状），
-    每回合打一行日志是白花 stdout 预算，而"又存了一遍同样的东西"不算"有事"。
-
-    `stripped` = 调用方（`Agent.SOP2Prompt`）在存之前挖掉了几处 `<answer>…</answer>`
-    （`chat.strip_answers`）—— 只进日志。因此 `sop` 是挖过之后的正文：这里的
-    "收到 N 字"数的是挖完的那一份，两者的差由 `describe` 那句话解释。
+    `stripped` = 调用方在存之前挖掉了几处 `<answer>…</answer>`（`chat.strip_answers`），
+    只进日志 ⇒ `sop` 是挖过之后的正文，这里的"收到 N 字"数的是挖完的那一份。
     """
     key = name.strip()
     raw = sop if isinstance(sop, str) else ""
@@ -67,11 +60,9 @@ def store(
 def describe(name: str, received: str, stored: str, stripped: int = 0) -> str:
     """一条流程更新的日志正文 —— 一行，且截断必须留痕。
 
-    超上限时同时报"收到多少 / 存了多少"；挖掉过 `<answer>` 段就报几处（这正是
-    "LLM 又把答案格式写进 SOP 了"的唯一信号）；换行转义成 `\\n` —— 流程正文必然
-    是多行的，不转义一条记录会变几十行，而时间戳前缀只加在第一条物理行上；
-    `\\r` 与 `\\n` 都要转，Windows 上模型回的多半是 `\\r\\n`。报流程名（条数多了
-    以后"哪一条变了"只有它能回答）。
+    超上限时同报"收到多少 / 存了多少"；挖掉过 `<answer>` 段就报几处（这正是"LLM 又把
+    答案格式写进 SOP 了"的唯一信号）；`\r` 与 `\n` 都转义成字面量（Windows 上模型回
+    的多半是 `\r\n`）—— 一条记录恒为一行，时间戳前缀只加在第一条物理行上。
     """
     head = stored[:80].replace("\r", "\\r").replace("\n", "\\n")
     notes = [f"剔除 {stripped} 处 <answer> 段"] if stripped else []

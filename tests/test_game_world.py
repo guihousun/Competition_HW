@@ -1,13 +1,14 @@
 """game/world.py 的用例：`Turn.summary()` 的四块版面与上界、昼夜判定。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py tests/<本文件>`（全量：`py -m unittest discover -s tests -v`）。
+必须用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import sys
 import unittest
 from pathlib import Path
 
-# tests/ 给 `_fixtures` 用（discover 不一定把它放进 sys.path）；src/ 给 coregeek 用
+# tests/ 给 `_fixtures` 用、src/ 给 coregeek 用（discover 跑时前者不一定在 sys.path 里）
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -21,9 +22,9 @@ from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
 def _blocks(summary: str) -> list[str]:
     """`Turn.summary()` → 非空行。
 
-    摘要按块拼接（`【回合】 / 【我方】 / 【机器】 / 【可接任务点】` 各占一块），
-    块数固定但物理行数是数据相关的（一块里放不下会换行）。
-    断言块内容就够 —— 空行只是给人眼看的，钉住它反而会把"某块变长了"误报成格式错。
+    摘要按块拼接（`【回合】 / 【我方】 / 【机器】 / 【可接任务点】` 各占一块），块数固定但物理
+    行数是数据相关的（一块里放不下会换行）。断言块内容就够 —— 空行只是给人眼看的，钉住它
+    反而会把"某块变长了"误报成格式错。
     """
     return [line for line in summary.splitlines() if line]
 
@@ -31,8 +32,8 @@ def _blocks(summary: str) -> list[str]:
 class TurnSummaryTest(unittest.TestCase):
     """`Turn.summary()` 的四块摘要。
 
-    它跑在 `app.handle` 的 `try` 里 —— 抛异常 = 整回合退化成空指令，
-    所以"空局面不炸"与"长度有上界"和内容一样重要。
+    它跑在 `app.handle` 的 `try` 里 —— 抛异常 = 整回合退化成空指令，所以"空局面不炸"与"长度
+    有上界"和内容一样重要。
     """
 
     def _turn(self, **kw) -> Turn:

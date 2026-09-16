@@ -35,8 +35,8 @@ class GridTest(unittest.TestCase):
     def test_station_is_expanded_to_four_cells(self):
         """基地 2×2，`pos` 给的是左上角 ⇒ 占 `y` 和 `y-1`。
 
-        接口文档写的是"双方"基地大小都是 2*2，敌我都要展成 4 格。只标一格的话，
-        角色会一头撞进基地里 —— 那是一条判题器不收的指令。
+        接口文档写的是"双方"基地大小都是 2*2，敌我都要展成 4 格：只标一格的话角色会
+        一头撞进基地里 —— 那是一条判题器不收的指令。
         """
         for corner, kind in ((Pos(10, 24), "station"), (Pos(30, 10), "enemy:station")):
             with self.subTest(corner=corner):
@@ -131,9 +131,8 @@ class GridTest(unittest.TestCase):
     def test_the_legend_covers_every_category(self):
         """图例必须覆盖字符表里的每一个类别。
 
-        它守的是"加了新中立元素却忘了往 `_NAMES` 里补" —— 漏掉的症状是复盘时
-        把新元素看成 `?`，而 `?` 在地图上到处都是（空地旁边就是），很难注意到。
-        集合相等比"循环 assertIn"更强：多一个、少一个都挂。
+        守的是"加了新中立元素却忘了往 `_NAMES` 里补" —— 漏掉的症状是复盘时把新元素看成
+        `?`，而 `?` 在地图上到处都是。集合相等比循环 `assertIn` 更强：多一个少一个都挂。
         """
         self.assertEqual(set(_NAMES), set(_RENDER_SIDED) | set(_RENDER_NEUTRAL))
         for kind in _NAMES:
@@ -142,10 +141,9 @@ class GridTest(unittest.TestCase):
         for token in ("x=机器人", "空格=空地", "?=未知", "大写=敌方", "%=敌方围墙"):
             self.assertIn(token, LEGEND)
 
-        # 一个字符只能代表一样东西：两个类别共用字符的症状是图上分不出来
-        # （我方围墙整圈沉进空地背景），而图例看上去只是重复了一项，不像 bug ——
-        # 上面的 `assertIn` 一条都不会挂，所以单独钉。（`_char` 恒返回 1 字符，
-        # 比长度就够。）守门员管的是"任何两个类别都不许共用字符"，不是某一对具体值。
+        # 一个字符只能代表一样东西：共用的症状是图上分不出来（我方围墙整圈沉进空地
+        # 背景），而图例看上去只是重复一项、上面那些 `assertIn` 一条都不会挂。`_char`
+        # 恒返回 1 字符 ⇒ 比长度就够。守的是"任何两个类别都不许共用"，不是某一对具体值。
         chars = [_char(kind) for kind in _NAMES] + ["x", " ", "?"]
         self.assertEqual(len(set(chars)), len(chars), sorted(chars))
 
@@ -153,8 +151,8 @@ class GridTest(unittest.TestCase):
         """`1`-`4` 是阵营的任务点，不是"我方/敌方"。
 
         它们来自 `zones` 的 `challengerTaskPoint*` / `defenderTaskPoint*`，两队同时存在；
-        样例里我方恰好是挑战者、两套重合，写错也测不出来。我方可接的那两个点
-        不在字符表里（`Turn.task_points`，来自 `teamOur.playerTasks`）—— 别混为一谈。
+        样例里我方恰好是挑战者、两套重合 ⇒ 写错也测不出来。我方可接的那两个点在
+        `Turn.task_points`（来自 `teamOur.playerTasks`），别混为一谈。
         """
         self.assertIn("挑战方任务点", LEGEND)
         self.assertIn("防守方任务点", LEGEND)
@@ -204,7 +202,7 @@ class BuildGeometryTest(unittest.TestCase):
             weapon_sites(Pos(10, 24), 41),
             (Pos(12, 24), Pos(12, 25), Pos(12, 22)),
         )
-        #: 换边后整套落点自动跟着翻 —— 按基地坐标判而不用 `teamOur.type`
+        # 换边后整套落点自动跟着翻 —— 按基地坐标判而不用 `teamOur.type`
         self.assertEqual(
             weapon_sites(Pos(30, 10), 41),
             (Pos(29, 10), Pos(29, 11), Pos(29, 8)),
@@ -233,9 +231,8 @@ class BuildGeometryTest(unittest.TestCase):
     def test_every_site_touches_the_base(self):
         """这个阵形的理由：三个落点各自与基地的一格切比雪夫距离 1。
 
-        升级券/维修包必须在目标建筑周围一格内使用（任务书 L292 / L314），`attack`
-        也要求角色站在炮旁 ⇒ 同一个角色站在落点上，脚下的炮和旁边的基地一够就是两个。
-        顺带钉住"落点在武器环上" —— 不在环上的话 `build` 落点非法、那 25 金币白花。
+        升级券/维修包要在目标建筑周围一格内用（任务书 L292 / L314），`attack` 也要求站在
+        炮旁 ⇒ 站上落点就够得着脚下的炮与旁边的基地。顺带钉住"落点在武器环上"。
         """
         for base, width in ((Pos(10, 24), 41), (Pos(30, 10), 41)):
             with self.subTest(base=base):
@@ -290,9 +287,8 @@ class StepOutsideTest(unittest.TestCase):
 class StepsBetweenTest(unittest.TestCase):
     """`steps_between` —— 回合预算用的口径，与 `Pos.dist` 分家。
 
-    `dist` 是切比雪夫直线（选点用），`steps_between` 是绕障的真实步数（"这天还来不
-    来得及来回"用），且独有一个 `dist` 给不出的失败态 -1，每个调用点都得自己接住
-    ⇒ 三种返回值各钉一条。
+    `dist` 是切比雪夫直线（选点用），它是绕障的真实步数（"这趟来不来得及"用），独有一个
+    `dist` 给不出的失败态 -1 ⇒ 每个调用点都得自己接住，三种返回值各钉一条。
     """
 
     BASE = Pos(10, 24)

@@ -1,11 +1,10 @@
-"""本地 Python 执行器：只允许计算 —— 无三方包、不碰环境的任何东西（文件、接口一律不行）。
+"""本地 Python 执行器：只允许纯计算 —— 无三方包、不碰环境的任何东西（文件、接口一律不行）。
 
-与 `cmd.executeCmd` 的分工（两边的工具描述里也这么教 LLM）：那是把命令交给判题器的
-沙盒跑（一回合往返、限时 15 秒、能看到任务文件）；这里在我们自己的进程里即时算 ——
-产出当回合就进 prompt（`Agent.python_exec` 记进会话），但看不见沙盒里的任何东西。
-护栏不是对抗级沙箱：AST 白名单 + 内置白名单 + 守卫超时，防的是 LLM 误伤（写出
-`open` / `import os` / 死循环），不是防恶意逃逸 —— LLM 是我们自己的解题者。
-真正的硬约束是超时：`task_channel` 跑在判题器 5 秒响应预算里（红线），`while True`
+与 `cmd.executeCmd` 的分工（工具描述里也这么教 LLM）：那是把命令交给判题器的沙盒
+（一回合往返、限时 15 秒、能看任务文件），这里在我们自己的进程里即时算 —— 产出当回合
+就进 prompt，但看不见沙盒。护栏不是对抗级沙箱：AST 白名单 + 内置白名单 + 守卫超时，
+防的是 LLM 误伤（`open` / `import os` / 死循环），不是防恶意逃逸 —— LLM 是我们自己的
+解题者。真硬约束是超时：`task_channel` 跑在判题器 5 秒响应预算里（红线）⇒ `while True`
 必须当场返回 `[TIMEOUT]`（与判题器沙盒回执的标记同一个词，LLM 认得）。
 只依赖标准库、零状态。
 """
@@ -16,9 +15,9 @@ import io
 import threading
 from contextlib import redirect_stdout
 
-#: 允许 import 的标准库模块 —— 纯计算的那一小撮（math/json/re/datetime…）；
-#: os/sys/socket/pathlib/subprocess 一类环境面全在白名单外。判题环境本就只有标准库
-#: ⇒ "无三方包"自动成立，这里管的是"标准库里也不许碰环境"。
+#: 允许 import 的标准库模块 —— 纯计算的那一小撮（math/json/re/datetime…）。判题环境本
+#: 就只有标准库 ⇒ "无三方包"自动成立，这里管的是"标准库里也不许碰环境"（os/sys/socket/
+#: pathlib/subprocess 一类环境面全在白名单外）。
 ALLOWED_MODULES = frozenset(
     {
         "math", "cmath", "decimal", "fractions", "statistics",
@@ -54,9 +53,8 @@ SAFE_BUILTINS = {
     )
 }
 
-#: 输出上限（字不是字节）：产出会整段进 prompt，99999 字的 print 会把后续每一份
-#: prompt 都撑爆。截断留痕与 `utils._clip` 同形 —— agent 是叶子包（只依赖标准库），
-#: 这条规则各存一份。
+#: 输出上限（字不是字节）：产出整段进 prompt，99999 字的 print 会把后续每一份 prompt
+#: 撑爆。截断留痕与 `utils._clip` 同形 —— agent 是叶子包，这条规则各存一份。
 EXEC_TEXT_MAX = 4000
 
 #: 守卫超时（秒）：判题器响应预算 5 秒，给 plan/网络留足余量。超时的线程杀不掉
@@ -66,11 +64,10 @@ EXEC_TIMEOUT = 2.0
 #: 真 `__import__`（在限定内置之前抓一份——import 语句在底层全走它）。
 _REAL_IMPORT = builtins.__import__
 
-#: 预热：启动时（进程拉起、判题器第一回合之前）把白名单模块全部 import 一遍 ⇒
-#: 沙盒里的 `import` 从此只是 `sys.modules` 的字典命中（微秒级）。没有这一步，
-#: 冷导入在慢机器/杀毒扫描下能吃掉几秒 —— `import statistics`（连带
-#: decimal/fractions/random）冷加载可超过 2 秒守卫超时，而 5 秒响应预算是红线。
-#: 代价是启动时一次性 ~百毫秒，不落在任何回合的预算里。
+#: 预热：启动时把白名单模块全部 import 一遍 ⇒ 沙盒里的 `import` 从此只是 `sys.modules`
+#: 的字典命中（微秒级）。没有这一步，冷导入在慢机器/杀毒扫描下能吃掉几秒 ——
+#: `import statistics`（连带 decimal/fractions/random）冷加载可超过 2 秒守卫超时，而
+#: 5 秒响应预算是红线。代价是启动时一次性 ~百毫秒，不落在任何回合的预算里。
 for _name in sorted(ALLOWED_MODULES):
     __import__(_name)
 
@@ -78,9 +75,9 @@ for _name in sorted(ALLOWED_MODULES):
 def run(code: str, timeout: float = EXEC_TIMEOUT) -> str:
     """执行一段纯计算的 Python，返回给 LLM 看的产出文本；绝不抛异常。
 
-    标记与判题器沙盒回执同一套词根：`[语法错误]` / `[拒绝]`（环境面）/
-    `[错误]`（代码自己抛的） / `[TIMEOUT]`。单表达式走 eval、值即产出；
-    多语句走 exec、只有 print 的输出 —— 这两个形状都写进了工具描述。
+    标记与判题器沙盒回执同一套词根：`[语法错误]` / `[拒绝]`（环境面）/ `[错误]`（代码
+    自己抛的）/ `[TIMEOUT]`。单表达式走 eval、值即产出；多语句走 exec、只有 print 的输出
+    —— 这两个形状都写进了工具描述。
     """
     try:
         tree = ast.parse(code)
@@ -128,8 +125,8 @@ def _guarded_import(name: str, *args: object, **kwargs: object) -> object:
 
 
 def _reject(tree: ast.Module) -> str | None:
-    """静态安检：返回拒绝理由；`None` = 放行。只看三类东西——
-    import 的模块、危险内置名、下划线属性（`__class__`/`__globals__` 一类逃逸口）。"""
+    """静态安检：返回拒绝理由；`None` = 放行。只看三类 —— import 的模块、危险内置名、
+    下划线属性（`__class__`/`__globals__` 一类逃逸口）。"""
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:

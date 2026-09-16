@@ -21,10 +21,9 @@ from coregeek.agent.tools import sop  # noqa: E402
 class ChatPromptTest(unittest.TestCase):
     """prompt 的组装 —— `agent/prompt.py` 的段模板（system）+ 累积的会话记录。
 
-    断言逐字钉住段头与两个形状的示例：它们是"LLM 照不照抄"的唯一杠杆；
-    `str.format` 漏填一个占位符会让整段变成 `{tool_desc}` 这种字面量出现在 prompt 里
-    —— 那种错在实盘上表现为"LLM 完全不按格式回"，本地却什么都看不出来。
-    `Agent.chat` 每轮用模板现刷 system。
+    断言逐字钉住段头与两个形状的示例：它们是"LLM 照不照抄"的唯一杠杆；`str.format`
+    漏填一个占位符会让 `{tool_desc}` 这种字面量出现在 prompt 里 —— 实盘上表现为
+    "LLM 完全不按格式回"，本地却什么都看不出来。`Agent.chat` 每轮用模板现刷 system。
     """
 
     def setUp(self) -> None:
@@ -41,7 +40,7 @@ class ChatPromptTest(unittest.TestCase):
             "# 【注意事项】",
         ):
             self.assertIn(header, prompt)
-        #: 会话记录是拼接出来的（不走 `str.format`），会漏的只有模板自己那两个槽
+        # 会话记录是拼接出来的（不走 `str.format`），会漏的只有模板自己那两个槽
         for leftover in ("{tool_desc}", "{sop}"):
             self.assertNotIn(leftover, prompt)
 
@@ -54,9 +53,8 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_role_section_teaches_depositing_environment_knowledge(self):
         """探索到的环境知识（接口描述等）也要沉淀成 SOP。
 
-        会话窗口只留最近两轮、摘要是 best-effort ⇒ SOP 是跨回合唯一保证还在的记忆
-        —— 不沉淀的发现过了窗口就丢。这条提示钉在 ROLE 段（沉淀的"流程 / 环境知识"
-        两个动词都在），措辞就是产品，别改成同义词。"""
+        会话窗口只留最近两轮、摘要是 best-effort ⇒ SOP 是跨回合唯一保证还在的记忆 ——
+        不沉淀的发现过了窗口就丢。措辞就是产品，别改成同义词。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         role = system.split("# 【工具描述】")[0]
         self.assertIn("环境知识", role)
@@ -96,11 +94,9 @@ class ChatPromptTest(unittest.TestCase):
 
     def test_the_sop_round_must_carry_the_answer(self):
         """prompt 里必须有"沉淀 SOP 与作答写在同一条回复里"这条规则与示例 ——
-        prompt 不写的话，LLM 就按"一回合只输出一样东西"把沉淀单独占一回合
-        （那一回合在日志上看着完全正常，只有分数会低）。示例是两块（工具块 +
-        块外的 `<answer>`，工具块里是 `<name>` + `<sop>` 两个参数）。`sop` 里
-        不许出现 `<answer>` 这对标签的规则也在这段里 —— 它是 `chat.strip_answers`
-        在代码侧兜底的那条规矩，必须让 LLM 先知道。
+        不写的话 LLM 就按"一回合只输出一样东西"把沉淀单独占一回合（日志上看着完全
+        正常，只有分数会低）。`sop` 里不许出现 `<answer>` 标签的规则也在这段里：
+        它是 `chat.strip_answers` 在代码侧兜底那条规矩，必须让 LLM 先知道。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn("它只沉淀、不产出命令", system)
@@ -116,9 +112,8 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_attention_says_how_to_find_the_file(self):
         """`# 【注意事项】` 那几条，附一段可以直接照抄的命令范式。
 
-        任务信息里给的往往只是一个文件名，散文式提醒落到 LLM 手里就是"先 `find`、
-        下一回合再 `cat`"（两条命令 = 两回合 = 直接掉分）。范式把"找 + 读"写成一条：
-        `find` 加 `-maxdepth`/`2>/dev/null` 兜住沙盒 15 秒与 64KB 截断。
+        任务信息里给的往往只是一个文件名 ⇒ 散文式提醒落到 LLM 手里就是"先 `find`、
+        下一回合再 `cat`"（两条命令 = 两回合 = 直接掉分）。范式把"找 + 读"写成一条，
         措辞是拍的，效果只能靠实盘。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
@@ -143,8 +138,8 @@ class ChatPromptTest(unittest.TestCase):
     def test_a_stored_flow_renders_with_its_name(self):
         """存过一条流程之后，后面每一份 prompt 都带着 `## SopName - 流程名` + 正文；
         空表打占位 —— 段头永远都在，那个槽是 LLM 自己写的目标，看不见槽就不会去用它。
-        接线是两个方法之间的（`SOP2Prompt` 写 `self._sop`，`chat` 读它）—— 走的是实例
-        （跨回合那条更强的证据在 `TaskChannelTest.test_the_singleton_carries_the_sop_across_turns`）。
+        跨回合那条更强的证据在
+        `TaskChannelTest.test_the_singleton_carries_the_sop_across_turns`。
         """
         self.assertIn("（暂无沉淀）", json.loads(self.agent.chat("题目"))[0]["content"])
         self.agent.SOP2Prompt("找任务书", "先看目录再动手")
@@ -206,9 +201,8 @@ class ChatPromptTest(unittest.TestCase):
     def test_braces_in_the_values_are_not_scanned_again(self):
         """`str.format` 只做一次 —— 替换值里的 `{}` 不能被当成占位符。
 
-        题目原文与沙盒输出都是任意文本，python 代码片段里 `{}` 太常见了；二次扫描
-        会在 `chat` 里直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。流程正文
-        是第三个替换值，三处一起钉；会话正文则走 `json.dumps`，与 `format` 无关。"""
+        题目原文、沙盒输出与流程正文都是任意文本，`{}` 太常见；二次扫描会在 `chat` 里
+        直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。三处一起钉。"""
         self.agent.SOP2Prompt("带花括号", "SOP 里有 {sop} 和 {0}")
         messages = json.loads(self.agent.chat("题目 {task} {0} {}", result="{'a': 1}"))
         contents = [m["content"] for m in messages]

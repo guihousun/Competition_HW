@@ -1,15 +1,17 @@
 """protocol/actions.py 的用例：动作的权限闸门（角色不对根本造不出动作）与线上报文形状。
-权限类 bug 的特征是本地全绿——格式完全合法，只有判题器会说"不"，而那条路直通红线
-（累计 5 次异常即整场不再被调度）。"格式对"证明不了"这角色有权这么做"，必须单独钉。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+权限类 bug 的特征是本地全绿 —— 报文完全合法，只有判题器会说"不"，而那条路直通红线
+（累计 5 次异常即整场不再被调度）："格式对"证明不了"这角色有权这么做"，必须单独钉。
+
+跑法：`PYTHONUTF8=1 py tests/<本文件>`（全量：`py -m unittest discover -s tests -v`）。
+必须用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import sys
 import unittest
 from pathlib import Path
 
-# tests/ 给 `_fixtures` 用（discover 不一定把它放进 sys.path）；src/ 给 coregeek 用
+# tests/ 给 `_fixtures` 用、src/ 给 coregeek 用（discover 跑时前者不一定在 sys.path 里）
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -53,8 +55,8 @@ class MoveWireTest(unittest.TestCase):
     def test_collect_wire_shape(self):
         """`collect` 的 `targetPos` 是矿石的坐标，形状与 `move` 同（只有 action + targetPos）。
 
-        没有实证报文（`docs/response.txt` 只有 move/build/remove），形状从接口文档
-        §2.2/§2.3 推 —— 写错就是一次"指令非法"。
+        没有实证报文（`docs/response.txt` 只有 move/build/remove），形状从接口文档 §2.2/§2.3
+        推 —— 写错就是一次"指令非法"。
         """
         self.assertEqual(
             actions.Collect("worker", Pos(4, 24)).to_wire(),
@@ -64,9 +66,9 @@ class MoveWireTest(unittest.TestCase):
     def test_attack_wire_shape(self):
         """逐字对照 `docs/response.txt` 里唯一一条 `attack` 实证报文。
 
-        这个对象是"武器 10020 由角色 10010 操控"，`to_wire()` 编的是挂在武器 id 下的
-        那条记录（key 由 `planner._emit` 给）。字段名 `controllerId` 写错
-        （`controllerID` / `roleId`）就是一次"指令非法"。
+        这个对象是"武器 10020 由角色 10010 操控"，`to_wire()` 编的是挂在武器 id 下的那条记录
+        （key 由 `planner._emit` 给）。字段名 `controllerId` 写错（`controllerID` / `roleId`）
+        就是一次"指令非法"。
         """
         wire = actions.Attack("worker", "10010", Pos(29, 7)).to_wire()
         self.assertEqual(
@@ -83,9 +85,9 @@ class MoveWireTest(unittest.TestCase):
 
     def test_sell_wire_shape(self):
         """`{"action":"sell","name":<矿种>,"num":<件数>}`：`num` 是 Int（§2.2，不填默认 1），
-        `name` 取矿种（与 `neutralType` / `vendorShopList.name` / 背包物品名同一套词），
-        不是动作名。没有实证报文，形状从接口文档推。`attack` 的 `controllerId` 标 String、
-        这里标 Int，两者相反 ⇒ 两处各钉一次类型（抄错方向 = 一次"指令非法"）。
+        `name` 取矿种（与 `neutralType` / `vendorShopList.name` / 背包物品名同一套词），不是
+        动作名。没有实证报文，形状从接口文档推。`attack` 的 `controllerId` 标 String、这里标
+        Int ⇒ 两处各钉一次类型（抄错方向 = 一次"指令非法"）。
         """
         wire = actions.Sell("worker", "copper", 4).to_wire()
         self.assertEqual(wire, {"action": "sell", "name": "copper", "num": 4})
@@ -93,18 +95,17 @@ class MoveWireTest(unittest.TestCase):
         self.assertNotIsInstance(wire["num"], bool)
 
     def test_buy_wire_shape(self):
-        """`buy` 在武器商店旁用（§4.4：全部角色）：`name` = 商品名
-        （`weaponShopList.name` 那套词）、`num` 是 Int（不填默认 1，支持批量）。
-        没有实证报文，形状从接口文档推。
+        """`buy` 在武器商店旁用（§4.4：全部角色）：`name` = 商品名（`weaponShopList.name`
+        那套词）、`num` 是 Int（不填默认 1，支持批量）。没有实证报文，形状从接口文档推。
         """
         wire = actions.Buy("worker", "WeaponUpgradeVoucher1", 1).to_wire()
         self.assertEqual(wire, {"action": "buy", "name": "WeaponUpgradeVoucher1", "num": 1})
         self.assertIsInstance(wire["num"], int)
 
     def test_use_wire_shape(self):
-        """`use` 用升级券：`name` + `targetPos` —— 券须站在目标建筑周围一格内并指定
-        目标位置（任务书 L292）。已 level3 再用不生效、非法使用不消耗（L293-294）
-        ⇒ 发错顶多白跑一趟，不碰红线。没有实证报文，形状从接口文档推。"""
+        """`use` 用升级券：`name` + `targetPos` —— 券须站在目标建筑周围一格内并指定目标位置
+        （任务书 L292）。已 level3 再用不生效、非法使用不消耗（L293-294）⇒ 发错顶多白跑一趟，
+        不碰红线。没有实证报文，形状从接口文档推。"""
         self.assertEqual(
             actions.Use("worker", "WeaponUpgradeVoucher1", Pos(12, 22)).to_wire(),
             {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 12, "y": 22}]},
@@ -144,19 +145,16 @@ class GateTest(unittest.TestCase):
                     actions.Move(role_type, Pos(0, 0))
 
     def test_pioneer_cannot_build(self):
-        """`build` 仅在工人那一行（任务书 §4.4 最右列）。
-
-        开拓者误发 `build` 是典型的"本地全绿"bug —— 报文格式挑不出毛病，只有判题器
-        会说"不"，而那条路直通红线。
-        """
+        """`build` 仅在工人那一行（任务书 §4.4 最右列）：开拓者误发是典型的"本地全绿"bug
+        —— 报文格式挑不出毛病，只有判题器会说"不"。"""
         with self.assertRaises(PermissionError):
             actions.Build("pioneer", "gatling", Pos(9, 23))
 
     def test_pioneer_cannot_collect(self):
         """`collect` 同样仅在工人那一行（任务书 §4.4 最右列）。
 
-        它的昼夜限制表里没写（`build`/`remove`/`attack` 都写了）⇒ 闸门只拦角色、
-        不拦时段，只管"谁"。每加一个受限动作都要在这里补一条。
+        它的昼夜限制表里没写（`build`/`remove`/`attack` 都写了）⇒ 闸门只拦角色、不拦时段，
+        只管"谁"。每加一个受限动作都要在这里补一条。
         """
         with self.assertRaises(PermissionError):
             actions.Collect("pioneer", Pos(4, 24))
@@ -164,8 +162,7 @@ class GateTest(unittest.TestCase):
     def test_pioneer_cannot_remove(self):
         """`remove` 同样仅在工人那一行（任务书 §4.4 最右列）。
 
-        拆墙真的会由工人发 —— 一旦闸门写成"全部角色"，开拓者某天顺手拆一格
-        就是一次异常。
+        拆墙真的会由工人发 —— 闸门一旦写成"全部角色"，开拓者某天顺手拆一格就是一次异常。
         """
         with self.assertRaises(PermissionError):
             actions.Remove("pioneer", Pos(13, 23))
@@ -176,8 +173,8 @@ class GateTest(unittest.TestCase):
             actions.Move("workre", Pos(0, 0))
 
     def test_attack_is_allowed_for_both_roles(self):
-        """§4.4 里 `attack` 的可用角色是全部 —— 开拓者也上炮位，别误窄成工人
-        （反过来的 bug 本地全绿，只是整夜少一门火力）。"""
+        """§4.4 里 `attack` 的可用角色是全部 —— 开拓者也上炮位，别误窄成工人（反过来的
+        bug 本地全绿，只是整夜少一门火力）。"""
         for role_type in ("worker", "pioneer"):
             with self.subTest(role_type=role_type):
                 self.assertEqual(actions.Attack(role_type, "10010", Pos(1, 1)).to_wire()["action"], "attack")
@@ -185,8 +182,8 @@ class GateTest(unittest.TestCase):
     def test_worker_cannot_accept_a_task(self):
         """`acceptTask` 只在开拓者那一行（任务书 §4.4 最右列）。
 
-        它的报文只有一个 `action` 字段、格式挑不出毛病 ⇒ "本地全绿"bug 最容易藏在这里。
-        每加一个受限动作都要补一条。
+        它的报文只有一个 `action` 字段、格式挑不出毛病 ⇒ 权限写错最容易藏在这里。每加一个
+        受限动作都要在这里补一条。
         """
         with self.assertRaises(PermissionError):
             actions.AcceptTask("worker")
@@ -199,9 +196,8 @@ class GateTest(unittest.TestCase):
     def test_sell_is_allowed_for_both_roles(self):
         """§4.4 里 `sell` 的可用角色是全部（开拓者一样能卖），与 `build`/`collect` 相反。
 
-        反方向的 bug（把开拓者挡在门外）本地永远测不出来 —— 报文格式完全合法，
-        只有判题器会说"不"。与上面那两条成对：`build`/`collect` 钉"窄得对"，
-        这里钉"窄不得"。
+        反方向的 bug（把开拓者挡在门外）本地永远测不出来 —— 报文完全合法，只有判题器会说
+        "不"。与上面那两条成对：`build`/`collect` 钉"窄得对"，这里钉"窄不得"。
         """
         for role_type in ("worker", "pioneer"):
             with self.subTest(role_type=role_type):

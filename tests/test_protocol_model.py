@@ -1,7 +1,8 @@
 """protocol/model.py 的用例：payload → Turn 的容错解析（字段缺失的缺省方向、判题器回执
 `errors` / `lastRoundRoleActionResults`、沙盒回执 `lastCmdResult`、任务点 `playerTasks`）。
 
-跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
+跑法：`PYTHONUTF8=1 py tests/<本文件>`（全量：`py -m unittest discover -s tests -v`）。
+必须用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
 import json
@@ -9,7 +10,7 @@ import sys
 import unittest
 from pathlib import Path
 
-# tests/ 给 `_fixtures` 用（discover 不一定把它放进 sys.path）；src/ 给 coregeek 用
+# tests/ 给 `_fixtures` 用、src/ 给 coregeek 用（discover 跑时前者不一定在 sys.path 里）
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -41,9 +42,9 @@ class ParseTest(unittest.TestCase):
     def test_weapons_and_robots_come_from_the_payload(self):
         """武器名册与机器人来自 `teamOur.roles` / `robot.roles`（`turn.weapons` / `turn.robots`）。
 
-        `attackRange` 取样例的 4/7/INT_MAX（与任务书 §4.5.1 表格的 3/6/10 矛盾，以 payload 为准）；
-        三座炮都没有 `cooldown` 字段 ⇒ 全 -1 ⇒ 不当成"冷却中"。
-        地图网格里还留着这三格（武器一样挡路），但"哪座炮能开火"只认这份名册。
+        `attackRange` 取样例的 4/7/INT_MAX（与任务书 §4.5.1 表格的 3/6/10 矛盾，以 payload
+        为准）；三座炮都没有 `cooldown` 字段 ⇒ 全 -1 ⇒ 不当成"冷却中"。地图网格里还留着这三格
+        （武器一样挡路），但"哪座炮能开火"只认这份名册。
         """
         turn = self._turn()
         by_id = {w.id: w for w in turn.weapons}
@@ -85,9 +86,9 @@ class ParseTest(unittest.TestCase):
     def test_vendor_prices_come_from_the_payload_verbatim(self):
         """价目照抄载荷，不写死 —— 样例是 1/3/5，事件期间会变（任务书 L386）。
 
-        字段坏掉的整条丢掉，尤其不能把"解析不出来"的 -1 当成一个价格（`_int` 对缺字段/
-        类型不对给 -1，而负的收购价不存在）：混进来要么选出倒贴钱的矿，
-        要么把整张表判成"没有价"（`_pick_ore` 滤掉 <= 0）。
+        字段坏掉的整条丢掉，尤其不能把"解析不出来"的 -1 当成价格（`_int` 对缺字段/类型不对给
+        -1，而负的收购价不存在）：混进来要么选出倒贴钱的矿，要么把整张表判成"没有价"
+        （`_pick_ore` 滤掉 <= 0）。
         """
         self.assertEqual(
             dict(self._turn().vendor_prices), {"stone": 1, "iron": 3, "copper": 5}
@@ -140,8 +141,8 @@ class ParseTest(unittest.TestCase):
     def test_ores_carry_their_kind_but_everything_blocks(self):
         """石/铁/铜各自带矿种进 `ores`；小贩 / 武器商店 / 任务点不是矿，却一样挡路。
 
-        `ores` 装的是"矿点 → 矿种"而不是坐标集：选矿那一步要在三种矿之间按收购价排
-        （铜未必比铁贵，见 `Turn.vendor_prices`），只留坐标就答不出"这是哪种矿"。
+        `ores` 装的是"矿点 → 矿种"而不是坐标集：选矿那一步要在三种矿之间按收购价排（铜未必比
+        铁贵，见 `Turn.vendor_prices`），只留坐标就答不出"这是哪种矿"。
         """
         grid = self._turn().map
         self.assertEqual(
@@ -169,9 +170,8 @@ class ParseTest(unittest.TestCase):
         """小贩单独一张表（`Map.vendors`）：`sell` 那条线唯一的目标点。
 
         它和矿在网格里的形状一样（都是 `neutralType`）却不像矿那样带矿种 ⇒ 是
-        `frozenset[Pos]` 而不是 `Mapping`。小贩不是 `teamOur.roles` 里的单位，
-        "小贩在哪"只能从网格认；它照样挡路（`step_toward` 撞上它自然停在贴着一格 ——
-        那正好是 `sell` 要求的站位）。
+        `frozenset[Pos]` 而不是 `Mapping`。小贩不是 `teamOur.roles` 里的单位，"小贩在哪"只能
+        从网格认；它照样挡路（`step_toward` 撞上它自然停在贴着一格 —— 那正是 `sell` 的站位）。
         """
         grid = self._turn().map
         self.assertEqual(grid.vendors, {Pos(20, 16)})
@@ -181,9 +181,8 @@ class ParseTest(unittest.TestCase):
     def test_a_size_less_map_has_no_vendors_either(self):
         """尺寸非法 ⇒ 整个矩阵为空 ⇒ 小贩也没有（`vendors` 得跟着 `ores` 一起空）。
 
-        `frozenset()` 与"地图上没有小贩"在策略侧是同一件事（`_sell_ore` 的门 ②），
-        但属性不存在会直接 `AttributeError` —— 那跑在 `handle` 的 `try` 里，
-        代价是整回合空指令。
+        `frozenset()` 与"地图上没有小贩"在策略侧是同一件事（`_sell_ore` 的门 ②），但属性不
+        存在会直接 `AttributeError` —— 它跑在 `handle` 的 `try` 里，代价是整回合空指令。
         """
         for size in ((-1, -1), (41, 0)):
             with self.subTest(size=size):
@@ -196,8 +195,8 @@ class ParseTest(unittest.TestCase):
         """背包是物品名数组，重复即计数（接口文档 §1.3.1）—— `_bag` 收整张名字表，
         `BaseRole.stone` 是它的派生属性。
 
-        非矿石（开拓者那个 `medicine`）也照样收进来 —— `_bag` 不认识矿，
-        认矿是 `planner` 的事（`SELLABLE`）。
+        非矿石（开拓者那个 `medicine`）也照样收进来 —— `_bag` 不认识矿，认矿是 `planner`
+        的事（`SELLABLE`）。
         """
         by_id = {r.id: r for r in self._turn().roles}
         self.assertEqual(by_id[10010].bag, {"stone": 1, "iron": 1, "copper": 1})
@@ -208,8 +207,8 @@ class ParseTest(unittest.TestCase):
     def test_a_missing_backpack_is_an_empty_bag(self):
         """背包缺失 / 不是数组 ⇒ 空表 ⇒ 石头 0 块、一件都卖不掉。
 
-        降级方向是"少做"，与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发
-        `build` 或 `sell`（`num` 报大件数会不会被判"指令非法"文档没写）。
+        降级方向是"少做"，与 `_gold` / `_size` 一致：宁可少采，不可对着空背包发 `build` 或
+        `sell`（`num` 报大件数会不会被判"指令非法"文档没写）。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         for node in raw["teamOur"]["roles"]:
@@ -226,8 +225,8 @@ class ParseTest(unittest.TestCase):
 class TaskParseTest(unittest.TestCase):
     """`teamOur.playerTasks` → `Turn.task_points`，以及顶层的 `phaseTask` / `llmResp`。
 
-    `playerTasks` 是任务点的权威来源：它只含我方那 2 个点（阵营已按 `teamOur.type`
-    滤好），不必去 `mapInfo.zones` 里认 `challengerTaskPoint*`，也不必读 `teamOur.type`。
+    `playerTasks` 是任务点的权威来源：它只含我方那 2 个点（阵营已按 `teamOur.type` 滤好），
+    不必去 `mapInfo.zones` 里认 `challengerTaskPoint*`，也不必读 `teamOur.type`。
     """
 
     POINT = {
@@ -260,9 +259,9 @@ class TaskParseTest(unittest.TestCase):
         self.assertEqual(self._load({**self.POINT, "isValid": False}).task_points, ())
 
     def test_walls_carry_their_health_and_level(self):
-        """墙是实体（`teamOur.roles` 里 roleType=="wall"，id 40000 系、带 health/level）
-        —— 修墙线的判据来源。已毁（health==0）⇒ 丢 —— 那是一格缺口，归 `_ring`
-        的候选表管（重建），不该出现在修复名单里。"""
+        """墙是实体（`teamOur.roles` 里 roleType=="wall"，id 40000 系、带 health/level）——
+        修墙线的判据来源。已毁（health==0）⇒ 丢：那是一格缺口，归 `_ring` 的候选表管（重建），
+        不该出现在修复名单里。"""
         turn = model.load(
             {
                 "teamOur": {
@@ -279,8 +278,8 @@ class TaskParseTest(unittest.TestCase):
         self.assertEqual(turn.station_level, 2)
 
     def test_the_official_news_is_carried(self):
-        """`worldNews.officialNews`（矿产事件的原文）—— 新闻查价线的原料；
-        `folkLegends` 是宝藏线索、不读。字段缺失 ⇒ 空串。"""
+        """`worldNews.officialNews`（矿产事件的原文）—— 新闻查价线的原料；`folkLegends` 是
+        宝藏线索、不读。字段缺失 ⇒ 空串。"""
         turn = model.load({"worldNews": {"officialNews": "北部铁矿区塌方", "folkLegends": "石门三钥"}})
         self.assertEqual(turn.news, "北部铁矿区塌方")
         self.assertEqual(model.load({}).news, "")

@@ -144,25 +144,23 @@ class TaskHoldTest(unittest.TestCase):
 
 
 class TaskChannelTest(unittest.TestCase):
-    """任务线的对外通道：`task_channel` 的五条判据 + `submitAnswer` 那条独立的线。
+    """任务线的对外通道：`task_channel` 的判据链 + `submitAnswer` 那条独立的线。
 
-    两条通道是独立的：`task_channel` 产出响应顶层的 `prompt` / `executeCmd`
-    （跟判题器的 LLM 与它的沙盒打交道），`plan` 里的 `_answer_task` 产出 `submitAnswer`
-    （跟判分打交道）—— 各自判各自的，不共享判据。所以"这一轮在提问"与"这一轮在提交"
-    可以同时成立，那是有利的（接口文档 L140 取"通过率最高"，重交零成本）。
+    两条通道各判各的：`task_channel` 产出响应顶层的 `prompt` / `executeCmd`（对判题器的 LLM
+    与它的沙盒），`plan` 里的 `_answer_task` 产出 `submitAnswer`（对判分）。所以"这一轮在提问"
+    与"这一轮在提交"可以同时成立，那是有利的（接口文档 L140 取"通过率最高"，重交零成本）。
     """
 
     def setUp(self) -> None:
-        #: SOP 是单实例上的跨回合状态，不清就会跨用例串味。
+        # SOP 是单实例上的跨回合状态，不清就会跨用例串味。
         AGENT.reset()
 
     DAY = 1
     TASK = "请查询北京天气"
     ANSWER = "晴 26 度"
-    #: 回灌那两段的分界符，用来断言"该出现 / 不该出现"。
-    #: 拿"分界符"而不是"某句话"当判据：模板正文里也有一句"沙盒的执行结果原文"，
-    #: 用普通词当判据会把自己绊倒；而 `【` 整个模板里一个都没有，只属于注入的两段
-    #: —— 沙盒输出与 LLM 回复都是任意文本，没有分界符档着就分不清哪段是题目。
+    #: 回灌那两段的分界符，用来断言"该出现 / 不该出现"。拿分界符而不是某句话当判据：模板
+    #: 正文里也有"沙盒的执行结果原文"这种普通词、会把自己绊倒；而 `【` 整个模板里一个都没有，
+    #: 只属于注入的两段 —— 沙盒输出与 LLM 回复都是任意文本，没分界符就分不清哪段是题目。
     RESULT_MARK = "【上一条命令的执行结果"
     RETRY_MARK = "【你上一次提交的答案"
 
@@ -267,10 +265,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_dead_pioneer_never_touches_the_sandbox(self):
         """开拓者阵亡 ⇒ 两个通道都停，哪怕 `phaseTask` 还没清干净。
 
-        `submitAnswer` 走 `roleCommandMap`，而阵亡的人根本不在 `model._character`
-        给出的 `roles` 里 ⇒ `_answer_task` 天生就进不来；但 `executeCmd` 是响应
-        顶层字段，不经过角色循环、也不经过 `Action` 的权限闸门 ⇒ 那条白送的闸门
-        对它不存在。同一件事在一条通道上有闸门、在另一条上没有，迟早出事。
+        `submitAnswer` 走 `roleCommandMap`，阵亡的人不在 `model._character` 给出的 `roles` 里
+        ⇒ `_answer_task` 天生进不来；但 `executeCmd` 是响应顶层字段，不经过角色循环、也不经过
+        `Action` 的权限闸门 ⇒ 那条白送的闸门对它不存在，得手写补上。
         """
         self.assertEqual(
             task_channel(self._turn(self.TASK, "<tool>ls</tool>", roles=())), ("", ""),
@@ -287,9 +284,8 @@ class TaskChannelTest(unittest.TestCase):
     def test_the_command_comes_out_of_the_tool_markup(self):
         """工具调用里 `<tool_param>` 内层的 `<cmd>` 就是那条命令，两侧空白去掉、内部原样保留。
 
-        只认嵌套形状：旧形状（属性式 / 裸参数 / 裸工具块）不是命令 —— 它们落重问，见
-        `test_the_old_shapes_fall_back_to_reasking`。
-        多标签只取第一条：`executeCmd` 只有一个字段，一回合只跑得了一条（接口文档 L210）。
+        只认嵌套形状（旧形状落重问，见 `test_the_old_shapes_fall_back_to_reasking`）；多标签
+        只取第一条 —— `executeCmd` 只有一个字段，一回合只跑得了一条（接口文档 L210）。
         """
         def call(cmd: str) -> str:
             return (
@@ -308,12 +304,10 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertEqual(task_channel(self._turn(self.TASK, reply)), ("", expected))
 
     def test_the_old_shapes_fall_back_to_reasking(self):
-        """严格模式的降级方向：旧形状既取不出命令、也不许被当成答案
-        ⇒ `tool_of` 给 `None`、`looks_like_tool` 给真 ⇒ 重问。
+        """严格模式的降级方向：旧形状既取不出命令、也不许被当成答案 ⇒ 重问。
 
-        丢的是一回合（任务期间 prompt 不限量、不碰红线），换来的是解析只有一种形状。
-        若哪一条被判成"取不出命令 = 这是答案"，就会出现提问与提交同时哑火
-        （`_answer_task` 跳过工具回复）—— 那才是事故。
+        丢的是一回合（任务期间 prompt 不限量、不碰红线），换来的是解析只有一种形状。若哪一条
+        被判成"取不出命令 = 这是答案"，提问与提交就会同时哑火（`_answer_task` 跳过工具回复）。
         """
         for reply in (
             "<tool>ls -la</tool>",
@@ -328,10 +322,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_broken_tool_tag_yields_no_command(self):
         """凑不齐的标签 ⇒ 没有命令可发。别把半截标签当命令丢进沙盒。
 
-        后面几条是隐式子路径 ③′：调用是完整的，但工具给不出命令
-        （`SOP2Prompt` / 未知工具 / 缺参数）。它们与"畸形"落同一个出口：重问。
-        `SOP2Prompt` 那条的形状是合法的（声明 `name` + `sop`），
-        "给不出命令"与"调用作废"由此分家：前者照旧重问，后者见
+        后面几条是隐式子路径 ③′：调用完整、工具给不出命令（`SOP2Prompt` / 未知工具 / 缺参数），
+        与"畸形"落同一个出口：重问。`SOP2Prompt` 那条的形状是合法的（声明 `name` + `sop`），
+        "给不出命令"与"调用作废"由此分家 —— 后者见
         `AgentToolCallTest.test_sop2prompt_stores_the_flow_and_yields_no_command`。
         """
         replies = (
@@ -353,13 +346,11 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_tool_that_yields_no_command_is_asked_again(self):
         """③′：工具调用成了、但工具不产出命令 ⇒ 重问（既不提交、也不发命令）。
 
-        `SOP2Prompt` 是最典型的一个 —— 它当回合没有别的回执，而下一轮 prompt 里
-        那段「沉淀的 SOP」就是"调用成功了"的凭证（它自己看得见）。
-        沉淀与作答分家：这条回复只沉淀、没作答 ⇒ SOP 照样落库
-        （`assertEqual(AGENT.sop, …)` 那一行就是那件事），丢的只是那一回合（重问）。
-        "沉淀 + 同轮作答"那条路见 `test_sinking_the_sop_rides_along_with_the_answer`。
-        这条路径不会活锁：任务期间 prompt 不限量不计数（接口文档 L198），
-        而出口有"LLM 改口 / `code 2` 带来的纠错段 / 它看见 SOP 段"三条。
+        `SOP2Prompt` 最典型：它当回合没有别的回执，下一轮 prompt 里那段「沉淀的 SOP」就是
+        "调用成功了"的凭证（它自己看得见）。它只沉淀、没作答 ⇒ SOP 照样落库（`assertEqual(AGENT.sop, …)`
+        那一行就是那件事），丢的只是那一回合。这条路径不会活锁：任务期间 prompt 不限量不计数
+        （接口文档 L198），出口有"LLM 改口 / 纠错段 / 它看见 SOP 段"三条；"沉淀 + 同轮作答"
+        见 `test_sinking_the_sop_rides_along_with_the_answer`。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -376,14 +367,12 @@ class TaskChannelTest(unittest.TestCase):
     def test_sinking_the_sop_rides_along_with_the_answer(self):
         """沉淀 SOP 不许独占一回合 —— 它单独来一趟就得重问一次，等于白花一回合。
 
-        任务是按回合计分的（`5 × 标准回合数 / (完成回合 − 接取回合)`），所以白花一回合
-        直接掉分。代码侧支持"同一条回复里既沉淀又作答"：工具块沉淀、块外的
-        `<answer>` 作答（`tool_of` 只认第一个块、`answer_of` 先把它整段挖掉再扫）⇒
-        `task_channel` 走判据 ⑤（`("", "")`，不是 ③′ → ⑥ 的重问）；同时 `plan` 里
-        `_answer_task` 独立用同一个谓词取答案，当回合就 `submitAnswer`。
-        ⇒ 唯一的阻塞是 prompt 措辞（那条用例见
-        `ChatPromptTest.test_the_sop_round_must_carry_the_answer`）。
-        防污染的两道闸门见 `test_a_literal_in_the_sop_does_not_poison_the_submitted_answer`。
+        任务是按回合计分的（`5 × 标准回合数 / (完成回合 − 接取回合)`），白花一回合直接掉分。
+        代码侧支持"同一条回复里既沉淀又作答"：工具块沉淀、块外的 `<answer>` 作答（`tool_of`
+        只认第一个块、`answer_of` 先把它整段挖掉再扫）⇒ 走判据 ⑤（`("", "")`）而不是 ③′ → ⑥；
+        同时 `plan._answer_task` 独立用同一个谓词取答案、当回合就 `submitAnswer`。唯一的阻塞是
+        prompt 措辞（见 `ChatPromptTest.test_the_sop_round_must_carry_the_answer`），防污染的两道
+        闸门见 `test_a_literal_in_the_sop_does_not_poison_the_submitted_answer`。
         """
         reply = (
             "<tool><tool_name>SOP2Prompt</tool_name>"
@@ -404,15 +393,13 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_literal_in_the_sop_does_not_poison_the_submitted_answer(self):
         """端到端的污染守门员。
 
-        SOP 正文里写着"答案要写成 `<answer>假答案</answer>` 的形状"—— 不设防的话会把
-        这个示例当成答案交上去，而日志上完全看不出来（任务行只打原文）。两道闸门各管一头：
+        SOP 正文里写着"答案要写成 `<answer>假答案</answer>` 的形状"—— 不设防就会把示例当成
+        答案交上去，而日志上完全看不出来（任务行只打原文）。两道闸门：① `answer_of` 先挖掉整个
+        工具块 ⇒ 块内字面量够不着（交的是块外的 `晴 26 度`）；② `SOP2Prompt` 入库前挖掉成对的
+        `<answer>` 段 ⇒ 存下来的 SOP 不带这对串进后续 prompt。
 
-        ① `answer_of` 先挖掉整个工具块 ⇒ 块内那些字面量够不着（交的是块外的 `晴 26 度`）；
-        ② `SOP2Prompt` 入库前挖掉成对的 `<answer>` 段 ⇒ 存下来的 SOP 也不会带着这对串
-        进后续每一份 prompt（`assertEqual(AGENT.sop, …)` 就是那件事）。
-
-        反向验证：① 退成"扫整条回复" ⇒ 交的是 `假答案`（挂）；② 去掉 `strip_answers` ⇒
-        存下来的 SOP 里带着 `假答案`（挂）。
+        反向验证：① 退成"扫整条回复" ⇒ 交的是 `假答案`（挂）；② 去掉 `strip_answers` ⇒ 存下来的
+        SOP 里带着 `假答案`（挂）。
         """
         reply = (
             "<tool><tool_name>SOP2Prompt</tool_name>"
@@ -442,14 +429,12 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertIn("先 ls 再算", task_channel(turn)[0])
 
     def test_the_singleton_carries_the_sop_across_turns(self):
-        """单实例的接线证据：开拓者这一回合存下的 SOP，下一回合的提问里带着。
+        """单实例的接线证据：这一回合存下的 SOP，下一回合的提问里带着。
 
-        两回合之间没有任何东西被传过去 —— 上一回合的 `llm_resp` 没进 payload、
-        也没有返回值被接收（`task_channel` 的返回值由 `app` 直接拼进报文）。
-        能把它接起来的只有"两次调用用的是同一个 `AGENT`"，所以这条用例就是
-        `from ..agent import AGENT` 那个注入点的守门员：
-        把它改回"每次新建一个 `Agent()`"，这里立刻挂（症状在实盘上 = 永远学不会，
-        而日志上完全看不出来：每回合的 SOP 都恰好是空的）。
+        两回合之间没有任何东西被传过去（上一回合的 `llm_resp` 没进 payload、也没有返回值被
+        接收 —— `task_channel` 的返回值由 `app` 直接拼进报文），能接起来的只有"两次调用用的是
+        同一个 `AGENT`"。所以它是 `from ..agent import AGENT` 那个注入点的守门员：改回"每次新建
+        一个 `Agent()`"这里立刻挂（实盘症状 = 永远学不会，而日志上看不出来：SOP 每回合都是空的）。
         """
         task_channel(
             self._turn(
@@ -465,10 +450,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_broken_tool_reply_is_asked_again(self):
         """半截工具调用要落回"重问"，不能两边都哑火。
 
-        `<tool` 有开无闭时取不出命令 ⇒ 判据 3 不命中；若再按"取不出命令 = 这是答案"
-        落到判据 5，就会 `("", "")` —— 而 `_answer_task` 又跳过工具回复，
-        于是提问与提交同时哑火。`llm_resp` 若粘住，下一回合还是同一条畸形回复、
-        永久空转，且日志上什么都看不出来（"提问：无 ｜ 提交：有"看着完全正常）。
+        `<tool` 有开无闭 ⇒ 取不出命令、判据 3 不命中；若再按"取不出命令 = 这是答案"落到判据 5，
+        就会 `("", "")`，而 `_answer_task` 又跳过工具回复 ⇒ 提问与提交同时哑火；`llm_resp` 若
+        粘住就永久空转，日志上什么都看不出来（"提问：无 ｜ 提交：有"看着完全正常）。
         """
         prompt, execute = task_channel(self._turn(self.TASK, "<tool ls -la"))
         self.assertEqual(execute, "")
@@ -484,10 +468,9 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn(output, messages[-1]["content"])
 
     def test_the_reply_is_remembered_even_on_command_rounds(self):
-        """发命令那一轮也记回复（`AGENT.hear` 的存在理由）：③ 那轮没有
-        prompt，但它的工具调用必须进会话 —— 否则回灌那一轮 LLM 看见的是
-        "题目 → 莫名其妙的结果"，它自己要的命令凭空消失。粘住的 `llmResp`
-        顺带被去重（assistant 只出现一次）。
+        """发命令那一轮也记回复（`AGENT.hear` 的存在理由）：③ 那轮没有 prompt，但它的工具
+        调用必须进会话 —— 否则回灌那轮 LLM 看见的是"题目 → 莫名其妙的结果"，它自己要的命令
+        凭空消失。粘住的 `llmResp` 顺带被去重（assistant 只出现一次）。
         """
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
@@ -561,10 +544,8 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_summary_reply_round_goes_back_to_the_task(self):
         """压缩回复到达、又没有别的回执 ⇒ 判据按"没回复"走 → ⑥ 重问。
 
-        压缩只跟在 ③ 命令轮后面（答案轮不压缩，压缩与 `<answer>` 互斥）
-        ⇒ 命令轮与压缩轮交替：压缩请求的回复下一轮到达，这一轮把任务对话推回去
-        （nudge）。这一轮不是压缩轮 —— nudge 是模型请求，闸门不落；
-        摘要照样进（`【历史摘要】` 可见）。
+        压缩只跟在 ③ 命令轮后面（答案轮不压缩，压缩与 `<answer>` 互斥）⇒ 命令轮与压缩轮交替。
+        这一轮不是压缩轮 —— nudge 是模型请求、闸门不落；摘要照样进（`【历史摘要】` 可见）。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问
         task_channel(
@@ -584,9 +565,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_result_already_in_hand_blocks_the_next_command(self):
         """沙盒刚交作业这一轮，绝不能再发命令 —— 判据 2 必须压在判据 3 前面。
 
-        动机是 `llmResp` 可能粘住：文档给 `lastCmdResult` 写了"未发命令时为空字符串"
-        （L33）、对 `llmResp` 一个字没写（L31）。万一它还停在上轮那条 `<tool>…</tool>`
-        上，判据 3 先命中就会同一条命令反复丢进沙盒。附带挡住"结果延迟两回合"。
+        动机是 `llmResp` 可能粘住：文档给 `lastCmdResult` 写了"未发命令时为空字符串"（L33）、
+        对 `llmResp` 一个字没写（L31）。它还停在上轮那条 `<tool>…</tool>` 上的话，判据 3 先命中
+        就会把同一条命令反复丢进沙盒。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -602,10 +583,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_result_and_a_rejection_come_back_together(self):
         """沙盒结果与"答错了"是同一个分支的两面，不能互相吞掉。
 
-        `errors` 说的是本轮产生的错误，与我们上轮发了什么并不同步：第 R 轮发命令
-        （那轮没有 `prompt`）⇒ 第 R+1 轮 `cmd_result` 非空，而 `errors` 里的 `code 2`
-        说的是更早那次 `submitAnswer` 的判决 —— 两者同时命中是真实可达的。
-        把纠错做成独立分支就会把它整段吞掉，所以它是修饰符。
+        `errors` 说的是本轮产生的错误，与我们上轮发了什么并不同步：第 R 轮发命令（那轮没有
+        `prompt`）⇒ 第 R+1 轮 `cmd_result` 非空，而 `code 2` 说的是更早那次 `submitAnswer` 的
+        判决 —— 两者同时命中是真实可达的。把纠错做成独立分支就会把它整段吞掉，所以它是修饰符。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -623,12 +603,12 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn(self.RETRY_MARK, users[-1])
 
     def test_a_rejection_blames_even_when_the_answer_is_not_in_hand(self):
-        """判据 ④ 不要求手上真有那个答案：判题器给了错误提示就要装进提示词，
-        绝不落「请继续。」（反馈-only 的重问里没有答案文本，无从踩"拿带标签的原文
-        当答案骂"的雷；会话里最后一条 assistant 正是它上一次说过的话，反馈紧跟着落）。
+        """判据 ④ 不要求手上真有那个答案：判题器给了错误提示就要装进提示词，绝不落「请继续。」
 
-        仍然不骂的只剩取得了命令的工具回复：它在判据 3 就走了 —— 有 error 2
-        也不该妨碍"该跑的命令照跑"；这一轮的反馈落空没关系，code 2 会连着报几轮。
+        反馈-only 的重问里没有答案文本，无从踩"拿带标签的原文当答案骂"的雷；会话里最后一条
+        assistant 正是它上一次说过的话，反馈紧跟着落。仍不骂的只剩取得了命令的工具回复 ——
+        它在判据 3 就走了（有 error 2 也不该妨碍"该跑的命令照跑"；这轮反馈落空没关系，
+        code 2 会连着报几轮）。
         """
         nobody_to_blame = task_channel(self._turn(self.TASK, errors=(Error(2, "x"),)))
         self.assertIn(self.RETRY_MARK, nobody_to_blame[0], "反馈照样装进提示词（第 47 步）")
@@ -638,9 +618,8 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertIn(self.RETRY_MARK, broken[0], "半条命令不妨碍把反馈带到")
 
-        # 独立会话：这轮走 ③ ⇒ prompt 是压缩请求，而压缩原料是原始上下文全文
-        # —— 不清会话的话，上面两个 case 的纠错块会留在会话里、被原料带出来，
-        # "不骂"就断言不出来了。
+        # 独立会话：这轮走 ③ ⇒ prompt 是压缩请求，而原料是原始上下文全文 —— 不清会话的话
+        # 上面两个 case 的纠错块会被原料带出来，"不骂"就断言不出来了。
         AGENT.reset()
         replied_a_command = task_channel(
             self._turn(
@@ -656,10 +635,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_the_retry_blames_exactly_what_we_submitted(self):
         """纠错段里带的必须是"我们交上去的那一份"，不是回复原文。
 
-        交的是解包后的 `晴 26 度`，骂的却是 `<answer>晴 26 度</answer>` 的话，
-        LLM 会以为自己交了一堆标签 —— 它会去改一个并不存在的问题。
-        两处（`_answer_task` 提交、判据 ④ 回灌）共用 `answer_of` 就是为了这件事，
-        这条用例把它钉死：骂的 = 交的。
+        交的是解包后的 `晴 26 度`、骂的却是 `<answer>晴 26 度</answer>` 的话，LLM 会以为
+        自己交了一堆标签、去改一个并不存在的问题。两处（`_answer_task` 提交、判据 ④ 回灌）
+        共用 `answer_of` 就是为了这件事，这条用例把它钉死：骂的 = 交的。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -676,22 +654,20 @@ class TaskChannelTest(unittest.TestCase):
     def test_the_two_call_sites_agree_on_what_the_answer_is(self):
         """期望值由测试自己算 —— 两个调用点必须落在同一份上。
 
-        上一份答案的交出（`plan` → `_answer_task`）与它被骂时回灌的（判据 ④）
-        在判题器那侧是同一件事："你上次答的 X 不对"里的 X，就是我们上次交的。
-        两处各写一份判据的后果不是崩溃，而是 LLM 去改一个并不存在的问题
-        （它交的 `晴 26 度` 被骂成 `<answer>晴 26 度</answer>`，于是它开始往标签上使劲）。
+        上一份答案的交出（`plan` → `_answer_task`）与它被骂时回灌的（判据 ④）在判题器那侧是
+        同一件事："你上次答的 X 不对"里的 X 就是我们上次交的。两处各写一份判据的后果不是崩溃，
+        而是 LLM 去改一个并不存在的问题（交的 `晴 26 度` 被骂成带标签的原文，于是它往标签上使劲）。
 
-        这里对每个回复独立地用 `answer_of` 算出期望值，再去比两个调用点的产出 ——
-        所以 `answer_of` 若被搬进 `Agent` 自成一派，提交与回灌至少有一边会与它分家，
-        这里立刻挂。
+        这里对每个回复独立地用 `answer_of` 算期望值、再去比两个调用点的产出 —— 所以 `answer_of`
+        若被搬进 `Agent` 自成一派，提交与回灌至少有一边会与它分家，这里立刻挂。
         """
         for reply in (
             "<answer>晴 26 度</answer>",
             "晴 26 度",
             "  晴 26 度\n",
             "<answer>晴 26 度</answer>\n补充一句",
-            #: SOP 正文里的字面量 `<answer>` 不算答案（工具块先整段挖掉），
-            #: 真答案在块外 —— 这条同时钉"两个调用点都别去认块内那份"
+            # SOP 正文里的字面量 `<answer>` 不算答案（工具块先整段挖掉），真答案在块外
+            # —— 这条同时钉"两个调用点都别去认块内那份"
             "<tool><tool_name>SOP2Prompt</tool_name>"
             "<tool_param><name>答题格式</name>"
             "<sop>答案写成 <answer>假答案</answer> 的形状</sop></tool_param></tool>"
@@ -715,9 +691,8 @@ class TaskChannelTest(unittest.TestCase):
                     prompt = task_channel(
                         self._turn(self.TASK, llm_resp=reply, errors=(Error(2, "答案不正确"),))
                     )[0]
-                    #: 钉纠错块整块原文：会话里可以有带标签的 assistant 消息（那是它
-                    #: 真说过的话），但骂的必须是交上去的那一份（`answer_of` 解包后的），
-                    #: 而且后面挂着判题器自己的原话。
+                    # 钉纠错块整块原文：会话里可以有带标签的 assistant 消息（那是它真说过的
+                    # 话），但骂的必须是交上去的那一份（`answer_of` 解包后的），后面挂着判题器原话。
                     users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
                     self.assertIn(
                         f"【你上一次提交的答案被判定为不正确】\n{expected}"
@@ -728,9 +703,8 @@ class TaskChannelTest(unittest.TestCase):
     def test_the_verdict_rides_back_verbatim(self):
         """判题器说"哪里不对"的原话（`errorCode 2` 的 `description`）要回到 LLM 手里。
 
-        只回灌"我们自己上次交的答案"的话，LLM 知道错了、不知道错在哪，
-        只能把同一份答案再交一遍。那句话是黑盒里最接近"哪一项不对"的信息，
-        只进日志不进 prompt 就等于白拿。
+        只回灌"我们自己上次交的答案"的话，LLM 知道错了、不知道错在哪，只能把同一份答案再交
+        一遍。那句话是黑盒里最接近"哪一项不对"的信息，只进日志不进 prompt 就等于白拿。
         """
         prompt, _ = task_channel(
             self._turn(
@@ -763,13 +737,12 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertEqual(execute, "")
 
     def test_the_error_feedback_enters_the_prompt_even_without_the_answer(self):
-        """答案轮之后判题器报 `code 2`、而这轮回复里拿不到答案原文（`llmResp`
-        文档没写 ⇒ 必须按可能不粘设计）⇒ 错误反馈照样装进提示词，
+        """答案轮之后判题器报 `code 2`、而这轮回复里拿不到答案原文 ⇒ 错误反馈照样装进提示词，
         绝不落成一句「请继续。」—— 那等于没告诉它答案错了。
 
-        会话里最后一条 assistant 正是它上一次的答案，反馈紧跟着落，语义完整。
-        判题器没给 `description` ⇒ 纠错块的外壳（"被判定为不正确／请重新作答"）
-        自己就是事实陈述，占位一句即可。
+        `llmResp` 文档没写 ⇒ 必须按可能不粘设计。会话里最后一条 assistant 正是它上一次的答案，
+        反馈紧跟着落，语义完整；判题器没给 `description` 时，纠错块的外壳（"被判定为不正确／
+        请重新作答"）自己就是事实陈述，占位一句即可。
         """
         task_channel(self._turn(self.TASK, self.ANSWER))  # ⑤ 答案轮：只交答案（prompt 空）
         prompt, execute = task_channel(
@@ -800,10 +773,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_command_never_rides_with_a_task_question(self):
         """任务提问不与命令同轮。
 
-        命令轮的 prompt 若是任务提问，LLM 会拿着过期结果作答 ⇒ 又要一遍同一条命令
-        ⇒ 活锁。命令轮允许携带压缩请求（它的回复内容路由进摘要、永不当任务材料，
-        活锁的成因对它不成立）；所以契约钉成：
-        `executeCmd` 非空 ⇒ `prompt` 为空或是压缩请求（带指令标记）。
+        命令轮的 prompt 若是任务提问，LLM 会拿着过期结果作答 ⇒ 又要一遍同一条命令 ⇒ 活锁。
+        命令轮允许携带压缩请求（它的回复路由进摘要、永不当任务材料，活锁的成因对它不成立）
+        ⇒ 契约钉成：`executeCmd` 非空 ⇒ `prompt` 为空或是压缩请求（带指令标记）。
         """
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"

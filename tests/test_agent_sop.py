@@ -19,9 +19,8 @@ from coregeek.agent.tools import sop  # noqa: E402
 class SopStateTest(unittest.TestCase):
     """SOP 流程表 `{流程名: 正文}`（同名覆盖、异名追加）—— 状态住在 `Agent` 实例上。
 
-    用每条用例自己的新实例（不用包根单例）：状态在实例上 ⇒ 天然隔离，这也顺带把
-    "状态确实在实例上而不是某个模块里"钉住了（见 `test_a_fresh_agent_starts_with_no_sop` /
-    `test_the_sop_never_leaks_between_instances`）。
+    用每条用例自己的新实例（不用包根单例）：状态在实例上 ⇒ 天然隔离，顺带把"状态确实
+    在实例上而不是某个模块里"钉住（见 `test_a_fresh_agent_starts_with_no_sop`）。
     """
 
     def setUp(self) -> None:
@@ -63,9 +62,8 @@ class SopStateTest(unittest.TestCase):
     def test_each_instance_keeps_its_own_tool_table(self):
         """工具表也是实例的：`SOP2Prompt` 那一项是绑定方法，钉在各自的实例上。
 
-        共享一张模块级工具表、而表里那个函数去写"某个全局 SOP"是很自然的退化写法，
-        症状是"两个 Agent 的 SOP 互相覆盖" —— 这条用例用走工具表的路径（不是直接
-        调方法）把它挡住。
+        退化写法是共享一张模块级工具表、表里那个函数去写"某个全局 SOP"（症状：两个
+        Agent 的 SOP 互相覆盖）—— 这条走工具表路径、不直接调方法，把它挡住。
         """
         other = Agent()
         self.agent.tool_call("SOP2Prompt", [("name", "流程"), ("sop", "甲走工具表")])
@@ -74,24 +72,23 @@ class SopStateTest(unittest.TestCase):
         self.assertEqual(other.sop, {"流程": "乙走工具表"})
 
     def test_reset_clears_this_instance(self):
-        """`reset()` 是整个测试文件赖以隔离的那个机制 —— 它必须真的清掉自己
-        （`AGENT` 是模块级的，`HandleTest` / `TaskChannelTest` 的 `setUp` 全靠它才不跨用例串味）。
-        两种退化写法，这条各挡一半：① 不生效（`return` 掉）⇒ 上一个用例存的流程会
-        灌进下一个用例的 prompt；② 清错了对象（如 `Agent()._sop = {}`）⇒ 看着像清了，
-        自己身上那份一点没动。
+        """`reset()` 是隔离机制本身，必须真的清掉自己（`AGENT` 是模块级的，别处的
+        `setUp` 全靠它才不跨用例串味）。
+
+        两种退化各挡一半：① 不生效（`return` 掉）⇒ 上个用例的流程灌进下个用例的
+        prompt；② 清错了对象（如 `Agent()._sop = {}`）⇒ 看着像清了，自己那份没动。
         """
         self.agent.SOP2Prompt("甲", "要清掉的东西")
         self.agent.reset()
         self.assertEqual(self.agent.sop, {})
         self.assertNotIn("要清掉的东西", self.agent.chat("题目"))
-        #: 复位之后还能重新存（别把 reset 写成"把实例锁死"）
+        # 复位之后还能重新存（别把 reset 写成"把实例锁死"）
         self.agent.SOP2Prompt("乙", "第二版")
         self.assertIn("第二版", self.agent.chat("题目"))
 
     def test_an_overlong_flow_is_truncated_and_says_so(self):
-        """超上限 ⇒ 保头截断（上限是单条流程的），而且日志同时报
-        "收到多少 / 存了多少"、带流程名 —— 静默截断会让后来人以为 LLM 只写了
-        1000 字。上限存在的理由是硬约束 5（prompt 每回合都发）。
+        """超上限 ⇒ 保头截断（上限是单条流程的），日志同时报"收到多少 / 存了多少"、
+        带流程名 —— 静默截断会让后来人以为 LLM 只写了 1000 字。上限的理由是硬约束 5。
         """
         with self.assertLogs(sop.__name__, level="INFO") as caught:
             self.agent.SOP2Prompt("长流程", "长" * 9000)
@@ -102,8 +99,8 @@ class SopStateTest(unittest.TestCase):
         self.assertIn("长流程", line)
 
     def test_the_flow_count_is_capped_and_the_eviction_is_logged(self):
-        """条数超 `SOP_FLOWS_MAX` ⇒ 丢最旧的（新经验优先），而且日志点名丢了谁 ——
-        否则"怎么少了一条"无从查起。与单条的 `SOP_MAX` 合起来是流程表的防膨胀机制。"""
+        """条数超 `SOP_FLOWS_MAX` ⇒ 丢最旧的（新经验优先），日志点名丢了谁 ——
+        否则"怎么少了一条"无从查起。与 `SOP_MAX` 合起来是流程表的防膨胀机制。"""
         for i in range(sop.SOP_FLOWS_MAX + 1):
             self.agent.SOP2Prompt(f"流程{i}", f"做法{i}")
         self.assertEqual(len(self.agent.sop), sop.SOP_FLOWS_MAX)
@@ -149,14 +146,12 @@ class SopStateTest(unittest.TestCase):
     def test_the_logger_name_does_not_depend_on_the_agent(self):
         """SOP 那一行的 logger 名保持 `coregeek.agent.tools.sop`。
 
-        名字变了就会连带改三份东西：`app._log` 的字节表、"唯一一条不在 `app` 名下的日志"
-        那条守卫用例、`CLAUDE.md` 硬约束 5。这条用例是那个取舍的守门员
-        （把 `store` 挪进 `agent/agent.py` 就会在这里挂）。
+        名字变了会连带改三份东西：`app._log` 的字节表、"唯一一条不在 `app` 名下的日志"
+        那条守卫、`CLAUDE.md` 硬约束 5 —— 把 `store` 挪进 `agent/agent.py` 就会在这里挂。
         """
-        #: 断的是 `LOGGER` 的名字（不是模块的 `__name__` —— 那个是同义反复）：
-        #: 它必须与 `app._log` 的字节表、`CLAUDE.md` 硬约束 5 里写的那个字面量一致。
-        #: 把 `LOGGER` 挪进 `agent/agent.py` ⇒ 这里 `AttributeError`；
-        #: 只改名字 ⇒ 断言的字符串对不上。两种都挂。
+        # 断的是 `LOGGER` 的名字（不是模块的 `__name__`，那是同义反复）：它得与 `app._log`
+        # 的字节表、`CLAUDE.md` 硬约束 5 里那个字面量一致 —— 把 `LOGGER` 挪走 ⇒ 这里
+        # `AttributeError`；只改名字 ⇒ 断言的字符串对不上。两种都挂。
         self.assertEqual(sop.LOGGER.name, "coregeek.agent.tools.sop")
 
 
