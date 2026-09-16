@@ -70,6 +70,14 @@ def main():
                     except subprocess.TimeoutExpired:process.kill();process.wait()
             log_text=(Path(folder)/(side+'.log')).read_text(encoding='utf-8')
             assert 'upgrade_itinerary' in log_text and 'weapon_readiness' in log_text
+            catalogs=[json.loads(line.split('task_event ',1)[1]) for line in log_text.splitlines()
+                      if 'task_event ' in line and '"kind":"trading_catalog"' in line]
+            assert len(catalogs)==1
+            catalog=json.loads(catalogs[0]['content']['text'])
+            assert catalog['vendorShopList']['items']==board(side)['vendorShopList']
+            assert catalog['weaponShopList']['items']==board(side)['weaponShopList']
+            assert catalog['weaponShopList']['positions']==[board(side)['mapInfo']['zones'][0]['pos']]
+            rows[-1]['trading_catalog']=catalog
     report={'source_commit':source,'archive_sha256':sha,'passed':True,'cases':rows,
             'scope':'Actual archive main3 HTTP; independent synthetic mirrored board and local buy/use settlement, not official platform PASS'}
     output.parent.mkdir(parents=True,exist_ok=True);output.write_text(json.dumps(report,indent=2)+'\n',encoding='utf-8')

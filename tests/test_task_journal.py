@@ -22,6 +22,53 @@ def request(round_no, **fields):
 
 
 class TaskJournalTests(unittest.TestCase):
+    def test_trading_catalog_lists_observed_positions_prices_and_changes_only(self):
+        journal=TaskJournal()
+        req=request(1,vendorShopList=[{'name':'iron','price':3}],
+                    weaponShopList=[{'name':'WeaponUpgradeVoucher1','price':100}],
+                    mapInfo={'zones':[{'neutralType':'vendor','pos':{'x':20,'y':15}},
+                                      {'neutralType':'weaponShop','pos':{'x':22,'y':17}}]})
+        before=deepcopy(req)
+        rows=journal.observe(req,{})
+        event=next(e for e in rows if e['kind']=='trading_catalog')
+        data=json.loads(event['content']['text'])
+        self.assertEqual(data['vendorShopList']['items'],[{'name':'iron','price':3}])
+        self.assertEqual(data['weaponShopList']['positions'],[{'x':22,'y':17}])
+        self.assertEqual(req,before)
+        req['roundNo']=2;self.assertEqual(journal.observe(req,{}),[])
+        req['roundNo']=3;req['vendorShopList'][0]['price']=5
+        self.assertEqual([e['kind'] for e in journal.observe(req,{})],['trading_catalog'])
+        missing=journal.observe(request(4),{})
+        self.assertFalse(json.loads(missing[0]['content']['text'])['vendorShopList']['field_present'])
+        self.assertEqual(journal.observe(request(5),{}),[])
+
+    def test_trading_catalog_distinguishes_missing_empty_and_invalid(self):
+        journal=TaskJournal()
+        rows=journal.observe(request(1,vendorShopList=[]),{})
+        data=json.loads(rows[0]['content']['text'])
+        self.assertEqual(data['vendorShopList']['item_count'],0)
+        self.assertTrue(data['vendorShopList']['list_observed'])
+        self.assertFalse(data['weaponShopList']['field_present'])
+        self.assertIsNone(data['weaponShopList']['item_count'])
+        rows=journal.observe(request(2,vendorShopList=[],weaponShopList=[{'name':'unknown','price':'100'}]),{})
+        data=json.loads(rows[0]['content']['text'])
+        item=data['weaponShopList']['items'][0]
+        self.assertIsNone(item['price']);self.assertEqual(item['observed_price_text'],'100')
+
+    def test_trading_catalog_is_bounded_and_keeps_new_games_separate(self):
+        journal=TaskJournal()
+        quote=[{'name':'item'+str(i),'price':i} for i in range(80)]
+        req=request(2,weaponShopList=quote)
+        event=journal.observe(req,{},stream='a')[0]
+        data=json.loads(event['content']['text'])
+        self.assertEqual(data['weaponShopList']['item_count'],80)
+        self.assertEqual(len(data['weaponShopList']['items']),64)
+        self.assertTrue(data['weaponShopList']['items_truncated'])
+        self.assertLessEqual(len(event['content']['text']),8300)
+        self.assertEqual(journal.observe({**req,'roundNo':3},{},stream='a'),[])
+        self.assertTrue(journal.observe(req,{},stream='b'))
+        self.assertTrue(journal.observe({**req,'roundNo':1},{},stream='a'))
+
     def test_question_model_tool_answer_and_end_are_visible_without_inferred_success(self):
         journal = TaskJournal()
         sequence = [

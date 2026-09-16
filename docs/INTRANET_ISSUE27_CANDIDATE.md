@@ -20,6 +20,10 @@
 
 新控制台 `task_event` 的 `upgrade_itinerary` 行记录商店/小贩数量、可用金币与购物状态。重点看：
 
+`trading_catalog` 行额外记录两类中立单位的实际坐标，以及 `vendorShopList`、`weaponShopList` 的商品名称、报价、商品总数。首次有观测和内容改变时输出；列表缺失、非法类型、空列表分别标记，不用内置价格替代平台报价。单类保留前64种商品、16个坐标，超过上限明确标记截断；控制台该事件最多8192字符，正常官方商品数量可完整显示。
+
+可用 `Select-String -Path .\teamA.log -Pattern 'trading_catalog|upgrade_itinerary'` 提取交易信息。目录快照不代表已经成交，实际购买仍看buy动作、金币及下一轮背包。
+
 | reason/phase | 含义 |
 |---|---|
 | weapon_shop_not_observed | 本轮地图没有weaponShop；不能据此断言全地图永久没有商店 |

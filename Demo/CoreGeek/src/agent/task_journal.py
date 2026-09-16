@@ -16,6 +16,41 @@ TEXT_LIMIT = 1200
 MAX_STREAMS = 8
 
 
+def trading_catalog(request, include_missing=False):
+    """Observed prices and merchant positions only, not a synthetic catalog."""
+    info=request.get('mapInfo')
+    zones=info.get('zones') if isinstance(info,dict) else None
+    zones_observed=isinstance(zones,list)
+    zones=zones if zones_observed else []
+    if not include_missing and not any(key in request for key in ('vendorShopList','weaponShopList')) and not any(
+            isinstance(z,dict) and z.get('neutralType') in ('vendor','weaponShop') for z in zones):
+        return None
+    result={'currency':'gold','location_source':'mapInfo.zones','locations_observed':zones_observed}
+    for kind,key,label in [('vendor','vendorShopList','小贩：收购矿石'),
+                           ('weaponShop','weaponShopList','武器商店：出售商品')]:
+        raw=request.get(key);items=[]
+        for item in raw[:64] if isinstance(raw,list) else []:
+            if not isinstance(item,dict):
+                items.append({'invalid_item_type':type(item).__name__});continue
+            name=item.get('name');price=item.get('price')
+            entry={'name':name[:120] if isinstance(name,str) else None,
+                   'price':price if type(price) is int else None}
+            if isinstance(name,str) and len(name)>120:entry['name_truncated']=True
+            if type(price) is not int:
+                entry['invalid_price_type']=type(price).__name__
+                if isinstance(price,str):entry['observed_price_text']=price[:80]
+            items.append(entry)
+        positions=[z.get('pos') for z in zones if isinstance(z,dict) and z.get('neutralType')==kind]
+        positions=[{'x':p.get('x'),'y':p.get('y')} for p in positions if isinstance(p,dict)
+                   and type(p.get('x')) is int and type(p.get('y')) is int]
+        result[key]={'meaning':label,'merchant_type':kind,'positions':positions[:16],
+            'positions_count':len(positions),'positions_truncated':len(positions)>16,
+            'field_present':key in request,'list_observed':isinstance(raw,list),
+            'item_count':len(raw) if isinstance(raw,list) else None,'items':items,
+            'items_truncated':isinstance(raw,list) and len(raw)>64}
+    return result
+
+
 def excerpt(value, limit=TEXT_LIMIT):
     """Redact before hashing/truncation; retain both ends of long results."""
     value = clean(value)
@@ -66,7 +101,15 @@ class TaskJournal:
                          'continuity': 'reset' if reset else 'gap' if gap else
                                        'first_observation' if first else 'consecutive',
                          'attribution': 'observed_context_only_not_official_request_id',
-                         'content': excerpt(content, max(self.text_limit, 4096) if kind == 'task_outcome_summary' else self.text_limit)})
+                         'content': excerpt(content, max(self.text_limit, 8192) if kind == 'trading_catalog' else
+                                            max(self.text_limit, 4096) if kind == 'task_outcome_summary' else self.text_limit)})
+
+        catalog=trading_catalog(request,include_missing='trading_catalog' in previous['fields'])
+        if catalog is not None:
+            signature=excerpt(catalog)['sha256']
+            if signature!=previous['fields'].get('trading_catalog'):
+                add('trading_catalog',catalog)
+            previous['fields']['trading_catalog']=signature
 
         question = request.get('phaseTask')
         question = question if isinstance(question, str) else ''
