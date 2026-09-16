@@ -1,0 +1,264 @@
+{
+  "source_commit": "a230a1c0aa4d3550952ed4b57cac1f3d6f738795",
+  "archive_sha256": "440c88307cd71d72dbf5b6547ed157ab540f383e70d3147a60057e604d8fd6b2",
+  "python": "3.11.10 (main, Oct 16 2024, 00:15:32) [MSC v.1929 64 bit (AMD64)]",
+  "scope": "16 actual-package POSTs; sequential public movement settlement only, not official match",
+  "cases": [
+    {
+      "side": "challenger",
+      "round": 391,
+      "commands": {
+        "607": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "ms": 137.83650001278147
+    },
+    {
+      "side": "challenger",
+      "round": 392,
+      "commands": {
+        "601": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "ms": 33.0989999929443
+    },
+    {
+      "side": "challenger",
+      "round": 393,
+      "commands": {
+        "601": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "ms": 34.3836999963969
+    },
+    {
+      "side": "challenger",
+      "round": 394,
+      "commands": {
+        "655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 8,
+              "y": 27
+            }
+          ]
+        }
+      },
+      "ms": 9.044699952937663
+    },
+    {
+      "side": "challenger",
+      "round": 395,
+      "commands": {
+        "655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 7,
+              "y": 27
+            }
+          ]
+        }
+      },
+      "ms": 9.706499986350536
+    },
+    {
+      "side": "challenger",
+      "round": 396,
+      "commands": {
+        "655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 6,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "ms": 23.01530004478991
+    },
+    {
+      "side": "challenger",
+      "round": 397,
+      "commands": {
+        "655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 5,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "ms": 19.69200000166893
+    },
+    {
+      "side": "challenger",
+      "round": 398,
+      "commands": {
+        "655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 4,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "ms": 5.376500019337982
+    },
+    {
+      "side": "defender",
+      "round": 391,
+      "commands": {
+        "10607": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "ms": 138.01519997650757
+    },
+    {
+      "side": "defender",
+      "round": 392,
+      "commands": {
+        "10601": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "ms": 20.109499979298562
+    },
+    {
+      "side": "defender",
+      "round": 393,
+      "commands": {
+        "10601": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "ms": 46.653299999888986
+    },
+    {
+      "side": "defender",
+      "round": 394,
+      "commands": {
+        "10655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 32,
+              "y": 27
+            }
+          ]
+        }
+      },
+      "ms": 23.542400042060763
+    },
+    {
+      "side": "defender",
+      "round": 395,
+      "commands": {
+        "10655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 33,
+              "y": 27
+            }
+          ]
+        }
+      },
+      "ms": 5.295200040563941
+    },
+    {
+      "side": "defender",
+      "round": 396,
+      "commands": {
+        "10655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 34,
+              "y": 26
+            }
+          ]
+        }
+      },
+      "ms": 25.81570000620559
+    },
+    {
+      "side": "defender",
+      "round": 397,
+      "commands": {
+        "10655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 35,
+              "y": 25
+            }
+          ]
+        }
+      },
+      "ms": 24.36480001779273
+    },
+    {
+      "side": "defender",
+      "round": 398,
+      "commands": {
+        "10655": {
+          "action": "move",
+          "targetPos": [
+            {
+              "x": 36,
+              "y": 24
+            }
+          ]
+        }
+      },
+      "ms": 61.56090000877157
+    }
+  ]
+}

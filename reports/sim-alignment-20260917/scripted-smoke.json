@@ -1,0 +1,52 @@
+{
+  "source": "a230a1c0aa4d3550952ed4b57cac1f3d6f738795",
+  "audit_sha256": "b270f8e55930e2291d83204a8f6879f284c934cc90fdcba5945e39da7060fc5c",
+  "python": "3.11.10 (main, Oct 16 2024, 00:15:32) [MSC v.1929 64 bit (AMD64)]",
+  "scope": "Four 260-round scripted integration smokes; no native DSH, no fitness or official PASS claim",
+  "cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "rounds": 260,
+      "terminal": false,
+      "base_hp": 1500,
+      "score": 531,
+      "movement_errors": [],
+      "execution_failures": 0,
+      "max_step_ms": 723.4459000173956
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "rounds": 260,
+      "terminal": false,
+      "base_hp": 1500,
+      "score": 1154,
+      "movement_errors": [],
+      "execution_failures": 0,
+      "max_step_ms": 556.7040000460111
+    },
+    {
+      "seed": 19,
+      "side": "challenger",
+      "rounds": 260,
+      "terminal": false,
+      "base_hp": 1500,
+      "score": 1068,
+      "movement_errors": [],
+      "execution_failures": 0,
+      "max_step_ms": 516.6625999845564
+    },
+    {
+      "seed": 19,
+      "side": "defender",
+      "rounds": 260,
+      "terminal": false,
+      "base_hp": 1500,
+      "score": 835,
+      "movement_errors": [],
+      "execution_failures": 0,
+      "max_step_ms": 466.11729997675866
+    }
+  ]
+}

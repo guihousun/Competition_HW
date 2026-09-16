@@ -1,5 +1,5 @@
 {
-  "commit": "9f6ea52ff860c60f453cc660a8b318caedd1f124",
+  "commit": "a230a1c0aa4d3550952ed4b57cac1f3d6f738795",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -266,9 +266,9 @@
       "source": "submission/server.py"
     },
     {
-      "bytes": 45657,
+      "bytes": 43836,
       "path": "CoreGeek/src/agent/simulator.py",
-      "sha256": "3bb598adac834411615b4606b5e282657d9a87f37c0222cee6c19a69b3cf6be1",
+      "sha256": "ebf889ce2830ff7614c2c0fd54373835e885dfd62c0fb07adfa5ffe5fda5bc43",
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
@@ -344,9 +344,9 @@
       "source": "Demo/CoreGeek/src/agent/tasks.py"
     },
     {
-      "bytes": 18238,
+      "bytes": 18483,
       "path": "CoreGeek/src/agent/taskworld.py",
-      "sha256": "d5afa99b846db2f7cea43b6aac3fee09e1a8ea99c755ae1df5df8f9e7dd26526",
+      "sha256": "f1ac2ab564eb730a70b597148f540e5a2ba15ee4a2703a75b7445b22790ff893",
       "source": "Demo/CoreGeek/src/agent/taskworld.py"
     },
     {
@@ -435,5 +435,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "56935ea3ed24dc0b187080880557ce9be2b96740251cf377ef1e945b8d1cb476"
+  "source_digest": "7ebae0bcf68d9d7dff6123a34dc5a0ab11186e33b5a03740a1dc469251b7da3a"
 }
