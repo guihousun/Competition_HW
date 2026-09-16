@@ -1,5 +1,5 @@
 {
-  "commit": "65b03f995a448035b31c3001e72e5e3ec3ec2c9d",
+  "commit": "8fa062536ecc20ba30d813136d20a6c8559eca8b",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 105634,
+      "bytes": 109058,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "b1e479b7aa346cd2305f30dcbe255e216c013486d6ccd25833ab74152b20086c",
+      "sha256": "3f36a8b4482919b04a28ec0acc8b87475325cec72014cab5834b9d82e51b9fb9",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -120,6 +120,12 @@
       "path": "CoreGeek/src/agent/grid.py",
       "sha256": "d6863d968b251246284a80f2ddeaf8b4a2dc184fd1ec62e58ab866370a43e4aa",
       "source": "Demo/CoreGeek/src/agent/grid.py"
+    },
+    {
+      "bytes": 3714,
+      "path": "CoreGeek/src/agent/item_reference.py",
+      "sha256": "b4805ff8dc71ed3f55b326e9f34bfb5f2534bebe99134681dbf2ba26471dfb61",
+      "source": "Demo/CoreGeek/src/agent/item_reference.py"
     },
     {
       "bytes": 39309,
@@ -242,15 +248,15 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 23987,
+      "bytes": 24292,
       "path": "CoreGeek/src/agent/task_agent.py",
-      "sha256": "491712fd2ba48f56884fb4ea34368eb64b72746d727a0e9e93f23ce9fc087292",
+      "sha256": "c78bc2116ef566cff3e313cc1dc53a3813f159741584e8f09b4a05b37e5cd39a",
       "source": "Demo/CoreGeek/src/agent/task_agent.py"
     },
     {
-      "bytes": 7374,
+      "bytes": 7949,
       "path": "CoreGeek/src/agent/task_answer_contract.py",
-      "sha256": "b89ef3cdfa10f3d55b01625d2a59fc709b51c6521063410cfd2468a881b43ebd",
+      "sha256": "5e3fd39c85c42bf51d75e11116683a838d32f153272825e1403146a9692fd564",
       "source": "Demo/CoreGeek/src/agent/task_answer_contract.py"
     },
     {
@@ -260,9 +266,9 @@
       "source": "Demo/CoreGeek/src/agent/task_context.py"
     },
     {
-      "bytes": 8886,
+      "bytes": 12858,
       "path": "CoreGeek/src/agent/task_journal.py",
-      "sha256": "0e0fbfda907318221b9cde64e3f9ef14b081cebf359b610f798ff0171749ea80",
+      "sha256": "6a1e3f09ee448a5831bd1e3bd38713ade19ac3c47fb527e205feff48c9ac23d5",
       "source": "Demo/CoreGeek/src/agent/task_journal.py"
     },
     {
@@ -272,9 +278,9 @@
       "source": "Demo/CoreGeek/src/agent/task_lifecycle.py"
     },
     {
-      "bytes": 10297,
+      "bytes": 10441,
       "path": "CoreGeek/src/agent/task_progress.py",
-      "sha256": "b85be84da7424f20c6bd1362474dd2851c12f9b3cd80a4cadeb3db7ecdd1c001",
+      "sha256": "35801d7e021ce142f4d3c1226dcf46e3f6d0b766b53ae8d42b569e881d16f020",
       "source": "Demo/CoreGeek/src/agent/task_progress.py"
     },
     {
@@ -284,9 +290,9 @@
       "source": "Demo/CoreGeek/src/agent/task_skills.py"
     },
     {
-      "bytes": 7951,
+      "bytes": 8799,
       "path": "CoreGeek/src/agent/task_tools.py",
-      "sha256": "9016980ad64929fbe0a801492655ff95f0deb70f5d6784229306a28552b736f8",
+      "sha256": "72852fe385a11f88d53a376f9bbe3212ed33ee59f33d6e34a1bda98fe325b627",
       "source": "Demo/CoreGeek/src/agent/task_tools.py"
     },
     {
@@ -338,6 +344,12 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
+      "bytes": 6241,
+      "path": "CoreGeek/src/agent/upgrade_itinerary.py",
+      "sha256": "e7571cb580c958059292723a5db6a395d4cff1bbdfd6d4d07ae78309c7737233",
+      "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
+    },
+    {
       "bytes": 6609,
       "path": "CoreGeek/src/agent/vision.py",
       "sha256": "a0d20a3e38503132df6d1cd4821b6f847ce7e16c527454ae8e052afc5fa56fc4",
@@ -381,5 +393,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "09bcbdf380ef0eae2980151dbb9372ce0ea20e0d8a89a2090b98c6c28aae35b8"
+  "source_digest": "27167bc941f144a97efc24929640fdff55bbf67e7a51d1834e3bd82931e7dd67"
 }
