@@ -1,0 +1,115 @@
+{
+  "scope": "Actual tar.gz main3 HTTP; scripted LLM and result receipts, not intranet PASS",
+  "source_commit": "7c41f182e0870cfa13ded850158d7dabdfe34662",
+  "archive_sha256": "f3815ba867c5ac751c3a6bce6392005a844fb92927c817f6f801b4dec7e7c7f6",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "passed": true,
+  "cases": [
+    {
+      "side": "challenger",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 85.42225200000075,
+          "prompt": true,
+          "pioneer_action": {}
+        },
+        {
+          "round": 261,
+          "ms": 14.799847000006139,
+          "prompt": true,
+          "pioneer_action": {}
+        },
+        {
+          "round": 402,
+          "ms": 6.393599000006134,
+          "prompt": true,
+          "pioneer_action": {}
+        },
+        {
+          "round": 403,
+          "ms": 9.963737000006745,
+          "prompt": false,
+          "pioneer_action": {}
+        },
+        {
+          "round": 521,
+          "ms": 4.35519600000589,
+          "prompt": false,
+          "pioneer_action": {
+            "action": "summonTreasure",
+            "targetPos": [
+              {
+                "x": 3,
+                "y": 4
+              }
+            ],
+            "item": [
+              "IronWhistle"
+            ]
+          }
+        },
+        {
+          "round": 522,
+          "ms": 5.321233999993069,
+          "prompt": false,
+          "pioneer_action": {}
+        }
+      ]
+    },
+    {
+      "side": "defender",
+      "passed": true,
+      "trace": [
+        {
+          "round": 1,
+          "ms": 48.20016400000782,
+          "prompt": true,
+          "pioneer_action": {}
+        },
+        {
+          "round": 261,
+          "ms": 5.121712999994088,
+          "prompt": true,
+          "pioneer_action": {}
+        },
+        {
+          "round": 402,
+          "ms": 9.746777999993128,
+          "prompt": true,
+          "pioneer_action": {}
+        },
+        {
+          "round": 403,
+          "ms": 7.862699999989786,
+          "prompt": false,
+          "pioneer_action": {}
+        },
+        {
+          "round": 521,
+          "ms": 5.311113999994177,
+          "prompt": false,
+          "pioneer_action": {
+            "action": "summonTreasure",
+            "targetPos": [
+              {
+                "x": 3,
+                "y": 4
+              }
+            ],
+            "item": [
+              "IronWhistle"
+            ]
+          }
+        },
+        {
+          "round": 522,
+          "ms": 6.040252000005353,
+          "prompt": false,
+          "pioneer_action": {}
+        }
+      ]
+    }
+  ]
+}
