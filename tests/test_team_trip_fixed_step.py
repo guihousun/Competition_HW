@@ -62,16 +62,23 @@ class FixedStepTests(unittest.TestCase):
         self.assertEqual(guard.report()['time_slice'],'after_fixed_action')
 
     def test_first_step_cannot_land_on_a_same_round_new_wall(self):
-        p,c=hand_drawn()
-        # Each action is independently legal: the builder is adjacent to the
-        # free (5,9) cell, and the courier is also adjacent. Their joint target
-        # conflicts, so no hypothetical path may start inside the new wall.
-        next(u for u in p['teamOur']['roles'] if u['id']==999)['pos']=dict(x=5,y=10)
+        p,c=corridor(20)
+        p['mapInfo']['zones']=[]
+        p['teamOur']['roles'][-1]['pos']=dict(x=7,y=9)
+        builder=unit(999,'worker',8,8);builder['backpack']=['stone']
+        p['teamOur']['roles'].append(builder)
+        c.update(issued_round=1,last_round=19,deadline=26,last_action='move')
+        # (8,9) is on the legal assumed radius-2 wall ring of base(10,10).
+        # Each actor is adjacent; the cell is currently free. The simultaneous
+        # move/build conflict must not become a fictitious shadow start.
         t=Turn.load(p)
-        first=dict(action='move',targetPos=[dict(x=5,y=9)])
+        from agent.defense_layout import geometric_ring
+        self.assertIn(Pos(8,9),geometric_ring(t.station().pos))
+        self.assertNotIn(Pos(8,9),t.occupied_cells())
+        first=dict(action='move',targetPos=[dict(x=8,y=9)])
         guard=team_trip.RouteGuard(t,p,c,{731:first})
-        self.assertFalse(guard.check(999,Pos(5,10),(Pos(5,9),))[0])
-        cost=guard.cache[(999,Pos(5,10),frozenset((Pos(5,9),)))]
+        self.assertFalse(guard.check(999,Pos(8,8),(Pos(8,9),))[0])
+        cost=guard.cache[(999,Pos(8,8),frozenset((Pos(8,9),)))]
         self.assertEqual(cost.reason,'first_action_conflict')
 
 
