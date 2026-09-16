@@ -1,0 +1,57 @@
+{
+  "scope": "Controlled seed1 challenger day2 snapshot: set observed gold to150; not default income or official PASS",
+  "last_round": 178,
+  "events": [
+    {
+      "round": 152,
+      "action": {
+        "a": "buy",
+        "id": 10012,
+        "kind": "WeaponUpgradeVoucher1",
+        "num": 1,
+        "price": 100,
+        "gold": -100,
+        "from": {
+          "x": 24,
+          "y": 19
+        },
+        "to": {
+          "x": 24,
+          "y": 19
+        },
+        "bag": 2
+      }
+    }
+  ],
+  "weapons": [
+    {
+      "id": 10030,
+      "roleType": "railgun",
+      "level": 1,
+      "pos": {
+        "x": 6,
+        "y": 27
+      }
+    },
+    {
+      "id": 10040,
+      "roleType": "rocket",
+      "level": 2,
+      "pos": {
+        "x": 9,
+        "y": 27
+      }
+    },
+    {
+      "id": 10041,
+      "roleType": "rocket",
+      "level": 1,
+      "pos": {
+        "x": 9,
+        "y": 25
+      }
+    }
+  ],
+  "gold": 80,
+  "source_commit": "e0c9410702dbcf80708e76faa8c4fabc8054eebd"
+}

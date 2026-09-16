@@ -46,5 +46,5 @@ HP、背包及倒计时，完整资料始终保留在左侧控制台。
 
 更新代码后重启 `python main.py 8086`，刷新浏览器，页脚应显示 `20260916-front`。
 观察新炮位请点“开始新对局”；已有录像保留原建筑位置。公司测试仍拉取 `codex/sgh`，
-根目录 `CoreGeek.tar.gz` 是可上传候选，测试通过范围见 `reports/front-guns-final/`。
+根目录 `CoreGeek.tar.gz` 是可上传候选，测试通过范围见 `reports/front-guns-delivery/`。
 本地验证不代表官方或内网 PASS。

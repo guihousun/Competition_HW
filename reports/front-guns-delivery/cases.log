@@ -1,0 +1,4 @@
+{"seed": 1, "side": "challenger", "rounds": 390, "base_hp": 1395, "score_local": 865, "execution_failures": 0, "audit_errors": {}}
+{"seed": 1, "side": "defender", "rounds": 390, "base_hp": 1200, "score_local": 1755, "execution_failures": 0, "audit_errors": {}}
+{"seed": 90601, "side": "challenger", "rounds": 390, "base_hp": 1500, "score_local": 1577, "execution_failures": 0, "audit_errors": {}}
+{"seed": 90601, "side": "defender", "rounds": 390, "base_hp": 765, "score_local": 1193, "execution_failures": 0, "audit_errors": {}}

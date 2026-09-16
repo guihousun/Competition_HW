@@ -1,5 +1,5 @@
 {
-  "commit": "3632d37793c1ced04c77992e7a161d5830bb122a",
+  "commit": "e0c9410702dbcf80708e76faa8c4fabc8054eebd",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 116545,
+      "bytes": 117941,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "b16d0213551d0246fd4a6fa753d71cd4f4076b8a3fa797c38dd14e835a9f69f5",
+      "sha256": "baacf5356d7e4e0f3312c8e09f5e7f50eef9a5e6b94142cf1dd753973aac69c0",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -206,9 +206,9 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 7469,
+      "bytes": 7500,
       "path": "CoreGeek/src/agent/nightwork.py",
-      "sha256": "4b0b4fc6783f4eb599402bca29c111b5cc6263b952196e7dbe7aa5a0fc1e3b2d",
+      "sha256": "b628add9353e1438d0172d1242095698e5d757fd8a5829ba0f8306d2fd0a08f2",
       "source": "Demo/CoreGeek/src/agent/nightwork.py"
     },
     {
@@ -362,9 +362,9 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 6515,
+      "bytes": 8324,
       "path": "CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "4afd712e4fe33982d461236c3190f6cc1331e0ad8757c0f06fddbc12cfdc5b26",
+      "sha256": "2e4c841eeaa997826aba7b73b3f3feb746557c9fb696f4ec1f66ca8bec99eb13",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -411,5 +411,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "22311e962029d0ab1f3cd33bad70a8541c068685a5721ae27ba8d91745f2b330"
+  "source_digest": "63924a4c94add6d8074d935a668e67b1265ed4d4a12af7112a6e65589f004119"
 }
