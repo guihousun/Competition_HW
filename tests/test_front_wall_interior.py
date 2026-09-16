@@ -1,6 +1,7 @@
 """Hand-set geometry and official actions; no simulator oracle for expectations."""
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 from itertools import combinations
 from copy import deepcopy
 from test_coordination import unit
@@ -138,3 +139,31 @@ class FrontWallTests(unittest.TestCase):
         self.assertLess(upgrade_itinerary.priority(turn.weapons()[0]),upgrade_itinerary.priority(turn.station()))
         roles[0]['health']=500;turn=Turn.load(dict(roundNo=13,mapInfo=dict(width=41,height=32),teamOur=dict(roles=roles)))
         self.assertLess(upgrade_itinerary.priority(turn.station()),upgrade_itinerary.priority(turn.weapons()[0]))
+
+    def test_fourth_night_boundary_does_not_disable_daytime(self):
+        p=quiet_board()
+        for round_no,expected in ((390,False),(391,False),(460,False),(461,True),(462,True),(520,True),(521,False)):
+            p['roundNo']=round_no
+            self.assertEqual(home_defense.full_night(Turn.load(p)),expected,round_no)
+
+    def test_fourth_night_cancels_clear_field_external_work(self):
+        p=quiet_board();p['teamOur']['roles'][1]['pos']={'x':8,'y':5}
+        p['roundNo']=390;commands={};brain._night(Turn.load(p),commands,p)
+        self.assertEqual(commands[2]['action'],'collect')
+        p['roundNo']=462;commands={};brain._night(Turn.load(p),commands,p)
+        self.assertEqual(commands[2]['action'],'move')
+        self.assertFalse(any(c['action'] in ('collect','buy','sell') for c in commands.values()))
+
+    def test_fourth_night_blocks_treasure_and_task_arbitration_even_after_clearance(self):
+        from test_treasure_night_staging import board as treasure_board, NOTES
+        from agent import planner
+        p=treasure_board();p['roundNo']=462
+        with patch.object(brain,'_treasure_notes',return_value=NOTES), \
+             patch.object(brain,'_task_step',side_effect=AssertionError('must defend')), \
+             patch.object(brain,'_task_walk',side_effect=AssertionError('must defend')), \
+             patch.object(brain,'_treasure_step',side_effect=AssertionError('must defend')):
+            brain.plan_for_state(p,planner.PlannerState(),judge_tasks=False)
+        report=brain.decision_report()
+        self.assertEqual(report['supervisor']['reason'],'night_four_all_roles_defend')
+        self.assertTrue(report['supervisor']['reserve_pioneer'])
+        self.assertNotIn('treasure_preparation',report)

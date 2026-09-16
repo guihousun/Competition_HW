@@ -4,6 +4,13 @@ from collections import deque
 from .defense_layout import footprint_bounds
 from .protocol import Pos
 
+# User-selected strategy threshold; official day/night duration is unchanged.
+FULL_DEFENCE_FROM_DAY = 4
+
+
+def full_night(turn):
+    return not turn.is_day and (turn.round_no - 1) // 130 + 1 >= FULL_DEFENCE_FROM_DAY
+
 
 def inside(turn, pos):
     base = turn.station()

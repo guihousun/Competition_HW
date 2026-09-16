@@ -1728,6 +1728,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     confine = not nightwork.field_clear(turn, state)
     cycle = getattr(planner_state, 'tasks', {}).get('cycle') if planner_state is not None else None
     committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
+    committed_task = committed_task and not home_defense.full_night(turn)
     staging = _treasure_night_staging(turn, state, pairs) if state is not None and not committed_task else None
     extra_work = nightwork.plan(turn, state, pairs) if state is not None and staging is None else {}
     for command in extra_work.values():
@@ -1801,6 +1802,8 @@ def _treasure_night_staging(turn, payload, pairs):
     No predicted window or wave is consulted. Return None to restore ordinary
     defence immediately; a hold flag is internal arbitration, never an action.
     """
+    if home_defense.full_night(turn):
+        return None
     robots = payload.get('robot')
     pioneer, base = turn.pioneer(), turn.station()
     if (turn.is_day or (turn.round_no - 1) % 130 == 70 or payload.get('phaseTask')

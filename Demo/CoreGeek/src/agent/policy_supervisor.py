@@ -6,6 +6,7 @@ not make a distant opponent-targeted robot an imminent threat to our base.
 """
 from dataclasses import dataclass
 from .protocol import distance
+from .home_defense import full_night
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,8 @@ def evaluate(turn, payload, pioneer_tower, *, tower_pairs=(), committed_work=Fal
              dusk_index=55, tuning=SupervisorTuning()):
     pioneer, base = turn.pioneer(), turn.station()
     if pioneer is None or base is None or pioneer_tower is None:
+        if full_night(turn):
+            return Directive('defend', True, 'night_four_all_roles_defend', 0, 0)
         return Directive('work', False, 'no_pioneer_defence_assignment', 0, 0)
     travel = max(0, distance(pioneer.pos, pioneer_tower.pos)-1)
     # Official R03 base capacities; their values are not tuning parameters.
@@ -74,7 +77,10 @@ def evaluate(turn, payload, pioneer_tower, *, tower_pairs=(), committed_work=Fal
             pressure += robot.health
             imminent = imminent or near
     reserve = bool(relevant and (not intact or imminent or workers == 0 or
-                   pressure > assigned_workers*tuning.health_budget_per_worker))
+                     pressure > assigned_workers*tuning.health_budget_per_worker))
+    if full_night(turn):
+        return Directive('defend', True, 'night_four_all_roles_defend', relevant,
+                         travel, workers, pressure, True)
     reason = ('base_damaged' if relevant and not intact else
               'base_threat_nearby' if imminent else
               'visible_pressure_requires_controller' if reserve else

@@ -72,7 +72,7 @@ def _front_repair(turn, pairs):
 
 def field_clear(turn, payload):
     """Explicit current clearance, never a forecast of later waves."""
-    if not isinstance(payload, dict):
+    if not isinstance(payload, dict) or home_defense.full_night(turn):
         return False
     robot_info = payload.get('robot')
     if (turn.is_day or (turn.round_no - 1) % 130 == 70
