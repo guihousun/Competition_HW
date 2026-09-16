@@ -205,10 +205,16 @@ class Handler(BaseHTTPRequestHandler):
                         invalid_input=False, decision_exception=None, fault=None, decision=None):
         body = json.dumps(response, ensure_ascii=False).encode('utf-8')
         sent = False
+        from . import ordered_diagnostics
+        summary_ticket = ordered_diagnostics.reserve(lambda: self._diagnose(
+            payload, response if sent else {}, plan_ms, invalid_input=invalid_input,
+            decision_exception=decision_exception if sent else 'response_write_failed',
+            event_id=getattr(ticket, 'event_id', None), decision=decision))
         try:
             self._send(200, body, 'application/json; charset=utf-8')
             sent = True
         finally:
+            ordered_diagnostics.complete(summary_ticket)
             # Immutable wire bytes go to a bounded queue AFTER the HTTP write.
             # Redaction, diffing and all file I/O happen on the writer thread.
             try:
@@ -216,9 +222,6 @@ class Handler(BaseHTTPRequestHandler):
                                  invalid_input=invalid_input, fault=fault, decision=decision)
             except Exception:
                 pass
-        self._diagnose(payload, response, plan_ms, invalid_input=invalid_input,
-                       decision_exception=decision_exception,
-                       event_id=getattr(ticket, 'event_id', None), decision=decision)
 
     def _diagnose(self, payload, response, plan_ms: float, *, invalid_input: bool = False,
                   decision_exception: str | None = None, event_id: str | None = None, decision=None) -> None:

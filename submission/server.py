@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .brain import respond, decision_report
 from .scenarios import observation
-from . import diagnostics, telemetry
+from . import diagnostics, telemetry, ordered_diagnostics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -61,6 +61,10 @@ class Handler(BaseHTTPRequestHandler):
         elapsed = (time.perf_counter()-started)*1000
         body = json.dumps(response, ensure_ascii=False).encode('utf-8')
         sent = False
+        summary_ticket = ordered_diagnostics.reserve(lambda: diagnostics.response_summary(
+            payload, response if sent else {}, plan_ms=elapsed, invalid_input=invalid,
+            decision_exception=('internal_error' if fault else None) if sent else 'response_write_failed',
+            event_id=getattr(ticket, 'event_id', None), decision=decision))
         try:
             self.send_response(200)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
@@ -69,17 +73,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             sent = True
         finally:
+            ordered_diagnostics.complete(summary_ticket)
             try:
                 telemetry.submit(ticket, raw, body, sent=sent, plan_ms=elapsed,
                                  invalid_input=invalid, fault=fault, decision=decision)
             except Exception:
                 pass
-        try:
-            diagnostics.response_summary(payload, response, plan_ms=elapsed, invalid_input=invalid,
-                                         decision_exception='internal_error' if fault else None,
-                                         event_id=getattr(ticket, 'event_id', None), decision=decision)
-        except Exception:
-            pass
 
     def do_GET(self):
         body = b'{"status":"ready","mode":"competition"}'
