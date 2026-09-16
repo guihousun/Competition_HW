@@ -261,8 +261,19 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_no_question_once_the_llm_answered(self):
-        """回复是答案 ⇒ 不再提问（同一个 prompt 问两遍不会得到更好的答案）。"""
-        self.assertEqual(task_channel(self._turn(self.TASK, self.ANSWER)), ("", ""))
+        """回复是答案 ⇒ 不再提问（同一个 prompt 问两遍不会得到更好的答案）。
+
+        第 43 步起"不发" ≠ "prompt 留空"：答案轮本回合没有模型请求，回合最末尾的
+        压缩闸门把空槽填成**压缩请求**（用户口径：任务中、未生产模型请求才压缩）。
+        先 ⑥ 首问把会话建起来 —— 没开过会话时 `compression_request` 给 ""，
+        维持旧形状。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
+        prompt, execute = task_channel(self._turn(self.TASK, self.ANSWER))
+        self.assertEqual(execute, "")
+        self.assertIn("【上下文压缩】", prompt, "答案轮的空槽发的是压缩请求（第 43 步）")
+        self.assertNotIn(self.RETRY_MARK, prompt)
+        self.assertNotIn(self.RESULT_MARK, prompt)
 
     def test_the_command_comes_out_of_the_tool_markup(self):
         """工具调用里 `<tool_param>` 内层的 `<cmd>` **就是那条命令**，两侧空白去掉、内部原样保留。
@@ -546,6 +557,23 @@ class TaskChannelTest(unittest.TestCase):
             True, ["<summary>" in c for c in contents], "裸摘要不进会话表"
         )
 
+    def test_a_summary_reply_round_goes_back_to_the_task(self):
+        """压缩回复到达、又没有别的回执 ⇒ 判据按"没回复"走 → ⑥ 重问。
+
+        第 43 步起答案轮与压缩轮**交替**：压缩请求的回复下一轮到达，这一轮把任务对话
+        推回去（nudge），再下一轮 LLM 重新给出答案、⑤ 接着交接着压。这一轮**不是**
+        压缩轮 —— nudge 是模型请求，闸门不落；摘要照样进（`【历史摘要】` 可见）。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        task_channel(self._turn(self.TASK, self.ANSWER))  # ⑤ 答案轮（发压缩请求）
+        prompt, execute = task_channel(
+            self._turn(self.TASK, "<summary>【总目标】交 token</summary>")
+        )
+        self.assertEqual(execute, "")
+        self.assertNotIn("【上下文压缩】", prompt, "nudge 是模型请求，闸门不落")
+        self.assertIn("请继续。", prompt)
+        self.assertIn("【总目标】交 token", prompt, "摘要已进【历史摘要】")
+
     def test_a_result_already_in_hand_blocks_the_next_command(self):
         """⚠️ **沙盒刚交作业这一轮，绝不能再发命令** —— 判据 2 必须压在判据 3 前面。
 
@@ -710,13 +738,25 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn("【判题器反馈】：第 3 项应为整数", users[-1])
 
     def test_only_the_answer_error_triggers_the_retry(self):
-        """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。"""
+        """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。
+
+        第 43 步起答案轮的空槽发压缩请求：非 2 的码 ⇒ prompt 是**压缩请求**、
+        绝不是带纠错段的任务重问（判别器 = 任务模板的头；压缩原料是**原文**，
+        上一轮 code 2 落进历史的纠错块当然还在里面，不算这一轮在骂）。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
+        prompt, execute = task_channel(
+            self._turn(self.TASK, llm_resp=self.ANSWER, errors=(Error(2, "x"),))
+        )
+        self.assertIn(self.RETRY_MARK, prompt)
         for code in (0, 1, 3, 4, 5):
             with self.subTest(code=code):
                 prompt, execute = task_channel(
                     self._turn(self.TASK, llm_resp=self.ANSWER, errors=(Error(code, "x"),))
                 )
-                self.assertEqual((prompt, execute), ("", ""))
+                self.assertIn("【上下文压缩】", prompt)
+                self.assertNotIn("# 【ROLE定位】", prompt, "是压缩请求，不是任务重问")
+                self.assertEqual(execute, "")
 
     def test_a_timeout_result_still_goes_back(self):
         """`[TIMEOUT]` / `[JUDGER_ERROR]` 打头的回执**照样原样回灌** —— 那是沙盒侧的

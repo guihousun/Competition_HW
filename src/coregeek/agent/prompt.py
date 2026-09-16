@@ -171,8 +171,9 @@ def gen_sop_prompt(sop) -> str:
     return SOP_PROMPT.format(sop=flows)
 
 
-#: 压缩轮的指令（第 41 步）：**只进压缩 prompt、不进任务 system** —— 任务 prompt
-#: 专注任务（卸掉了第 39 步搭车的 881 字节教学），压缩 prompt 专注压缩。
+#: 压缩请求的产出（`COMPRESSION_PROMPT`，只进压缩 prompt、不进 system）——
+#: 第 43 步起在**回合最末尾的压缩闸门**发（任务线没产模型请求的轮：③ 命令轮 /
+#: ⑤ 答案轮），任务 prompt 专注任务（卸掉了第 39 步搭车的 881 字节教学）。
 #: 四槽照第 39 步的口径（总目标/关键数据/已完成未完成/下一步），加两条输出纪律：
 #: 只输出摘要块；摘要里不带 `<answer>` 对（`answer_of` 挖块之外的又一道保险）。
 COMPRESSION_PROMPT = """# 【上下文压缩】

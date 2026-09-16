@@ -287,12 +287,20 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     3. **回复是完整的工具调用、且工具给了命令 ⇒ 把命令交给判题器**（不提问）。
     4. **判题器说答案错了 ⇒ 带着"上次答错了"重问**（`errors` 里有 `code == 2` 且回复不是工具调用）。
        排在 3 之后：`code 2` 会连着报几轮，而 LLM 这时回了新的工具调用是进展，先让它跑。
-    5. **回复是最终答案 ⇒ 什么都不发**，开拓者那边每回合在 `submitAnswer`。
+    5. **回复是最终答案 ⇒ 本回合不发模型请求**，开拓者那边每回合在 `submitAnswer`。
        判据用 `answer_of` 而**不是**"取不出命令"：畸形的工具调用会被当成答案交上去，
        而 `_answer_task` 又跳过工具回复 ⇒ **两条通道同时哑火，永久空转**。
     6. **否则（第一次提问 / 畸形回复重问）⇒ 只把题目发出去问。**
        隐式子路径 ③′（完整工具调用但拿不到命令：`SOP2Prompt`、未知工具、空参数）也落在这里；
        它不会活锁 —— 任务期间 prompt 不限量不计数，出口有"LLM 改口给答案""纠错段""它自己写进去的 SOP 段"。
+
+    **回合最末尾另有一道压缩闸门（第 43 步，用户拍板"回合最末尾、任务中、未生产
+    模型请求才压缩"）**：判据链算完 `prompt` 还是空（只有 ③ 命令轮与 ⑤ 答案轮会这样）
+    ⇒ 填上**压缩请求**。②/④/⑥ 的模型请求永远优先，压缩是这条链上优先级最低的租客；
+    判据 ① 的两条早返回在闸门**之前** —— 没任务/没开拓者绝不压缩（任务线之外每游戏日
+    只有 3 次额度）。压缩请求的回复（裸 `<summary>`）在链首就被路由进摘要、不进会话表，
+    下一轮判据按"没回复"落 ⑥ 把任务对话推回去 —— 于是答案轮与压缩轮**交替**，互不阻塞。
+    没开过会话 ⇒ `compression_request` 给 `""`，维持旧形状（降级安全）。
 
     工具调度只有 `AGENT.tool_call` 一个入口，副作用（SOP 沉淀）只发生在那一行，且写在判据之前
     ⇒ 走"回灌结果"那一轮 SOP 照样生效。`AGENT.hear`（把回复记进会话）也在这条链的开头：
@@ -328,8 +336,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     summary = is_summary_reply(reply)
     prices = is_prices_reply(reply)
     if summary is not None:
-        # **压缩回复**（第 41 步：命令轮同发的压缩请求的产物）：进摘要、**不进会话表**
-        # —— 它不是 LLM 在任务上说过的话，进表会污染窗口、与【历史摘要】双份。
+        # **压缩回复**（压缩请求的产物 —— 第 43 步起 ③/⑤ 落空的轮都发）：进摘要、
+        # **不进会话表** —— 它不是 LLM 在任务上说过的话，进表会污染窗口、与【历史摘要】双份。
         # 粘住的重复路由一次 = 幂等。任务判据按"没回复"继续走（cmd_result 回灌等）。
         AGENT.adopt_summary(summary)
         reply = ""
@@ -364,15 +372,21 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         retry = f"{answer}\n【判题器反馈】：{why}" if why else answer
 
     if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（**必须压在 ③ 前**）
-        return AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
-    if command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽本来空着，捎上**压缩请求**（第 41 步）
-        return AGENT.compression_request(), command
-    if retry:  # ④ 判题器说答案错了 ⇒ 带上"上次答错了"重问
-        return AGENT.chat(turn.phase_task, retry=retry), ""
-    if answer:  # ⑤ 我们已经拿到了答案 ⇒ 都不发
-        return "", ""
-    # ⑥ 第一次提问 / 畸形或"不产出命令"的工具回复 ⇒ 只把题目问出去（**③′ 落在这里**）
-    return AGENT.chat(turn.phase_task), ""
+        prompt, cmd = AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
+    elif command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽留给回合末尾的压缩闸门
+        prompt, cmd = "", command
+    elif retry:  # ④ 判题器说答案错了 ⇒ 带上"上次答错了"重问
+        prompt, cmd = AGENT.chat(turn.phase_task, retry=retry), ""
+    elif answer:  # ⑤ 我们已经拿到了答案 ⇒ 本回合任务线不产模型请求
+        prompt, cmd = "", ""
+    else:  # ⑥ 第一次提问 / 畸形或"不产出命令"的工具回复 ⇒ 只把题目问出去（**③′ 落在这里**）
+        prompt, cmd = AGENT.chat(turn.phase_task), ""
+    # **回合最末尾的压缩闸门**（第 43 步，用户拍板"回合最末尾、任务中、未生产模型请求
+    # 才压缩"）：②/④/⑥ 的模型请求永远优先，压缩只填 ③/⑤ 落空的 prompt 槽 —— 这条链
+    # 上优先级最低的租客。没开过会话 ⇒ `compression_request` 给 ""，维持旧形状（降级安全）。
+    if prompt == "":
+        prompt = AGENT.compression_request()
+    return prompt, cmd
 
 
 def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
