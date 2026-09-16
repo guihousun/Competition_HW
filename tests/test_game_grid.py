@@ -187,48 +187,52 @@ class BuildGeometryTest(unittest.TestCase):
         for pos in (Pos(9, 24), Pos(9, 25), Pos(10, 25)):
             self.assertIn(pos, cells)
 
-    def test_sites_face_away_from_the_robots(self):
-        """基地在左半 ⇒ 后列取 `bx-1`、前排两角取 `bx+2`；在右半镜像。
+    def test_all_sites_are_on_the_front_column(self):
+        """三座武器全在**迎着机器人的前排**（左半 `x=bx+2`、右半 `x=bx-1`）。
 
-        机器人从基地**面向地图中心**的那一侧来（`docs/pic/大致地图信息.png`）。判反了
-        武器就摆在迎着机器人的一侧 —— 不报错、不违规，只是白建三座。
+        新阵形：前排上方相邻两格放 2 火箭、前排下方一格放加特林 —— 两火箭相邻 ⇒
+        一个角色可同时操作两座，释放开拓者夜间行动。
         """
-        left = weapon_sites(Pos(10, 24), 41)  # 左半 ⇒ 后列 x=9、前排 x=12
-        self.assertEqual([c.x for c in left], [9, 12, 12])
-        right = weapon_sites(Pos(30, 10), 41)  # 右半 ⇒ 后列 x=32、前排 x=29
-        self.assertEqual([c.x for c in right], [32, 29, 29])
+        left = weapon_sites(Pos(10, 24), 41)  # 左半 ⇒ 前排 x=12
+        self.assertEqual([c.x for c in left], [12, 12, 12])
+        right = weapon_sites(Pos(30, 10), 41)  # 右半 ⇒ 前排 x=29
+        self.assertEqual([c.x for c in right], [29, 29, 29])
         self.assertEqual(len(left), len(right), "两侧都该是整整齐齐三个落点")
 
-    def test_the_three_sites_are_the_rear_top_corner_and_the_two_front_corners(self):
-        """后列**上角**那一格 + 前排两角，顺序即建造顺序（第 24 步：后列从贴基地下沿挪到上角）。"""
+    def test_the_three_sites_are_two_adjacent_rockets_plus_a_gatling(self):
+        """前排上方相邻两格（2 火箭）+ 前排下方一格（加特林），顺序即建造顺序。
+
+        两火箭相邻是关键：一个角色站在内侧那一格就能同时贴着两座，利用 3 回合冷却交替开火。
+        """
         self.assertEqual(
             weapon_sites(Pos(10, 24), 41),
-            (Pos(9, 25), Pos(12, 22), Pos(12, 25)),
+            (Pos(12, 24), Pos(12, 25), Pos(12, 22)),
         )
         #: 换边后整套落点自动跟着翻 —— 按**基地坐标**判而不用 `teamOur.type`
         self.assertEqual(
             weapon_sites(Pos(30, 10), 41),
-            (Pos(32, 11), Pos(29, 8), Pos(29, 11)),
+            (Pos(29, 10), Pos(29, 11), Pos(29, 8)),
         )
 
-    def test_the_rear_sites_operator_stays_off_the_bottom_route(self):
-        """后列落点的**环内站位全在顶线一侧** ⇒ 后列操作者堵不死前排（第 24 步改阵的动机）。
+    def test_the_two_rockets_share_an_operator_spot(self):
+        """两火箭之间存在一个**同时贴着两座**的环内空格 ⇒ 一个角色能操作两座。
 
-        底行路线（门 → (9,22) → (10,22) → (11,22)）是从门走到前下角、不绕顶线的通道。
-        旧阵后列在 (9,23)：环内站位含 (9,22)/(10,22)（正在这条路上），加上前上角操作者
-        站 (12,24)，前下角的两个站位 (11,22)/(12,23) 就成了孤岛 —— **操作者堵死操作者**。
-        后列挪到上角 (9,25) 之后环内站位只剩 (9,24)/(10,25)（顶线一侧），底行路线谁也压不着。
+        左半基地两火箭在 (12,24)/(12,25) ⇒ 操作位是 (11,25)（内侧、非基地、非墙）。
         """
-        rear = weapon_sites(self.BASE, 41)[0]
-        neighbors = {Pos(rear.x + d.x, rear.y + d.y) for d in STEPS}
-        #: 只看**环内**站位：门柱那三个在走廊外面，本来就压不着人
-        inside = neighbors & set(weapon_cells(self.BASE))
-        bottom_row = {Pos(x, self.BASE.y - 2) for x in range(self.BASE.x - 1, self.BASE.x + 3)}
-        self.assertTrue(inside, "后列武器总得有环内站位，这条用例才钉得住东西")
-        self.assertFalse(inside & bottom_row, f"后列站位压住了底行路线：{inside & bottom_row}")
-        #: 门柱上也能操它（从外面回来的操作者 BFS 停在门柱、不进走廊）——"堵不着人"的另一半
-        door = {Pos(self.BASE.x - 2, y) for y in range(self.BASE.y - 3, self.BASE.y + 3)}
-        self.assertTrue(neighbors & door, "后列武器该贴着门柱：外面就能操，不必进走廊")
+        sites = weapon_sites(self.BASE, 41)
+        rockets = sites[:2]
+        # 两火箭必须相邻（切比雪夫距离 1）
+        self.assertEqual(rockets[0].dist(rockets[1]), 1, "两火箭必须相邻才能共享操作位")
+        # 求同时贴着两座火箭的格子
+        nbrs0 = {Pos(rockets[0].x + d.x, rockets[0].y + d.y) for d in STEPS}
+        nbrs1 = {Pos(rockets[1].x + d.x, rockets[1].y + d.y) for d in STEPS}
+        common = nbrs0 & nbrs1
+        ring = set(weapon_cells(self.BASE))
+        shared = common & ring  # 只看环内空格（操作位必须走得进去）
+        self.assertTrue(shared, f"两火箭之间该有共享操作位，交集={common}")
+        for spot in shared:
+            self.assertEqual(spot.dist(rockets[0]), 1)
+            self.assertEqual(spot.dist(rockets[1]), 1)
 
     def test_every_site_touches_the_base(self):
         """**这才是这个阵形的理由**：三个落点各自都与基地的一格切比雪夫距离 1。

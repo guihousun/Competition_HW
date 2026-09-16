@@ -50,9 +50,12 @@ from .world import ROUNDS_PER_DAY, Robot, Turn, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
-#: 三座武器的**种类，下标与 `grid.weapon_sites()` 的落点一一对应**：后列火箭、前排两角加特林/电磁炮。
-#: 按射程配（后列离机器人最远）；数量上限 = 角色数 = 3（§4.5.1 原文"每种 ≤3"与"全局 ≤3"矛盾，取保守的）。
-WEAPONS_BY_SITE = ("rocket", "gatling", "railgun")
+#: 三座武器的**种类，下标与 `grid.weapon_sites()` 的落点一一对应**：前排上方相邻两格放 2 座火箭、
+#: 前排下方一格放加特林。两火箭相邻 ⇒ 一个角色站在它们内侧那一格就能同时贴着两座，利用火箭
+#: 3 回合冷却交替开火 —— **2 个角色即可操作 3 座武器**，释放开拓者夜间行动（用户拍板）。
+#: 放弃电磁炮：它是单目标、能量对满血机器人（≥40 血）不穿透，群体价值最低；而双火箭的溅射
+#: 在机器人挤在墙根时收益极高。
+WEAPONS_BY_SITE = ("rocket", "rocket", "gatling")
 
 #: 三种武器的 **L1 伤害**（任务书 §4.5.1 表格 + §4.5.4 补充说明；升级线没做 ⇒ 恒为 L1）：
 #: 加特林每颗子弹 10（沿弹道命中**最近**一台即消耗）；电磁狙击炮能量 10（沿弹道穿透、逐台扣减）；
@@ -84,18 +87,18 @@ TIME_MARGIN = 5
 #: ⚠️ **石头只在"墙砌完了"那一支里才卖得出去** —— 调用点 `_build_walls` 已经保证了这一点。
 SELLABLE = (STONE, IRON, COPPER)
 
-#: 升级优先链：`(武器类别, 目标等级)`，先命中先用。判据是**群体打击**（第 29 步，用户授权）：
-#: **加特林**最优先 —— +1 颗子弹 = 每回合 +10、无冷却、弹道必命中，两颗可分打两台
-#: （90° 锥内），一夜 60 回合最多 +600，射程 +2 还让它更早接敌；**火箭**次之 —— +1 枚
-#: 对簇约 +30/齐射，但 3 回合冷却一夜只 ~20 轮齐射、依赖机器人扎堆；**电磁**最后 ——
-#: 单目标，能量对满血机器人（≥40 血）不穿透，群体价值最低。
+#: 升级优先链：`(武器类别, 目标等级)`，先命中先用。当前阵形 = 2 火箭 + 1 加特林（无电磁炮）。
+#: **加特林**最优先 —— 无冷却、每回合必开火，+1 颗子弹 = 每回合 +10、两颗可分打两台
+#: （90° 锥内），一夜 60 回合最多 +600，射程 +2 还让它更早接敌；**双火箭**次之 ——
+#: 两座各升一级，+1 枚导弹对簇约 +30/齐射（3 回合冷却，一夜 ~20 轮齐射，依赖机器人扎堆）。
+#: 同类出现两次 ⇒ `_upgrade_target` 会按 id 先后把两座火箭都升到目标级。
 UPGRADE_CHAIN = (
     ("gatling", 2),
     ("rocket", 2),
+    ("rocket", 2),
     ("gatling", 3),
-    ("railgun", 2),
     ("rocket", 3),
-    ("railgun", 3),
+    ("rocket", 3),
 )
 
 #: 升级券的商品名（`weaponShopList.name` 那套词；价目逐回合从载荷读，样例实证 100/150）。
@@ -242,6 +245,15 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             remaining=len(segment),
             ore_taken=ore_taken, paths=paths,
         ):
+            continue
+
+        # **白天末尾强制补墙**（点 2 优化）：环上有缺口且已进入"必须补回"窗口
+        # （`day_rounds_left <= HOLE_PATCH_LEFT`）⇒ 禁止落兜底去卖矿/采闲矿，
+        # 哪怕这回合砌不了（没石头/gated）也必须走向缺口待命 —— 人在缺口旁，
+        # 下回合（或次日第一回合）就能砌，绝不让墙带着缺口过夜。
+        # `_build_walls` 内部已尝试采石/走向缺口，返回 False 只说明这回合没产出指令。
+        if target is not None and turn.day_rounds_left <= HOLE_PATCH_LEFT:
+            _step(role, target, turn, cmds, claimed, sites | paths)
             continue
 
         slot = next(slots, None)
@@ -397,7 +409,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # **回合最末尾的压缩闸门**（第 43 步；**第 47 步收窄到只剩 ③** —— 答案轮在上面
     # 提前返回了）：②/④/⑥ 的模型请求永远优先，压缩只填 ③ 落空的 prompt 槽 —— 这条
     # 链上优先级最低的租客。没开过会话 ⇒ `compression_request` 给 ""，维持旧形状（降级安全）。
-    if prompt == "":
+    if not answer and prompt == "":
         prompt = AGENT.compression_request()
     return prompt, cmd
 
@@ -415,18 +427,18 @@ def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
     if station is None:
         return
 
-    have = {w.kind for w in turn.weapons}  # 名册在 `Turn.weapons`，网格里那份不用
     need = len(turn.roles) - len(turn.weapons)
     if need <= 0:
         return
 
     blocked = turn.map.blocked
-    #: **先按种类配对、再滤**。反过来（先滤种类再 `zip` 落点）落点会整体前移 ——
-    #: 后列那格被占时"少一座火箭"会把加特林塞进给火箭留的格子上，而落点与种类是绑死的。
+    #: **落点与种类绑死**（`WEAPONS_BY_SITE` 与 `weapon_sites` 下标一一对应），只滤"落点是空的"。
+    #: ⚠️ 不再用 `kind not in have` 过滤 —— 现在有 2 座火箭（同种），那道过滤会把第二座火箭跳过。
+    #: 已有武器的格子在 `blocked` 里 ⇒ `cell not in blocked` 自然不会在上面重建（覆盖成 L1）。
     yield from [
         (kind, cell)
         for kind, cell in zip(WEAPONS_BY_SITE, weapon_sites(station, turn.map.size[0]))
-        if kind not in have and cell not in blocked
+        if cell not in blocked
     ][:need]
 
 
@@ -1285,6 +1297,54 @@ def _leave_for_the_post(
 
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────
+def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
+    """把武器分成**操作组**：同一组的武器由同一个角色操作。
+
+    当前阵形 = 2 火箭（相邻）+ 1 加特林 ⇒ 两组：`(rocket1, rocket2)` 和 `(gatling,)`。
+    两火箭相邻 ⇒ 一个角色站在它们内侧那一格就能同时贴着两座，利用 3 回合冷却交替开火
+    —— **2 个角色即可操作 3 座武器**，释放开拓者夜间行动（用户拍板）。
+    分组依据是 `weapon_sites` 的下标（0,1 = 火箭对；2 = 加特林），不按场上已有武器的
+    种类猜（种类重复时猜不准）。某座还没建出来 ⇒ 那一组就只含已建的。
+    """
+    station = turn.map.station
+    sites = weapon_sites(station, turn.map.size[0]) if station is not None else ()
+    by_pos = {w.pos: w for w in turn.weapons}
+    grouped: set[Pos] = set()
+    groups: list[tuple[Weapon, ...]] = []
+    for indices in ((0, 1), (2,)):
+        group = tuple(by_pos[sites[i]] for i in indices if i < len(sites) and sites[i] in by_pos)
+        if group:
+            groups.append(group)
+            grouped.update(w.pos for w in group)
+    #: 不在 `weapon_sites` 里的武器（测试手搭的位置 / 被摧毁后重建的偏移）⇒ 单独成组，
+    #: 降级为"一人操一座"的旧行为，避免测试里手搭的炮没人认领。
+    for w in turn.weapons:
+        if w.pos not in grouped:
+            groups.append((w,))
+    return tuple(groups)
+
+
+def _operator_spots(
+    group: tuple[Weapon, ...], blocked: set[Pos], size: tuple[int, int]
+) -> list[Pos]:
+    """一组武器的**操作站位**：贴着组内**所有**武器的格子（去障碍）。
+
+    单座组 ⇒ 返回那座本身（`step_toward` 会停在邻格）；多座组 ⇒ 返回所有武器 8 邻域的
+    交集里走得通的格子。左半基地两火箭在 (12,24)/(12,25) ⇒ 操作位是 (11,25)
+    （内侧那一格，同时贴着两座；基地格 (11,24) 被排除）。
+    """
+    if len(group) == 1:
+        return [group[0].pos]
+    common: set[Pos] | None = None
+    for w in group:
+        nbrs = {Pos(w.pos.x + d.x, w.pos.y + d.y) for d in STEPS}
+        common = nbrs if common is None else common & nbrs
+    if common is None:
+        return []
+    width, height = size
+    return sorted(c for c in common if c not in blocked and 0 <= c.x < width and 0 <= c.y < height)
+
+
 def _defend(
     role: BaseRole,
     turn: Turn,
@@ -1293,29 +1353,44 @@ def _defend(
     taken: set[Pos],
     assigned: dict[Pos, int],
 ) -> None:
-    """夜里：走到最近的一座**还没被本回合别人认领**的武器旁，贴着就开火。所有角色都走这里。
+    """夜里：认领一组**还没被本回合别人认领**的武器，走到操作位，开火。所有角色都走这里。
 
     ⚠️ **回合号缺失（`round_no < 0`）时一发不发**：`is_day` 把缺失的回合号判成夜里，
     那个降级方向对"白天不许建造"安全，对 `attack` 就反过来了（白天开火非法）。
 
-    选炮：最近且没人认领的，同距离按 `id` 排（并列不能取决于 payload 顺序）。
-    贴着（切比雪夫 ≤1）就**认领并停在这里**，开不开火交给 `_fire`；**不换炮**
-    —— 每回合重挑会让角色在炮位之间来回走。一人只能操一座，用 `taken` 去重。
+    **武器组**（`_weapon_groups`）：2 火箭一组（一个角色操作）、加特林单独一组。
+    组内多座 ⇒ 角色站在操作位（同时贴着所有座），挑冷却好了的那座开火；火箭 3 回合
+    冷却 ⇒ 两火箭交替开火，相当于一人操两座。
+    选组：最近且没人认领的（组内任一座被认领 = 整组被认领），贴着任一座就**认领整组**
+    并开火；**不换组** —— 每回合重挑会让角色在炮位之间来回走。
     场上没有武器 / 都够不着 ⇒ 不动（空指令合法且不计异常）。
     """
     if turn.round_no < 0:
         return
-    for weapon in sorted(turn.weapons, key=lambda w: (role.pos.dist(w.pos), w.id)):
-        if weapon.pos in taken:
+    groups = _weapon_groups(turn)
+    walk = turn.map.blocked | claimed
+    for group in sorted(groups, key=lambda g: (min(role.pos.dist(w.pos) for w in g), min(w.id for w in g))):
+        if any(w.pos in taken for w in group):
             continue
-        if role.pos.dist(weapon.pos) <= 1:
-            taken.add(weapon.pos)
-            _fire(role, weapon, turn, cmds, assigned)  # 打不了就不发，但人已经站住了
+        spots = _operator_spots(group, turn.map.blocked, turn.map.size)
+        if not spots:
+            continue
+        # 已经贴着组内某座 ⇒ 认领整组，挑冷却好了的那座开火
+        adjacent = [w for w in group if role.pos.dist(w.pos) <= 1]
+        if adjacent:
+            for w in group:
+                taken.add(w.pos)
+            for w in sorted(adjacent, key=lambda w: (w.cooldown > 0, w.id)):
+                if _fire(role, w, turn, cmds, assigned):
+                    break
             return
-        step = step_toward(role.pos, weapon.pos, turn.map.blocked | claimed, turn.map.size)
+        # 还没贴着 ⇒ 朝最近的操作位走一格
+        spot = min(spots, key=lambda s: (role.pos.dist(s), s))
+        step = step_toward(role.pos, spot, walk, turn.map.size)
         if step is None or not _emit(cmds, role, actions.Move, step):
-            continue  # 走不到 / 发不出去 → 换下一座，别为一棵树放弃整片林子
-        taken.add(weapon.pos)  # 认领发生在迈步之后：没走成才轮到下一座
+            continue  # 走不到 / 发不出去 → 换下一组
+        for w in group:
+            taken.add(w.pos)  # 认领发生在迈步之后
         claimed.add(step)
         return
 
@@ -1350,6 +1425,27 @@ def _upgrade_station(
     return _emit(cmds, role, actions.Move, step)
 
 
+def _foe_robots(turn: Turn) -> tuple[Robot, ...]:
+    """**打我方基地的机器人**（点 3 优化）。
+
+    过滤规则：
+    - `our_team` 为空（字段缺失）⇒ 不过滤，全部照打（安全降级）；
+    - `robot.target_team` 为空 ⇒ 当成打我方的（照打）；
+    - `robot.target_team == our_team` ⇒ 打我方的（照打）；
+    - 其他（明确打对方）⇒ 跳过。
+
+    跳过"打对方的机器人"的理由：它们不威胁我方基地，打它们既浪费本回合的火力
+    （应该用来打打我们的）、又帮对方减轻基地压力（让对方机器人去推对方基地对我们有利）。
+    火箭射程远（L3 全图）尤其需要这道过滤，否则经常把导弹砸到对方半场的机器人簇里。
+    """
+    our = turn.our_team
+    if not our:
+        return turn.robots
+    return tuple(
+        r for r in turn.robots if not r.target_team or r.target_team == our
+    )
+
+
 def _fire(
     role: BaseRole,
     weapon: Weapon,
@@ -1372,13 +1468,19 @@ def _fire(
     """
     if weapon.cooldown > 0:
         return False
+    # **只打打我方的机器人**（点 3 优化）：`our_team` 缺失或 `target_team` 缺失 ⇒ 照打
+    # （安全降级）；`target_team` 明确是对方阵营 ⇒ 跳过（打它们既浪费火力、又帮对方
+    # 减轻基地压力；火箭射程远尤其需要这道过滤）。
+    foes = _foe_robots(turn)
+    if not foes:
+        return False
     if weapon.kind == "rocket":
-        target = _rocket_site(weapon, turn.robots, turn.map.size, assigned)
+        target = _rocket_site(weapon, foes, turn.map.size, assigned)
         if target is None:
             return False
-        _book_rocket(target, turn.robots, assigned)
+        _book_rocket(target, foes, assigned)
     else:
-        victim = _beam_site(weapon, turn.robots, assigned)
+        victim = _beam_site(weapon, foes, assigned)
         if victim is None:
             return False
         target = victim.pos

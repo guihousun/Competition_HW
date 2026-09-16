@@ -43,6 +43,7 @@ def load(payload: Any) -> Turn | None:
         vendor_prices=_vendor_prices(payload),
         shop_prices=_shop_prices(payload),
         walls=_walls(payload),
+        our_team=_our_team(payload),
         station_health=_station_hp(payload)[0],
         station_level=_station_hp(payload)[1],
         news=_news(payload),
@@ -204,16 +205,27 @@ def _news(payload: dict[str, Any]) -> str:
 def _robots(payload: dict[str, Any]) -> tuple[Robot, ...]:
     """场上全部机器人（`robot.roles`）：全图可见、逐回合全量，白天为空。
 
-    只留 `pos` + `health`（打谁只看血量）。**不按 `targetTeam` 过滤**：文档声明了字段
-    但样例里没有，靠它过滤会让"字段缺失"变成"一台都不打"；射程本身已经把远处那批筛掉了。
+    只留 `pos` + `health` + `target_team`（打谁只看血量 + 是否打我方）。
+    `target_team` 字段缺失给空串 ⇒ 当成打我方的（安全降级：不打比打错更糟，
+    点 3 优化：火箭射程远，打对方的机器人既浪费火力又帮对方减轻基地压力）。
     """
     out = []
     for node in _items(payload, "robot", "roles"):
         pos = _pos(node)
         if pos is None:
             continue
-        out.append(Robot(pos=pos, health=_int(node.get("health"))))
+        team = node.get("targetTeam") if isinstance(node, dict) else None
+        out.append(
+            Robot(pos=pos, health=_int(node.get("health")), target_team=team if isinstance(team, str) else "")
+        )
     return tuple(out)
+
+
+def _our_team(payload: dict[str, Any]) -> str:
+    """我方阵营 `teamOur.type`（"challenger" / "defender"）。缺失 ⇒ 空串（不过滤机器人）。"""
+    team = payload.get("teamOur") if isinstance(payload, dict) else None
+    val = team.get("type") if isinstance(team, dict) else None
+    return val if isinstance(val, str) else ""
 
 
 def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:

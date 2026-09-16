@@ -133,33 +133,34 @@ class BuildWeaponTest(unittest.TestCase):
         self.assertGreater(self.gold, 0, "这次不是钱见底才停的")
 
     def test_a_short_budget_builds_only_one(self):
-        """只有 25 金：**只建一座**（后列排第一的火箭），另一个工人转去采矿。
+        """只有 25 金：**只建一座**（前排排第一的火箭），金花光就停手。
 
         金币按**递减预算**扣。写成 `gold >= 25 * 待建数`（25 < 75 ⇒ 一座都不建）就全错了。
+        跑满到建成 1 座为止 —— 新阵形的前排落点离工人出生位远，单回合够不着。
         """
         self.gold = 25
-        cmds = plan(self._turn())
-        builds = self._builds(cmds)
-        self.assertEqual(len(builds), 1)
-        self.assertEqual(builds[0]["name"], "rocket")
-        self.assertEqual({c["action"] for c in cmds.values()}, {"build", "move"})
+        self._settle(want=1)
+        self.assertEqual(len(self._weapons()), 1)
+        self.assertEqual(self._weapons()[0], "rocket")
+        self.assertEqual(self.gold, 0, "25 金正好建一座，花光才停")
 
     def test_a_blocked_site_drops_only_its_own_weapon(self):
-        """后列那一格被占了 ⇒ **只有火箭不建**，两座前角照落在各自的位置上。
+        """前排第一格（第一座火箭）被占了 ⇒ **只有那一座不建**，另两座照落在各自的位置上。
 
-        这条钉的是 `_slots` 里"**先按种类配对、再滤**"的顺序。反过来写（先滤种类、
-        再 `zip` 落点）的话，"少一座火箭"会让 `zip` 整体前移 —— 加特林落到 (12,22)、
-        电磁炮落到 (12,25)，**每个种类都挪到了别人家的落点上**，而报文完全合法、本地全绿。
-        炮落在自己落点上时由 `have` 那道滤网挡住（同种类不会重建）；这里挡住它的是**墙**，
-        所以走的是 `blocked` 那一道 —— 顺带守住"覆盖会把原武器打成 level1"（§4.5.1 补充说明）。
+        这条钉的是 `_slots` 里"**落点与种类绑死、只滤 `blocked`**"的顺序。反过来写
+        （先滤空再 `zip`）的话，"少一座"会让 `zip` 整体前移 —— 第二座火箭落到第一座的
+        落点、加特林落到第二座火箭的落点，**每个种类都挪到了别人家的落点上**，而报文
+        完全合法、本地全绿。这里挡住它的是**墙**，走 `blocked` 那一道 —— 顺带守住
+        "覆盖会把原武器打成 level1"（§4.5.1 补充说明）。
         """
-        self.walls[Pos(9, 25)] = WALL
+        self.walls[Pos(12, 24)] = WALL  # 第一座火箭的落点被墙占了
         self._settle(want=2)
         self.assertEqual(
             {(name, cell) for name, cell in self.builds},
-            {("gatling", Pos(12, 22)), ("railgun", Pos(12, 25))},
+            {("rocket", Pos(12, 25)), ("gatling", Pos(12, 22))},
         )
-        self.assertNotIn("rocket", self._weapons(), "落点被占 ⇒ 那一座就是不建，不换地方")
+        built_cells = {cell for _, cell in self.builds}
+        self.assertNotIn(Pos(12, 24), built_cells, "落点被占 ⇒ 那一座就是不建，不换地方")
 
     def test_night_builds_nothing(self):
         """夜里 `build` 不可用（任务书 §4.4）—— 0 武器、75 金也一座都不许建。"""
@@ -622,8 +623,8 @@ class DayEndGateTest(unittest.TestCase):
     """
 
     BASE = Pos(10, 24)
-    #: 与 `weapon_sites` 同序：后列火箭 + 前排两角（这里只要"有三座炮"就够）
-    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
+    #: 与 `weapon_sites` 同序：前排上方两格火箭 + 前排下方加特林（这里只要"有三座炮"就够）
+    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
     SIZE = (41, 32)
 
     def _turn(self, *, round_no: int = 1, ring: bool = True, at: Pos = Pos(20, 24), stone: int = 0) -> Turn:

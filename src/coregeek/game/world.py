@@ -89,14 +89,18 @@ class Error(NamedTuple):
 
 
 class Robot(NamedTuple):
-    """一台机器人。**只留这一步用得上的**：打谁只看血量。
+    """一台机器人。**只留这一步用得上的**：打谁只看血量 + 是否打我方。
 
-    `id` / `roleType` / `abnormalState` / `targetTeam` 都不存 —— 目标位置用的是**坐标**，
+    `id` / `roleType` / `abnormalState` 都不存 —— 目标位置用的是**坐标**，
     按类型排优先级是另一种打法（用户选定的是"补刀"）。
+    `target_team`：该机器人打哪一队（"challenger" / "defender"），用于过滤"不打我们的
+    机器人"——火箭射程远（L3 全图），打对方的机器人既浪费火力、又帮对方减轻基地压力。
+    字段缺失给空串 ⇒ 当成打我们的（安全降级：不打比打错更糟）。
     """
 
     pos: Pos
     health: int
+    target_team: str = ""
 
 
 class Turn(NamedTuple):
@@ -142,6 +146,9 @@ class Turn(NamedTuple):
     action_results: tuple[tuple[int, bool], ...] = ()
     #: 我方围墙实体（第 42 步修墙的判据：health 与 level；网格里那份只有类别串）。
     walls: tuple[Wall, ...] = ()
+    #: 我方阵营（"challenger" / "defender"），用于过滤"不打我们的机器人"（点 3 优化）。
+    #: 缺失 ⇒ 空串 ⇒ 不过滤（全部照打，安全降级）。
+    our_team: str = ""
     #: 基地当前血量（夜里基地升级券的判据）。缺失 -1 ⇒ 判"不残血"（不轻举妄动）。
     station_health: int = -1
     #: 基地等级（查满血基准表用）。缺失按 1。
