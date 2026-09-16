@@ -29,9 +29,10 @@ def cases(side):
     unknown = deepcopy(quiet)
     unknown.pop('robot')
     rows = [('outside', outside, '1', 'move'), ('repair', repair, '1', 'use'),
-            ('quiet', quiet, '2', 'collect'), ('unknown', unknown, '2', 'move')]
+            ('quiet', quiet, '2', 'collect'), ('unknown', unknown, '2', 'move'),
+            ('quiet_fourth_night', deepcopy(quiet), '2', 'move')]
     for i, (name, state, uid, action) in enumerate(rows):
-        state['roundNo'] = 90 + i
+        state['roundNo'] = 462 if name == 'quiet_fourth_night' else 90 + i
         state['teamOur']['type'] = side
         if side == 'defender':
             for role in state['teamOur']['roles']:
