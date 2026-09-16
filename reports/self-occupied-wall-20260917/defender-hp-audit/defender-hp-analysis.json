@@ -1,0 +1,1483 @@
+{
+  "scope": "Read-only attribution from four completed defender trajectories; no counterfactual or policy rerun. Recorded-action physics replay verified every before/after public hash.",
+  "cases": [
+    {
+      "seed": 1,
+      "arms": {
+        "baseline-retry": {
+          "final_hp": 940,
+          "loss_windows": [
+            {
+              "start": 1028,
+              "end": 1040,
+              "damage": 520
+            },
+            {
+              "start": 1170,
+              "end": 1170,
+              "damage": 40
+            }
+          ],
+          "critical_night_deaths": [
+            {
+              "round": 897,
+              "id": 41000,
+              "kind": "wall",
+              "pos": {
+                "x": 30,
+                "y": 4
+              }
+            },
+            {
+              "round": 904,
+              "id": 41007,
+              "kind": "wall",
+              "pos": {
+                "x": 30,
+                "y": 3
+              }
+            }
+          ],
+          "trace_sha256": "888fd1d04aa494eb8064ab699bd7db90f231d92d3142418b20f7a8456ce81b2d",
+          "repair_or_heal_buys_or_uses": [],
+          "night_start_round": 851,
+          "night_start_gold": 0,
+          "night_start_roles": [
+            {
+              "backPackCapability": 0,
+              "backpack": [],
+              "health": 1500,
+              "id": 20013,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 6
+              },
+              "roleType": "station"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone",
+                "stone"
+              ],
+              "health": 220,
+              "id": 20010,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 5
+              },
+              "roleType": "worker"
+            },
+            {
+              "backPackCapability": 40,
+              "backpack": [],
+              "health": 180,
+              "id": 20011,
+              "level": 1,
+              "pos": {
+                "x": 31,
+                "y": 5
+              },
+              "roleType": "pioneer"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone"
+              ],
+              "health": 140,
+              "id": 20012,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 7
+              },
+              "roleType": "worker"
+            },
+            {
+              "cooldown": 0,
+              "health": 1460,
+              "id": 20040,
+              "level": 2,
+              "pos": {
+                "x": 31,
+                "y": 4
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 2000,
+              "id": 20041,
+              "level": 3,
+              "pos": {
+                "x": 31,
+                "y": 6
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 2000,
+              "id": 20030,
+              "level": 3,
+              "pos": {
+                "x": 34,
+                "y": 4
+              },
+              "roleType": "railgun"
+            },
+            {
+              "cooldown": 0,
+              "health": 970,
+              "id": 41002,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41003,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41004,
+              "level": 1,
+              "pos": {
+                "x": 31,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 675,
+              "id": 41005,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 6
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41006,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 700,
+              "id": 41008,
+              "level": 1,
+              "pos": {
+                "x": 31,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41009,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41010,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41011,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41012,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41013,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41014,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41015,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41016,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41017,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41000,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41001,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 5
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41007,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 3
+              },
+              "roleType": "wall"
+            }
+          ]
+        },
+        "candidate": {
+          "final_hp": 750,
+          "loss_windows": [
+            {
+              "start": 892,
+              "end": 910,
+              "damage": 190
+            },
+            {
+              "start": 1031,
+              "end": 1040,
+              "damage": 400
+            },
+            {
+              "start": 1167,
+              "end": 1170,
+              "damage": 160
+            }
+          ],
+          "critical_night_deaths": [
+            {
+              "round": 869,
+              "id": 41017,
+              "kind": "wall",
+              "pos": {
+                "x": 30,
+                "y": 3
+              }
+            },
+            {
+              "round": 872,
+              "id": 41001,
+              "kind": "wall",
+              "pos": {
+                "x": 30,
+                "y": 4
+              }
+            },
+            {
+              "round": 873,
+              "id": 20011,
+              "kind": "pioneer",
+              "pos": {
+                "x": 32,
+                "y": 4
+              }
+            },
+            {
+              "round": 879,
+              "id": 20010,
+              "kind": "worker",
+              "pos": {
+                "x": 31,
+                "y": 5
+              }
+            },
+            {
+              "round": 889,
+              "id": 41008,
+              "kind": "wall",
+              "pos": {
+                "x": 31,
+                "y": 3
+              }
+            },
+            {
+              "round": 891,
+              "id": 20012,
+              "kind": "worker",
+              "pos": {
+                "x": 33,
+                "y": 4
+              }
+            },
+            {
+              "round": 896,
+              "id": 41000,
+              "kind": "wall",
+              "pos": {
+                "x": 30,
+                "y": 5
+              }
+            }
+          ],
+          "trace_sha256": "9c534d5b97485bb610ddff42751006de7862e0deea416d0b26b9f0228e54e8b4",
+          "repair_or_heal_buys_or_uses": [],
+          "night_start_round": 851,
+          "night_start_gold": 0,
+          "night_start_roles": [
+            {
+              "backPackCapability": 0,
+              "backpack": [],
+              "health": 1500,
+              "id": 20013,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 6
+              },
+              "roleType": "station"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "copper",
+                "copper",
+                "copper",
+                "copper"
+              ],
+              "health": 220,
+              "id": 20010,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 5
+              },
+              "roleType": "worker"
+            },
+            {
+              "backPackCapability": 40,
+              "backpack": [],
+              "health": 10,
+              "id": 20011,
+              "level": 1,
+              "pos": {
+                "x": 31,
+                "y": 5
+              },
+              "roleType": "pioneer"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper"
+              ],
+              "health": 220,
+              "id": 20012,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 7
+              },
+              "roleType": "worker"
+            },
+            {
+              "cooldown": 0,
+              "health": 1500,
+              "id": 20040,
+              "level": 2,
+              "pos": {
+                "x": 31,
+                "y": 4
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 2000,
+              "id": 20041,
+              "level": 3,
+              "pos": {
+                "x": 31,
+                "y": 6
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 2000,
+              "id": 20030,
+              "level": 3,
+              "pos": {
+                "x": 34,
+                "y": 4
+              },
+              "roleType": "railgun"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41002,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41003,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41004,
+              "level": 1,
+              "pos": {
+                "x": 31,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 650,
+              "id": 41005,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 6
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41006,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 270,
+              "id": 41008,
+              "level": 1,
+              "pos": {
+                "x": 31,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41009,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41010,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41011,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41012,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41013,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41014,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41015,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41016,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 580,
+              "id": 41000,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 5
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 135,
+              "id": 41001,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41007,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 60,
+              "id": 41017,
+              "level": 1,
+              "pos": {
+                "x": 30,
+                "y": 3
+              },
+              "roleType": "wall"
+            }
+          ]
+        }
+      },
+      "first_hp_difference_round": 892,
+      "first_command_difference_round": 43
+    },
+    {
+      "seed": 19,
+      "arms": {
+        "baseline-retry": {
+          "final_hp": 1195,
+          "loss_windows": [
+            {
+              "start": 1027,
+              "end": 1040,
+              "damage": 280
+            },
+            {
+              "start": 1296,
+              "end": 1300,
+              "damage": 25
+            }
+          ],
+          "critical_night_deaths": [
+            {
+              "round": 1156,
+              "id": 41007,
+              "kind": "wall",
+              "pos": {
+                "x": 32,
+                "y": 3
+              }
+            },
+            {
+              "round": 1170,
+              "id": 41000,
+              "kind": "wall",
+              "pos": {
+                "x": 32,
+                "y": 4
+              }
+            }
+          ],
+          "trace_sha256": "e2fefcff7ccdacedde91e2eaa7e9169fe231f78e6cda445de02e772d69967996",
+          "repair_or_heal_buys_or_uses": [],
+          "night_start_round": 1111,
+          "night_start_gold": 50,
+          "night_start_roles": [
+            {
+              "backPackCapability": 0,
+              "backpack": [],
+              "health": 1220,
+              "id": 20013,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 6
+              },
+              "roleType": "station"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone"
+              ],
+              "health": 220,
+              "id": 20010,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 7
+              },
+              "roleType": "worker"
+            },
+            {
+              "backPackCapability": 40,
+              "backpack": [
+                "FlameBreath",
+                "FrostPotion"
+              ],
+              "health": 200,
+              "id": 20011,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 4
+              },
+              "roleType": "pioneer"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper",
+                "copper"
+              ],
+              "health": 220,
+              "id": 20012,
+              "level": 1,
+              "pos": {
+                "x": 36,
+                "y": 5
+              },
+              "roleType": "worker"
+            },
+            {
+              "cooldown": 0,
+              "health": 1015,
+              "id": 20040,
+              "level": 3,
+              "pos": {
+                "x": 33,
+                "y": 4
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 1440,
+              "id": 20041,
+              "level": 2,
+              "pos": {
+                "x": 33,
+                "y": 6
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 1500,
+              "id": 20030,
+              "level": 2,
+              "pos": {
+                "x": 36,
+                "y": 4
+              },
+              "roleType": "railgun"
+            },
+            {
+              "cooldown": 0,
+              "health": 585,
+              "id": 41002,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 690,
+              "id": 41004,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41005,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41006,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41008,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 780,
+              "id": 41009,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41010,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41011,
+              "level": 1,
+              "pos": {
+                "x": 36,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41012,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41013,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41014,
+              "level": 1,
+              "pos": {
+                "x": 36,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41015,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41016,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41017,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41000,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41001,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 5
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41003,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 6
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41007,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 3
+              },
+              "roleType": "wall"
+            }
+          ]
+        },
+        "candidate": {
+          "final_hp": 740,
+          "loss_windows": [
+            {
+              "start": 909,
+              "end": 910,
+              "damage": 80
+            },
+            {
+              "start": 1154,
+              "end": 1170,
+              "damage": 680
+            }
+          ],
+          "critical_night_deaths": [
+            {
+              "round": 1129,
+              "id": 20012,
+              "kind": "worker",
+              "pos": {
+                "x": 33,
+                "y": 5
+              }
+            },
+            {
+              "round": 1135,
+              "id": 20010,
+              "kind": "worker",
+              "pos": {
+                "x": 33,
+                "y": 5
+              }
+            },
+            {
+              "round": 1143,
+              "id": 41003,
+              "kind": "wall",
+              "pos": {
+                "x": 32,
+                "y": 6
+              }
+            },
+            {
+              "round": 1148,
+              "id": 41001,
+              "kind": "wall",
+              "pos": {
+                "x": 32,
+                "y": 5
+              }
+            },
+            {
+              "round": 1153,
+              "id": 20011,
+              "kind": "pioneer",
+              "pos": {
+                "x": 36,
+                "y": 5
+              }
+            }
+          ],
+          "trace_sha256": "6525fbc64dac3dfdf4c194c1e8678410bc5b60ea8981f005be34b47fab15e340",
+          "repair_or_heal_buys_or_uses": [],
+          "night_start_round": 1111,
+          "night_start_gold": 30,
+          "night_start_roles": [
+            {
+              "backPackCapability": 0,
+              "backpack": [],
+              "health": 1420,
+              "id": 20013,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 6
+              },
+              "roleType": "station"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [],
+              "health": 220,
+              "id": 20010,
+              "level": 1,
+              "pos": {
+                "x": 36,
+                "y": 5
+              },
+              "roleType": "worker"
+            },
+            {
+              "backPackCapability": 40,
+              "backpack": [],
+              "health": 200,
+              "id": 20011,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 7
+              },
+              "roleType": "pioneer"
+            },
+            {
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone"
+              ],
+              "health": 20,
+              "id": 20012,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 5
+              },
+              "roleType": "worker"
+            },
+            {
+              "cooldown": 0,
+              "health": 1380,
+              "id": 20040,
+              "level": 3,
+              "pos": {
+                "x": 33,
+                "y": 4
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 2000,
+              "id": 20041,
+              "level": 3,
+              "pos": {
+                "x": 33,
+                "y": 6
+              },
+              "roleType": "rocket"
+            },
+            {
+              "cooldown": 0,
+              "health": 1500,
+              "id": 20030,
+              "level": 2,
+              "pos": {
+                "x": 36,
+                "y": 4
+              },
+              "roleType": "railgun"
+            },
+            {
+              "cooldown": 0,
+              "health": 320,
+              "id": 41002,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41004,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41005,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41006,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41008,
+              "level": 1,
+              "pos": {
+                "x": 34,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 490,
+              "id": 41009,
+              "level": 1,
+              "pos": {
+                "x": 33,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41010,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41011,
+              "level": 1,
+              "pos": {
+                "x": 36,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41012,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 8
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41013,
+              "level": 1,
+              "pos": {
+                "x": 35,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41014,
+              "level": 1,
+              "pos": {
+                "x": 36,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41015,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41016,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 4
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41017,
+              "level": 1,
+              "pos": {
+                "x": 37,
+                "y": 7
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 200,
+              "id": 41003,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 6
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 820,
+              "id": 41001,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 5
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 0,
+              "id": 41007,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 3
+              },
+              "roleType": "wall"
+            },
+            {
+              "cooldown": 0,
+              "health": 1000,
+              "id": 41000,
+              "level": 1,
+              "pos": {
+                "x": 32,
+                "y": 3
+              },
+              "roleType": "wall"
+            }
+          ]
+        }
+      },
+      "first_hp_difference_round": 909,
+      "first_command_difference_round": 49
+    }
+  ],
+  "confirmed_obstruction": {
+    "fixture": "19-candidate-r1042-request.json",
+    "worker": 20012,
+    "position": {
+      "x": 32,
+      "y": 4
+    },
+    "stone_count": 3,
+    "legal_missing_wall_sites": [
+      {
+        "x": 32,
+        "y": 4
+      },
+      {
+        "x": 32,
+        "y": 3
+      }
+    ],
+    "self_occupied_missing_site_removed_from_free_walls": {
+      "x": 32,
+      "y": 4
+    },
+    "source_path": "Demo/CoreGeek/src/agent/brain.py",
+    "source_lines": [
+      711,
+      713,
+      788,
+      824,
+      1339
+    ],
+    "memory_scope": "Full public request is exact; no original per-round planner dump saved for1042. Empty team_trip_events/absent construction reports are observations, not proof of every internal memory field."
+  },
+  "limits": [
+    "Direct replayed robot attack records are local engine-derived attribution, not official public interface fields.",
+    "Different earlier actions already changed state and RNG trajectory; parallel arms do not isolate one causal strategy parameter.",
+    "No counterfactual executed; only a local two-step yield/build probe is proposed.",
+    "Prior no-collision/self-blocked-robot experiments are excluded.",
+    "All source code unchanged."
+  ],
+  "files": {
+    "1-baseline-retry-windows.json": "9159a4b1dbbe98a0429cbb168c7fd9468139a7159c5b611d49b98906ec9f50c2",
+    "1-candidate-windows.json": "4b7eff04baff6e7f99f424dd6ec2a93458c9ec42c70a361dabf95e4ab6095354",
+    "19-baseline-retry-windows.json": "ae0d5e9407dff06db466b1d0b16c435b09454fa895193e334302dd4fbf19da2c",
+    "19-candidate-windows.json": "bdfebdb224d3c2fe765bba2614cf5353a716de787e7181c51c5489b86f18c8ab"
+  }
+}

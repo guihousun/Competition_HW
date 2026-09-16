@@ -1,0 +1,262 @@
+{
+  "220": {
+    "source": ".workflow\\react-lab\\failure50-navigation-v5\\solo_mixed\\train-1-challenger\\rounds\\0220.json",
+    "source_file_sha256": "e05c1675bcc941487a106f6a7299e6397ef68bfd752ef0aa774c16fa64b6d9a6",
+    "observation_hash": "d99da17399f3240d9f9e8a9ec7dc3accb6abf18ac488ac0fcb254407f0dab69b",
+    "after_hash": "44e070d236591438acc122a45702a8ba2c901b82e3a60a1ef6a562dfee373e29",
+    "fixture_file_sha256": "69adbcbd5afe5b30883fe1a3a245ef329e24c64072f421db51a1b287b6d11997"
+  },
+  "221": {
+    "source": ".workflow\\react-lab\\failure50-navigation-v5\\solo_mixed\\train-1-challenger\\rounds\\0221.json",
+    "source_file_sha256": "991271552ff1eb98cda3258b8ed5f0745e86af4b631ecd9ab9b85ff79cb57806",
+    "observation_hash": "44e070d236591438acc122a45702a8ba2c901b82e3a60a1ef6a562dfee373e29",
+    "after_hash": "ade78ec5215280ca0fbf743cb8011ee9a9349d942697dfaac22c73885bc3b9d8",
+    "fixture_file_sha256": "2bb49d83d44d001a0ab12e6a30dc649c1b52eee22746c10795c330a1e40be847"
+  },
+  "far_stationary_at_least20": [
+    {
+      "id": 320115,
+      "type": "smallRobot",
+      "pos": {
+        "x": 19,
+        "y": 14
+      },
+      "first": 210,
+      "last": 259,
+      "min_distance_to_any_own_unit": 9,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320123,
+      "type": "smallRobot",
+      "pos": {
+        "x": 20,
+        "y": 13
+      },
+      "first": 210,
+      "last": 259,
+      "min_distance_to_any_own_unit": 10,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320100,
+      "type": "middleRobot",
+      "pos": {
+        "x": 16,
+        "y": 17
+      },
+      "first": 212,
+      "last": 259,
+      "min_distance_to_any_own_unit": 6,
+      "hp_before": 60,
+      "hp_after": 30
+    },
+    {
+      "id": 320103,
+      "type": "middleRobot",
+      "pos": {
+        "x": 17,
+        "y": 16
+      },
+      "first": 212,
+      "last": 259,
+      "min_distance_to_any_own_unit": 7,
+      "hp_before": 60,
+      "hp_after": 50
+    },
+    {
+      "id": 320121,
+      "type": "smallRobot",
+      "pos": {
+        "x": 18,
+        "y": 15
+      },
+      "first": 212,
+      "last": 259,
+      "min_distance_to_any_own_unit": 8,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320101,
+      "type": "middleRobot",
+      "pos": {
+        "x": 14,
+        "y": 19
+      },
+      "first": 214,
+      "last": 259,
+      "min_distance_to_any_own_unit": 4,
+      "hp_before": 30,
+      "hp_after": 30
+    },
+    {
+      "id": 320108,
+      "type": "middleRobot",
+      "pos": {
+        "x": 15,
+        "y": 18
+      },
+      "first": 214,
+      "last": 259,
+      "min_distance_to_any_own_unit": 5,
+      "hp_before": 50,
+      "hp_after": 50
+    },
+    {
+      "id": 320132,
+      "type": "smallRobot",
+      "pos": {
+        "x": 21,
+        "y": 13
+      },
+      "first": 210,
+      "last": 251,
+      "min_distance_to_any_own_unit": 11,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320128,
+      "type": "smallRobot",
+      "pos": {
+        "x": 19,
+        "y": 15
+      },
+      "first": 212,
+      "last": 251,
+      "min_distance_to_any_own_unit": 9,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320135,
+      "type": "smallRobot",
+      "pos": {
+        "x": 20,
+        "y": 14
+      },
+      "first": 212,
+      "last": 251,
+      "min_distance_to_any_own_unit": 10,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320117,
+      "type": "smallRobot",
+      "pos": {
+        "x": 17,
+        "y": 17
+      },
+      "first": 213,
+      "last": 251,
+      "min_distance_to_any_own_unit": 7,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320126,
+      "type": "smallRobot",
+      "pos": {
+        "x": 18,
+        "y": 16
+      },
+      "first": 213,
+      "last": 251,
+      "min_distance_to_any_own_unit": 8,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320105,
+      "type": "middleRobot",
+      "pos": {
+        "x": 19,
+        "y": 16
+      },
+      "first": 210,
+      "last": 232,
+      "min_distance_to_any_own_unit": 9,
+      "hp_before": 60,
+      "hp_after": 60
+    },
+    {
+      "id": 320130,
+      "type": "smallRobot",
+      "pos": {
+        "x": 20,
+        "y": 15
+      },
+      "first": 211,
+      "last": 232,
+      "min_distance_to_any_own_unit": 10,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320137,
+      "type": "smallRobot",
+      "pos": {
+        "x": 21,
+        "y": 14
+      },
+      "first": 211,
+      "last": 232,
+      "min_distance_to_any_own_unit": 11,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320140,
+      "type": "smallRobot",
+      "pos": {
+        "x": 21,
+        "y": 15
+      },
+      "first": 212,
+      "last": 233,
+      "min_distance_to_any_own_unit": 11,
+      "hp_before": 40,
+      "hp_after": 40
+    },
+    {
+      "id": 320109,
+      "type": "middleRobot",
+      "pos": {
+        "x": 17,
+        "y": 18
+      },
+      "first": 212,
+      "last": 232,
+      "min_distance_to_any_own_unit": 7,
+      "hp_before": 60,
+      "hp_after": 50
+    },
+    {
+      "id": 320118,
+      "type": "smallRobot",
+      "pos": {
+        "x": 18,
+        "y": 17
+      },
+      "first": 212,
+      "last": 232,
+      "min_distance_to_any_own_unit": 8,
+      "hp_before": 40,
+      "hp_after": 40
+    }
+  ],
+  "successful_attack_checks": {
+    "solo_mixed": {
+      "successful_attacks": 96,
+      "invalid_controller_geometry_cooldown_or_double_commands": []
+    },
+    "solo_rockets": {
+      "successful_attacks": 76,
+      "invalid_controller_geometry_cooldown_or_double_commands": []
+    }
+  }
+}

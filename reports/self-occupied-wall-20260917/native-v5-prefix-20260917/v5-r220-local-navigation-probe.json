@@ -1,0 +1,216 @@
+{
+  "scope": "read-only planner on closed public r220, no new match or live mutation",
+  "observation_hash": "d99da17399f3240d9f9e8a9ec7dc3accb6abf18ac488ac0fcb254407f0dab69b",
+  "results": [
+    {
+      "id": 320115,
+      "pos": {
+        "x": 19,
+        "y": 14
+      },
+      "goal": {
+        "x": 8,
+        "y": 25
+      },
+      "distance": 11,
+      "move": null,
+      "attack": [],
+      "neighbors": [
+        {
+          "pos": {
+            "x": 18,
+            "y": 13
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 18,
+            "y": 14
+          },
+          "distance": 11,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 18,
+            "y": 15
+          },
+          "distance": 10,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320121
+          ]
+        },
+        {
+          "pos": {
+            "x": 19,
+            "y": 13
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 19,
+            "y": 15
+          },
+          "distance": 11,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320128
+          ]
+        },
+        {
+          "pos": {
+            "x": 20,
+            "y": 13
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320123
+          ]
+        },
+        {
+          "pos": {
+            "x": 20,
+            "y": 14
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320135
+          ]
+        },
+        {
+          "pos": {
+            "x": 20,
+            "y": 15
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320130
+          ]
+        }
+      ]
+    },
+    {
+      "id": 320123,
+      "pos": {
+        "x": 20,
+        "y": 13
+      },
+      "goal": {
+        "x": 8,
+        "y": 25
+      },
+      "distance": 12,
+      "move": null,
+      "attack": [],
+      "neighbors": [
+        {
+          "pos": {
+            "x": 19,
+            "y": 12
+          },
+          "distance": 13,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 19,
+            "y": 13
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 19,
+            "y": 14
+          },
+          "distance": 11,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320115
+          ]
+        },
+        {
+          "pos": {
+            "x": 20,
+            "y": 12
+          },
+          "distance": 13,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 20,
+            "y": 14
+          },
+          "distance": 12,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320135
+          ]
+        },
+        {
+          "pos": {
+            "x": 21,
+            "y": 12
+          },
+          "distance": 13,
+          "hard": false,
+          "land": true,
+          "robot_ids": []
+        },
+        {
+          "pos": {
+            "x": 21,
+            "y": 13
+          },
+          "distance": 13,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320132
+          ]
+        },
+        {
+          "pos": {
+            "x": 21,
+            "y": 14
+          },
+          "distance": 13,
+          "hard": false,
+          "land": true,
+          "robot_ids": [
+            320137
+          ]
+        }
+      ]
+    }
+  ]
+}

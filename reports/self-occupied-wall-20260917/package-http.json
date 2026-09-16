@@ -1,0 +1,119 @@
+{
+  "source_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+  "archive_sha256": "388582d9649c1253c0484414502562aae57b725f9b3c40b7e9822a2474fdac55",
+  "python": "3.11.10 (main, Oct 16 2024, 00:15:32) [MSC v.1929 64 bit (AMD64)]",
+  "scope": "Four actual-package HTTP requests; independent legal move/build settlement; no simulator and no official platform",
+  "cases": [
+    {
+      "side": "defender",
+      "round": 1042,
+      "response": {
+        "roleCommandMap": {
+          "20010": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 38,
+                "y": 4
+              }
+            ]
+          },
+          "20012": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 33,
+                "y": 5
+              }
+            ]
+          }
+        }
+      },
+      "ms": 192.9402999812737
+    },
+    {
+      "side": "defender",
+      "round": 1043,
+      "response": {
+        "roleCommandMap": {
+          "20010": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 38,
+                "y": 3
+              }
+            ]
+          },
+          "20012": {
+            "action": "build",
+            "targetPos": [
+              {
+                "x": 32,
+                "y": 4
+              }
+            ],
+            "name": "wall"
+          }
+        }
+      },
+      "ms": 30.6290999869816
+    },
+    {
+      "side": "challenger",
+      "round": 1042,
+      "response": {
+        "roleCommandMap": {
+          "20010": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 2,
+                "y": 4
+              }
+            ]
+          },
+          "20012": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 7,
+                "y": 5
+              }
+            ]
+          }
+        }
+      },
+      "ms": 94.67800002312288
+    },
+    {
+      "side": "challenger",
+      "round": 1043,
+      "response": {
+        "roleCommandMap": {
+          "20010": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 2,
+                "y": 3
+              }
+            ]
+          },
+          "20012": {
+            "action": "build",
+            "targetPos": [
+              {
+                "x": 8,
+                "y": 4
+              }
+            ],
+            "name": "wall"
+          }
+        }
+      },
+      "ms": 30.816300015430897
+    }
+  ],
+  "status": "passed"
+}

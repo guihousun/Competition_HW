@@ -1,0 +1,53 @@
+{
+  "created_unix": 1789583497.006401,
+  "source_refs": {
+    "baseline": "1b8da86aaf83e71904b4a6b213cac3634781d051",
+    "candidate": "2296d9a16aa9a96df41225a785f0b313e12463f2"
+  },
+  "runner_sha256": "6f0f275acdf05491a4c6556d41a89b6827bb752ecfb6876440e967089d779107",
+  "runner_unchanged": true,
+  "cases": [
+    {
+      "seed": 19,
+      "sides": [
+        "challenger",
+        "defender"
+      ],
+      "failure_rate": 0,
+      "task_gold": 80,
+      "arms": [
+        "candidate"
+      ],
+      "baseline_reuse": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\issue32\\navigation-team-validation-1b8da86\\candidate"
+    },
+    {
+      "seed": 127031,
+      "sides": [
+        "challenger",
+        "defender"
+      ],
+      "failure_rate": 0.5,
+      "task_gold": 80,
+      "arms": [
+        "baseline",
+        "candidate"
+      ],
+      "preinspection": "First locked now for this validation; no prior results inspected by this reviewer",
+      "lock": "No strategy adjustment or seed expansion in response to these outcomes"
+    }
+  ],
+  "new_matches": 6,
+  "flags": "candidate/early_economy/repair_supply/construction_trip/wall_sustain off",
+  "profile": "observed-seven-days",
+  "tasks_per_point": 3,
+  "limits": "failure0.5 is injected local task stress, not measured official LLM failure; seed19 previously viewed development set. New seed is a one-time validation sample, not an exhaustive generalization guarantee.",
+  "gates": [
+    "no_earlier_base_destruction_per_pair",
+    "no_new_protocol_or_execution_errors"
+  ],
+  "descriptive": [
+    "score",
+    "base_hp",
+    "worst_policy_ms_and_round"
+  ]
+}
