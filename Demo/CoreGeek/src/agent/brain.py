@@ -1761,8 +1761,6 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     if state is not None and _try_battle_items(turn, commands, state):
         pass
     for role, tower in pairs:
-        if role.kind == PIONEER and committed_task:
-            continue
         if role.unit_id in outside_workers:
             continue
         if role.unit_id in commands:

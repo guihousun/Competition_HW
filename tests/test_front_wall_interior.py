@@ -53,7 +53,8 @@ class FrontWallTests(unittest.TestCase):
 
     def test_outside_adjacent_controller_returns_instead_of_firing(self):
         p = battle()
-        p['teamOur']['roles'][-3]['pos'] = {'x':12,'y':23} # outside, near upper gun
+        next(u for u in p['teamOur']['roles'] if u['id']==10040)['pos'] = {'x':11,'y':21}
+        next(u for u in p['teamOur']['roles'] if u['id']==1)['pos'] = {'x':12,'y':21}
         turn=Turn.load(p);commands={}
         brain._night(turn,commands,p)
         brain._fill_ready_weapons(turn,commands,set())
@@ -70,7 +71,8 @@ class FrontWallTests(unittest.TestCase):
     def test_defending_pioneer_also_returns_but_active_task_is_not_forced_out(self):
         p = battle()
         role = next(u for u in p['teamOur']['roles'] if u['id'] == 1)
-        role.update(roleType='pioneer', pos={'x':12,'y':23})
+        next(u for u in p['teamOur']['roles'] if u['id']==10040)['pos'] = {'x':11,'y':21}
+        role.update(roleType='pioneer', pos={'x':12,'y':21})
         turn = Turn.load(p); commands = {}
         brain._night(turn,commands,p)
         self.assertEqual(commands[1]['action'],'move')
