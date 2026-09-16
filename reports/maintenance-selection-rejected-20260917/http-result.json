@@ -1,0 +1,1086 @@
+{
+  "status": "passed",
+  "source_commit": "9463590049a8ff8ad9cc1e461eb1eb72455bc142",
+  "python": "3.11.10 (main, Oct 16 2024, 00:15:32) [MSC v.1929 64 bit (AMD64)]",
+  "archive_sha256": "26ea075f7b6916c57dc20a0ca2df47603be15c6d8b3717d512d0dc6c24013d74",
+  "scope": "Actual package HTTP with explicit maintenance ON; both sides day/night; hand-counted action expectations and local engine settlement, not official platform",
+  "feature_environment": {
+    "COMPETITION_HW_MAINTENANCE_V2": "on"
+  },
+  "cases": [
+    {
+      "case": "day-blue",
+      "round": 1,
+      "ms": 165.80189997330308,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "buy",
+            "name": "WallFixer",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 2,
+      "ms": 18.681999994441867,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 3,
+      "ms": 17.00450002681464,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 11,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 4,
+      "ms": 16.033199965022504,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 12,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 5,
+      "ms": 16.20720000937581,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "use",
+            "name": "WallFixer",
+            "targetPos": [
+              {
+                "x": 13,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 6,
+      "ms": 15.216400031931698,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 11,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 7,
+      "ms": 20.060500013642013,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 8,
+      "ms": 17.334299976937473,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 9,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 9,
+      "ms": 17.116600007284433,
+      "response": {
+        "roleCommandMap": {}
+      }
+    },
+    {
+      "case": "day-blue",
+      "round": 10,
+      "ms": 15.086900035385042,
+      "response": {
+        "roleCommandMap": {}
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 1,
+      "ms": 40.7503999886103,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "buy",
+            "name": "WallFixer",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 2,
+      "ms": 15.307300025597215,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 3,
+      "ms": 15.066099993418902,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 29,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 4,
+      "ms": 15.812899975571781,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 28,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 5,
+      "ms": 15.01920004375279,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "use",
+            "name": "WallFixer",
+            "targetPos": [
+              {
+                "x": 27,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 6,
+      "ms": 13.467099983245134,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 29,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 7,
+      "ms": 14.107100025285035,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 8,
+      "ms": 17.215900006704032,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 31,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 9,
+      "ms": 26.176100014708936,
+      "response": {
+        "roleCommandMap": {}
+      }
+    },
+    {
+      "case": "day-red",
+      "round": 10,
+      "ms": 12.803199992049485,
+      "response": {
+        "roleCommandMap": {}
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 80,
+      "ms": 32.010599970817566,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          },
+          "412": {
+            "action": "attack",
+            "targetPos": [
+              {
+                "x": 15,
+                "y": 10
+              }
+            ],
+            "controllerId": "9081"
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 81,
+      "ms": 13.442899973597378,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 11,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 82,
+      "ms": 13.407299993559718,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 12,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 83,
+      "ms": 23.613299999851733,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "use",
+            "name": "WallFixer",
+            "targetPos": [
+              {
+                "x": 13,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 84,
+      "ms": 13.644999999087304,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 11,
+                "y": 11
+              }
+            ]
+          },
+          "412": {
+            "action": "attack",
+            "targetPos": [
+              {
+                "x": 15,
+                "y": 10
+              }
+            ],
+            "controllerId": "9081"
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 85,
+      "ms": 13.408300001174212,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 86,
+      "ms": 13.529699994251132,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 9,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 87,
+      "ms": 15.548700001090765,
+      "response": {
+        "roleCommandMap": {}
+      }
+    },
+    {
+      "case": "night-blue",
+      "round": 88,
+      "ms": 26.307599968276918,
+      "response": {
+        "roleCommandMap": {
+          "412": {
+            "action": "attack",
+            "targetPos": [
+              {
+                "x": 15,
+                "y": 10
+              }
+            ],
+            "controllerId": "731"
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 80,
+      "ms": 40.73940002126619,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          },
+          "40412": {
+            "action": "attack",
+            "targetPos": [
+              {
+                "x": 25,
+                "y": 10
+              }
+            ],
+            "controllerId": "49081"
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 81,
+      "ms": 18.332800013013184,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 29,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 82,
+      "ms": 17.085300001781434,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 28,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 83,
+      "ms": 15.753400046378374,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "use",
+            "name": "WallFixer",
+            "targetPos": [
+              {
+                "x": 27,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 84,
+      "ms": 19.243899965658784,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 29,
+                "y": 11
+              }
+            ]
+          },
+          "40412": {
+            "action": "attack",
+            "targetPos": [
+              {
+                "x": 25,
+                "y": 10
+              }
+            ],
+            "controllerId": "49081"
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 85,
+      "ms": 24.821900005917996,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 86,
+      "ms": 13.42490001115948,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 31,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 87,
+      "ms": 29.293400002643466,
+      "response": {
+        "roleCommandMap": {}
+      }
+    },
+    {
+      "case": "night-red",
+      "round": 88,
+      "ms": 13.277800055220723,
+      "response": {
+        "roleCommandMap": {
+          "40412": {
+            "action": "attack",
+            "targetPos": [
+              {
+                "x": 25,
+                "y": 10
+              }
+            ],
+            "controllerId": "40731"
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 1,
+      "ms": 42.7120000240393,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "buy",
+            "name": "WallFixer",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 2,
+      "ms": 15.751700033433735,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 3,
+      "ms": 17.986099992413074,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 11,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 4,
+      "ms": 37.695800012443215,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 12,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 5,
+      "ms": 15.495100000407547,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "use",
+            "name": "WallFixer",
+            "targetPos": [
+              {
+                "x": 13,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 6,
+      "ms": 17.710799991618842,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 11,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 7,
+      "ms": 15.058499993756413,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 8,
+      "ms": 19.433800014667213,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 9,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 9,
+      "ms": 17.85040000686422,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "buy",
+            "name": "WeaponUpgradeVoucher1",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 10,
+      "ms": 30.74339998420328,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "use",
+            "name": "WeaponUpgradeVoucher1",
+            "targetPos": [
+              {
+                "x": 9,
+                "y": 9
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 11,
+      "ms": 18.514800001867115,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "buy",
+            "name": "WallFixer",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-blue",
+      "round": 12,
+      "ms": 14.818500028923154,
+      "response": {
+        "roleCommandMap": {
+          "731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 10,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 1,
+      "ms": 42.98690002178773,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "buy",
+            "name": "WallFixer",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 2,
+      "ms": 16.0592999891378,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 3,
+      "ms": 33.997700025793165,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 29,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 4,
+      "ms": 14.97459999518469,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 28,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 5,
+      "ms": 17.052699986379594,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "use",
+            "name": "WallFixer",
+            "targetPos": [
+              {
+                "x": 27,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 6,
+      "ms": 20.134299993515015,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 29,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 7,
+      "ms": 14.545099984388798,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 8,
+      "ms": 25.707900000270456,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 31,
+                "y": 10
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 9,
+      "ms": 17.30220002355054,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "buy",
+            "name": "WeaponUpgradeVoucher1",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 10,
+      "ms": 14.42199997836724,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "use",
+            "name": "WeaponUpgradeVoucher1",
+            "targetPos": [
+              {
+                "x": 31,
+                "y": 9
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 11,
+      "ms": 20.985800016205758,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "buy",
+            "name": "WallFixer",
+            "num": 1
+          }
+        }
+      }
+    },
+    {
+      "case": "selection-red",
+      "round": 12,
+      "ms": 14.896799984853715,
+      "response": {
+        "roleCommandMap": {
+          "40731": {
+            "action": "move",
+            "targetPos": [
+              {
+                "x": 30,
+                "y": 11
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

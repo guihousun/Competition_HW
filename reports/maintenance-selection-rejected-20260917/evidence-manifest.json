@@ -1,0 +1,19 @@
+{
+  "source_commit": "9463590049a8ff8ad9cc1e461eb1eb72455bc142",
+  "not_promoted": true,
+  "full_comparison_local_sha256": "a8b57ae30e4ff1604abccb58434f032d1af240fb3ed28116a1e8edc491efa935",
+  "files": {
+    "candidate-receipt.json": "7feb5146628aa7250162a1ee098945fc207926fe301b7099baceff673f5ecec7",
+    "comparison-summary.json": "c275e7f0ce13b6f93092590ae0c8f71a96a483b8760b8c3710c9714442b59d71",
+    "comparison.md": "660ce63745f914d7edbe3606077f7b48a6c95db73a85c16098974b01c3c16ac0",
+    "full-tests-receipt.json": "d5a4a353bdf729f06e4ee3c9223e2ea8902da6b961b8c63df2b57ba69394b4d6",
+    "http-result.json": "42b8e5aebb334761babe8a425bae63a4fa1355baadd64e4f16eef6fb88ba862f",
+    "independent-review.json": "cc61ef08653544f8a1c37b48f2acef6c468b94891e854d1be52448982b03d320",
+    "native-survival-first-blue.json": "6511deb7d50e26037578b1701f030a9a12bf1ed29674f720df7a84b2172457e0",
+    "native-survival-first-blue.md": "7329431838a8aef6671c6cd29fa70fb5a0311dc448696429fb378afb0b01e06b",
+    "preregister.json": "5dd8874271b60e56756e7b7400c6bfeeb65dea3f6b18a7ce648df37a32c6bc49",
+    "README.md": "70ec124a62aa45e84decd08f10537b2b85c18ba185a4c3974535fc36fe2f1bd5",
+    "selection-diagnosis.md": "6afc2ca101c45f6b7b25dfe2a53a016bf85c86cdffc39a93a918ecb20078a49a",
+    "selection-sequence-audit.json": "4030a4bb9d5bfaf501365809e872d37e7c614365e2b8b7345f2d5e22d24f0160"
+  }
+}

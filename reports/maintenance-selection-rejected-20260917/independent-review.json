@@ -1,0 +1,17 @@
+{
+  "ref": "9463590049a8ff8ad9cc1e461eb1eb72455bc142",
+  "blocking_findings": [],
+  "new_tests": 14,
+  "exit_code": 0,
+  "seconds": 0.409,
+  "runtime": "Windows Python3.11.10",
+  "checked": [
+    "night future memory discarded before next day",
+    "preview detached",
+    "new final issued purchase only",
+    "same-frame old-return release and new dispatch",
+    "carried vouchers and existing purchase protected",
+    "only feasible proposals",
+    "OFF clears optional history without adding empty dump"
+  ]
+}

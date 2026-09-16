@@ -1,0 +1,28 @@
+{
+  "locked_before_run": 1789587473.0833366,
+  "candidate_ref": "9463590049a8ff8ad9cc1e461eb1eb72455bc142",
+  "baseline_ref": "9c6ed09adc90f0b2b670456349cfb96c4efad495",
+  "historical_only_ref": "fa74d5ab760da601bd644e72962776989ce99303",
+  "new_matches": 4,
+  "seeds": [
+    1,
+    19
+  ],
+  "sides": [
+    "challenger",
+    "defender"
+  ],
+  "failure_rate": 0.5,
+  "task_gold": 80,
+  "tasks_per_point": 3,
+  "old_flags": "all off",
+  "candidate_maintenance_v2": "on",
+  "baseline_maintenance_v2": "off",
+  "gates": {
+    "each_pair_no_earlier_base_destruction": true,
+    "no_added_protocol_or_execution_errors": true,
+    "total_score_minimum": 7141,
+    "minimum_final_base_hp": 505
+  },
+  "scope": "Previously seen development cases only. No tuning, seed expansion, new heldout claim, or default enablement from this gate alone."
+}

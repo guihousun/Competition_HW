@@ -1,0 +1,336 @@
+{
+  "scope": "Read-only completed traces; no new decisions or matches",
+  "cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "selection_reports_checked": 354,
+      "both_feasible_checks": 5,
+      "issues": [],
+      "actual_dispatches": [
+        {
+          "round": 261,
+          "operation": "repair",
+          "reason": "initial_repair_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 391,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 521,
+          "operation": "repair",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 651,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 683,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 801,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 931,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 1061,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 1191,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        }
+      ],
+      "observed_return_releases": {
+        "repair": 6,
+        "upgrade": 3
+      }
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "selection_reports_checked": 479,
+      "both_feasible_checks": 4,
+      "issues": [],
+      "actual_dispatches": [
+        {
+          "round": 261,
+          "operation": "repair",
+          "reason": "initial_repair_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 391,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 423,
+          "operation": "upgrade",
+          "reason": "only_upgrade_feasible",
+          "available": {
+            "repair": false,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 541,
+          "operation": "repair",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 671,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 801,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 1171,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        }
+      ],
+      "observed_return_releases": {
+        "repair": 4,
+        "upgrade": 3
+      }
+    },
+    {
+      "seed": 19,
+      "side": "challenger",
+      "selection_reports_checked": 390,
+      "both_feasible_checks": 4,
+      "issues": [],
+      "actual_dispatches": [
+        {
+          "round": 261,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 391,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 399,
+          "operation": "repair",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 521,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 651,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 781,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 911,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        }
+      ],
+      "observed_return_releases": {
+        "repair": 4,
+        "upgrade": 3
+      }
+    },
+    {
+      "seed": 19,
+      "side": "defender",
+      "selection_reports_checked": 399,
+      "both_feasible_checks": 3,
+      "issues": [],
+      "actual_dispatches": [
+        {
+          "round": 261,
+          "operation": "repair",
+          "reason": "initial_repair_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 391,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 521,
+          "operation": "upgrade",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 671,
+          "operation": "repair",
+          "reason": "alternate_new_opportunity",
+          "available": {
+            "repair": true,
+            "upgrade": true
+          }
+        },
+        {
+          "round": 781,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 911,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 1061,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        },
+        {
+          "round": 1171,
+          "operation": "repair",
+          "reason": "only_repair_feasible",
+          "available": {
+            "repair": true,
+            "upgrade": false
+          }
+        }
+      ],
+      "observed_return_releases": {
+        "repair": 7,
+        "upgrade": 1
+      }
+    }
+  ]
+}
