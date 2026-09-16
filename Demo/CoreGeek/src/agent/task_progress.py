@@ -10,8 +10,9 @@ def digest(text):
 
 
 def stats(team):
-    return {key: team.get(key) if type(team.get(key)) is int else None
-            for key in ('gold', 'totalScore')}
+    # Wire field is goldNum. Keep the existing output key gold for consumers.
+    return {'gold':team.get('goldNum') if type(team.get('goldNum')) is int else None,
+            'totalScore':team.get('totalScore') if type(team.get('totalScore')) is int else None}
 
 
 def delta(before, after):

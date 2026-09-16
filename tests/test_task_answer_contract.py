@@ -97,7 +97,9 @@ class ContractPipelineTests(unittest.TestCase):
             reply='```json\n'+self.answer('run','cd /tmp/unseen/work && ./check')+'\n```'
             command=self.step(llm=reply,side=side)
             self.assertIn('executeCmd',command)
-            self.step(cmd='[exitCode:0]\n[ OK ] 全部通过 (6/6)\nTOKEN: fresh-token-123',side=side)
+            self.assertTrue(command['executeCmd'].startswith('# task-check/1\n'))
+            self.step(cmd='[exitCode:0]\n'+json.dumps({'tool':'task-check/1','exit_code':0,'truncated':False,
+                'stdout':'[ OK ] 全部通过 (6/6)\nTOKEN: fresh-token-123'}),side=side)
             submitted=self.step(llm=self.answer('answer','fresh-token-123'),side=side)
             answer=next(c['taskAnswer'] for c in submitted['roleCommandMap'].values() if c['action']=='submitAnswer')
             self.assertEqual(json.loads(answer),{'token':'fresh-token-123'})

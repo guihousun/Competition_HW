@@ -54,11 +54,11 @@ with tempfile.TemporaryDirectory() as tmp:
                     payload=observation(round_no=n,team=side,role_pos=(6,5),
                         phase_task='请阅读task_sample.md，获取任务信息',llm_resp=llm,cmd_result=cmd,timeout_rounds=15)
                     if a.check_task:
-                        payload['teamOur'].setdefault('gold',25)
+                        payload['teamOur'].setdefault('goldNum',25)
                         payload['teamOur'].setdefault('totalScore',0)
                     if n==6:
                         payload['phaseTask']=''
-                        payload['teamOur']['gold']+=80
+                        payload['teamOur']['goldNum']+=80
                         payload['teamOur']['totalScore']+=80
                         payload['lastRoundRoleActionResults']={role:True for role,action in trace[-1]['actions'].items() if action.get('action')=='submitAnswer'}
                     start=time.perf_counter()

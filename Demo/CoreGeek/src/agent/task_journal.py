@@ -84,7 +84,7 @@ class TaskJournal:
                 changes = {}
                 for field in ('gold', 'totalScore'):
                     old = previous.get('stats', {}).get(field)
-                    new = team.get(field)
+                    new = team.get('goldNum' if field=='gold' else field)
                     changes[field] = new-old if type(old) is int and type(new) is int else None
                 receipts = request.get('lastRoundRoleActionResults')
                 add('task_text_ended' if not question else 'task_text_replaced',
@@ -120,6 +120,18 @@ class TaskJournal:
             previous['episode'] = None
 
         agent = decision.get('agent') if isinstance(decision, dict) else None
+        if isinstance(decision, dict):
+            for field in ('upgrade_itinerary','weapon_readiness'):
+                value=decision.get(field)
+                if not value:continue
+                # Route progress does not need another line on every move.
+                signature_value=deepcopy(value)
+                if field=='upgrade_itinerary':signature_value.pop('gold_available',None)
+                else:
+                    for weapon in signature_value:weapon.pop('cooldown',None)
+                signature=excerpt(signature_value)['sha256']
+                if signature!=previous['fields'].get(field):add(field,value)
+                previous['fields'][field]=signature
         if isinstance(agent, dict):
             summary = {key: agent.get(key) for key in ('generation', 'stage', 'stopReason',
                        'prompts', 'commands', 'answers', 'memoryReads', 'methodCount',
@@ -147,7 +159,7 @@ class TaskJournal:
                             'answer_sha256': hashlib.sha256(answer.encode()).hexdigest() if isinstance(answer, str) else None}
         if question and previous.get('progress'):
             task_progress.issued(previous['progress'], response, round_no, team)
-        previous['stats'] = {field: team.get(field) for field in ('gold', 'totalScore')}
+        previous['stats'] = task_progress.stats(team)
         return rows
 
 

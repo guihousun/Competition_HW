@@ -135,6 +135,26 @@ def http_request(command_text):
         return None
 
 
+def standalone_check(command_text):
+    """Resolve only a simple check invocation with a known absolute cwd/path.
+
+    No mutation chains, shell expansions, redirects, arguments or relative cwd.
+    Unknown/complex commands remain byte-for-byte unchanged.
+    """
+    import posixpath
+    try:words=shlex.split(command_text)
+    except ValueError:return None
+    path=None
+    if len(words)==1 and words[0].startswith('/'):
+        path=words[0]
+    elif len(words)==4 and words[0]=='cd' and words[1].startswith('/') and words[2]=='&&':
+        path=posixpath.join(words[1],words[3])
+    if not path or any(c in path for c in '$`\n\r\0;&|<>()*?[]{}~!') or '..' in path.split('/'):
+        return None
+    if posixpath.basename(path) not in ('check','check.sh','check.py'):return None
+    return command('check',{'path':posixpath.normpath(path)})
+
+
 def clean_profile(raw):
     if not isinstance(raw,dict) or set(raw)!={'endpoint','auth','aliases'}:
         raise ValueError('invalid service profile')

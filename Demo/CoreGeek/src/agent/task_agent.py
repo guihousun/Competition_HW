@@ -259,6 +259,11 @@ class TaskAgent:
                 self._event('payload_over_limit', f'{field}实际{len(value)}字符，上限{cap}；请缩短或拆分，不会截断执行。', round_no)
                 return False
             if plan_kind == 'run':
+                from .task_tools import standalone_check
+                compatible=standalone_check(value)
+                if compatible:
+                    value=compatible
+                    self._event('check_tool_selected','独立check调用使用CRLF兼容工具；不修改check文件',round_no)
                 last_command = next((e for e in reversed(self.history)
                     if e['kind'] in ('shell_syntax_failed','emitted_cmd')), None)
                 repeated_syntax = (last_command and last_command['kind']=='shell_syntax_failed'

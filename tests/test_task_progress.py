@@ -15,7 +15,7 @@ def content(rows, kind):
 
 def req(round_no, text='任务', side='challenger', gold=10, score=20, **fields):
     return {**request(round_no, phaseTask=text),
-            'teamOur':{'type':side,'gold':gold,'totalScore':score},**fields}
+            'teamOur':{'type':side,'goldNum':gold,'totalScore':score},**fields}
 
 
 class ProgressTests(unittest.TestCase):

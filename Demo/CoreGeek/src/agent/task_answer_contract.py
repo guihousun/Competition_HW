@@ -24,8 +24,16 @@ def derive(text, source):
     if not isinstance(text,str) or not text or len(text)>131072:
         return None
     shapes=[]
-    for anchor in re.finditer(r'(?:答案(?:的)?格式|提交(?:答案)?(?:的)?格式|输出格式|answer\s+format|形式)\s*[:：]',text,re.I):
+    # Markdown answer sections are also explicit anchors; never harvest an
+    # arbitrary JSON object from an API example or the task background.
+    anchors=list(re.finditer(r'(?:答案(?:的)?格式|提交(?:答案)?(?:的)?格式|输出格式|answer\s+format|形式)\s*[:：]',text,re.I))
+    anchors+=list(re.finditer(r'^#{1,6}\s*(?:提交(?:要求|规则|格式|形式)|答案(?:要求|格式)|输出(?:要求|格式|示例)|answer\s+format)\s*[:：]?\s*$',text,re.I|re.M))
+    for anchor in anchors:
         tail=text[anchor.end():anchor.end()+4000].lstrip()
+        tail=re.split(r'\n#{1,6}\s',tail,maxsplit=1)[0]
+        if not tail.startswith(('{','```')):
+            block=re.search(r'```(?:json)?\s*\n\s*(\{)',tail,re.I)
+            if block:tail=tail[block.start():]
         tail=re.sub(r'^\x60\x60\x60(?:json)?\s*','',tail,flags=re.I)
         if not tail.startswith('{'):continue
         try:

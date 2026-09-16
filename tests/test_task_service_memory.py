@@ -104,7 +104,7 @@ class ServiceMemoryTests(unittest.TestCase):
 class SubmissionEvidenceTests(unittest.TestCase):
     def payload(self,n,task,gold,score,**extra):
         return {'roundNo':n,'phaseTask':task,
-                'teamOur':{'type':'challenger','gold':gold,'totalScore':score,'roles':[]},**extra}
+                'teamOur':{'type':'challenger','goldNum':gold,'totalScore':score,'roles':[]},**extra}
 
     def test_disappearance_after_submission_reports_delta_without_pass(self):
         journal=TaskJournal()

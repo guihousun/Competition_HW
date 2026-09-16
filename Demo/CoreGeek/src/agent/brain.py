@@ -5,7 +5,7 @@ from copy import deepcopy
 from itertools import combinations, permutations
 import os
 
-from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy
+from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -40,7 +40,7 @@ from .protocol import (
     station_footprint,
 )
 
-TOWER_LOADOUT = ("rocket", "rocket", "rocket")
+TOWER_LOADOUT = ("rocket", "rocket", "railgun")
 # Stone carried per wall run. Above the surplus threshold, so that a worker that
 # has filled up while the wall ring is unfinished still visits the vendor with
 # the excess instead of hoarding it.
@@ -76,6 +76,7 @@ TREASURE_PREP_RESERVE = 25  # strategy reserve, not an official price/limit
 # Task pipeline: the frame is official, the solvers are pluggable.
 TASK_PIPELINE = TaskPipeline()
 _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
+_UPGRADE_REPORT = ContextVar('competition_upgrade_report',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
@@ -321,6 +322,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         for uid, command in list(commands.items()):
             if command.get('action') == 'attack' and str(command.get('controllerId')) == str(pioneer_role.unit_id):
                 commands.pop(uid)
+    if not turn.is_day:
+        excluded = {pioneer_role.unit_id} if job and job.get('claimed') and pioneer_role is not None else set()
+        if night_staging and night_staging['hold']:
+            excluded.add(night_staging['owner'])
+        _fill_ready_weapons(turn, commands, excluded)
     commands = reconcile(turn, payload, commands)
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
@@ -360,6 +366,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
         if getattr(planner_state, "team_agent", None) is not None:
             _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
+        if turn.is_day:
+            _DECISION_REPORT.get()['upgrade_itinerary'] = deepcopy(_UPGRADE_REPORT.get())
+        _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
         if _sale_signals(turn):
             _DECISION_REPORT.get()['news_economy'] = deepcopy(_sale_signals(turn))
         supervisor_notes = planner_state.tasks.get('supervisor')
@@ -627,6 +636,7 @@ def _sync_cycle(payload: dict[str, Any], turn: Turn, planner_state: Any) -> None
 
 def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
          planner_state: Any = None) -> None:
+    _UPGRADE_REPORT.set({'phase':'idle','reason':'return_before_night'})
     # Return before night instead of waiting until robots arrive.
     if (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
         _night(turn, commands, state)
@@ -666,6 +676,16 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         # Tell the later stages of this round that the treasure itinerary owns the
         # pioneer, so the task walk does not walk it back to the task point.
         state["_treasureRound"] = turn.round_no if reserved else None
+    upgrade, upgrade_report = upgrade_itinerary.plan(turn,state,commands,
+        start=ECONOMY_WINDOW_START,deadline=RETURN_BEFORE_NIGHT)
+    _UPGRADE_REPORT.set(upgrade_report)
+    if upgrade:
+        owner, command = upgrade
+        commands[owner] = command
+        busy.add(owner);reserved.add(owner)
+        if errands is not None:
+            for key,mission in list(errands.items()):
+                if key==str(owner) or mission.get('goal')=='shop':errands.pop(key,None)
     if errands is not None:
         # Starting an errand must come before the construction plan: once a
         # worker leaves for the vendor the defence plan must not re-assign it,
@@ -673,7 +693,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         for role in turn.workers():
             if role.unit_id in commands:
                 continue
-            if _start_errand(turn, role, commands, state, errands, busy):
+            if not upgrade and _start_errand(turn, role, commands, state, errands, busy):
                 busy.add(role.unit_id)
                 break
         for role in turn.workers():
@@ -682,6 +702,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     # A trip already under way owns the team's spare worker: the metal run must
     # not start a second one and bypass the one-errand-at-a-time ledger.
     errand_owners = {int(key) for key, mission in (errands or {}).items() if mission}
+    if upgrade:errand_owners.add(upgrade[0])
     # One route memo per planning pass: the metal decision probes many candidate
     # mines and stand cells, and every miss is a bounded A* search (R01: the
     # response must stay well inside 5s).
@@ -1058,6 +1079,8 @@ def _errand_mission(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
     for going disappears (prices gone, surplus sold, gold spent).
     """
     key = str(role.unit_id)
+    if role.unit_id in commands:
+        return False
     mission = errands.get(key)
     if not mission:
         return False
@@ -1861,6 +1884,52 @@ def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
     _hits, target, role = best
     commands[role.unit_id] = use_command(BOMB, target)
     return True
+
+
+def _fill_ready_weapons(turn, commands, excluded):
+    """Fill an unserved ready weapon with adjacent free crew after task arbitration.
+
+    A cooling weapon's nominal owner may fire another weapon. One official
+    action per role still applies; never replace a use/buy/task action.
+    """
+    if turn.is_day:return
+    used={str(c.get('controllerId')) for c in commands.values() if c.get('action')=='attack'}
+    roles=[r for r in turn.controllable() if r.unit_id not in excluded and str(r.unit_id) not in used
+           and (r.unit_id not in commands or commands[r.unit_id].get('action')=='move')]
+    towers=[(t,_aim_points(turn,t)) for t in turn.weapons() if t.cooldown==0 and t.unit_id not in commands]
+    towers=[(t,aim) for t,aim in towers if aim]
+    best=[]
+    def search(index,chosen,claimed):
+        nonlocal best
+        if index==len(towers):
+            if len(chosen)>len(best):best=list(chosen)
+            return
+        tower,aim=towers[index]
+        for role in roles:
+            if role.unit_id not in claimed and distance(role.pos,tower.pos)<=1:
+                search(index+1,chosen+[(role,tower,aim)],claimed|{role.unit_id})
+        search(index+1,chosen,claimed)
+    search(0,[],set())
+    for role,tower,aim in best:
+        commands.pop(role.unit_id,None)
+        commands[tower.unit_id]=attack_command_multi(role.unit_id,aim)
+
+
+def _weapon_readiness(turn, commands):
+    rows=[]
+    for tower in turn.weapons():
+        command=commands.get(tower.unit_id,{})
+        nearby=[r.unit_id for r in turn.controllable() if distance(r.pos,tower.pos)<=1]
+        if command.get('action')=='attack':reason='attack_issued'
+        elif turn.is_day:reason='daytime'
+        elif tower.cooldown>0:reason='cooldown'
+        elif not _attack_target(turn,tower):reason='no_target_in_range'
+        elif not nearby:reason='no_controller_in_range'
+        else:reason='controller_claimed_or_unassigned'
+        rows.append({'weapon':tower.unit_id,'type':tower.kind,'level':tower.level,
+                     'cooldown':tower.cooldown,'nearby_roles':nearby,'reason':reason,
+                     'controller':command.get('controllerId')})
+    return rows
 
 
 def _tower_pairs(turn: Turn) -> tuple[tuple[Unit, Unit], ...]:
