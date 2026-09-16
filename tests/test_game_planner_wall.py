@@ -1518,11 +1518,13 @@ class RepairTest(unittest.TestCase):
 
 
 class WallPriorityTest(unittest.TestCase):
-    """修墙 / 砌墙是最高优先级，且工人不能什么都不做 —— 砌不了就落
-    建武器 / 经济线（卖 → 升级 → 采闲矿），一件不行才轮到下一件。
+    """白天工人的优先级链：**建武器 > 修墙 > 砌墙 > 经济线**，且工人不能什么都不做
+    —— 一件不行才轮到下一件。
 
-    plan 的白天顺序由此锁定：修墙(`_repair_line`) > 砌墙(`_build_walls`) >
-    建武器(`_slots`) > 经济线。`_build_walls` 返回 `True` = 本回合的指令已由
+    武器是最高优先级（口径：无论哪一天，武器没了先建）：份额有缺且钱够 ⇒ 建/走向
+    落点；钱不够但**筹资可行**（有小贩、有价可卖）⇒ 整条墙线让位，先卖背包的货、
+    再采最值钱的矿，凑够 25 金币回来建；筹资不可行（没小贩/没价目）⇒ 照旧走墙线。
+    升级线只在武器齐了之后才跑。`_build_walls` 返回 `True` = 本回合的指令已由
     墙线产出（或 gated 待命）；`False` = 什么都没发过，兜底链接手。
     """
 
@@ -1540,8 +1542,9 @@ class WallPriorityTest(unittest.TestCase):
         prices: dict[str, int] | None = None,
         walls: Iterable[Pos] = (),
         phase_task: str = "",
+        weapons: tuple[Weapon, ...] = (),
     ) -> Turn:
-        grid = {**ground, **{c: WALL for c in walls}}
+        grid = {**ground, **{c: WALL for c in walls}, **{w.pos: w.kind for w in weapons}}
         grid |= {r.pos: r.type_name for r in roles}  # 单位铺在最后（与 model._entries 一致）
         return Turn(
             round_no=1,
@@ -1549,14 +1552,14 @@ class WallPriorityTest(unittest.TestCase):
             roles=roles,
             gold=gold,
             phase_task=phase_task,
+            weapons=weapons,
             vendor_prices=prices if prices is not None else {},
         )
 
-    def test_the_wall_line_beats_weapons_and_economy(self):
-        """顺序锁：环没砌完时，砌墙排在建武器与经济线之前 —— 金够三座武器
-        （75）、铜矿比石头贵四倍还贴得更近，工人照样先采石：环上的缺口是一切的前提。
-        建武器排最前的话这里会发出"走向武器位"的 move，立即挂。"""
-        worker = Worker(10010, Pos(5, 23))
+    def test_weapons_beat_walls_when_affordable(self):
+        """顺序锁：武器是最高优先级 —— 份额有缺且钱够（75 金）时，哪怕环上一格没砌、
+        石矿贴着脚，工人也先建武器。武器排后的话这里会发出"采石"，立即挂。"""
+        worker = Worker(10010, Pos(11, 25))  # 贴着 0 号落点 (12,24)
         turn = self._turn(
             (worker,),
             {self.BASE: "station", Pos(4, 24): "stone", Pos(6, 24): "copper"},
@@ -1564,9 +1567,55 @@ class WallPriorityTest(unittest.TestCase):
             prices={"stone": 1, "copper": 5},
         )
         cmd = plan(turn)[str(10010)]
-        self.assertEqual(cmd["action"], "collect", "先采石，不是先建武器/采铜")
+        self.assertEqual(cmd["action"], "build", "先建武器，不是先采石/采铜")
+        self.assertEqual(cmd["name"], "rocket")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
+
+    def test_a_weapon_gap_without_gold_fundraises(self):
+        """份额有缺、钱不够、筹资可行（有小贩有价）⇒ 整条墙线让位：先卖背包的货
+        （空）、再采最值钱的矿 —— 铜比石头值钱就去采铜，凑够 25 金币回来建武器。"""
+        worker = Worker(10010, Pos(5, 23))
+        turn = self._turn(
+            (worker,),
+            {
+                self.BASE: "station", Pos(4, 24): "stone", Pos(6, 24): "copper",
+                Pos(7, 26): "vendor",
+            },
+            prices={"stone": 1, "copper": 5},
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "collect", "筹资采最值钱的矿，不是先采石砌墙")
         cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertEqual(cell, Pos(4, 24), "墙线只认石矿（铜再贵也砌不了墙）")
+        self.assertEqual(cell, Pos(6, 24), "铜（5 金）优先于石头（1 金）")
+
+    def test_fundraising_yields_to_walls_when_no_vendor(self):
+        """筹资不可行（没小贩，矿卖不出去）⇒ 不筹资，照旧走墙线 —— 没有通往
+        25 金币的路时，墙是剩下最值得干的事。"""
+        worker = Worker(10010, Pos(5, 23))
+        turn = self._turn(
+            (worker,),
+            {self.BASE: "station", Pos(4, 24): "stone", Pos(6, 24): "copper"},
+            prices={"stone": 1, "copper": 5},
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "collect", "筹资不可行 ⇒ 走墙线采石")
+        cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cell, Pos(4, 24))
+
+    def test_no_voucher_runs_while_weapons_are_pending(self):
+        """升级线只在武器齐了之后才跑：份额有缺（两角色一武器 ⇒ 缺一）时，持券工人
+        不去用券 —— 它的时间该花在筹资上（等级是武器齐了以后的事）。"""
+        weapons = (Weapon(10020, "rocket", Pos(12, 24), 10, 0),)
+        worker = Worker(10010, Pos(16, 24), {"WeaponUpgradeVoucher1": 1})
+        turn = self._turn(
+            (Pioneer(10011, Pos(20, 20)), worker),
+            {self.BASE: "station", Pos(15, 24): "copper"},
+            walls=wall_cells(self.BASE, 41),  # 环是满的：没有墙线的事
+            prices={"copper": 5},
+            weapons=weapons,
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "collect", "武器有缺 ⇒ 筹资采铜，不是去用券")
 
     def test_no_reachable_stone_falls_to_the_economy(self):
         """环没砌完但没石矿可采 ⇒ 落经济线采铜，不是原地待命 ——

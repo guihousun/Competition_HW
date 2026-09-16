@@ -140,7 +140,10 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     #: 本回合已认领的待修墙格（两个修墙工人不挤同一面墙）
     repair_taken: set[Pos] = set()
     budget = turn.gold
-    slots = _slots(turn)
+    #: 武器缺口（份额有缺且落点为空的名额）：建武器最优先的判据，也是筹资线的开关。
+    pending = list(_slots(turn))
+    slots = iter(pending)
+    weapon_gap = bool(pending)
     #: 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
     box = box_cells(turn.map.station) if turn.map.station else frozenset()
     #: 砌满墙就会被关在盒子里的人：闸门 (2) 按人放行，闸门 (1) 随 `gated` 传给 `_build_walls`
@@ -205,41 +208,23 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
             if turn.task_points:
                 _take_task(role, turn, cmds, claimed)
             else:
-                # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事；卖矿退居兜底（接住它从
-                # 任务/宝藏拿到可卖物的情形）；没差事没货 ⇒ 待命（空指令合法）。
-                if not _upgrade_line(role, turn, cmds, claimed):
+                # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事（武器齐了才跑）；
+                # 卖矿兜底（接住它从任务/宝藏拿到可卖物的情形）；没货 ⇒ 待命。
+                if not weapon_gap and not _upgrade_line(role, turn, cmds, claimed):
                     _sell_ore(role, turn, cmds, claimed, frozenset())
             continue
 
         if not isinstance(role, Worker):
             continue  # 不该出现的角色（`roles.make` 已挡过一道）
 
-        # 修墙 / 砌墙是最高优先级：先修半血墙，再砌新墙；砌不了（没石头 / 采不到 /
-        # 被闸门挡住）⇒ `_build_walls` 返回 False，落到建武器、经济线 —— 工人不能什么都不做。
-        if turn.is_day and _repair_line(role, turn, cmds, claimed, sites, repair_taken):
-            continue
-
         segment = segments[worker_no] if worker_no < len(segments) else ()
         worker_no += 1
         target = segment[0] if segment else None
         if target is not None and _door_open(turn):
             target = None  # 白天中段：环上那个缺口当临时门，先别补
-        if target is not None and _build_walls(
-            role, turn, cmds, claimed, sites,
-            gated=bool(leaving), target=target,
-            remaining=len(segment),
-            ore_taken=ore_taken, paths=paths,
-        ):
-            continue
 
-        # 白天末尾强制补墙：环上有缺口且已进入"必须补回"窗口（`day_rounds_left <=
-        # HOLE_PATCH_LEFT`）⇒ 禁止落兜底去卖矿/采闲矿，哪怕这回合砌不了（没石头/gated）
-        # 也必须走向缺口待命 —— 人在缺口旁，下回合就能砌，绝不让墙带着缺口过夜。
-        # `_build_walls` 内部已尝试采石/走向缺口，返回 False 只说明这回合没产出指令。
-        if target is not None and turn.day_rounds_left <= HOLE_PATCH_LEFT:
-            _step(role, target, turn, cmds, claimed, sites | paths)
-            continue
-
+        # 建武器最优先（口径：无论哪一天，武器没了先建）：份额有缺且钱够 ⇒ 建/走向
+        # 落点。造武器与墙无关，不参与下面的安全闸门。
         slot = next(slots, None)
         if slot is not None and budget >= WEAPON_COST:
             kind, cell = slot
@@ -255,9 +240,47 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
                     claimed.add(step)
                     continue
 
-        # 经济线兜底：修墙 / 砌墙 / 建武器都做不了 ⇒ 卖矿 → 升级 → 采闲矿。
+        # 修墙：半血墙先修（包优先、重建兜底，见 `_repair_line`）。
+        if _repair_line(role, turn, cmds, claimed, sites, repair_taken):
+            continue
+
+        # 安全闸门：墙格在手而砌下去会把人关住 ⇒ 待命（不发指令也不筹资 ——
+        # 别跑远，下回合缺口还在；`_build_walls` 里还有同一道闸兜底）。
+        if target is not None and leaving:
+            continue
+
+        # 补墙窗口（天黑前必须封死，筹资与经济线都让位）：优先让墙线自己干
+        # （砌/采石/走向缺口），它这一回合什么都没发出来才强制走向缺口待命。
+        if target is not None and turn.day_rounds_left <= HOLE_PATCH_LEFT:
+            if not _build_walls(
+                role, turn, cmds, claimed, sites,
+                gated=bool(leaving), target=target,
+                remaining=len(segment),
+                ore_taken=ore_taken, paths=paths,
+            ):
+                _step(role, target, turn, cmds, claimed, sites | paths)
+            continue
+
+        # 筹资：武器还有缺但钱不够、且筹资可行（有小贩、有价可卖，见 `_can_fund`）
+        # ⇒ 整条墙线让位，先卖背包里的货、再采最值钱的矿 —— 凑够 25 金币回来建
+        # （火力缺口比墙急；凑不成的地图上墙仍是剩下最值得干的事）。
+        if weapon_gap and budget < WEAPON_COST and _can_fund(turn):
+            if not _sell_ore(role, turn, cmds, claimed, sites, paths):
+                _mine_spare_ore(role, turn, cmds, claimed, sites, ore_taken, paths)
+            continue
+
+        # 砌墙（平常时序）。
+        if target is not None and _build_walls(
+            role, turn, cmds, claimed, sites,
+            gated=bool(leaving), target=target,
+            remaining=len(segment),
+            ore_taken=ore_taken, paths=paths,
+        ):
+            continue
+
+        # 经济线兜底：卖矿 →（武器齐了才升级）→ 采闲矿。
         if not _sell_ore(role, turn, cmds, claimed, sites, paths):
-            if not _upgrade_line(role, turn, cmds, claimed):
+            if weapon_gap or not _upgrade_line(role, turn, cmds, claimed):
                 _mine_spare_ore(role, turn, cmds, claimed, sites, ore_taken, paths)
 
     return cmds
@@ -399,6 +422,15 @@ def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
         for kind, cell in zip(WEAPONS_BY_SITE, weapon_sites(station, turn.map.size[0]))
         if cell not in blocked
     ][:need]
+
+
+def _can_fund(turn: Turn) -> bool:
+    """筹资可行：地图上有小贩、且有收购价 > 0 的矿 —— 矿挖了卖得掉，才谈得上凑
+    建武器的钱。没小贩 / 没价目 ⇒ 筹不成，墙线照旧（没什么更好可干的事）。"""
+    if not turn.map.vendors:
+        return False
+    prices = turn.vendor_prices
+    return any(prices.get(kind, 0) > 0 for kind in turn.map.ores.values())
 
 
 # ── 开拓者的任务线 ──────────────────────────────────────────────────
