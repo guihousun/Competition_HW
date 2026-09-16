@@ -6,7 +6,8 @@ task rewards cannot fund another action until they appear in the next observatio
 from typing import Any
 
 from .market import shop_prices
-from .protocol import Pos, Turn, TOWER_TYPES, WEAPON_BUILD_COST, WORKER, distance, move_command
+from .protocol import (Pos, Turn, CONTROLLABLE_TYPES, TOWER_TYPES, WEAPON_BUILD_COST,
+                       WORKER, distance, move_command)
 
 
 def _neighbours(pos: Pos):
@@ -14,15 +15,19 @@ def _neighbours(pos: Pos):
             for dy in (-1, 0, 1) if dx or dy)
 
 
-def _reachable_area(turn: Turn, start: Pos, blocked: set[Pos]) -> int:
-    """Size of the opening a yield actually creates, bounded by the public map."""
+def _reachable_cells(turn: Turn, start: Pos, blocked: set[Pos]) -> set[Pos]:
+    """Public connected component; diagonals obey the same movement rules."""
     seen, pending = {start}, [start]
     while pending:
         for pos in _neighbours(pending.pop()):
             if pos not in seen and pos not in blocked and turn.land(pos):
                 seen.add(pos)
                 pending.append(pos)
-    return len(seen)
+    return seen
+
+
+def _reachable_area(turn: Turn, start: Pos, blocked: set[Pos]) -> int:
+    return len(_reachable_cells(turn, start, blocked))
 
 
 def _cost(command: dict[str, Any], prices: dict[str, int]) -> int | None:
@@ -53,7 +58,8 @@ def available_gold(turn: Turn, payload: dict[str, Any],
 
 
 def reconcile(turn: Turn, payload: dict[str, Any],
-              commands: dict[int, dict[str, Any]]) -> dict[int, dict[str, Any]]:
+              commands: dict[int, dict[str, Any]], *,
+              day_yield_deadline: int | None = None) -> dict[int, dict[str, Any]]:
     """Last planning pass, after task/treasure overrides, before official output.
 
     Earlier spending intents keep priority. For a shared free destination, rotate
@@ -85,6 +91,9 @@ def reconcile(turn: Turn, payload: dict[str, Any],
 
     reserved = {Pos.load(pos) for cmd in accepted.values()
                 if cmd.get('action') == 'build' for pos in cmd.get('targetPos', [])}
+    # The second cell of a two-cell task point is occupied too (R02/R07).
+    reserved.update(Pos(pos.x + 1, pos.y) for pos, kind in turn.zones.items()
+                    if kind in ('challengerTaskPoint2', 'defenderTaskPoint2'))
     roles = list(turn.controllable())
     if roles:
         offset = (turn.round_no - 1) % len(roles)
@@ -110,21 +119,58 @@ def reconcile(turn: Turn, payload: dict[str, Any],
         if commands.get(role.unit_id, {}).get('action') != 'move' or role.unit_id in accepted:
             continue
         blocked = turn.blocked(role)
-        if any(turn.land(pos) and pos not in blocked for pos in _neighbours(role.pos)):
+        has_space = any(turn.land(pos) and pos not in blocked for pos in _neighbours(role.pos))
+        # A free dead-end cell does not mean the intended journey is reachable.
+        # Expand the old fully-boxed recovery only during peaceful daytime;
+        # task holders and active workers/controllers remain protected below.
+        threat = any(r.health > 0 for r in turn.robots) or any(
+            r.health > 0 and r.kind in CONTROLLABLE_TYPES + TOWER_TYPES for r in turn.enemies)
+        extended = (turn.is_day and not threat and day_yield_deadline is not None
+                    and (turn.round_no - 1) % 130 + 2 < day_yield_deadline)
+        if has_space and not extended:
+            continue
+        before_area = _reachable_area(turn, role.pos, set(blocked) | reserved)
+        idle = [worker for worker in roles if worker.kind == WORKER
+                and worker.unit_id not in commands and worker.unit_id not in accepted
+                and worker.unit_id not in controllers
+                and (extended or distance(worker.pos, role.pos) == 1)]
+        # Upper bound after relocating idle crew: removing them entirely may
+        # connect the component, but they still occupy distinct cells afterward.
+        # This also avoids a costly search on an already open map.
+        possible = _reachable_cells(turn, role.pos,
+                                    (set(blocked) - {w.pos for w in idle}) | reserved)
+        idle = [w for w in idle if w.pos in possible]
+        if len(possible) - len(idle) <= before_area:
             continue
         options = []
-        for worker in roles:
-            if (worker.kind != WORKER or worker.unit_id in commands
-                    or worker.unit_id in accepted or worker.unit_id in controllers
-                    or distance(worker.pos, role.pos) != 1):
-                continue
+        first_steps = []
+        for worker in idle:
             worker_blocked = turn.blocked(worker)
             free = [pos for pos in _neighbours(worker.pos)
                     if turn.land(pos) and pos not in worker_blocked and pos not in reserved]
             for target in free:
                 after = (set(blocked) - {worker.pos}) | {target} | reserved
                 area = _reachable_area(turn, role.pos, after)
-                options.append((-area, worker.unit_id, target.x, target.y, target))
+                first_steps.append((worker, target, after))
+                if area > before_area:
+                    options.append((-area, worker.unit_id, target.x, target.y, target))
+        if not options and extended:
+            # Two idle workers can block one another. Prove progress after two
+            # SEQUENTIAL legal moves, but emit only the first. The next real
+            # observation must independently revalidate any subsequent yield;
+            # no assumed successful move, simultaneous swap, or cached script.
+            for worker, target, after in first_steps:
+                for second in idle:
+                    if second.unit_id == worker.unit_id:
+                        continue
+                    second_blocked = (set(turn.blocked(second)) - {worker.pos}) | {target} | reserved
+                    for next_target in _neighbours(second.pos):
+                        if not turn.land(next_target) or next_target in second_blocked:
+                            continue
+                        final = (after - {second.pos}) | {next_target}
+                        area = _reachable_area(turn, role.pos, final)
+                        if area > before_area:
+                            options.append((-area, worker.unit_id, target.x, target.y, target))
         if options:
             # Merely moving a worker one cell deeper into a one-cell corridor
             # recreates the blockage. Prefer a move that opens the largest region.

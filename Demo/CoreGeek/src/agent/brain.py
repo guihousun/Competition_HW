@@ -341,7 +341,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if safety['command'] is not None:
             commands[pioneer_role.unit_id] = safety['command']
             job = None  # Leaving task range must not also submit a new task action.
-    commands = reconcile(turn, payload, commands)
+    commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
     plan = job.get("plan") if job else None
