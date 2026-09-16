@@ -1,5 +1,5 @@
 {
-  "commit": "8fa062536ecc20ba30d813136d20a6c8559eca8b",
+  "commit": "04e139604ae14ba71fa15c95efeb585caf0e274f",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 109058,
+      "bytes": 111589,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "3f36a8b4482919b04a28ec0acc8b87475325cec72014cab5834b9d82e51b9fb9",
+      "sha256": "85865e599ca628456bf358552a55c791dae3475236a899bc2d90dcd91b0f027a",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -98,9 +98,9 @@
       "source": "Demo/CoreGeek/src/agent/deepseek_client.py"
     },
     {
-      "bytes": 19293,
+      "bytes": 20213,
       "path": "CoreGeek/src/agent/defense_layout.py",
-      "sha256": "71e7471ddd6120a408cfd825b47662e850b998234e9d0406b23de0ad76dedfd5",
+      "sha256": "9775fbe6ece8a63555ae30256d60dc46ea1055e1aca4b4f1b7afd8fe560992b1",
       "source": "Demo/CoreGeek/src/agent/defense_layout.py"
     },
     {
@@ -120,6 +120,12 @@
       "path": "CoreGeek/src/agent/grid.py",
       "sha256": "d6863d968b251246284a80f2ddeaf8b4a2dc184fd1ec62e58ab866370a43e4aa",
       "source": "Demo/CoreGeek/src/agent/grid.py"
+    },
+    {
+      "bytes": 2470,
+      "path": "CoreGeek/src/agent/home_defense.py",
+      "sha256": "b7cbecf2bb995ec71ed3b326142d789c65e00bc0d88a2c7cf67e7261fb3fca3e",
+      "source": "Demo/CoreGeek/src/agent/home_defense.py"
     },
     {
       "bytes": 3714,
@@ -194,9 +200,9 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 5892,
+      "bytes": 7469,
       "path": "CoreGeek/src/agent/nightwork.py",
-      "sha256": "b14ee0e4798dcad4501d8a5afd9a51c433f634f6cfac6c3d3a4137d240a3ed67",
+      "sha256": "4b0b4fc6783f4eb599402bca29c111b5cc6263b952196e7dbe7aa5a0fc1e3b2d",
       "source": "Demo/CoreGeek/src/agent/nightwork.py"
     },
     {
@@ -206,9 +212,9 @@
       "source": "Demo/CoreGeek/src/agent/planner.py"
     },
     {
-      "bytes": 4153,
+      "bytes": 4468,
       "path": "CoreGeek/src/agent/policy_supervisor.py",
-      "sha256": "f79ea96b832a220290c7e73f26f07defeeb0968fc4026d82b9783c2268e9cd6c",
+      "sha256": "fd6de6c6646f226151d7153af2f0dae7644f19a975cf625d3ef8f3f06c30aa8c",
       "source": "Demo/CoreGeek/src/agent/policy_supervisor.py"
     },
     {
@@ -266,9 +272,9 @@
       "source": "Demo/CoreGeek/src/agent/task_context.py"
     },
     {
-      "bytes": 12858,
+      "bytes": 12875,
       "path": "CoreGeek/src/agent/task_journal.py",
-      "sha256": "6a1e3f09ee448a5831bd1e3bd38713ade19ac3c47fb527e205feff48c9ac23d5",
+      "sha256": "872c04e766cd2e5bc1139f2aebbaba5361be544e8d64f2f9a3681935d3fe7e2e",
       "source": "Demo/CoreGeek/src/agent/task_journal.py"
     },
     {
@@ -344,9 +350,9 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 6241,
+      "bytes": 6515,
       "path": "CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "e7571cb580c958059292723a5db6a395d4cff1bbdfd6d4d07ae78309c7737233",
+      "sha256": "4afd712e4fe33982d461236c3190f6cc1331e0ad8757c0f06fddbc12cfdc5b26",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -393,5 +399,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "27167bc941f144a97efc24929640fdff55bbf67e7a51d1834e3bd82931e7dd67"
+  "source_digest": "e5bbe31f2a7c2e096032761268c298a1ed707fcd81857fef163dc13c81c361a4"
 }
