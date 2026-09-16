@@ -202,6 +202,10 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     last_round = getattr(planner_state, "last_round", 0)
     if last_round and turn.round_no < last_round and turn.round_no != 1:
         return sandbox.ResponseBuilder()
+    if commit and not defense_sustain.enabled():
+        # Explicit OFF commit drops optional opportunity history; preview does
+        # not mutate it and dump never hides nonempty state behind an ENV flag.
+        getattr(planner_state,'purchase_selection',{}).clear()
     if commit:
         _DECISION_REPORT.set(None)
     if llm_router_enabled():
@@ -241,6 +245,10 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         planner_state.tasks['supervisor'] = directive.summary()
     night_staging = None
     defense_state = deepcopy(planner_state) if defense_sustain.enabled() and not commit else planner_state
+    if defense_sustain.enabled():
+        from . import maintenance_selection
+        defense_state.purchase_selection=maintenance_selection.sanitize_memory(
+            getattr(defense_state,'purchase_selection',{}),turn.round_no)
     if turn.is_day:
         _day(turn, commands, payload, defense_state)
     else:
@@ -356,6 +364,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         next_trips = trip_frame.finalize(commands)
         if commit:
             planner_state.team_trips = next_trips
+            if defense_sustain.enabled():
+                from . import maintenance_selection
+                issued=maintenance_selection.new_dispatch(trip_frame.events,next_trips,turn.round_no)
+                if issued is not None:
+                    planner_state.purchase_selection=issued
         report = _UPGRADE_REPORT.get()
         if report is not None:
             report['team_trip_events'] = deepcopy(trip_frame.events)
@@ -703,10 +716,17 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
                 cached_upgrade = upgrade_itinerary.plan(turn,state,commands,start=0,
                     deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
                     reserved_workers=({construction['owner']} if construction else ()))
-                proposal, report = cached_upgrade
-                if proposal is not None and report.get('phase') in ('use','return_with_voucher'):
-                    frame.stage_purchase(report,proposal)
-                    return proposal,report
+                from . import maintenance_selection
+                funded=(cached_upgrade[0] is not None
+                        and cached_upgrade[1].get('phase') in ('use','return_with_voucher'))
+                repair=None if funded else maintenance_supply.plan(turn,state,commands,
+                    deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
+                    reserved_workers=({construction['owner']} if construction else ()))
+                (proposal,report),selection=maintenance_selection.choose(cached_upgrade,repair,
+                    getattr(planner_state,'purchase_selection',{}),turn.round_no)
+                report=dict(report,purchase_selection=selection)
+                frame.stage_purchase(report,proposal)
+                return proposal,report
             proposal, report = maintenance_supply.plan(turn,state,commands,
                 deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,commitment=frame.purchase,
                 reserved_workers=({construction['owner']} if construction else ()))

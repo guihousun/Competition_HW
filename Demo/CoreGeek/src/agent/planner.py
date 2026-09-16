@@ -39,6 +39,7 @@ class PlannerState:
     tasks: dict[str, Any] = field(default_factory=dict)
     team_trips: dict[str, Any] = field(default_factory=dict)
     sustain_memory: dict[str, Any] = field(default_factory=dict)
+    purchase_selection: dict[str, Any] = field(default_factory=dict)
     # Shared cognitive-channel scheduler and bounded task context (P0b).
     llm_router: "LLMRouter | None" = None
     task_context: "ContextStore | None" = None
@@ -122,9 +123,12 @@ class PlannerState:
         while they did on the judge path.
         """
         cycle = self.tasks.get("cycle")
+        from .maintenance_selection import sanitize_memory as clean_selection
+        selection=clean_selection(self.purchase_selection)
         return {
             **({'teamTrips': deepcopy(self.team_trips)} if self.team_trips else {}),
             **({'sustainMemory': deepcopy(self.sustain_memory)} if self.sustain_memory else {}),
+            **({'purchaseSelection':selection} if selection else {}),
             "schema": PLANNER_SCHEMA,
             "degraded": self.degraded,
             "lastRound": int(self.last_round),
@@ -223,6 +227,8 @@ class PlannerState:
         state.team_trips = clean_memory(dump.get('teamTrips'))
         from .defense_sustain import sanitize_memory
         state.sustain_memory = sanitize_memory(dump.get('sustainMemory'))
+        from .maintenance_selection import sanitize_memory as clean_selection
+        state.purchase_selection=clean_selection(dump.get('purchaseSelection'),state.last_round)
         tasks = dump.get("tasks") if isinstance(dump.get("tasks"), dict) else {}
         raw_cycle = tasks.get("cycle")
         cycle = None
@@ -317,6 +323,7 @@ class PlannerState:
             self.llm_router = self.task_context = None
             self.team_agent = None
             self.sustain_memory.clear()
+            self.purchase_selection.clear()
             self.degraded = None
             self.prompts_sent = self.commands_sent = 0
             self._routed_key, self._routed_fields = "", {}
