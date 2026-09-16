@@ -235,6 +235,24 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(AGENT.price_hint("iron"), 2.0)
         self.assertEqual(AGENT.price_hint("copper"), 1.0)
 
+    def test_a_python_exec_round_feeds_the_output_back_at_once(self):
+        """**本地计算**（第 45 步）：LLM 调 `python_exec` ⇒ 当回合执行、产出直接进
+        下一份 prompt（tool 消息 + 「请继续。」），**不走 `executeCmd`**（那要一整个
+        沙盒往返）。判据链落 ③′→⑥：调用成了、但不产命令。"""
+        AGENT.reset()
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        prompt, execute = task_channel(
+            self._turn(
+                self.TASK,
+                "<tool><tool_name>python_exec</tool_name>"
+                "<tool_param><code>print(6*7)</code></tool_param></tool>",
+            )
+        )
+        self.assertEqual(execute, "", "本地计算不产命令")
+        self.assertIn("【本地 python 的执行结果", prompt)
+        self.assertIn("42", prompt)
+        self.assertIn("请继续。", prompt)
+
     def test_nothing_is_sent_without_a_task(self):
         """**不在任务里一次都不发**（`prompt` 也不行、`executeCmd` 更不行）。
 

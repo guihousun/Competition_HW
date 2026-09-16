@@ -94,6 +94,13 @@ class Context:
         """无新内容的重问轮：追加一句固定收尾（见 `NUDGE`）。"""
         self._messages.append(Message(_USER, NUDGE))
 
+    def tool_output(self, text: str) -> None:
+        """本地工具（`python_exec`，第 45 步）的产出：一条 `tool` 消息，**当场**进表 ——
+        它跟在 `hear` 记下的那条 assistant 调用后面，下一份 prompt（对它的重问）窗口里
+        就能看到。与沙盒回执同一条纪律（工具的产出归 `tool` 角色），标题标明来源 ——
+        LLM 才分得清"这是本地算的"与"这是判题器沙盒跑的"。"""
+        self._messages.append(Message(_TOOL, f"【本地 python 的执行结果（原文）】\n{text}"))
+
     def hear(self, reply: str) -> None:
         """记一条 LLM 的回复（**原文** —— assistant 消息收它真说过的话）。
 

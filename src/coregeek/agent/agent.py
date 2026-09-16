@@ -18,6 +18,7 @@ from collections.abc import Callable
 from .chat import is_prices_reply, is_summary_reply, strip_answers
 from .context import Context
 from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
+from .tools import pyexec
 from .tools.cmd import executeCmd
 from .tools.sop import store
 
@@ -48,6 +49,17 @@ class Agent:
                 executeCmd,
                 "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。",
                 (("cmd", "命令原文"),),
+            ),
+            "python_exec": (
+                self.python_exec,
+                "在本地即时执行一段**纯计算**的 Python：结果当回合就回到你面前"
+                "（不走判题器沙盒、没有 15 秒限制，但**看不见沙盒里的任务文件**——"
+                "读任务文件还是用 executeCmd）。只允许计算：import 仅限 "
+                "math/cmath/decimal/fractions/statistics/itertools/functools/collections/"
+                "heapq/bisect/array/json/re/string/datetime/random，"
+                "读写文件/网络/环境一律拒绝。用 print 输出，或只写一个表达式返回它的值；"
+                "超过 2 秒终止。",
+                (("code", "要执行的 Python 代码原文"),),
             ),
             "SOP2Prompt": (
                 self.SOP2Prompt,
@@ -117,6 +129,22 @@ class Agent:
         if self._context is None:
             return ""
         return gen_compression_prompt(self._context.material())
+
+    def python_exec(self, code: str) -> str:
+        """**本地即时计算**（第 45 步）：`pyexec.run` 跑代码，产出**当场**记进会话
+        （`tool` 消息，跟着 LLM 那条调用走），返回 `""` —— 不产命令。判据链落
+        ③′→⑥：重问的 prompt 窗口里它看得见自己的调用与产出，下一回合就能作答 ——
+        比 `executeCmd` **省一整个沙盒往返**。
+
+        ⚠️ 与 `executeCmd` 的分工（两边的描述里都写了）：那是**判题器沙盒**
+        （能看任务文件、一回合往返、限 15 秒）；这里是**我们进程里**的纯计算
+        （即时、看不见沙盒、安检 + 2 秒超时）。产出没开会话时丢弃（任务已结束的
+        迟到回复，无害）。
+        """
+        output = pyexec.run(code)
+        if self._context is not None:
+            self._context.tool_output(output)
+        return ""
 
     def news_question(self, news: str) -> str:
         """没任务时的**新闻查价** prompt（第 42 步）。**同一份 news 只问一次**（指纹
