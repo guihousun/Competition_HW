@@ -75,7 +75,19 @@ def purchase_allowed(turn, payload, item, commands):
     return available_gold(turn,payload,commands) - price >= budget
 
 
-def plan(turn, payload, commands, *, start=12, deadline=55):
+def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, reserved_workers=()):
+    if commitment is not None:
+        from .team_trip import evaluate_trip
+        cost = evaluate_trip(turn,payload,commitment,commands=commands)
+        worker = next((w for w in turn.workers() if w.unit_id==commitment['owner']),None)
+        report = dict(phase='idle',reason=cost.reason,worker=commitment['owner'],
+                      building=commitment['target'],voucher=commitment['item'],
+                      committed=True,route=cost.report())
+        if not cost.feasible or worker is None or worker.unit_id in commands:
+            return None,report
+        report['phase'] = ('use' if cost.command['action']=='use' else 'buy' if cost.command['action']=='buy'
+                           else 'return_with_voucher' if commitment['item'] in worker.backpack else 'to_shop')
+        return (worker.unit_id,cost.command),report
     shops=sorted((p for p,k in turn.zones.items() if k=='weaponShop'),key=lambda p:(p.x,p.y))
     gold=available_gold(turn,payload,commands)
     report={'phase':'idle','reason':None,'gold_available':gold,'weapon_reserve':weapon_reserve(turn,payload),'shop_count':len(shops),
@@ -84,7 +96,7 @@ def plan(turn, payload, commands, *, start=12, deadline=55):
     if not turn.is_day:return stop('night_defence')
     index=(turn.round_no-1)%130
     if index>=deadline:return stop('return_before_night')
-    workers=[w for w in turn.workers() if w.unit_id not in commands]
+    workers=[w for w in turn.workers() if w.unit_id not in commands and w.unit_id not in reserved_workers]
     base = turn.station()
     def building_priority(b):
         rank = wall_priority(b.pos, base.pos, turn.width, turn.height)[0] if base and b.kind == WALL else 0

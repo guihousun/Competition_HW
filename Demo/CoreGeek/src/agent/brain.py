@@ -81,6 +81,7 @@ TASK_PIPELINE = TaskPipeline()
 _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
 _SHARED_CONTROL = ContextVar('competition_shared_control', default=None)
 _UPGRADE_REPORT = ContextVar('competition_upgrade_report',default=None)
+_TRIP_FRAME = ContextVar('competition_team_trip_frame',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
@@ -195,6 +196,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     the task result bookkeeping.
     """
     turn = Turn.load(payload)
+    _TRIP_FRAME.set(None)
     last_round = getattr(planner_state, "last_round", 0)
     if last_round and turn.round_no < last_round and turn.round_no != 1:
         return sandbox.ResponseBuilder()
@@ -342,6 +344,17 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             commands[pioneer_role.unit_id] = safety['command']
             job = None  # Leaving task range must not also submit a new task action.
     commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
+    trip_frame = _TRIP_FRAME.get()
+    if trip_frame is not None:
+        commands = trip_frame.protect_final(commands)
+        next_trips = trip_frame.finalize(commands)
+        if commit:
+            planner_state.team_trips = next_trips
+        report = _UPGRADE_REPORT.get()
+        if report is not None:
+            report['team_trip_events'] = deepcopy(trip_frame.events)
+    elif commit and hasattr(planner_state,'team_trips'):
+        planner_state.team_trips.clear()
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
     plan = job.get("plan") if job else None
@@ -656,13 +669,30 @@ def _sync_cycle(payload: dict[str, Any], turn: Turn, planner_state: Any) -> None
 
 def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
          planner_state: Any = None) -> None:
+    from . import team_trip
+    frame = team_trip.TripFrame(turn,state,getattr(planner_state,'team_trips',{}),
+        purchase_deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,construction_deadline=RETURN_BEFORE_NIGHT)
+    _TRIP_FRAME.set(frame)
+
+    def upgrade_plan():
+        construction = frame.construction
+        proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
+            deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,commitment=frame.purchase,
+            reserved_workers=({construction['owner']} if construction else ()))
+        if frame.purchase and proposal is None:
+            frame.cancel('purchase',report['reason'])
+            proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
+                deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
+                reserved_workers=({construction['owner']} if construction else ()))
+        frame.stage_purchase(report,proposal)
+        return proposal,report
+
     _UPGRADE_REPORT.set({'phase':'idle','reason':'return_before_night'})
     # Return before night instead of waiting until robots arrive.
     if (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
         # A priced upgrade trip uses its actual round-trip budget, not the
         # generic early-return cutoff that used to strand it before buying.
-        upgrade, report = upgrade_itinerary.plan(turn, state, commands,
-            start=0, deadline=DAY_ROUNDS - UPGRADE_RETURN_MARGIN)
+        upgrade, report = upgrade_plan()
         _UPGRADE_REPORT.set(report)
         if upgrade:
             commands[upgrade[0]] = upgrade[1]
@@ -703,8 +733,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         # Tell the later stages of this round that the treasure itinerary owns the
         # pioneer, so the task walk does not walk it back to the task point.
         state["_treasureRound"] = turn.round_no if reserved else None
-    upgrade, upgrade_report = upgrade_itinerary.plan(turn,state,commands,
-        start=0,deadline=DAY_ROUNDS - UPGRADE_RETURN_MARGIN)
+    upgrade, upgrade_report = upgrade_plan()
     _UPGRADE_REPORT.set(upgrade_report)
     if upgrade:
         owner, command = upgrade
@@ -720,10 +749,14 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         for role in turn.workers():
             if role.unit_id in commands:
                 continue
+            if frame.construction and role.unit_id==frame.construction['owner']:
+                continue
             if not upgrade and _start_errand(turn, role, commands, state, errands, busy):
                 busy.add(role.unit_id)
                 break
         for role in turn.workers():
+            if frame.construction and role.unit_id==frame.construction['owner']:
+                continue
             if _errand_mission(turn, role, commands, state, errands):
                 busy.add(role.unit_id)
     # A trip already under way owns the team's spare worker: the metal run must
@@ -734,23 +767,75 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     # mines and stand cells, and every miss is a bounded A* search (R01: the
     # response must stay well inside 5s).
     routes = _RouteCost(turn)
+    def construct(role):
+        from . import construction_trip
+        landings = set(claimed)
+        for issued in commands.values():
+            if issued.get('action') in ('move','build'):
+                landings.update(Pos.load(p) for p in issued.get('targetPos',()))
+        contract = frame.construction
+        targets = ([Pos.load(p) for p in contract['walls']] if contract else walls_missing)
+        if contract and contract['phase']=='return':
+            targets = []
+        targets = [p for p in targets if p not in standing_walls and (p not in occupied or p==role.pos)]
+        guard = team_trip.RouteGuard(turn,state,frame.purchase,commands)
+        trip = construction_trip.plan(turn,role,targets,claimed=landings,
+            deadline=RETURN_BEFORE_NIGHT,batch_limit=STONE_BATCH,
+            mine_available=_mine_available(turn,'stone'),route_guard=guard)
+        report = {'worker':role.unit_id,'phase':'hold','reason':'no_safe_complete_trip'}
+        if trip:
+            command,report = trip
+            commands[role.unit_id] = command
+            frame.stage_construction(role.unit_id,command,report)
+            destinations = [Pos.load(p) for p in command.get('targetPos',())]
+            claimed.update(destinations)
+            if command['action']=='build':
+                free_walls[:] = [p for p in free_walls if p not in destinations]
+        elif contract:
+            if home_defense.inside(turn,role.pos) and any(distance(role.pos,g.pos)==1 for g in turn.weapons()):
+                frame.cancel('construction','safe_stop')
+            else:
+                contract['phase']='return'
+        report['team_route'] = guard.report()
+        upgrade_report.setdefault('construction',[]).append(report)
+        busy.add(role.unit_id)
+
     for role in turn.workers():
         if role.unit_id in busy:
+            continue
+        if frame.construction and role.unit_id==frame.construction['owner']:
+            construct(role)
             continue
         if upgrade and not any(distance(role.pos,g.pos)<=4 for g in turn.weapons()):
             step = home_defense.step_inside(turn,role,claimed=claimed)
             if step is not None:
                 commands[role.unit_id]=move_command(step);claimed.add(step)
             continue
+        previous_claimed,previous_walls = set(claimed),list(free_walls)
         _worker_day(
             turn, role, sites, free_towers, free_walls, claimed, commands, state, busy,
             other_errand=bool(errand_owners - {role.unit_id}), routes=routes,
         )
+        proposed = commands.get(role.unit_id,{})
+        if frame.purchase and proposed.get('action') in ('move','build'):
+            guard = team_trip.RouteGuard(turn,state,frame.purchase,
+                {uid:c for uid,c in commands.items() if uid!=role.unit_id})
+            if not guard.allows_command(role,proposed):
+                commands.pop(role.unit_id,None)
+                claimed.clear();claimed.update(previous_claimed)
+                free_walls[:] = previous_walls
+                if not towers_missing and walls_missing:
+                    construct(role)
+                continue
         if upgrade and commands.get(role.unit_id,{}).get('action') == 'move':
             destination=Pos.load(commands[role.unit_id]['targetPos'][0])
             if not any(distance(destination,g.pos)<=4 for g in turn.weapons()):
                 commands.pop(role.unit_id,None)
                 claimed.discard(destination)
+                if not towers_missing and walls_missing:
+                    claimed.clear();claimed.update(previous_claimed)
+                    free_walls[:] = previous_walls
+                    construct(role)
     # Tasks come last so a task command always wins the pioneer: the task frame
     # is turn-sensitive (timeout, hold range) while defence positioning is not.
     for role, tower in _tower_pairs(turn):
