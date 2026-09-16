@@ -21,7 +21,7 @@ def purchase(round_no=178):
     # Synthetic internal memory for replaying the target that the historical
     # planner selected; NOT a claim the old program had this new memory field.
     return dict(owner=20012,target=20041,item='WeaponUpgradeVoucher1',level=1,count=0,
-                issued_round=164,last_round=round_no,deadline=198)
+                issued_round=164,last_round=round_no,deadline=198,phase='acquire',last_action='move')
 
 
 def construction(round_no=177):
@@ -90,7 +90,7 @@ class TeamTripTests(unittest.TestCase):
         proposal,report=upgrade_itinerary.plan(Turn.load(p),p,{},deadline=67)
         self.assertEqual(report['building'],20030)
         frame=team_trip.TripFrame(Turn.load(p),p,{'purchase':c})
-        self.assertIsNone(frame.purchase)
+        self.assertEqual(frame.purchase['phase'],'return')
         self.assertEqual(frame.events[0]['reason'],'route_exceeds_budget',
                          'an independently changed board must explicitly cancel, not pin forever')
 
@@ -152,12 +152,12 @@ class TeamTripTests(unittest.TestCase):
         retry,_=upgrade_itinerary.plan(Turn.load(p),p,{},commitment=f.purchase)
         self.assertEqual(retry[1]['action'],'use')
 
-    def test_observed_use_releases_target_without_losing_backpack(self):
+    def test_target_change_outside_retains_return_without_claiming_our_use(self):
         p=observed(179); c=purchase();c['count']=1
         next(u for u in p['teamOur']['roles'] if u['id']==20041)['level']=2
         before=deepcopy(p)
         frame=team_trip.TripFrame(Turn.load(p),p,{'purchase':c})
-        self.assertIsNone(frame.purchase)
+        self.assertEqual(frame.purchase['phase'],'return')
         self.assertEqual(frame.events[0]['reason'],'target_changed_observed')
         self.assertEqual(p,before)
 
@@ -170,7 +170,7 @@ class TeamTripTests(unittest.TestCase):
         self.assertEqual(mem['purchase']['count'],1)
         owner['backpack'].remove('WeaponUpgradeVoucher1');p['roundNo']+=1
         frame=team_trip.TripFrame(Turn.load(p),p,mem)
-        self.assertIsNone(frame.purchase)
+        self.assertEqual(frame.purchase['phase'],'return')
         self.assertEqual(frame.events[0]['reason'],'item_absent_observed')
 
     def test_future_income_capacity_and_current_quote_cannot_be_assumed(self):
@@ -261,7 +261,7 @@ class TeamTripTests(unittest.TestCase):
     def test_new_threat_aborts_work_but_keeps_return_assignment(self):
         p=observed(178);p['robot']['roles']=[dict(id=800,health=40,pos=dict(x=10,y=10))]
         f=team_trip.TripFrame(Turn.load(p),p,{'purchase':purchase(177),'construction':construction()})
-        self.assertIsNone(f.purchase)
+        self.assertEqual(f.purchase['phase'],'return')
         self.assertEqual(f.construction['phase'],'return')
 
     def test_real_quarry_wall_return_revalidates_every_move(self):

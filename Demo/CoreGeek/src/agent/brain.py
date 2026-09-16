@@ -353,6 +353,10 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         report = _UPGRADE_REPORT.get()
         if report is not None:
             report['team_trip_events'] = deepcopy(trip_frame.events)
+            deferred=next((e for e in trip_frame.events if e.get('kind')=='purchase' and e.get('event')=='defer'),None)
+            if deferred:
+                report['planned_phase']=report.get('phase')
+                report.update(phase='deferred',reason=deferred['reason'],final_route=deepcopy(deferred['route']))
     elif commit and hasattr(planner_state,'team_trips'):
         planner_state.team_trips.clear()
     response = sandbox.ResponseBuilder()
@@ -679,7 +683,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
             deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,commitment=frame.purchase,
             reserved_workers=({construction['owner']} if construction else ()))
-        if frame.purchase and proposal is None:
+        if frame.purchase and proposal is None and frame.purchase.get('phase')!='return':
             frame.cancel('purchase',report['reason'])
             proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
                 deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
@@ -735,6 +739,8 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         state["_treasureRound"] = turn.round_no if reserved else None
     upgrade, upgrade_report = upgrade_plan()
     _UPGRADE_REPORT.set(upgrade_report)
+    if frame.purchase and frame.purchase.get('phase')=='return':
+        busy.add(frame.purchase['owner']);reserved.add(frame.purchase['owner'])
     if upgrade:
         owner, command = upgrade
         commands[owner] = command
@@ -747,7 +753,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         # worker leaves for the vendor the defence plan must not re-assign it,
         # otherwise a multi-day trip could never finish.
         for role in turn.workers():
-            if role.unit_id in commands:
+            if role.unit_id in commands or role.unit_id in busy:
                 continue
             if frame.construction and role.unit_id==frame.construction['owner']:
                 continue
@@ -755,6 +761,8 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
                 busy.add(role.unit_id)
                 break
         for role in turn.workers():
+            if role.unit_id in busy:
+                continue
             if frame.construction and role.unit_id==frame.construction['owner']:
                 continue
             if _errand_mission(turn, role, commands, state, errands):

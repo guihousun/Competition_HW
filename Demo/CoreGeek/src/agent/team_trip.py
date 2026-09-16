@@ -6,12 +6,13 @@ overlay is a planning counterfactual, never confirmation that a move succeeded.
 """
 from collections import deque
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from heapq import heappop, heappush
 
 from .coordination import available_gold
 from .home_defense import inside
 from .market import can_upgrade, shop_prices
-from .protocol import (Pos, CONTROLLABLE_TYPES, TOWER_TYPES, distance,
+from .protocol import (Pos, CONTROLLABLE_TYPES, TOWER_TYPES, DAY_ROUNDS, ROUNDS_PER_DAY, distance,
                        move_command, buy_command, use_command)
 
 MAX_ROUTE_OVERLAYS = 64  # compute bound; exhaustion defers construction
@@ -53,7 +54,7 @@ class TripCost:
 
 def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
                   added_walls=(), commands=None):
-    """Cost to the SAME target: buy if absent, deliver/use if actually held.
+    """Cost to the SAME target AND a legal sheltered weapon post afterward.
 
     No alternate building, speculative future income, assumed consumption or
     mine reserves. Real occupants are static obstacles unless explicitly moved
@@ -62,18 +63,19 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     budget = commitment['deadline'] - turn.round_no
     def reject(reason, actions=None):
         return TripCost(False, actions, budget, reason)
-    if not turn.is_day or budget <= 0:
+    returning = commitment.get('phase') == 'return'
+    if not turn.is_day or (budget <= 0 and not returning):
         return reject('deadline')
     owner = next((w for w in turn.workers() if w.unit_id == commitment['owner']), None)
     target = next((u for u in turn.ours if u.health > 0 and u.unit_id == commitment['target']), None)
     item = commitment['item']
-    if owner is None or target is None:
+    if owner is None or (target is None and not returning):
         return reject('owner_or_target_missing')
-    if not can_upgrade(item, target.kind, target.level):
+    if not returning and not can_upgrade(item, target.kind, target.level):
         return reject('target_no_longer_eligible')
     held = item in owner.backpack
     price = shop_prices(payload).get(item)
-    if not held and (price is None or price < 0 or price > available_gold(
+    if not returning and not held and (price is None or price < 0 or price > available_gold(
             turn, payload, commands or {}, replacing=owner.unit_id) or owner.backpack_full):
         return reject('purchase_unavailable')
     blocked = set(turn.blocked(owner)) | task_cells(turn) | set(added_walls)
@@ -99,7 +101,35 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
                 queue.append(nxt)
         return distances, first
 
-    stands = [p for p in neighbours(target.pos) if turn.land(p) and p not in blocked]
+    # Reverse return graph. Once sheltered, returning may not exit the ring
+    # again merely to reach another gun; exterior starts may enter normally.
+    base=turn.station()
+    inside_region=({p for cell in turn.footprint(base) for p in (cell,*neighbours(cell))}
+                   if base is not None else set())
+    homes = {p for gun in turn.weapons() for p in neighbours(gun.pos)
+             if p in inside_region and turn.land(p) and p not in blocked}
+    return_cost = {p:0 for p in homes}; home_step = {p:None for p in homes}
+    queue = deque(sorted(homes,key=lambda p:(p.x,p.y)))
+    while queue:
+        cell = queue.popleft()
+        for predecessor in neighbours(cell):
+            if (predecessor in return_cost or predecessor in blocked or not turn.land(predecessor)
+                    or (predecessor in inside_region and cell not in inside_region)):
+                continue
+            return_cost[predecessor]=return_cost[cell]+1
+            home_step[predecessor]=cell
+            queue.append(predecessor)
+    if returning:
+        actions = return_cost.get(owner.pos)
+        if actions is None:
+            return reject('return_blocked')
+        command = move_command(home_step[owner.pos]) if actions else None
+        return TripCost(actions<=budget,actions,budget,
+                        'returned' if actions==0 else 'return' if actions<=budget else 'late_return',command)
+
+    stands = [p for p in neighbours(target.pos) if turn.land(p) and p not in blocked and p in return_cost]
+    if not stands:
+        return reject('return_unreachable')
     outward, first = bfs(owner.pos)
     options = []
     if held:
@@ -107,22 +137,26 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
             if stand in outward:
                 command = (use_command(item, target.pos) if outward[stand] == 0
                            else move_command(first[stand]))
-                options.append((outward[stand]+1, 0, stand.x, stand.y, command))
+                options.append((outward[stand]+1+return_cost[stand], outward[stand], stand.x, stand.y, command))
     else:
-        # Reverse multi-source distances are exact on the undirected move grid.
-        home = {p: 0 for p in stands}; queue = deque(stands)
-        while queue:
-            cell = queue.popleft()
+        # Weighted reverse search: a use stand's initial cost includes use AND
+        # its real return. Nearest-to-target alone can pick a stranded stand.
+        delivery = {p:1+return_cost[p] for p in stands}
+        pending = []
+        for p,n in delivery.items():heappush(pending,(n,p.x,p.y))
+        while pending:
+            cost,x,y=heappop(pending);cell=Pos(x,y)
+            if cost!=delivery[cell]:continue
             for nxt in neighbours(cell):
-                if nxt in home or nxt in blocked or not turn.land(nxt):
+                if nxt in blocked or not turn.land(nxt) or cost+1>=delivery.get(nxt,10**9):
                     continue
-                home[nxt] = home[cell]+1; queue.append(nxt)
+                delivery[nxt]=cost+1;heappush(pending,(cost+1,nxt.x,nxt.y))
         shops = sorted((p for p, kind in turn.zones.items() if kind == 'weaponShop'), key=lambda p:(p.x,p.y))
         for shop in shops:
             for stand in neighbours(shop):
-                if stand not in outward or stand not in home:
+                if stand not in outward or stand not in delivery:
                     continue
-                actions = outward[stand]+1+home[stand]+1
+                actions = outward[stand]+1+delivery[stand]
                 command = buy_command(item,1) if outward[stand] == 0 else move_command(first[stand])
                 options.append((actions,outward[stand],stand.x,stand.y,command))
     if not options:
@@ -155,10 +189,13 @@ class RouteGuard:
             self.cache[key] = evaluate_trip(self.turn,self.payload,self.commitment,
                 actor_positions={owner:stand},added_walls=key[2],commands=self.commands)
         after = self.cache[key]
-        if not after.feasible:
+        allowed = after.feasible
+        if self.commitment.get('phase')=='return' and after.actions is not None:
+            allowed = allowed or (self.before.actions is None or after.actions<=self.before.actions)
+        if not allowed:
             self.rejected += 1
         increase = max(0,after.actions-self.before.actions) if after.actions is not None and self.before.actions is not None else 0
-        return after.feasible, increase
+        return allowed, increase
 
     def allows_command(self, role, command):
         action = command.get('action')
@@ -185,15 +222,21 @@ def clean_memory(value):
             continue
         if any(type(row.get(k)) is not int for k in ('owner','issued_round','last_round','deadline')):
             continue
-        if row['owner'] < 0 or not 1 <= row['issued_round'] <= row['last_round'] < row['deadline'] <= 1301:
+        returning = kind=='purchase' and row.get('phase')=='return'
+        last_limit = ((row['issued_round']-1)//ROUNDS_PER_DAY)*ROUNDS_PER_DAY+DAY_ROUNDS+1 if returning else row['deadline']
+        if (row['owner'] < 0 or not 1 <= row['issued_round'] <= row['last_round'] < last_limit
+                or not row['issued_round'] < row['deadline'] <= 1301):
             continue
         common = {k:row[k] for k in ('owner','issued_round','last_round','deadline')}
         if kind == 'purchase':
             if (type(row.get('target')) is not int or type(row.get('level')) is not int
                     or type(row.get('count')) is not int or not 0 <= row['count'] <= 100
-                    or not isinstance(row.get('item'),str) or len(row['item']) > 80):
+                    or not isinstance(row.get('item'),str) or len(row['item']) > 80
+                    or row.get('phase','acquire') not in ('acquire','return')
+                    or row.get('last_action','') not in ('','move','buy','use')):
                 continue
             common.update({k:row[k] for k in ('target','level','count','item')})
+            common.update(phase=row.get('phase','acquire'),last_action=row.get('last_action',''))
         else:
             cells = row.get('walls')
             if (row.get('phase') not in ('work','return') or not isinstance(cells,list)
@@ -216,31 +259,36 @@ class TripFrame:
         self.construction_deadline = deadline(turn,construction_deadline)
         self.memory = clean_memory(memory)
         self.events, self.pending = [], {}
+        self._new_deferred = False
         live = {w.unit_id:w for w in turn.workers()}
         for kind,row in list(self.memory.items()):
             reason = None
             if row['owner'] not in live:
                 reason = 'owner_missing'
-            elif not turn.is_day or turn.round_no >= row['deadline']:
+            elif not turn.is_day:
                 reason = 'deadline'
             elif turn.round_no-row['last_round'] not in (0,1) or (turn.round_no-1)//130 != (row['last_round']-1)//130:
                 reason = 'observation_discontinuity'
-            elif threat(turn):
-                if kind=='construction':
-                    row['phase']='return'
-                    self.events.append({'kind':kind,'event':'return','reason':'visible_threat','owner':row['owner']})
-                else:
-                    reason = 'visible_threat'
+            elif kind=='construction' and turn.round_no>=row['deadline']:
+                reason='deadline'
             elif kind == 'purchase':
-                target = next((u for u in turn.ours if u.unit_id==row['target'] and u.health>0),None)
-                if target is None or target.level != row['level']:
-                    reason = 'target_changed_observed'
-                elif row['count'] and row['item'] not in live[row['owner']].backpack:
-                    reason = 'item_absent_observed'
-                else:
+                if row['phase']=='acquire':
+                    target = next((u for u in turn.ours if u.unit_id==row['target'] and u.health>0),None)
+                    count = live[row['owner']].backpack.count(row['item'])
+                    if target is None or target.level != row['level']:
+                        confirmed = (target is not None and target.level>row['level']
+                                     and count<row['count'] and row['last_action']=='use')
+                        self.begin_return(row,'upgrade_confirmed_observed' if confirmed else 'target_changed_observed')
+                    elif row['count'] and count<row['count']:
+                        self.begin_return(row,'item_absent_observed')
+                if threat(turn):
+                    self.begin_return(row,'visible_threat')
+                elif turn.round_no>=row['deadline']:
+                    self.begin_return(row,'deadline')
+                if row['phase']=='acquire':
                     cost = evaluate_trip(turn,payload,row)
                     if not cost.feasible:
-                        reason = cost.reason
+                        self.begin_return(row,cost.reason)
                     else:
                         count = live[row['owner']].backpack.count(row['item'])
                         if count != row['count']:
@@ -251,7 +299,14 @@ class TripFrame:
                 self.cancel(kind,reason)
                 continue
             row['last_round'] = turn.round_no
+            if kind=='purchase' and row['phase']=='return':
+                worker=live[row['owner']]
+                if inside(turn,worker.pos) and any(distance(worker.pos,g.pos)==1 for g in turn.weapons()):
+                    self.cancel(kind,'returned_observed')
             if kind == 'construction':
+                if threat(turn):
+                    row['phase']='return'
+                    self.events.append({'kind':kind,'event':'return','reason':'visible_threat','owner':row['owner']})
                 remaining = set(Pos.load(p) for p in row['walls']) - {w.pos for w in turn.walls()}
                 if not remaining:
                     row['phase'] = 'return'
@@ -272,18 +327,30 @@ class TripFrame:
             self.events.append({'kind':kind,'event':'cancel','reason':reason,'owner':self.memory[kind]['owner']})
             self.memory.pop(kind)
 
+    def begin_return(self,row,reason):
+        if row.get('phase')!='return':
+            self.events.append({'kind':'purchase','event':'return','reason':reason,'owner':row['owner']})
+            row['phase']='return'
+
     def stage_purchase(self, report, proposal):
         if proposal is None:
             return
         owner,command = proposal
         target = next((u for u in self.turn.ours if u.unit_id==report.get('building')),None)
         worker = next((w for w in self.turn.workers() if w.unit_id==owner),None)
-        if target is None or worker is None or not report.get('voucher'):
-            return
         prior = self.purchase
-        record = dict(owner=owner,target=target.unit_id,item=report['voucher'],level=target.level,
+        if worker is None or not report.get('voucher'):
+            return
+        if prior and prior['phase']=='return':
+            record = dict(prior,last_round=self.turn.round_no,last_action=command['action'],
+                          count=worker.backpack.count(prior['item']))
+        elif target is None:
+            return
+        else:
+            record = dict(owner=owner,target=target.unit_id,item=report['voucher'],level=target.level,
                       count=worker.backpack.count(report['voucher']),issued_round=(prior or {}).get('issued_round',self.turn.round_no),
-                      last_round=self.turn.round_no,deadline=(prior or {}).get('deadline',self.purchase_deadline))
+                      last_round=self.turn.round_no,deadline=(prior or {}).get('deadline',self.purchase_deadline),
+                      phase='acquire',last_action=command['action'])
         self.pending['purchase'] = record,deepcopy(command)
 
     def stage_construction(self, owner, command, report):
@@ -300,10 +367,45 @@ class TripFrame:
         for kind,(record,proposed) in self.pending.items():
             if commands.get(record['owner']) != proposed:
                 continue
+            if kind=='purchase' and self.purchase is None:
+                cost=self.prospective_new(record,proposed,commands)
+                if not cost.feasible:
+                    self.defer_new(record,cost)
+                    continue
             if kind not in self.memory:
                 self.events.append({'kind':kind,'event':'issued','owner':record['owner']})
             self.memory[kind] = record
         return clean_memory(self.memory)
+
+    def prospective_new(self,record,proposed,commands):
+        """Conditional after-settlement proof; none of this is persisted as fact.
+
+        Include the exact proposed first step, not a newly recomputed shortcut.
+        The real contract still stores the CURRENT bag and target level.
+        """
+        owner=next(w for w in self.turn.workers() if w.unit_id==record['owner'])
+        after_record=dict(record)
+        if proposed['action']=='move':
+            owner=replace(owner,pos=Pos.load(proposed['targetPos'][0]))
+        elif proposed['action']=='buy':
+            owner=replace(owner,backpack=owner.backpack+(record['item'],))
+        elif proposed['action']=='use':
+            after_record['phase']='return'
+        positions={uid:Pos.load(c['targetPos'][0]) for uid,c in commands.items()
+                   if uid!=owner.unit_id and c.get('action')=='move'}
+        walls={Pos.load(p) for c in commands.values() if c.get('action')=='build'
+               for p in c.get('targetPos',())}
+        after_turn=replace(self.turn,round_no=self.turn.round_no+1,
+            is_day=self.turn.round_no%ROUNDS_PER_DAY<DAY_ROUNDS,
+            gold=available_gold(self.turn,self.payload,commands),
+            ours=tuple(owner if u.unit_id==owner.unit_id else u for u in self.turn.ours))
+        return evaluate_trip(after_turn,self.payload,after_record,actor_positions=positions,added_walls=walls)
+
+    def defer_new(self,record,cost):
+        if not self._new_deferred:
+            self.events.append({'kind':'purchase','event':'defer','owner':record['owner'],
+                'reason':'new_trip_conflicts_final_actions','route':cost.report()})
+            self._new_deferred=True
 
     def protect_final(self,commands):
         """A late task move/reservation may change the earlier route proof.
@@ -313,9 +415,17 @@ class TripFrame:
         accepted move cannot create a same-round move into its old position.
         This does not claim protection from future opponent actions.
         """
-        if self.purchase is None:
-            return commands
         result = dict(commands)
+        if self.purchase is None:
+            pending=self.pending.get('purchase')
+            if pending:
+                record,proposed=pending
+                if result.get(record['owner'])==proposed:
+                    cost=self.prospective_new(record,proposed,result)
+                    if not cost.feasible:
+                        result.pop(record['owner'],None)
+                        self.defer_new(record,cost)
+            return result
         for worker in self.turn.workers():
             if worker.unit_id==self.purchase['owner']:
                 continue

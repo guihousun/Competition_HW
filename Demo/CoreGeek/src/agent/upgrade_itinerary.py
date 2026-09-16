@@ -1,7 +1,7 @@
 """Observation-derived worker shopping and voucher delivery, R02/R06.
 
 One worker travels; one remains home. No hidden map or future wave inputs.
-Costs are path lengths on the currently observed board, plus buy/use rounds.
+Costs include paths, buy/use rounds and a legal return to a sheltered gun post.
 """
 from collections import deque
 from .protocol import Pos, WALL, STATION, TOWER_TYPES, MEDICINE, WALL_FIXER, distance, buy_command, use_command, move_command
@@ -83,9 +83,11 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
         report = dict(phase='idle',reason=cost.reason,worker=commitment['owner'],
                       building=commitment['target'],voucher=commitment['item'],
                       committed=True,route=cost.report())
-        if not cost.feasible or worker is None or worker.unit_id in commands:
+        returning=commitment.get('phase')=='return'
+        if worker is None or worker.unit_id in commands or cost.command is None or (not cost.feasible and not returning):
+            if returning:report['phase']='return_wait'
             return None,report
-        report['phase'] = ('use' if cost.command['action']=='use' else 'buy' if cost.command['action']=='buy'
+        report['phase'] = ('return_to_post' if returning else 'use' if cost.command['action']=='use' else 'buy' if cost.command['action']=='buy'
                            else 'return_with_voucher' if commitment['item'] in worker.backpack else 'to_shop')
         return (worker.unit_id,cost.command),report
     shops=sorted((p for p,k in turn.zones.items() if k=='weaponShop'),key=lambda p:(p.x,p.y))
@@ -104,15 +106,16 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3 and b.kind in (STATION,WALL)+TOWER_TYPES),key=building_priority)
     # Bound planning cost on crowded wall maps; retain all base/tower targets.
     buildings=[b for b in buildings if b.kind!=WALL]+[b for b in buildings if b.kind==WALL][:4]
-    cache={}
-    def route(worker,pos):
-        key=(worker.unit_id,pos)
-        if key not in cache:cache[key]=routes(turn,worker,pos)
-        return cache[key]
     def action(worker,building,item,phase,cmd,price=None):
         report.update(phase=phase,reason=phase,worker=worker.unit_id,building=building.unit_id,
                       voucher=item,target=building.pos.dump(),price=price)
         return (worker.unit_id,cmd),report
+    def full_cost(worker,building,item):
+        from .team_trip import evaluate_trip, deadline as absolute_deadline
+        return evaluate_trip(turn,payload,dict(owner=worker.unit_id,target=building.unit_id,
+            item=item,deadline=absolute_deadline(turn,deadline)),commands=commands)
+    from .team_trip import threat
+    visible_danger=threat(turn)
     # Actual inventory has priority; no shop presence/quote is needed to use it.
     carried=False
     for building in buildings:
@@ -120,14 +123,11 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
             for item in sorted(set(worker.backpack)&set(VOUCHER_TARGETS)):
                 carried=True
                 if not can_upgrade(item,building.kind,building.level):continue
-                if distance(worker.pos,building.pos)<=1:
-                    return action(worker,building,item,'use',use_command(item,building.pos))
-                dist,first=route(worker,worker.pos)
-                choices=[p for p in stands(turn,worker,building.pos) if p in dist and index+dist[p]+1<=deadline]
-                if choices:
-                    goal=min(choices,key=lambda p:(dist[p],p.x,p.y))
-                    if first[goal] is not None:return action(worker,building,item,'return_with_voucher',move_command(first[goal]))
-    if carried:return stop('held_voucher_no_reachable_eligible_target')
+                cost=full_cost(worker,building,item)
+                if cost.feasible and (not visible_danger or (cost.command['action']=='use' and cost.actions==1)):
+                    report['route']=cost.report()
+                    return action(worker,building,item,'use' if cost.command['action']=='use' else 'return_with_voucher',cost.command)
+    if carried:return stop('held_voucher_deferred_for_threat' if visible_danger else 'held_voucher_no_reachable_eligible_target')
     if len(turn.weapons())<3:return stop('initial_weapons_first')
     if not shops:return stop('weapon_shop_not_observed')
     if index<start:return stop('before_shopping_window')
@@ -146,22 +146,10 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
         options=[]
         for worker in workers:
             if worker.backpack_full:continue
-            # Daytime has no visible robots (checked above). The day planner
-            # explicitly returns/retains the other worker instead of cancelling
-            # a funded trip whenever that worker briefly leaves a four-cell radius.
-            dist,first=route(worker,worker.pos)
-            destinations=stands(turn,worker,building.pos)
-            for shop in shops:
-                for stand in stands(turn,worker,shop):
-                    if stand not in dist:continue
-                    back,_=route(worker,stand)
-                    returning=min((back[p] for p in destinations if p in back),default=10**9)
-                    total=dist[stand]+1+returning+1
-                    if index+total<=deadline:
-                        options.append((total,dist[stand],worker.unit_id,stand.x,stand.y,worker,stand,shop))
+            cost=full_cost(worker,building,item)
+            if cost.feasible:options.append((cost.actions,worker.unit_id,worker,cost))
         if options:
-            *_,worker,stand,shop=min(options,key=lambda x:x[:5])
-            if distance(worker.pos,shop)<=1:
-                return action(worker,building,item,'buy',buy_command(item,1),price)
-            return action(worker,building,item,'to_shop',move_command(route(worker,worker.pos)[1][stand]),price)
+            _,_,worker,cost=min(options,key=lambda x:x[:2])
+            report['route']=cost.report()
+            return action(worker,building,item,'buy' if cost.command['action']=='buy' else 'to_shop',cost.command,price)
     return stop('trip_unreachable_full_or_too_late')
