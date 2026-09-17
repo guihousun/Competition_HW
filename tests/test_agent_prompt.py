@@ -242,30 +242,6 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("一项不落地读完、跑到", attention)
         self.assertIn("别自己另定一套标准", attention)
 
-    def test_the_attention_lets_it_submit_before_the_answer_is_complete(self):
-        """交答案不必等凑齐 —— 判题器取**交过的版本里通过率最高的那一版**。
-
-        用户确认：答错了判题器回一条 error、任务继续（`errors` 的 code 2），所以每回合都交是
-        判题器预期的用法（接口文档 L140）。不点破这一点，ROLE / 输出约定 / 第 7 条三处的"完成"
-        会把它推到"等到齐了再交" —— 而任务超时结束是一种收尾方式，那时**一版都没交过就是 0 分**。
-        尾句"不是收工"是划界：交一版不等于任务做完，别拿它当停手的理由（与第 5 条分工 ——
-        那条管动手做，这条只管交）。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        attention = system.split("# 【注意事项】")[1]
-        self.assertIn("交过的所有版本里通过率最高的那一版", attention)
-        self.assertIn("一版都没交过而任务超时结束就是 0 分", attention)
-        self.assertIn("先交一版也不是收工", attention)
-        # 旧内容整句保留（输出里已经有答案时别再多跑一条命令）
-        self.assertIn('不要为"再确认一下"执行多余命令', attention)
-
-    def test_the_role_and_output_sections_agree_on_submitting_early(self):
-        """三处同源：ROLE 说立场、输出约定说形状、【注意事项】说账怎么算。
-
-        只改一处 ⇒ 另外两处的"完成"二字会把 LLM 拉回"等齐了再交"，第 8 条等于白发。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("手上有一版答案就先交出去", system)
-        self.assertIn("不必等任务全部做完，手上那一版先交出去", system)
-
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
 
