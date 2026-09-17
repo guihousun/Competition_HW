@@ -798,9 +798,13 @@ class RescueTest(unittest.TestCase):
         stone: int = 1,
         robots: bool = True,
         colleagues: tuple[Pos, ...] = (),
+        gap_robot: Pos | None = None,
         phase_task: str = "把石头运回基地",
     ) -> Turn:
-        """默认：通道被 6 台机器人堵死、开拓者被关在盒子里、工人站在正面墙外 `(14,24)`。"""
+        """默认：通道被 6 台机器人堵死、开拓者被关在盒子里、工人站在正面墙外 `(14,24)`。
+
+        `gap_robot` = 环上留一格不砌、并在那一格里放一台机器人（缺口被堵住 ⇒ 环敞着人也出不去）。
+        """
         roles: list[BaseRole] = [Worker(1, rescuer, {"stone": stone} if stone else {}), Pioneer(2, boxed, {})]
         obstacles: dict[Pos, str] = {}
         if robots:
@@ -809,13 +813,18 @@ class RescueTest(unittest.TestCase):
         for i, colleague in enumerate(colleagues):
             obstacles[colleague] = "worker"
             roles.append(Worker(3 + i, colleague, {}))
+        if gap_robot is not None:
+            obstacles[gap_robot] = "robot:small"
+        # 墙既是地形也是实体（`teamOur.roles` 里那份）：`_rescue` 按实体挑要拆的那一格
+        built = [c for c in wall_cells(self.BASE, 41) if c != gap_robot]
         return Turn(
             round_no=round_no,
+            walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(built)),
             map=Map(
                 self.SIZE,
                 _terrain(
                     self.WEAPONS,
-                    {c: WALL for c in wall_cells(self.BASE, 41)},
+                    {c: WALL for c in built},
                     {self.BASE: "station"},
                     {rescuer: "worker"},
                     {boxed: "pioneer"},
@@ -882,10 +891,28 @@ class RescueTest(unittest.TestCase):
         cmds = plan(self._turn(robots=False, colleagues=self.DOOR))
         self.assertEqual(self._holes(cmds), {}, f"同事堵通道不算被关：{cmds}")
 
-    def test_the_first_day_never_rescues(self):
-        """第 1 天不救：那天环还在建，缺口本来就能走人，拆了等于白拆一块石头。"""
-        cmds = plan(self._turn(round_no=1))
-        self.assertEqual(self._holes(cmds), {}, f"第 1 天不拆：{cmds}")
+    def test_the_first_day_rescues_once_the_ring_is_complete(self):
+        """第 1 天环砌完了照救（用户口径）：环满 ⇒ 上面那个缺口只可能是自己拆出来的。
+
+        按回合号一刀切（第 1 天一律不救）的话，第 1 天被关住的人整整一天没人管。⚠️ 这一天救得了
+        还得赶早：`HOLE_MIN_LEFT`(30) 要求白天还剩 30 回合以上 ⇒ 环得在**第 40 回合前**砌完，
+        否则第 1 天照旧救不了（第 41 回合起 `day_rounds_left` 掉到 30 以下）。
+        """
+        self.assertEqual(self._holes(plan(self._turn(round_no=1))), {"1": Pos(13, 23)})
+
+    def test_the_rescue_never_targets_a_cell_without_a_wall(self):
+        """拆的必须是**真有墙**的那一格：环上没砌的格被机器人踩住时，`_ring` 看不见它（挡路 ⇒ 当已砌）。
+
+        这一幕是第 68 步放开第 1 天救援之后才够得着的：缺口被堵 ⇒ 盒里的人**真的**被困住、
+        `_ring` 也**真的**以为环齐了（没错，那一刻盒子确实是封的）⇒ 救援该来；但它拆的必须是
+        一格墙，不是那个没砌的空地（拆空地 = 白丢一回合，人还在里面）。夹具必须把那格堵上：
+        缺口敞着时人本来就走得出去，用例连坏的实现都放过去。
+        """
+        gap = Pos(13, 23)
+        cmds = plan(self._turn(round_no=1, gap_robot=gap))
+        holes = self._holes(cmds)
+        self.assertTrue(holes, f"人真被困住了，该来救：{cmds}")
+        self.assertNotIn(gap, set(holes.values()), f"没墙的那格不能拆：{cmds}")
 
     def test_a_stone_short_worker_cannot_rescue(self):
         """没石头救不了：拆一块少一块，补不回来就是整夜的洞。"""

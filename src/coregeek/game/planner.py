@@ -713,17 +713,6 @@ def _ring(turn: Turn) -> tuple[Pos, ...]:
 
 
 # ── 拆墙放人 ────────────────────────────────────────────────────────
-def _after_first_day(turn: Turn) -> bool:
-    """是不是第 2 天及以后 —— 允许拆墙放人的前提。
-
-    第 1 天环上"孤零零一个缺口"既是"刚拆的洞"、也是"还差一格没砌"，地图上逐字节同形，任何
-    无状态判据都分不开，只能靠时间：第 1 天缺口一律当"还没砌"（`_ring` 现在就是对的）。没有
-    它，第 1 天砌到只剩中段某一格时那格会被当成"洞"推迟到当天末尾、白天再也不补。守门：
-    `test_a_worker_on_the_last_cell_still_finishes_the_ring`。
-    """
-    return turn.round_no > ROUNDS_PER_DAY
-
-
 def _stuck_inside(turn: Turn, box: frozenset[Pos]) -> tuple[BaseRole, ...]:
     """现在真的走不出盒子的人；没有就空元组。
 
@@ -754,11 +743,14 @@ def _rescue(
     开哪一格：开了之后真能让某个被困的人迈出去、且离救援者最近的那一格（并列取坐标序）。门被
     机器人堵死时命中；被同事堵住时 `_stuck_inside` 先一步把人放出来了 ⇒ 这里不命中 —— 那正是
     "不白拆一次"的意思。守门：`RescueTest`。
+
+    环没砌满 ⇒ 整个不生效（`_ring` 那一句）：第 1 天那个缺口是"还没砌"、不是"刚拆的洞"，
+    地图上同形，只能靠"环满不满"分开 —— 环没满时人本来就能从缺口走。第 1 天环砌完了照救。
     """
     if not turn.is_day or not isinstance(role, Worker) or not box:
         return False
     station = turn.map.station
-    if station is None or not _after_first_day(turn):
+    if station is None:
         return False
     wall = wall_cells(station, turn.map.size[0], sealed=_sealed_back(turn))
     if _ring(turn) or q.claimed & set(wall):
@@ -770,10 +762,13 @@ def _rescue(
         return False
 
     walk, size = turn.map.blocked | q.claimed, turn.map.size
+    # 只认**真有墙**的格（`turn.walls` 是我方围墙实体）：`wall_cells` 是几何，没砌的那一格若被
+    # 机器人踩着照样挡路（`_ring` 因此以为环齐了、放这一支进来），照它拆就是拆一格没墙的空地。
+    live = {w.pos for w in turn.walls}
     free = [
         (role.pos.dist(c), c)
         for c in wall
-        if any(step_outside(v.pos, box, walk - {c}, size) is not None for v in stuck)
+        if c in live and any(step_outside(v.pos, box, walk - {c}, size) is not None for v in stuck)
     ]
     if not free:
         return False
