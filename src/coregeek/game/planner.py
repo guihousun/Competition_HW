@@ -285,8 +285,8 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             else:
                 # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事（武器齐了才跑）；卖矿兜底
                 # （接住它从任务/宝藏拿到可卖物的情形）；没货 ⇒ 待命。
-                if not weapon_gap and not _upgrade_line(role, turn, q):
-                    _sell_ore(role, turn, q, frozenset())
+                if not weapon_gap and not _upgrade_line(role, turn, q, sites):
+                    _sell_ore(role, turn, q, sites)
             continue
 
         if not isinstance(role, Worker):
@@ -337,7 +337,7 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 
         # 经济线兜底：卖矿 →（武器齐了才升级）→ 采闲矿。
         if not _sell_ore(role, turn, q, sites, with_paths=True):
-            if weapon_gap or not _upgrade_line(role, turn, q):
+            if weapon_gap or not _upgrade_line(role, turn, q, sites):
                 _mine_spare_ore(role, turn, q, sites, ore_taken)
 
     return q, sites
@@ -853,6 +853,7 @@ def _sell_ore(
     sites: set[Pos],
     *,
     with_paths: bool = False,
+    urgent: bool = False,
 ) -> bool:
     """把小贩肯收的矿背过去换金币。这一回合没去卖就返回 `False`（调用方接着去采）。
 
@@ -862,8 +863,10 @@ def _sell_ore(
     ① 有货：`_best_load` 从 `SELLABLE` 里挑收购价最高的一种；
     ② 有小贩且走得到（`Map.vendors` 空、或一个都走不到就无处可卖）；
     ③ 够本：已经不贴着才算 —— 货值 < 往返回合数（`2 × 步数`）就留在矿边接着采（贴着时这趟路
-       早付过了）；"1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮；
-    ④ 回得来：`走到小贩 + 从小贩回基地 ≤ 白天剩余 − TIME_MARGIN`（夜里必须在炮位上）。
+       早付过了）；"1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮。`urgent=True` 跳过这一条：那趟路
+       的回报不是矿价（是买券的钱，见 `_upgrade_line`）；
+    ④ 回得来：`走到小贩 + 从小贩回基地 ≤ 白天剩余 − TIME_MARGIN`（夜里必须在炮位上）—— 这条
+       `urgent` 也不跳：赶不回来就是白丢货。
 
     距离一律 BFS 真实步数（小贩常在盒子外，回基地要绕后方通道）；-1 一律当"这趟不去"。站位
     是 `sell` 要求的"小贩周围一格内"，与小贩格本身挡路正好对上。一回合只能发一条指令 ⇒ 一次
@@ -884,7 +887,7 @@ def _sell_ore(
         # 0 = 已经贴着小贩（`steps_between` 的口径）。1 是"差一格"，那时候还不许卖
         return _emit(q.cmds, role, actions.Sell, kind, num)
     value = turn.vendor_prices.get(kind, 0) * num
-    if value < 2 * to_vendor:
+    if not urgent and value < 2 * to_vendor:
         return False  # ③ 为这一堆货走这么远不划算，接着采
     back = steps_between(vendor, station, walk, size)
     if back < 0 or to_vendor + back > turn.day_rounds_left - TIME_MARGIN:
@@ -1059,7 +1062,7 @@ def _detour_sell(
 
 
 def _upgrade_line(
-    role: BaseRole, turn: Turn, q: _Queue
+    role: BaseRole, turn: Turn, q: _Queue, sites: set[Pos]
 ) -> bool:
     """墙砌完后的第二优先：买券 → 走到目标武器 → 用券。这一回合没发指令就返回 `False`。
 
@@ -1067,6 +1070,10 @@ def _upgrade_line(
     持券的那个角色（券在谁包里谁用 —— 没有转移物品的指令；开拓者也能持券）> 真空闲的开拓者
     > 名册上第一个工人。只在白天跑（夜里 `_defend` 会把人接回炮位，明早预算重算、接着走）。
     距离一律 BFS 真实步数：商店/炮位在盒子内外两侧，整趟要绕门；-1 一律当天不去。
+
+    钱不够买券时，若"现钱 + 背包里最好那一堆货"够 ⇒ 先去卖矿（`_sell_ore(urgent=True)`）。
+    用最好那一堆而不是背包总值：一回合只能发一条 `sell`，卖掉哪一种就到账哪一种 —— 拿总值
+    凑够、到了却发现这一趟只够卖出一半，等于把路白走一遍。
     """
     workers = [r for r in turn.roles if isinstance(r, Worker)]
     holder = next(
@@ -1095,8 +1102,14 @@ def _upgrade_line(
         return q.step(role, weapon.pos)
     # 买券阶段：整趟 = 走到商店 + 买到武器 + 买/用两个动作回合
     price = turn.shop_prices.get(voucher, 0)
-    if price <= 0 or turn.gold < price:
+    if price <= 0:
         return False
+    if turn.gold < price:
+        # 钱不够但卖掉背包里最好那一堆就够 ⇒ 先去卖（那趟路的回报是券，不是矿价 ⇒ `urgent`）
+        kind, num = _best_load(role, turn.vendor_prices)
+        if not kind or turn.gold + turn.vendor_prices.get(kind, 0) * num < price:
+            return False
+        return _sell_ore(role, turn, q, sites, with_paths=True, urgent=True)
     # 并列按坐标排：先后不能取决于 payload 里的顺序。走不到的商店直接剔掉（BFS -1）。
     hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
     hops = [(steps, pos) for steps, pos in hops if steps >= 0]

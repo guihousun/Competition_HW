@@ -570,6 +570,9 @@ class UpgradeLineTest(unittest.TestCase):
     SHOP = Pos(25, 20)  # 样例的武器商店位
     PRICES = {"WeaponUpgradeVoucher1": 100, "WeaponUpgradeVoucher2": 150}
     ORE = Pos(36, 24)  # 跑腿之外工人该去采的那座矿
+    #: 小贩摆在跑腿者 11 步外、矿的**反方向** ⇒ 够本门的阈值 22 金币，一块铜（5）过不去；
+    #: 而"去矿"与"去小贩"这两条路在距离上分得开，用例才看得出它选了哪一条
+    VENDOR = Pos(4, 24)
 
     def _turn(
         self,
@@ -581,6 +584,7 @@ class UpgradeLineTest(unittest.TestCase):
         weapons: tuple[Weapon, ...] | None = None,
         roles: tuple[BaseRole, ...] | None = None,
         shop: bool = True,
+        vendor: Pos | None = None,
     ) -> Turn:
         return Turn(
             round_no=round_no,
@@ -591,6 +595,7 @@ class UpgradeLineTest(unittest.TestCase):
                     {self.BASE: "station", **({self.SHOP: "weaponShop"} if shop else {})},
                     self.RING,
                     {self.ORE: "copper"},
+                    {} if vendor is None else {vendor: "vendor"},
                 ),
             ),
             roles=roles if roles is not None else (Worker(1, pos, bag or {}),),
@@ -669,6 +674,33 @@ class UpgradeLineTest(unittest.TestCase):
         cmd = plan(self._turn(gold=99))["1"]
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.ORE), Pos(15, 24).dist(self.ORE), "钱不够 ⇒ 照常采矿")
+
+    def test_a_short_purse_sells_its_best_load_to_afford_the_ticket(self):
+        """钱差一点但背包里的货正好补上（95 + 5 = 100）⇒ 先去卖矿，不采矿也不待命。
+
+        这趟路单独看是**不划算的**（一块铜值 5，走到小贩来回 22 回合），唯一的理由是那趟的
+        回报不是矿价而是券 —— 所以它必须跳过够本门（`_sell_ore(urgent=...)`）。等价判据
+        `gold + 最好那一堆 ≥ 券价`是 `>=`：95 + 5 正好 100，写成 `>` 这位工人就永远差 5 金
+        停在原地（每一回合都在重新算，数字不会自己变）。
+        """
+        start = Pos(15, 24)
+        cmd = plan(self._turn(gold=95, bag={"copper": 1}, vendor=self.VENDOR))["1"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), start.dist(self.VENDOR), "该朝小贩走")
+
+    def test_a_load_that_leaves_the_ticket_unaffordable_is_not_walked(self):
+        """卖了也不够（90 + 5 < 100）⇒ 一步都不往小贩那儿走，照常采矿。
+
+        与上一条只差 5 金币：把"卖一趟就够了"的判据写反成一个恒真条件（比如只看背包非空、
+        或者忘了加现钱），这位工人就会背着货一路走到小贩那儿，卖掉、发现还是买不起。
+        """
+        start = Pos(15, 24)
+        cmd = plan(self._turn(gold=90, bag={"copper": 1}, vendor=self.VENDOR))["1"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.ORE), start.dist(self.ORE), "该去采矿")
+        self.assertGreater(step.dist(self.VENDOR), start.dist(self.VENDOR), "不该朝小贩走")
 
     def test_no_errand_when_the_trip_does_not_fit_the_day(self):
         """整趟（商店 → 目标武器，含买/用两个动作回合）来不及 ⇒ 不跑腿，回炮位（收工闸门）。
