@@ -469,6 +469,17 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     return prompt, cmd
 
 
+def _passable(turn: Turn) -> set[Pos]:
+    """估算距离用的地形：`map.blocked` 剔掉我方角色站着的格子。
+
+    与"这一回合实际怎么走"是两套口径（`_Queue.step` / `_walk_out` 那边必须把同事当硬障碍：
+    撞上就是执行失败、双双停住）。这里问的是"路有多远"：`model._entries` 把我方角色写进网格，
+    而环砌满之后盒子里只剩一格宽的走廊 ⇒ 同事停在走廊上就让估算判成不可达（-1），整条经济线
+    跟着静默放弃、工人一整天不动。与 `_stuck_inside` / `_post_spots` 同一个口径：自己人算路过。
+    """
+    return turn.map.blocked - {r.pos for r in turn.roles}
+
+
 def _slots(turn: Turn) -> Iterator[tuple[str, Pos]]:
     """本回合可以开建的 `(武器类别, 落点)`，按优先级排；没名额就一个都不产出。
 
@@ -749,7 +760,7 @@ def _stuck_inside(turn: Turn, box: frozenset[Pos]) -> tuple[BaseRole, ...]:
     """
     if not box:
         return ()
-    walk = turn.map.blocked - {r.pos for r in turn.roles}
+    walk = _passable(turn)
     size = turn.map.size
     return tuple(
         r for r in turn.roles if r.pos in box and step_outside(r.pos, box, walk, size) is None
@@ -838,7 +849,7 @@ def _repair_line(
     broken = _half_walls(turn)
     if not broken:
         return False
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     budget = turn.day_rounds_left - TIME_MARGIN
     if WALLFIXER not in role.bag:
         price = turn.shop_prices.get(WALLFIXER, 0)
@@ -846,7 +857,7 @@ def _repair_line(
         hops = [(d, s) for d, s in hops if d >= 0]
         to_shop, shop = min(hops) if hops else (-1, None)
         if shop is not None and price > 0 and turn.gold >= price and to_shop + 1 <= budget:
-            if to_shop <= 1:
+            if to_shop == 0:
                 return _emit(q.cmds, role, actions.Buy, WALLFIXER, 1)
             return q.step(role, shop, avoid=frozenset(sites))
         # 买不了 ⇒ 重建兜底
@@ -887,7 +898,7 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
     """
     if mine is None:
         return 0
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     to_mine = steps_between(role.pos, mine, walk, size)
     to_wall = steps_between(mine, target, walk, size)
     if to_mine < 0 or to_wall < 0:
@@ -923,14 +934,15 @@ def _sell_ore(
     kind, num = _best_load(role, turn.vendor_prices)
     if not kind or station is None or not turn.map.vendors:
         return False
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     # 并列按坐标排：先后不能取决于 payload 里的顺序。走不到的小贩直接剔掉（BFS -1）。
     hops = [(steps_between(role.pos, p, walk, size), p) for p in turn.map.vendors]
     hops = [(steps, pos) for steps, pos in hops if steps >= 0]
     if not hops:
         return False
     to_vendor, vendor = min(hops)
-    if to_vendor <= 1:
+    if to_vendor == 0:
+        # 0 = 已经贴着小贩（`steps_between` 的口径）。1 是"差一格"，那时候还不许卖
         return _emit(q.cmds, role, actions.Sell, kind, num)
     value = turn.vendor_prices.get(kind, 0) * num
     if value < 2 * to_vendor:
@@ -984,7 +996,7 @@ def _mine_spare_ore(
     station = turn.map.station
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
     budget = turn.day_rounds_left - TIME_MARGIN
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     # 先筛可行（走过去 + 回得来），再按性价比挑。BFS 是"命中目标即停"的，开销跟距离相关、
     # 不是整张图 —— 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒。
     feasible: dict[Pos, tuple[str, int, int]] = {}
@@ -1059,12 +1071,14 @@ def _detour_buy(
     want = _shopping_list(role, turn)
     if want is None or role.pos.dist(goal) <= 1:
         return False
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     direct = steps_between(role.pos, goal, walk, size)
     if direct < 0:
         return False
     for shop in sorted(turn.map.shops):
         via = steps_between(role.pos, shop, walk, size)
+        if via == 0:
+            return False  # 已经贴着商店：绕一步 = 原地不动 = 这一回合空指令
         after = steps_between(shop, goal, walk, size)
         if via < 0 or after < 0:
             continue
@@ -1089,12 +1103,14 @@ def _detour_sell(
         return False
     if _best_load(role, turn.vendor_prices)[1] <= 0:
         return False
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     direct = steps_between(role.pos, mine, walk, size)
     if direct < 0:
         return False
     for vendor in sorted(turn.map.vendors):
         via = steps_between(role.pos, vendor, walk, size)
+        if via == 0:
+            return False  # 已经贴着小贩：绕一步 = 原地不动 = 这一回合空指令
         after = steps_between(vendor, mine, walk, size)
         if via < 0 or after < 0:
             continue
@@ -1129,7 +1145,7 @@ def _upgrade_line(
         return False
     weapon, voucher = target
     budget = turn.day_rounds_left - TIME_MARGIN
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     if voucher in role.bag:
         # 持券阶段：终点就是炮位，用完正好站岗 —— 不用留回程
         if role.pos.dist(weapon.pos) <= 1:
@@ -1148,7 +1164,8 @@ def _upgrade_line(
     if not hops:
         return False  # 没有商店、或者一个都走不到
     to_shop, shop = min(hops)
-    if to_shop <= 1:
+    if to_shop == 0:
+        # 0 = 已经贴着商店（`steps_between` 的口径）。1 是"差一格"，那时候还不许买
         return _emit(q.cmds, role, actions.Buy, voucher, 1)
     to_weapon = steps_between(shop, weapon.pos, walk, size)
     if to_weapon < 0 or to_shop + to_weapon + 2 > budget:
@@ -1243,7 +1260,7 @@ def _leave_for_the_post(
     返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；`False` =
     还来得及干活（或没有可去的岗位）。
     """
-    walk, size = turn.map.blocked, turn.map.size
+    walk, size = _passable(turn), turn.map.size
     # 最近、还没人认领、而且真走得到的岗位 —— 一趟判定就够：最近的都赶不上，更远的更赶不上。
     # BFS -1（不可达）剔掉，切比雪夫给不出这个值；已经在岗位上 ⇒ 步数 0，与"还差 3 步"同一刻度。
     hops: list[tuple[int, Pos, tuple[Weapon, ...], bool]] = []
@@ -1327,7 +1344,7 @@ def _post_spots(group: tuple[Weapon, ...], turn: Turn, role: BaseRole) -> list[P
     自己那格保留：站在岗位上的人得认得出自己的岗位。
     """
     cells = {r.pos for r in turn.roles}
-    spots = _operator_spots(group, turn.map.blocked - cells, turn.map.size)
+    spots = _operator_spots(group, _passable(turn), turn.map.size)
     others = cells - {role.pos}
     return [s for s in spots if s not in others]
 

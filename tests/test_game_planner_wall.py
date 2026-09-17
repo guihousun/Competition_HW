@@ -1460,6 +1460,19 @@ class RepairTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "buy")
         self.assertEqual(cmd["name"], "WallFixer")
 
+    def test_a_worker_two_cells_from_the_shop_walks_instead_of_buying(self):
+        """差一格还不许买：`steps_between` 的 **0** 才是"贴着商店"（1 = 还要走一格）。
+
+        `buy` 要在商店周围一格内。站在切比雪夫 2 的地方发出去是非法指令，而且每回合算出来
+        还是 1、下一回合原样再发 —— 一次判错换算成几十次异常，红线只有 5 次。
+        """
+        worker = Worker(10010, Pos(22, 16), {})  # 与商店 (20,16) 切比雪夫 2
+        self.assertEqual(worker.pos.dist(self.SHOP), 2, "夹具前提：与商店差一格")
+        cmd = plan(self._turn(worker, gold=10))[str(10010)]
+        self.assertEqual(cmd.get("action"), "move", f"该走过去，不是隔着一格买：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), worker.pos.dist(self.SHOP), "朝商店走一格")
+
     def test_without_pack_or_gold_it_falls_back_to_rebuild(self):
         """没包且买不起（没钱/没商店）⇒ 贴着半血墙 `remove`（下一回合那格进 `_ring` 重建）。"""
         worker = Worker(10010, Pos(12, 22), {"stone": 1})
@@ -1663,13 +1676,15 @@ class WallPriorityTest(unittest.TestCase):
 
 
 class DayOneFinishTest(unittest.TestCase):
-    """第一天必须把墙建好 —— 全天模拟的验收网。
+    """第一天必须把墙建好、之后白天不许整天卡着 —— 全天模拟的验收网。
 
     可行地图（两座石矿 = 20 块石头 ≥ 18 格墙）上跑满 70 个白天回合，照判题器口径结算
-    指令（move/build/collect/sell/buy、矿采 10 次消失）：1) 环 18/18 砌完且同一格不许
-    砌两遍（石头白花）；2) 三座武器建满（开局 75 金恰好三座，夜里第一波机器人之前要有炮）；
+    指令（move/build/collect/sell/buy、矿采满 `MINE_CHARGES` 次消失）：1) 环 18/18 砌完且同一格
+    不许砌两遍（石头白花）；2) 三座武器建满（开局 75 金恰好三座，夜里第一波机器人之前要有炮）；
     3) 环砌完之前工人不许闲 —— 环砌完后的白天末尾，预算拦住回不来的远矿 ⇒ 待命是保守
     方向的合法行为，不在本网范围。
+
+    `test_the_workers_never_stall_a_whole_day` 接着往下跑第 2 天（矿量因此开得比一天用得多）。
     """
 
     BASE = Pos(10, 24)
@@ -1677,6 +1692,8 @@ class DayOneFinishTest(unittest.TestCase):
     IRON, COPPER = Pos(6, 30), Pos(20, 30)
     VENDOR, SHOP, TASK = Pos(20, 16), Pos(22, 18), Pos(30, 30)
     PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    #: 一座矿采满 10 次就消失 —— 第 2 天那条网要跑 260 回合，给足免得"没矿可采"被当成停滞
+    MINE_CHARGES = 40
 
     def setUp(self) -> None:
         AGENT.reset()
@@ -1694,7 +1711,10 @@ class DayOneFinishTest(unittest.TestCase):
         }
         self.walls: dict[Pos, Wall] = {}
         self.weapons: list[Weapon] = []
-        self.mine_left = {self.STONE1: 10, self.STONE2: 10, self.IRON: 10, self.COPPER: 10}
+        self.mine_left = {
+            self.STONE1: self.MINE_CHARGES, self.STONE2: self.MINE_CHARGES,
+            self.IRON: self.MINE_CHARGES, self.COPPER: self.MINE_CHARGES,
+        }
         self.built: list[Pos] = []
         self.idle: dict[int, list[int]] = {10012: [], 10013: []}
 
@@ -1722,6 +1742,8 @@ class DayOneFinishTest(unittest.TestCase):
         cmds = plan(self._turn(round_no))
         for key, cmd in cmds.items():
             rid = int(key)
+            if rid not in self.roles:
+                continue  # `attack` 的 key 是武器 id，不是角色 id
             role = self.roles[rid]
             bag = dict(role.bag)
             if cmd["action"] == "move":
@@ -1783,6 +1805,45 @@ class DayOneFinishTest(unittest.TestCase):
             self.assertEqual(
                 early, [], f"工人 {rid} 在环砌完（R{done_at}）之前就闲着：{early}"
             )
+
+    def _longest_idle_run(self) -> dict[int, int]:
+        """每个工人最长的一段"连续空指令"（只数白天的回合）。
+
+        夜里本来就该原地待命（到岗了就不再动），把它算进来，"白天整天不动"就淹在里面了。
+        先滤掉夜里的回合号再连号 ⇒ 一段不会跨过夜跟第 2 天接上。
+        """
+        out: dict[int, int] = {}
+        for rid, rounds in self.idle.items():
+            best = run = 0
+            prev = None
+            for r in sorted(rounds):
+                if (r - 1) % ROUNDS_PER_DAY + 1 > DAY_ROUNDS:
+                    continue
+                run = run + 1 if prev is not None and r == prev + 1 else 1
+                prev = r
+                best = max(best, run)
+            out[rid] = best
+        return out
+
+    def test_the_workers_never_stall_a_whole_day(self):
+        """第 2 天起白天不会整天卡在原地 —— 用户报的那条症状的整网。
+
+        第 1 天之后环是满的、三座武器也在 ⇒ 工人白天的活只有经济线（卖矿 / 采矿 / 升级）。
+        旧口径把我方角色算进估算距离：盒子内只剩几条一格宽的走廊，谁停在走廊上，同事的
+        "矿 → 最近的炮位"就一律 -1 ⇒ 每座矿都不可行 ⇒ 整段放弃、一回合一条指令都不发 ——
+        两个人一起卡死整整一天（实测第 2 天 70/70 回合空指令、金币停在 0）。
+
+        待命本身是合法的（收工时在岗、gated 闸门、**今天已经来不及跑一趟的远矿**），所以钉的
+        是"最长一段"而不是"一次都不许空"。本局面实测最长 12（第 2 天 R171-182）：两个工人都
+        在 20 回合内卖了货、背包空了，剩下两座矿来回 26/31 步 > 当天剩余预算 ⇒ 蹲在小贩边上
+        等天黑，是保守方向的合法行为。改前是 70（一整天），取 30 当天花板。
+        """
+        for round_no in range(1, 261):  # 2 天：白天干完夜里回炮位（`_settle` 认不出 attack）
+            self._settle(round_no)
+        runs = self._longest_idle_run()
+        self.assertLess(
+            max(runs.values()), 30, f"有工人整天没动过：最长空指令段 {runs}（回合数）"
+        )
 
 
 if __name__ == "__main__":

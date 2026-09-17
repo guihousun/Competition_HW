@@ -269,6 +269,66 @@ class SpareOreTest(unittest.TestCase):
         self.assertLess(detour.dist(vendor), start.dist(vendor), "有货可卖 ⇒ 顺路绕小贩")
         self.assertNotEqual(straight, detour, "留作封口的 1 块石头不该把人带去绕路")
 
+    def test_a_colleague_in_the_pocket_never_stops_the_other_worker(self):
+        """同事停在盒子里 ⇒ 另一个工人照样出门采矿（估算距离不算自己人）。
+
+        环砌满之后盒子内只剩几条一格宽的走廊：`model._entries` 把我方角色写进网格 ⇒ 旧口径
+        下"矿 → 最近的炮位"（`_mine_spare_ore` 的 `back`）对**每一座矿**都是 -1 ⇒ 全不可行
+        ⇒ 整段放弃、这一回合一条指令都不发。同事也正忙着自己的事不动 ⇒ 两人一起卡在原地，
+        一整天一格都没挪。自己人在"路有多远"里只是路过，实际走路那一套（`_Queue.step`）照旧
+        把他当硬障碍 —— 两套口径分工不同。
+        """
+        weapons = _records(
+            {Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"}
+        )
+        mine = Pos(4, 24)
+        a, b = Worker(10012, Pos(11, 22), {}), Worker(10013, Pos(11, 25), {})
+        grid = _terrain(weapons, {self.BASE: "station"}, self.RING, {mine: "stone"})
+        grid |= {a.pos: "worker", b.pos: "worker"}
+        turn = Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(a, b),
+            gold=0,
+            weapons=weapons,
+            vendor_prices=self.SAMPLE_PRICES,
+        )
+        cmd = plan(turn)["10012"]
+        self.assertEqual(cmd.get("action"), "move", f"该出门采矿，不是原地不动：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(mine), a.pos.dist(mine), "朝矿走")
+
+    def test_standing_next_to_the_shop_never_blocks_the_mine_trip(self):
+        """已经贴着商店 ⇒ 顺路买那一支直接放弃，别把它当成"绕一步"。
+
+        `_detour_buy` 的绕法是"朝商店迈一步"，而贴着商店时那一步根本不存在（`step_toward`
+        返回 None）⇒ 意图排了、第二段发不出任何东西、`_mine_spare_ore` 又已经早返回 ⇒ 整个
+        回合空指令。买券那条线自己有跑腿者（`_upgrade_line`），这里排不上就不是它的事。
+        """
+        shop, mine = Pos(24, 28), Pos(30, 24)
+        weapons = _records(
+            {Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"}
+        )
+        a = Worker(10012, Pos(24, 27), {})  # 贴着商店，也是名册第二个 ⇒ 跑腿轮不到它
+        b = Worker(10013, Pos(20, 20), {})
+        grid = _terrain(
+            weapons, {self.BASE: "station"}, self.RING, {mine: "iron"}, {shop: "weaponShop"}
+        )
+        grid |= {a.pos: "worker", b.pos: "worker"}
+        turn = Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(b, a),  # 名册第一个是 b ⇒ `_upgrade_line` 的跑腿者不是 a
+            gold=100,
+            weapons=weapons,
+            vendor_prices=self.SAMPLE_PRICES,
+            shop_prices={"WeaponUpgradeVoucher1": 100},
+        )
+        cmd = plan(turn)["10012"]
+        self.assertEqual(cmd.get("action"), "move", f"该继续去矿，不是空着不动：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(mine), a.pos.dist(mine), "朝矿走")
+
 
 class SellOreTest(unittest.TestCase):
     """墙砌满之后的白天：把矿背到小贩跟前卖掉。
@@ -441,6 +501,20 @@ class SellOreTest(unittest.TestCase):
         cmd = plan(self._turn(Pos(20, 23), {"copper": 4}, prices={"stone": 1}))["1"]
         self.assertNotEqual(cmd["action"], "sell", cmd)
 
+    def test_a_worker_two_cells_from_the_vendor_walks_instead_of_selling(self):
+        """差一格还不许卖：`steps_between` 的 **0** 才是"贴着小贩"（1 = 还要走一格）。
+
+        `sell` 的站位是"小贩周围一格内"（§4.4）⇒ 在切比雪夫 2 的地方发出去就是非法指令。
+        更糟的是每回合算出来都是 1 ⇒ 每回合原样再发一次：一次判错换算成几十次异常，而红线
+        只有 5 次。
+        """
+        start = Pos(22, 24)  # 与小贩 (20,24) 切比雪夫 2 ⇒ 到"贴着"还差 1 步
+        self.assertEqual(start.dist(self.VENDOR), 2, "夹具前提：与小贩差一格")
+        cmd = plan(self._turn(start, {"copper": 4}))["1"]
+        self.assertEqual(cmd.get("action"), "move", f"该走过去，不是隔着一格卖：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), start.dist(self.VENDOR), "朝小贩走一格")
+
     def test_too_late_in_the_day_to_walk_there_and_back(self):
         """白天不够"走到小贩 + 从小贩回基地" ⇒ 不卖，改去回炮位（收工闸门）。
 
@@ -540,6 +614,19 @@ class UpgradeLineTest(unittest.TestCase):
             plan(self._turn(gold=100, pos=Pos(25, 21)))["1"],
             {"action": "buy", "name": "WeaponUpgradeVoucher1", "num": 1},
         )
+
+    def test_a_worker_two_cells_from_the_shop_walks_instead_of_buying(self):
+        """差一格还不许买：`steps_between` 的 **0** 才是"贴着商店"（1 = 还要走一格）。
+
+        与 `sell` 同一条契约：`buy` 要在商店周围一格内。站在切比雪夫 2 的地方发出去是非法
+        指令，而且每回合重复 —— 红线只有 5 次。
+        """
+        start = Pos(27, 20)  # 与商店 (25,20) 切比雪夫 2 ⇒ 到"贴着"还差 1 步
+        self.assertEqual(start.dist(self.SHOP), 2, "夹具前提：与商店差一格")
+        cmd = plan(self._turn(gold=100, pos=start))["1"]
+        self.assertEqual(cmd.get("action"), "move", f"该走过去，不是隔着一格买：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), start.dist(self.SHOP), "朝商店走一格")
 
     def test_the_holder_walks_to_the_gatling(self):
         """持券者直奔目标武器（优先链第一个：加特林）—— 终点就是炮位，
