@@ -71,6 +71,35 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("动手前先看这里", sop)
         self.assertIn("不必重新探索", sop)
 
+    def test_the_example_shows_a_deposit_then_a_reuse(self):
+        """【输出示例】有两例，第二例是 few-shot：同一类任务演两遍 —— 第一次
+        「探索 → 调接口 → 沉淀与作答同回合」，第二次「翻 SOP → 跳过探索直接照做」。
+
+        ② 是**步骤形式**（step1. …）并且把每遍花掉几个回合点出来：这是给 LLM 看的，
+        要教的是"回合怎么花"，两份流程的回合差（4 → 3）本身就是那条规则。
+        每一步还给到**具体命令与它的输出**（示例一 step1 那条 find+cat 同理）—— 摘要式的一句
+        "读任务书"教不会它怎么写命令。
+        顺带钉示例自身的自洽：里面的 `<sop>` 正文不能出现 `<answer>` 对（否则 LLM 照抄，
+        入库时被 `strip_answers` 静默吃掉）。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        example = system.split("# 【输出示例】")[1].split("# 【注意事项】")[0]
+        second = example.split("示例二")[1]
+        self.assertIn("第一次", second)
+        self.assertIn("第二次", second)
+        self.assertIn("<tool_name>SOP2Prompt</tool_name>", second)
+        self.assertIn("订去某地的机票的流程", second)
+        self.assertIn("不必再读 api.md", second)
+        self.assertIn("一共 4 个回合", second)
+        self.assertIn("只花 3 个回合", second)
+        self.assertIn("step3.", second.split("第二次")[1])
+        # 每一步给到具体命令与输出（不是"读任务书"这种摘要），答案用当次那个 token
+        self.assertIn("f=$(find / -maxdepth 6 -name 'task.md' -print -quit); cat \"$f\"", second)
+        self.assertIn("<answer>tk_9f3a7c</answer>", second)
+        self.assertIn("<answer>tk_2b8e41</answer>", second)
+        # 示例一那条 find+cat 也点出来了
+        self.assertIn("f=$(find / -maxdepth 6 -name 'problem.txt' -print -quit)", example)
+        self.assertNotIn("<answer>", second.split("<sop>")[1].split("</sop>")[0])
+
     def test_the_role_section_pins_the_name_to_a_class_of_tasks(self):
         """`name` 要凝练到"一类问题"上（「订去某地的机票的流程」，不是「订去上海的机票」）。
 

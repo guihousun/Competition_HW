@@ -75,17 +75,49 @@ SOP_PROMPT = """
 {sop}
 """
 
-# 5. 示例：一段"从 problem.txt 到 token"的四步范式，进 `gen_system_prompt` 的 sections
+# 5. 示例：两例，进 `gen_system_prompt` 的 sections。示例一 = "从 problem.txt 到 token"
+# 的四步范式；示例二 = 同一类任务两次，第一次沉淀、第二次跳过探索
 EXAMPLE_PROMPT = """
 # 【输出示例】
-用于需求：解决promble.txt的任务
 
-step1. 通过shell命令找寻promble.txt的位置并获取文件内容
+示例一：需求是"解决 problem.txt 的任务"
+
+step1. 用一条shell命令把"找文件"和"读文件"一起做完（拆成两条 = 白花一个回合）：
+    f=$(find / -maxdepth 6 -name 'problem.txt' -print -quit); echo "FILE=$f"; cat "$f"
     假设文件内容为：
     需求描述文档spec.md中描述了需求要求，完成需求，并通过check.sh验证是否通过，全部通过后会返回一个token，token即为答案内容
 step2. 读取spec.md的内容了解需求要求
 step3. 按照需求要求完成需求，并验证是否通过
 step4. 通过则返回token，未通过则参考报错和spec.md的内容回到第三步
+
+示例二：同一类任务做第二次时，靠沉淀把探索那几趟回合省掉
+
+第一次：任务书说"订去上海的机票，订票接口在 api.md"（这条任务一共 4 个回合）
+step1. 读任务书 —— 找和读用一条命令做完：
+    f=$(find / -maxdepth 6 -name 'task.md' -print -quit); cat "$f"
+    输出：本次需求：订一张去上海的机票。订票接口见同目录下的 api.md。
+step2. 读接口文档 —— cat api.md，把接口形状抄下来：
+    输出：接口路径 xxxx:xxx/xxx/yyy；参数 zzzz 传目的地；成功时返回 token。
+step3. 照这条路径与参数调接口 —— 拿到 token：tk_9f3a7c
+step4. 提交答案；同回合把这一类问题的做法沉淀下来（名字泛化到"这一类"，不写死本次的目标）
+    —— 沉淀与作答写在同一条回复里，为它单独占一个回合纯属浪费：
+    <tool>
+        <tool_name>SOP2Prompt</tool_name>
+        <tool_param>
+            <name>订去某地的机票的流程</name>
+            <sop>订票接口见 api.md：路径 xxxx:xxx/xxx/yyy，参数 zzzz 传目的地，成功时返回 token，token 就是答案。</sop>
+        </tool_param>
+    </tool>
+    <answer>tk_9f3a7c</answer>
+
+第二次：任务书说"订去北京的机票，订票接口在 api.md"（同一条任务只花 3 个回合）
+step1. 读任务书 —— 这次是订去北京的机票：
+    f=$(find / -maxdepth 6 -name 'task.md' -print -quit); cat "$f"
+step2. 看一眼【沉淀的SOP】—— 这一类问题已经有现成做法了：不必再读 api.md、不必再试探路径与参数，
+    照那条流程调接口、参数换成这次的目的地：xxxx:xxx/xxx/yyy zzzz=北京 —— 返回 token：tk_2b8e41
+    （省掉的就是第一次 step2 那一趟）
+step3. 提交答案：
+    <answer>tk_2b8e41</answer>
 """
 
 # 6. 注意事项
