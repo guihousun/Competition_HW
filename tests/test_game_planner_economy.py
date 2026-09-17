@@ -551,10 +551,10 @@ class SellOreTest(unittest.TestCase):
 class UpgradeLineTest(unittest.TestCase):
     """买得起就优先升级武器 —— 买券 → 走到目标武器 → 用券。
 
-    优先链按群体打击判：加特林 > 火箭 > 电磁。加特林 +1 颗子弹 = 每回合 +10、无冷却、
-    弹道必命中，两颗可分打两台（90° 锥内），一夜 60 回合最多 +600；火箭 +1 枚对簇约
-    +30/齐射，但 3 回合冷却一夜只 ~20 轮、依赖扎堆；电磁单目标、能量对满血机器人不穿透。
-    链：gatling→2 → rocket→2 → gatling→3 → railgun→2 → …
+    优先链按群体打击判：火箭 > 加特林 > 电磁。火箭 +1 枚导弹 = 中心 20 + 周围 8 格溅射 10、
+    多枚叠加 ⇒ 对成簇的机器人一炮翻倍，射程还跟着涨（L3 全图）；加特林 +1 颗子弹 = 每回合
+    +10、无冷却、弹道必命中，一夜 60 回合最多 +600；电磁单目标、能量对满血机器人不穿透。
+    链：rocket→2 → rocket→2 → gatling→2 → rocket→3 → …
 
     无状态：拿没拿券看背包（买完金变少、包里多一张，两阶段天然可分）；跑腿者 = 持券的
     工人，没有持券者 ⇒ 名册上第一个工人（别人照常采/卖）。
@@ -606,7 +606,7 @@ class UpgradeLineTest(unittest.TestCase):
         )
 
     def test_walks_to_the_shop_when_the_upgrade_is_affordable(self):
-        """金够、加特林还是 L1 ⇒ 墙砌完后第一件事是跑商店（优先于采矿 ——
+        """金够、优先链上还有升得动的炮 ⇒ 墙砌完后第一件事是跑商店（优先于采矿 ——
         场上明明有矿也不去）。"""
         cmd = plan(self._turn(gold=100))["1"]
         self.assertEqual(cmd["action"], "move", "该朝武器商店走，不是去采矿")
@@ -633,31 +633,46 @@ class UpgradeLineTest(unittest.TestCase):
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.SHOP), start.dist(self.SHOP), "朝商店走一格")
 
-    def test_the_holder_walks_to_the_gatling(self):
-        """持券者直奔目标武器（优先链第一个：加特林）—— 终点就是炮位，
-        用完券正好站岗，不用留回程。"""
-        cmd = plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(20, 20)))["1"]
-        self.assertEqual(cmd["action"], "move")
-        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertLess(step.dist(Pos(12, 22)), Pos(20, 20).dist(Pos(12, 22)), "朝加特林走")
+    def test_the_holder_walks_to_the_rocket(self):
+        """持券者直奔目标武器（优先链第一个：火箭）—— 终点就是炮位，
+        用完券正好站岗，不用留回程。
+
+        把回合串起来跑到 `use` 为止：单帧的"朝哪边挪一格"分不出目标 —— 火箭与加特林都在
+        基地那一角，贪心的第一步经常是同一格（换回加特林优先它照样过）。
+        """
+        bag = {"WeaponUpgradeVoucher1": 1}
+        turn = self._turn(bag=bag, pos=Pos(20, 20))
+        for _ in range(30):
+            cmd = plan(turn)["1"]
+            if cmd["action"] == "use":
+                break
+            step = cmd["targetPos"][0]
+            turn = turn._replace(roles=(Worker(1, Pos(step["x"], step["y"]), dict(bag)),))
+        else:
+            self.fail("30 回合还没贴上目标武器")
+        self.assertEqual(
+            (cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]),
+            (9, 25),
+            "券该用在火箭上（优先链第一个）",
+        )
 
     def test_uses_the_voucher_when_adjacent_to_the_target(self):
         """贴着目标武器 ⇒ `use`，`targetPos` = 目标武器的位置（任务书 L292）。"""
         self.assertEqual(
-            plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(12, 23)))["1"],
-            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 12, "y": 22}]},
+            plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(9, 24)))["1"],
+            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 9, "y": 25}]},
         )
 
-    def test_a_maxed_gatling_passes_the_ticket_to_the_rocket(self):
-        """优先链顺延：加特林已 L2 ⇒ 目标换火箭（同是 L1 ⇒ 还是券1）。"""
+    def test_a_maxed_rocket_passes_the_ticket_to_the_gatling(self):
+        """优先链顺延：唯一的火箭已 L2 ⇒ 目标换加特林（同是 L1 ⇒ 还是券1）。"""
         weapons = (
-            Weapon(10020, "gatling", Pos(12, 22), 5, 0, 2),
+            Weapon(10020, "gatling", Pos(12, 22), 4, 0),
             Weapon(10030, "railgun", Pos(12, 25), 7, 0),
-            Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 0),
+            Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 0, 2),
         )
         self.assertEqual(
-            plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(9, 24), weapons=weapons))["1"],
-            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 9, "y": 25}]},
+            plan(self._turn(bag={"WeaponUpgradeVoucher1": 1}, pos=Pos(12, 23), weapons=weapons))["1"],
+            {"action": "use", "name": "WeaponUpgradeVoucher1", "targetPos": [{"x": 12, "y": 22}]},
         )
 
     def test_only_one_worker_runs_the_errand(self):

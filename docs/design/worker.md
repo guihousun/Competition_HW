@@ -164,8 +164,8 @@
    有走得通的小贩（BFS `-1` 剔除）；够本
    （**货值 ≥ 2×距离**，"1 金币 ≈ 1 回合"是拍的、唯一旋钮；已贴着就跳过；**`urgent`
    那一趟跳过它**）；回得来（去+回 ≤ `Turn.rounds_left`(本段剩余) − TIME_MARGIN，**`urgent` 不跳**）。
-2. **`_upgrade_line`**：`UPGRADE_CHAIN` 优先链 gatling→2 > rocket→2 > gatling→3 >
-   railgun→2 > rocket→3 > railgun→3（群体打击口径）。持券 ⇒ 走到目标武器 `use`
+2. **`_upgrade_line`**：`UPGRADE_CHAIN` 优先链 rocket→2 > rocket→2 > gatling→2 >
+   rocket→3 > rocket→3 > gatling→3（群体打击口径：火箭优先）。持券 ⇒ 走到目标武器 `use`
    （终点即炮位，用完正好站岗）；没券 ⇒ 跑腿者去商店 `buy`（整趟来得及才出发）；
    **钱不够券价但"现钱 + 背包最好那一堆"够 ⇒ 先去卖矿**（`_sell_ore(urgent=True)`）。
 3. **`_mine_spare_ore`**：**先筛可行**（到得了 + 回炮位回得来）**再按性价比挑**
@@ -249,7 +249,7 @@
 | `HOLE_MIN_LEFT` | 30 | 拆墙放人的时间门（剩不到 30 个白天回合就不拆）。第 57 步删掉了 `HOLE_MIN_SAVING`(5) 与 `HOLE_PATCH_LEFT`(15)——临时门机制整套撤掉后只剩这一个 |
 | `DETOUR_MAX` | 2 | 顺路买卖的绕路上限 |
 | `WALL_MAX_HP` / `STATION_MAX_HP` | 1000/1500/2000、1500/3000/4500 | 修墙的 **1/4 血**判据 / 基地残血判据（墙 L2/L3 是推断） |
-| `UPGRADE_CHAIN` | 6 步链 | 升级优先序（群体打击口径） |
+| `UPGRADE_CHAIN` | 6 步链 | 升级优先序（群体打击口径：火箭优先） |
 | `WEAPONS_BY_SITE` | `("rocket", "rocket", "gatling")` | 落点配种类（按射程；与 `weapon_sites` 下标一一对应）。两火箭相邻 ⇒ 共用一个操作位 `(11,25)` |
 
 ## 6. 实测锚点与已知薄弱处
