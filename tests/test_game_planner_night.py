@@ -404,12 +404,13 @@ class NightPostTest(unittest.TestCase):
 
 
 class NightEconomyTest(unittest.TestCase):
-    """夜里怪清完（视野内无机器人）⇒ 工人跑**整套**经济兜底：卖矿 → 升级券 → 采闲矿。
+    """夜里机器人全被打光 ⇒ 工人跑**整套**经济兜底：卖矿 → 升级券 → 采闲矿。
 
     与白天最后一级同一套（`_economy`），只把时间预算换成 `Turn.rounds_left` —— 夜里那段也是
-    "还剩多少回合"，而 `day_rounds_left` 在夜里恒为 0，用它的话什么差事都发不出去。机器人
-    列表是视野过滤的（"清完"只是看不见），所以"赶不回来就不去"由 `_sell_ore` 的第四道门与
-    `_mine_spare_ore` 的可行性筛选各自兜住：夜里的活动半径现在等于"这一段剩下多少回合"。
+    "还剩多少回合"，而 `day_rounds_left` 在夜里恒为 0，用它的话什么差事都发不出去。"全打光"是
+    真清完：机器人全图可见（任务书 L95）、一夜一波（L352）⇒ 判据过 `_alive`（已毁的照旧留在
+    `turn.robots` 里，见 `model._robots`）。"赶不回来就不去"由 `_sell_ore` 的第四道门与
+    `_mine_spare_ore` 的可行性筛选各自兜住：夜里的活动半径等于"这一段剩下多少回合"。
     夜间经济只发 collect / move / sell / buy / use —— **build / remove 夜里非法**（§4.4）。
     """
 
@@ -517,13 +518,26 @@ class NightEconomyTest(unittest.TestCase):
         )
 
     def test_robots_present_at_night_still_defend(self):
-        """视野里有机器人 ⇒ 照旧回炮位开火，不出门采矿。"""
+        """场上还有活机器人 ⇒ 照旧回炮位开火，不出门采矿。"""
         worker = Worker(10010, Pos(12, 24), {})
         turn = self._turn(worker, robots=(Robot(pos=Pos(13, 24), health=40),))
         cmds = plan(turn)
         self.assertTrue(
             all(v["action"] in ("attack", "move") for v in cmds.values()),
             f"夜里只该有 attack/move：{cmds}",
+        )
+
+    def test_a_dead_robot_alone_does_not_hold_the_worker_on_defense(self):
+        """只剩尸体的夜晚按"清完"算 ⇒ 工人跑经济线（卖货），不去炮位。
+
+        `model._robots` 不丢 `health == 0` 的（与 `_walls` / `_character` 相反）⇒ 判空如果直接读
+        `turn.robots`，一台打死的机器人会把工人整夜钉在炮位上、永远进不了经济线。
+        """
+        worker = Worker(10010, Pos(20, 15), {"copper": 1})  # 贴着小贩
+        turn = self._turn(worker, vendor=True, robots=(Robot(pos=Pos(20, 14), health=0),))
+        self.assertEqual(
+            plan(turn).get("10010"),
+            {"action": "sell", "name": "copper", "num": 1},
         )
 
 

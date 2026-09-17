@@ -259,11 +259,13 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 
         if not turn.is_day:
             # 夜里：① 持基地券且基地残血（< 满血 1/4）⇒ 贴基地 `use` 升级（升级 + 回满血一次
-            # 到位，当回合放弃开火）；② 视野里有机器人 ⇒ 回炮位开火；③ 怪清完 ⇒ 工人跑整套
+            # 到位，当回合放弃开火）；② 还有活机器人 ⇒ 回炮位开火；③ 全打光 ⇒ 工人跑整套
             # 经济兜底（与白天最后一级同一套；build/remove 夜里非法、绝不发），开拓者待命回炮位。
+            # 机器人在夜晚第一个回合统一出现、一夜一波（任务书 L352）、全图可见（L95）⇒ "场上没有
+            # 活的"就是真清完，不是看不见。已毁的照旧留在 `turn.robots` 里 ⇒ 必须过 `_alive`。
             if _upgrade_station(role, turn, q):
                 continue
-            if not turn.robots and isinstance(role, Worker):
+            if not _alive(turn.robots) and isinstance(role, Worker):
                 _economy(role, turn, q, sites, ore_taken, weapon_gap=weapon_gap)
                 continue
             _defend(role, turn, q, taken, assigned)
@@ -1411,6 +1413,16 @@ def _upgrade_station(
     return q.step(role, station)
 
 
+def _alive(robots: tuple[Robot, ...]) -> tuple[Robot, ...]:
+    """这一回合真在场上（`health != 0`）的机器人。
+
+    `model._robots` 不像 `_walls` / `_character` 那样丢掉已毁的（`_destroyed` 的 docstring 写明
+    "机器人不走那里"）⇒ 判空、看射程、记账一律得过这道筛子，别直接读 `turn.robots`。
+    机器人的 `health` 字段缺失给 -1（不是 0）⇒ 未知的照旧算活着（少打不如照打）。
+    """
+    return tuple(r for r in robots if r.health != 0)
+
+
 def _foe_robots(turn: Turn) -> tuple[Robot, ...]:
     """打我方基地的机器人；`our_team` 为空（字段缺失）⇒ 不过滤，全部照打（安全降级）。
 
@@ -1486,7 +1498,7 @@ def _beam_site(
     def effective(r: Robot) -> int:
         return min(shot, max(0, r.health - assigned.get(r.pos, 0)))
 
-    reach = [r for r in robots if r.health != 0 and weapon.pos.dist(r.pos) <= weapon.attack_range]
+    reach = [r for r in _alive(robots) if weapon.pos.dist(r.pos) <= weapon.attack_range]
     best = max(reach, key=lambda r: (effective(r), -weapon.pos.dist(r.pos), r.pos), default=None)
     return best if best is not None and effective(best) > 0 else None
 
@@ -1504,7 +1516,7 @@ def _rocket_site(
     （`assigned` = 本回合先开火的炮记的账），并列取坐标序最小（可复现）。
     越界格不进候选（越界落点 = 指令非法，红线不让赌）。
     """
-    alive = [r for r in robots if r.health != 0]
+    alive = _alive(robots)
     width, height = size
     cands = {
         cell
@@ -1528,9 +1540,7 @@ def _rocket_site(
 
 def _book_rocket(target: Pos, robots: tuple[Robot, ...], assigned: dict[Pos, int]) -> None:
     """把火箭这一发的估计伤害记到账上（同回合后开的炮按剩余血挑目标）。"""
-    for r in robots:
-        if r.health == 0:
-            continue
+    for r in _alive(robots):
         hit = ROCKET_CENTER if r.pos == target else ROCKET_SPLASH if r.pos.dist(target) == 1 else 0
         if hit:
             assigned[r.pos] = assigned.get(r.pos, 0) + hit
