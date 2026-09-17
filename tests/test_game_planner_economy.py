@@ -239,12 +239,12 @@ class SpareOreTest(unittest.TestCase):
         )
 
     def test_the_reserved_stone_is_not_worth_a_detour(self):
-        """保底留的那 1 块石头不值得绕路去卖：`_detour_sell` 与 `_sell_ore` 共用
-        `_best_load` 一个口径 —— 否则会"绕到小贩旁边才发现自己不肯卖那 1 块石头"，白绕一趟，
+        """留底的那几块石头不值得绕路去卖：`_detour_sell` 与 `_sell_ore` 共用
+        `_best_load` 一个口径 —— 否则会"绕到小贩旁边才发现自己不肯卖那几块石头"，白绕一趟，
         而且两处口径迟早分家。
 
-        同一局面只差背包里 1 块还是 2 块：2 块 ⇒ 多出那块可卖、顺路绕小贩；1 块 ⇒
-        那块留着封正面那个口、谁也不卖，于是直奔矿去。"""
+        同一局面只差背包里 3 块还是 4 块：4 块 ⇒ 多出那块可卖、顺路绕小贩；3 块 ⇒ 正好是
+        `STONE_RESERVE`，一块也不卖，于是直奔矿去。"""
         mine, vendor, start = Pos(30, 24), Pos(24, 28), Pos(20, 24)
 
         def step_for(stone: int) -> Pos:
@@ -265,9 +265,9 @@ class SpareOreTest(unittest.TestCase):
             )
             return self._move_to(turn)
 
-        detour, straight = step_for(2), step_for(1)
+        detour, straight = step_for(4), step_for(3)
         self.assertLess(detour.dist(vendor), start.dist(vendor), "有货可卖 ⇒ 顺路绕小贩")
-        self.assertNotEqual(straight, detour, "留作封口的 1 块石头不该把人带去绕路")
+        self.assertNotEqual(straight, detour, "留底的那几块石头不该把人带去绕路")
 
     def test_a_colleague_in_the_pocket_never_stops_the_other_worker(self):
         """同事停在盒子里 ⇒ 另一个工人照样出门采矿（估算距离不算自己人）。
@@ -418,23 +418,23 @@ class SellOreTest(unittest.TestCase):
         self.assertEqual(cmd["name"], "iron")
 
     def test_spare_stone_gets_sold_too(self):
-        """砌满之后多余的石头也卖，但保底留 1 块。
+        """砌满之后多余的石头也卖，但留底 `STONE_RESERVE` 块。
 
         这是"石头为什么敢进 `SELLABLE`"的实证：调用点只在"墙砌完了"那一支（`_build_walls`
-        的 `if not free:`），而墙没砌完时手里的石头一律有用。留下的 1 块由 `_best_load` 扣
-        —— 收工时得封上正面那个口（`wall_cells` 的最后一格），封不上就是整夜的一道门。
+        的 `if not free:`），而墙没砌完时手里的石头一律有用。留下的 3 块由 `_best_load` 扣
+        —— 与 `_stones_to_mine` 的存货上限同源：墙夜里被打掉一格，第二天手里有货就能立刻补上。
         """
         cmd = self._sold(self._turn(Pos(20, 23), {"stone": 6}))
-        self.assertEqual(cmd, {"action": "sell", "name": "stone", "num": 5})
+        self.assertEqual(cmd, {"action": "sell", "name": "stone", "num": 3})
 
-    def test_a_lone_stone_is_kept_for_the_seal(self):
-        """背包里只有 1 块石头 ⇒ 一件都不卖（那一块得留着封正面那个口）。
+    def test_the_stone_reserve_is_not_sold(self):
+        """手里够不到留底的量 ⇒ 一件都不卖（那几块得留着补墙 / 封正面那个口）。
 
         没有别的货 ⇒ `_best_load` 挑不出来 ⇒ 这一回合不去小贩那儿（改去干别的）。
         """
-        turn = self._turn(Pos(20, 23), {"stone": 1})
+        turn = self._turn(Pos(20, 23), {"stone": 3})
         cmd = plan(turn)["1"]
-        self.assertNotEqual(cmd.get("action"), "sell", f"那 1 块得留着封口：{cmd}")
+        self.assertNotEqual(cmd.get("action"), "sell", f"那 3 块得留着补墙：{cmd}")
         self.assertNotEqual(cmd.get("name"), "stone", f"更不该指名卖石头：{cmd}")
 
     def test_an_idle_pioneer_with_goods_goes_selling(self):
@@ -685,6 +685,19 @@ class UpgradeLineTest(unittest.TestCase):
         """
         start = Pos(15, 24)
         cmd = plan(self._turn(gold=95, bag={"copper": 1}, vendor=self.VENDOR))["1"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), start.dist(self.VENDOR), "该朝小贩走")
+
+    def test_a_stone_stack_sells_down_to_one_to_afford_the_ticket(self):
+        """买券也算筹资（用户口径）：石头留 1 块就够，其余全换成券钱。
+
+        90 金 + 12 块石头（每块 1 金）⇒ 卖到只剩 1 块是 101 ≥ 100；按砌墙线的留底
+        （`STONE_RESERVE`=3）只换得到 99 ⇒ 永远差 1 金，券永远买不上。判"够不够"与真卖
+        必须同一个 `keep`：这边按留 3 块算出"够了"、那边只肯卖到剩 3 块，就是白跑一趟。
+        """
+        start = Pos(15, 24)
+        cmd = plan(self._turn(gold=90, bag={"stone": 12}, vendor=self.VENDOR))["1"]
         self.assertEqual(cmd["action"], "move", cmd)
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.VENDOR), start.dist(self.VENDOR), "该朝小贩走")

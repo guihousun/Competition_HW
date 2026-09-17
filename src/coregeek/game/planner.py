@@ -71,8 +71,12 @@ ROUNDS_PER_STONE = 3
 
 #: 砌完墙后手里多留几块石头（用户口径）：墙夜里被打掉一格，第二天手里有货就能立刻补上。
 #: 只抬高 `_stones_to_mine` 的上限，不额外开"回合够不够多"的开关 —— 回合少时那个上限本来
-#: 就被回合预算压到很小。
+#: 就被回合预算压到很小。卖矿时同样按它留底（`_best_load`），两块口径同源。
 STONE_RESERVE = 3
+
+#: 筹资路上（建武器 / 买券）卖石头只留 1 块（用户口径）：那两条路缺的是几十金币，留够封口
+#: 的量就行，其余全换成钱；平常的砌墙线留 `STONE_RESERVE`。
+STONE_KEEP_RAISING = 1
 
 #: 容错余量（回合）：距离全按 BFS 真实步数算，这是给收尾动作留的真余量。5 是拍的。
 TIME_MARGIN = 5
@@ -309,9 +313,9 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 
         # 筹资：武器还有缺但钱不够、且筹资可行（有小贩有价可卖，见 `_can_fund`）⇒ 整条墙线
         # 让位（含修墙），先卖背包里的货、再采最值钱的矿凑 25 金币（火力缺口比墙急；凑不成的
-        # 地图上墙仍是剩下最值得干的事）。
+        # 地图上墙仍是剩下最值得干的事）。石头只留 `STONE_KEEP_RAISING` 块（用户口径）。
         if weapon_gap and budget < WEAPON_COST and _can_fund(turn):
-            if not _sell_ore(role, turn, q, sites, with_paths=True):
+            if not _sell_ore(role, turn, q, sites, with_paths=True, keep=STONE_KEEP_RAISING):
                 _mine_spare_ore(role, turn, q, sites, ore_taken)
             continue
 
@@ -850,13 +854,15 @@ def _sell_ore(
     *,
     with_paths: bool = False,
     urgent: bool = False,
+    keep: int = STONE_RESERVE,
 ) -> bool:
     """把小贩肯收的矿背过去换金币。这一回合没去卖就返回 `False`（调用方接着去采）。
 
     卖的可用角色是全部（§4.4）—— 工人（墙砌完后）与开拓者（任务点全空时）都走这里。四条门，
     任一条不成立就 `False`：
 
-    ① 有货：`_best_load` 从 `SELLABLE` 里挑收购价最高的一种；
+    ① 有货：`_best_load` 从 `SELLABLE` 里挑收购价最高的一种；`keep` = 石头留底块数（那两条
+       筹资路传 `STONE_KEEP_RAISING`，其余走默认）—— 判"卖得起"的调用方必须传同一个值；
     ② 有小贩且走得到（`Map.vendors` 空、或一个都走不到就无处可卖）；
     ③ 够本：已经不贴着才算 —— 货值 < 往返回合数（`2 × 步数`）就留在矿边接着采（贴着时这趟路
        早付过了）；"1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮。`urgent=True` 跳过这一条：那趟路
@@ -870,7 +876,7 @@ def _sell_ore(
     只卖一种矿，`num` = 手上那种的全部件数（卖光）。
     """
     station = turn.map.station
-    kind, num = _best_load(role, turn.vendor_prices)
+    kind, num = _best_load(role, turn.vendor_prices, keep=keep)
     if not kind or station is None or not turn.map.vendors:
         return False
     walk, size = _passable(turn), turn.map.size
@@ -893,20 +899,23 @@ def _sell_ore(
     return q.step(role, vendor, avoid=frozenset(sites), with_paths=with_paths, reserve=with_paths)
 
 
-def _best_load(role: Worker, prices: Mapping[str, int]) -> tuple[str, int]:
+def _best_load(
+    role: Worker, prices: Mapping[str, int], *, keep: int = STONE_RESERVE
+) -> tuple[str, int]:
     """挑这一趟卖哪种矿：收购价最高的，同价取件数多的；挑不出来 ⇒ `("", 0)`。
 
     价 ≤ 0 或件数为 0 的矿跳过（小贩不收的矿换不来金币）；价目表为空 ⇒ 一件都不卖。名字参与
     比较只是为了让并列可复现。
 
-    石头保底留 1 块不卖：收工时手里得有石头才能把正面那个口封上（`wall_cells` 的最后一格），
-    封不上就是整夜的一道门。只有 1 块 ⇒ 这一趟不卖石头（另外两种矿照卖）。"墙砌完了才卖石头"
-    的规则保证了这 1 块买不到墙，它的用途只有封口。
+    石头留底 `keep` 块不卖，另外两种矿照卖：默认 `STONE_RESERVE` —— 与 `_stones_to_mine` 的
+    存货上限同源，墙夜里被打掉一格、第二天手里有货就能立刻补上；筹资那两条路传
+    `STONE_KEEP_RAISING`。手里不到 `keep` 块 ⇒ 这一趟不卖石头（别的照卖）；一块都没有 ⇒
+    挑不出来。墙只吃石头，留下的这几块正是它要的。
     """
     loads = [
-        (prices.get(kind, 0), role.bag.get(kind, 0) - (1 if kind == STONE else 0), kind)
+        (prices.get(kind, 0), role.bag.get(kind, 0) - (keep if kind == STONE else 0), kind)
         for kind in SELLABLE
-        if prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > (1 if kind == STONE else 0)
+        if prices.get(kind, 0) > 0 and role.bag.get(kind, 0) > (keep if kind == STONE else 0)
     ]
     if not loads:
         return "", 0
@@ -1048,9 +1057,9 @@ def _detour_sell(
     贴上小贩的那一回合同一条链里更早的 `_sell_ore` 自然把货出手（贴着跳过够本门），卖完没货、
     绕路条件消失，下一回合继续去矿。已经贴着矿就别绕了（这一回合该采）。
 
-    "有没有可卖的货"用 `_best_load` 判、不在这里重抄一遍：那边有"石头保底留 1 块"的口径，抄
-    一遍就会出现"绕去卖那 1 块石头、到了却不肯卖"—— 白绕一趟。距离一律 BFS 真实步数；-1 的
-    绕法直接放弃。
+    "有没有可卖的货"用 `_best_load` 判、不在这里重抄一遍：那边有"石头留底 `STONE_RESERVE`
+    块"的口径，抄一遍就会出现"绕去卖那几块石头、到了却不肯卖"—— 白绕一趟。距离一律 BFS
+    真实步数；-1 的绕法直接放弃。
     """
     if role.pos.dist(mine) <= 1:
         return False
@@ -1117,11 +1126,13 @@ def _upgrade_line(
     if price <= 0:
         return False
     if turn.gold < price:
-        # 钱不够但卖掉背包里最好那一堆就够 ⇒ 先去卖（那趟路的回报是券，不是矿价 ⇒ `urgent`）
-        kind, num = _best_load(role, turn.vendor_prices)
+        # 钱不够但卖掉背包里最好那一堆就够 ⇒ 先去卖（那趟路的回报是券，不是矿价 ⇒ `urgent`）。
+        # 石头留 `STONE_KEEP_RAISING` 块 —— 判"够不够"与真卖必须同一个 `keep`，否则这边按
+        # 留 3 块算出"不够"、那边却肯卖到只剩 1 块，白跑一趟。
+        kind, num = _best_load(role, turn.vendor_prices, keep=STONE_KEEP_RAISING)
         if not kind or turn.gold + turn.vendor_prices.get(kind, 0) * num < price:
             return False
-        return _sell_ore(role, turn, q, sites, with_paths=True, urgent=True)
+        return _sell_ore(role, turn, q, sites, with_paths=True, urgent=True, keep=STONE_KEEP_RAISING)
     # 并列按坐标排：先后不能取决于 payload 里的顺序。走不到的商店直接剔掉（BFS -1）。
     hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
     hops = [(steps, pos) for steps, pos in hops if steps >= 0]

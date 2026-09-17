@@ -1375,6 +1375,23 @@ class WallPriorityTest(unittest.TestCase):
         cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(6, 24), "铜（5 金）优先于石头（1 金）")
 
+    def test_fundraising_sells_the_stone_reserve_down_to_one(self):
+        """筹资路上石头只留 1 块（用户口径）：建武器差的是几十金币，留够封口的量就行。
+
+        平常的砌墙线留 `STONE_RESERVE`(3) 块 —— 两条路共用一个 `keep` 默认值的话，这位
+        工人会守着 3 块石头不动，25 金币永远凑不齐（它手里别的货一件没有）。
+        """
+        worker = Worker(10010, Pos(7, 25), {"stone": 8})  # 贴着小贩 (7,26)
+        turn = self._turn(
+            (worker,),
+            {self.BASE: "station", Pos(4, 24): "stone", Pos(7, 26): "vendor"},
+            prices={"stone": 1},
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(
+            cmd, {"action": "sell", "name": "stone", "num": 7}, "留 1 块就够，其余全换成钱"
+        )
+
     def test_fundraising_beats_repairing_a_weak_wall(self):
         """武器有缺 + 钱不够 + 筹资可行 ⇒ 连**修墙**也让位（用户口径：武器 > 筹资 > 墙）。
 
