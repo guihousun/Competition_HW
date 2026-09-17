@@ -107,10 +107,14 @@ VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
 #: 基地升级券（夜里基地升级用）。
 STATION_VOUCHERS = ("StationUpgradeVoucher1", "StationUpgradeVoucher2")
 
-#: 围墙修复包：10 金、目标墙回满血。
+#: 围墙升级券：键 = **目标等级**（与 `VOUCHER` 同一口径），样例价目 20 / 30 金。升级同时把墙
+#: 回满血（任务书 L297）并把上限抬高一档 ⇒ 弱墙"升级当修"，比只回血的修复包多花 10~20 金。
+WALL_VOUCHER = {2: "WallUpgradeVoucher1", 3: "WallUpgradeVoucher2"}
+
+#: 围墙修复包：10 金、目标墙回满血。L3 到顶升不动了，只剩它。
 WALLFIXER = "WallFixer"
 
-#: 建筑满血基准：修墙的 1/4 血判据与夜里基地升级的"残血"判据用。基地 1500/3000/4500 是表格
+#: 建筑满血基准：修墙的 1/5 血判据与夜里基地升级的"残血"判据用。基地 1500/3000/4500 是表格
 #: 实证；墙 L2/L3 的 1500/2000 按每级 +500 推断（表格被图片截断，待实盘校准）—— 推断偏小的
 #: 方向是"晚修"，安全。
 WALL_MAX_HP = {1: 1000, 2: 1500, 3: 2000}
@@ -321,7 +325,7 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
                 _mine_spare_ore(role, turn, q, sites, ore_taken)
             continue
 
-        # 修墙：弱墙（< 满血 1/4）按等级分派修法（见 `_repair_line`）。
+        # 修墙：弱墙（< 满血 1/5）升级当修，L3 才用修复包（见 `_repair_line`）。
         if _repair_line(role, turn, q, sites, repair_taken):
             continue
 
@@ -782,20 +786,24 @@ def _rescue(
     return q.step(role, site)
 
 
-def _weak_walls(turn: Turn, *, level_min: int = 1) -> tuple[Wall, ...]:
-    """血量不到满血 1/4 的已砌墙 —— "墙不完备"的判据，按坐标序（可复现）。
+def _weak_walls(turn: Turn) -> tuple[Wall, ...]:
+    """血量不到满血 **1/5** 的已砌墙 —— "墙不完备"的判据，按坐标序（可复现）。
 
     满血基准按等级查 `WALL_MAX_HP`（升级后回满血）。health 缺失（-1）⇒ 未知 ⇒ 不算弱；已毁（0）
-    的墙在 `model._walls` 就丢了 —— 那是一格缺口，归 `_ring` 管重建。`level_min` 按等级筛：
-    等级决定修法（L2 起用包回满血，L1 拆掉重建，见 `_repair_line`）。
+    的墙在 `model._walls` 就丢了 —— 那是一格缺口，归 `_ring` 管重建。
     """
     return tuple(
         w
         for w in sorted(turn.walls, key=lambda w: w.pos)
-        if w.level >= level_min
-        and 0 < w.health
-        and w.health * 4 < WALL_MAX_HP.get(w.level, WALL_MAX_HP[1])
+        if 0 < w.health and w.health * 5 < WALL_MAX_HP.get(w.level, WALL_MAX_HP[1])
     )
+
+
+def _wall_item(level: int) -> str:
+    """修这面墙该用哪件东西：**升级当修**（用户口径）—— L1/L2 用对应等级的围墙升级券，
+    L3 到顶升不动了，只剩 10 金的修复包。
+    """
+    return WALL_VOUCHER.get(level + 1, WALLFIXER)
 
 
 def _repair_line(
@@ -805,57 +813,37 @@ def _repair_line(
     sites: set[Pos],
     taken: set[Pos],
 ) -> bool:
-    """弱墙（见 `_weak_walls`）的修复差事，按等级分派。返回 `True` = 这一轮归它了。
+    """弱墙（见 `_weak_walls`）的修复差事：**升级当修**（用户口径）。返回 `True` = 这一轮归它了。
 
-    ① L2+ 用修复包回满血（1 回合 + 10 金、墙不塌、不开洞）：持包 ⇒ 走到最近的那面（认领在
-       动身之前，两个修墙工人不挤同一面），贴着就 `use WallFixer`（目标 = 墙坐标）；没包 ⇒
-       商店可达、价目里有它、金币够就走去商店 `Buy`；
-    ② L1 拆掉重建：走到那一格、贴着就 `remove`（下一回合那格自然进 `_ring` 被重砌）—— 一块
-       1000 血的墙不值得 25 金的包。手里得有石头（拆了不回收，没石头就只是开个洞），且白天
-       还剩 `3 * TIME_MARGIN` 以上：天黑前砌不回来的洞等于整夜开着。
+    用哪件东西看墙的等级（`_wall_item`）：L1/L2 用围墙升级券（样例价目 20 / 30 金）—— 升级同时
+    回满血（任务书 L297）并把上限抬高一档；L3 到顶只剩 10 金的修复包。取**等级最低**的一面
+    （最便宜、每金币换到的血量最多），同等级取近的（认领在动身之前，两个修墙工人不挤同一面）。
 
-    ① 优先于 ②：回血不开洞，等级越高越舍不得推倒；① 这一轮做不成（走不到/买不起）才轮到 ②。
-    只在白天跑（与 `build` 同一条昼夜口径）。
+    持券 ⇒ 走到那面墙、贴着就 `use`（目标 = 墙坐标，站位契约与修复包同源，任务书 L292）；没券
+    ⇒ 商店可达、价目里有它、金币够就走去商店 `Buy`。**只在白天跑**（与 `build` 同一条昼夜口径）。
     """
     budget = turn.day_rounds_left - TIME_MARGIN
     walk, size = _passable(turn), turn.map.size
-
-    # ① L2+：包优先（回满血、不开洞），没包就去买
-    repair = _weak_walls(turn, level_min=2)
-    if repair:
-        if WALLFIXER not in role.bag:
-            price = turn.shop_prices.get(WALLFIXER, 0)
-            hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
-            hops = [(d, s) for d, s in hops if d >= 0]
-            to_shop, shop = min(hops) if hops else (-1, None)
-            if shop is not None and price > 0 and turn.gold >= price and to_shop + 1 <= budget:
-                if to_shop == 0:
-                    return _emit(q.cmds, role, actions.Buy, WALLFIXER, 1)
-                return q.step(role, shop, avoid=frozenset(sites))
-        else:
-            target = min(
-                (w for w in repair if w.pos not in taken),
-                key=lambda w: (role.pos.dist(w.pos), w.pos),
-                default=None,
-            )
-            if target is not None:
-                taken.add(target.pos)
-                if role.pos.dist(target.pos) <= 1:
-                    return _emit(q.cmds, role, actions.Use, WALLFIXER, target.pos)
-                to_wall = steps_between(role.pos, target.pos, walk, size)
-                if to_wall >= 0 and to_wall + 1 <= budget:
-                    return q.step(role, target.pos, avoid=frozenset(sites))
-
-    # ② L1：拆掉重建
-    if role.stone < WALL_COST or turn.day_rounds_left <= 3 * TIME_MARGIN:
-        return False  # 拆了砌不回来 ⇒ 不如留着那点血
-    low = [w for w in _weak_walls(turn) if w.level <= 1 and w.pos not in taken]
-    if not low:
+    weak = [w for w in _weak_walls(turn) if w.pos not in taken]
+    if not weak:
         return False
-    target = min(low, key=lambda w: (role.pos.dist(w.pos), w.pos))
+    target = min(weak, key=lambda w: (w.level, role.pos.dist(w.pos), w.pos))
+    item = _wall_item(target.level)
+
+    if item not in role.bag:
+        price = turn.shop_prices.get(item, 0)
+        hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
+        hops = [(d, s) for d, s in hops if d >= 0]
+        to_shop, shop = min(hops) if hops else (-1, None)
+        if shop is None or price <= 0 or turn.gold < price or to_shop + 1 > budget:
+            return False  # 这一面这一轮修不了 ⇒ 待命（明天再说），不换另一面
+        if to_shop == 0:
+            return _emit(q.cmds, role, actions.Buy, item, 1)
+        return q.step(role, shop, avoid=frozenset(sites))
+
     taken.add(target.pos)
     if role.pos.dist(target.pos) <= 1:
-        return _emit(q.cmds, role, actions.Remove, target.pos)
+        return _emit(q.cmds, role, actions.Use, item, target.pos)
     to_wall = steps_between(role.pos, target.pos, walk, size)
     if to_wall < 0 or to_wall + 1 > budget:
         return False  # 来不及 ⇒ 待命，明天接着走
@@ -1043,16 +1031,16 @@ def _mine_spare_ore(
 def _shopping_list(role: Worker, turn: Turn) -> str | None:
     """这一趟该顺路买什么 ⇒ 商品名；什么都不缺 ⇒ `None`。
 
-    只在买得起时才列：钱不够绕过去也白绕。优先级：WallFixer（有 L2+ 弱墙且包里没包 —— 10 金
-    回满血；L1 那种是拆掉重建、用不上包）> 升级链下一张券（别人包里已有一张就不再买 —— 没有转移指令，囤两张是白花金币）。
+    只在买得起时才列：钱不够绕过去也白绕。优先级：修墙要的东西（有弱墙且包里没有它 —— 与
+    `_repair_line` 同一条挑墙口径，买错件就白绕一趟）> 升级链下一张券（别人包里已有一张就不再买
+    —— 没有转移指令，囤两张是白花金币）。围墙券**不查别人拿没拿**：它会消耗掉，墙还会再坏。
     """
     prices = turn.shop_prices
-    if (
-        _weak_walls(turn, level_min=2)
-        and WALLFIXER not in role.bag
-        and 0 < prices.get(WALLFIXER, 0) <= turn.gold
-    ):
-        return WALLFIXER
+    weak = _weak_walls(turn)
+    if weak:
+        item = _wall_item(min(weak, key=lambda w: (w.level, w.pos)).level)
+        if item not in role.bag and 0 < prices.get(item, 0) <= turn.gold:
+            return item
     target = _upgrade_target(turn)
     if target is not None:
         voucher = target[1]

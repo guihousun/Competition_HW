@@ -1267,12 +1267,12 @@ class PathReserveTest(unittest.TestCase):
 
 
 class RepairTest(unittest.TestCase):
-    """弱墙（血 < 满血 1/4 = 不完备）的修复差事，按等级分派修法。
+    """弱墙（血 < 满血 1/5 = 不完备）的修复差事：**升级当修**（用户口径）。
 
-    文档事实：WallFixer 10 金、目标墙回满血（任务书消耗品表），站墙一格内 `use`。L2+ 回血
-    （1 回合 + 10 金、墙不塌、不开洞）优于推倒重建；L1 反着来 —— 一块 1000 血的墙不值得
-    25 金的包，拆掉让 `_ring` 重砌（2 石头 + 2 回合）。守门：`_weak_walls` 的阈值 +
-    `_repair_line` 的分派。
+    文档事实：围墙升级券 20 金（L1→L2）/ 30 金（L2→L3），WallFixer 10 金、目标墙回满血；升级后
+    建筑回满血（任务书 L297）⇒ 升级 = 回满血 + 上限抬高一档，所以 L1/L2 的弱墙一律升级，L3
+    到顶升不动了才用修复包。两件的站位契约同源（站墙一格内 `use`）。**不再拆墙** —— `remove`
+    只剩 `_rescue` 一个调用点。守门：`_weak_walls` 的阈值 + `_repair_line` 的分派。
     """
 
     BASE = Pos(10, 24)
@@ -1280,8 +1280,9 @@ class RepairTest(unittest.TestCase):
     SHOP = Pos(20, 16)
     WEAK = Pos(13, 22)  # 正面列的一格（弱墙）
     OTHER = Pos(13, 26)  # 正面列的另一格（第二面弱墙）
-    L2 = 300  # L2 满血 1500 ⇒ 300×4 < 1500
-    L1 = 200  # L1 满血 1000 ⇒ 200×4 < 1000
+    L2 = 299  # L2 满血 1500 ⇒ 299×5 < 1500
+    L1 = 199  # L1 满血 1000 ⇒ 199×5 < 1000
+    V1, V2 = "WallUpgradeVoucher1", "WallUpgradeVoucher2"
 
     def _turn(self, worker: Worker, *, walls=None, shop=True, gold=0, prices=None, ores=()):
         grid = _terrain(self.WEAPONS, {self.BASE: "station", self.WEAK: "wall"})
@@ -1297,26 +1298,74 @@ class RepairTest(unittest.TestCase):
             roles=(worker,),
             gold=gold,
             weapons=self.WEAPONS,
-            shop_prices=prices if prices is not None else {"WallFixer": 10},
+            shop_prices=prices if prices is not None else {self.V1: 20, self.V2: 30, "WallFixer": 10},
             walls=walls,
         )
 
-    def test_a_worker_with_a_pack_repairs_a_second_level_wall(self):
-        """持包 + 贴着 L2 弱墙 ⇒ `use WallFixer`（墙回满血、不塌、1 回合）。"""
-        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+    def test_a_worker_upgrades_the_second_level_wall_it_has_the_voucher_for(self):
+        """持券2 + 贴着 L2 弱墙 ⇒ `use WallUpgradeVoucher2`（升级 = 回满血 + 上限 1500→2000）。"""
+        worker = Worker(10010, Pos(12, 22), {self.V2: 1})
         cmd = plan(self._turn(worker))[str(10010)]
         self.assertEqual(cmd["action"], "use")
-        self.assertEqual(cmd["name"], "WallFixer")
-        self.assertEqual(
-            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.WEAK
+        self.assertEqual(cmd["name"], self.V2)
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.WEAK)
+
+    def test_a_worker_upgrades_a_level_one_wall_instead_of_demolishing_it(self):
+        """L1 弱墙 ⇒ `use WallUpgradeVoucher1`（20 金升到 L2）—— **不再拆墙**（用户口径）。
+
+        旧的"拆掉重建"这条路整个删了：拆墙要石头、当天还得砌回来，而升级券更便宜且顺带抬上限。
+        """
+        worker = Worker(10010, Pos(12, 22), {self.V1: 1, "stone": 1})
+        cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[str(10010)]
+        self.assertEqual(cmd["action"], "use", "L1 升级当修，不是 remove")
+        self.assertEqual(cmd["name"], self.V1)
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.WEAK)
+
+    def test_a_third_level_wall_falls_back_to_the_pack(self):
+        """L3 到顶升不动了 ⇒ 只剩 `use WallFixer`（10 金回满血）。"""
+        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, 399, 3),)))[str(10010)]
+        self.assertEqual(cmd["action"], "use")
+        self.assertEqual(cmd["name"], "WallFixer", "L3 没有券可用")
+
+    def test_the_cheapest_wall_wins(self):
+        """同时有 L1 与 L2 两面弱墙、两件券都在包里 ⇒ 先奔**等级最低**的那面（20 金换 1000 血，
+        比 30 金换 500 血划算）。两面的步数与墙都在，认的是等级序不是距离序。"""
+        walls = (Wall(40000, self.WEAK, self.L2, 2), Wall(40001, self.OTHER, self.L1, 1))
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station", self.WEAK: "wall", self.OTHER: "wall", self.SHOP: "weaponShop"},
+        )
+        worker = Worker(10010, Pos(12, 24), {self.V1: 1, self.V2: 1})
+        self.assertEqual(worker.pos.dist(self.WEAK), worker.pos.dist(self.OTHER), "夹具前提：两面一样远")
+        grid[worker.pos] = "worker"
+        cmd = plan(
+            Turn(
+                round_no=1, map=Map((41, 32), grid), roles=(worker,), gold=0,
+                weapons=self.WEAPONS, shop_prices={self.V1: 20, self.V2: 30}, walls=walls,
+            )
+        )[str(10010)]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.OTHER), worker.pos.dist(self.OTHER), "朝 L1 那面走")
+        self.assertGreaterEqual(
+            step.dist(self.WEAK), worker.pos.dist(self.WEAK), "别奔 L2 那面去"
         )
 
-    def test_a_worker_without_a_pack_buys_one_for_a_second_level_wall(self):
-        """没包 ⇒ 去商店买（贴着就买）；`collect`/挖矿都排在修墙之后。"""
+    def test_a_worker_without_a_voucher_buys_one_for_a_second_level_wall(self):
+        """没券 ⇒ 去商店买**这一面要的那张**（贴着就买）；`collect`/挖矿都排在修墙之后。"""
         worker = Worker(10010, Pos(20, 15), {})
-        cmd = plan(self._turn(worker, gold=10))[str(10010)]
+        cmd = plan(self._turn(worker, gold=30))[str(10010)]
         self.assertEqual(cmd["action"], "buy")
-        self.assertEqual(cmd["name"], "WallFixer")
+        self.assertEqual(cmd["name"], self.V2)
+
+    def test_a_level_one_wall_buys_the_cheaper_voucher(self):
+        """L1 弱墙要的是券1（20 金），别买成 30 金那张 —— 20 金够、30 金不够时差别立现。"""
+        worker = Worker(10010, Pos(20, 15), {})
+        cmd = plan(self._turn(worker, gold=20, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[
+            str(10010)
+        ]
+        self.assertEqual(cmd["action"], "buy")
+        self.assertEqual(cmd["name"], self.V1)
 
     def test_a_worker_two_cells_from_the_shop_walks_instead_of_buying(self):
         """差一格还不许买：`steps_between` 的 **0** 才是"贴着商店"（1 = 还要走一格）。
@@ -1326,87 +1375,78 @@ class RepairTest(unittest.TestCase):
         """
         worker = Worker(10010, Pos(22, 16), {})  # 与商店 (20,16) 切比雪夫 2
         self.assertEqual(worker.pos.dist(self.SHOP), 2, "夹具前提：与商店差一格")
-        cmd = plan(self._turn(worker, gold=10))[str(10010)]
+        cmd = plan(self._turn(worker, gold=30))[str(10010)]
         self.assertEqual(cmd.get("action"), "move", f"该走过去，不是隔着一格买：{cmd}")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.SHOP), worker.pos.dist(self.SHOP), "朝商店走一格")
 
     def test_a_worker_walks_to_a_second_level_wall_it_cannot_reach_yet(self):
         """没贴着也照走：差事的目标就是那面墙（不是原地等它自己贴过来）。"""
-        worker = Worker(10010, Pos(5, 22), {"WallFixer": 1})
+        worker = Worker(10010, Pos(5, 22), {self.V2: 1})
         cmd = plan(self._turn(worker))[str(10010)]
         self.assertEqual(cmd["action"], "move")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.WEAK), worker.pos.dist(self.WEAK), "朝弱墙走一格")
 
-    def test_a_level_one_wall_is_demolished_even_with_a_pack_in_hand(self):
-        """L1 弱墙 ⇒ `remove`，包在手里也照样拆（等级定修法，不看包）。"""
-        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1, "stone": 1})
-        cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[str(10010)]
-        self.assertEqual(cmd["action"], "remove", "L1 拆掉重建，不花 25 金的包")
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.WEAK)
-
-    def test_a_level_one_wall_is_demolished_from_a_distance(self):
-        """没贴着 ⇒ 先走过去（拆墙的站位与 `build` 同一条：切比雪夫 ≤1）。"""
-        worker = Worker(10010, Pos(5, 22), {"stone": 1})
-        cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[str(10010)]
-        self.assertEqual(cmd["action"], "move")
-        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertLess(step.dist(self.WEAK), worker.pos.dist(self.WEAK), "朝那面墙走一格")
-
-    def test_a_level_one_wall_is_left_alone_without_stone(self):
-        """手里没石头 ⇒ 不拆：拆了那格不回收，砌不回来就只是白开一个洞。"""
-        worker = Worker(10010, Pos(12, 22), {})
+    def test_a_level_one_wall_is_left_alone_when_the_voucher_is_out_of_reach(self):
+        """没券又买不起/商店走不到 ⇒ 什么都不发 —— **尤其不拆墙**（拆了那格不回收，砌不回来
+        就只是白开一个洞）。"""
+        worker = Worker(10010, Pos(12, 22), {"stone": 1})
         cmd = plan(
             self._turn(worker, shop=False, gold=0, prices={},
                        walls=(Wall(40000, self.WEAK, self.L1, 1),))
         ).get(str(10010), {})
-        self.assertNotEqual(cmd.get("action"), "remove")
+        self.assertNotIn(cmd.get("action"), ("use", "remove"))
 
     def test_a_second_level_wall_is_never_demolished(self):
-        """L2 弱墙没包又买不起 ⇒ 什么都不拆（推倒会把等级赔进去），也照样不待命到天荒地老
-        —— 这里只钉住"不发 remove"这一条。"""
+        """L2 弱墙没券又买不起 ⇒ 什么墙都不拆（推倒会把等级赔进去）。"""
         worker = Worker(10010, Pos(12, 22), {"stone": 1})
         cmd = plan(
             self._turn(worker, shop=False, gold=0, prices={})
         ).get(str(10010), {})
         self.assertNotEqual(cmd.get("action"), "remove")
-        self.assertNotEqual(cmd.get("action"), "use", "没包就没得 use")
+        self.assertNotEqual(cmd.get("action"), "use", "没券就没得 use")
 
-    def test_a_wall_above_a_quarter_health_is_never_touched(self):
-        """阈值是"不到满血 1/4"，不是"不到满"、也不是"不到一半"：过线的墙照旧算完备。
+    def test_walls_below_a_fifth_are_fixed_and_above_are_left_alone(self):
+        """阈值是"不到满血 **1/5**"，不是 1/4、不是半血。
 
-        400（L1 的 1/4 = 250）与 600（L2 的 1/4 = 375）都在正中间那一档 —— 按"半血"判就会
-        被拉去修/拆，正是这条钉住的分界。满血那两条顺带一起过。
+        正好 1/5（L1 = 200、L2 = 300）算**达标**（"少于"是严格小于），差一点（199 / 299）就
+        要修 —— 按 1/4 判的话 199 与 299 都会被放过去。满血那两条顺带一起过。
         """
-        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1, "stone": 1})
-        for level, hp in ((1, 400), (1, 1000), (2, 600), (2, 1500)):
+        worker = Worker(10010, Pos(12, 22), {self.V1: 1, self.V2: 1, "WallFixer": 1})
+        for level, hp, fixed in ((1, 200, False), (2, 300, False), (1, 1000, False),
+                                 (2, 1500, False), (1, 199, True), (2, 299, True),
+                                 (3, 399, True), (3, 400, False)):
             with self.subTest(level=level, hp=hp):
                 cmd = plan(
                     self._turn(worker, walls=(Wall(40000, self.WEAK, hp, level),))
                 ).get(str(10010), {})
-                self.assertNotIn(cmd.get("action"), ("use", "remove"))
+                action = cmd.get("action")
+                if fixed:
+                    self.assertEqual(action, "use", f"L{level} {hp} 血该修（{cmd}）")
+                else:
+                    self.assertNotIn(action, ("use", "remove"), f"L{level} {hp} 血没到线")
 
     def test_repair_beats_mining(self):
-        """修墙 > 挖矿 —— 贴着弱墙又贴着矿，先用包（差事顺序，不是距离顺序）。"""
-        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        """修墙 > 挖矿 —— 贴着弱墙又贴着矿，先升级券（差事顺序，不是距离顺序）。"""
+        worker = Worker(10010, Pos(12, 22), {self.V2: 1})
         cmd = plan(self._turn(worker, ores=(Pos(12, 20),)))[str(10010)]
         self.assertEqual(cmd["action"], "use")
 
     def test_two_workers_claim_different_weak_walls(self):
-        """两面 L2 弱墙、两个持包工人 ⇒ 各修各的（认领账本，不挤同一面）。"""
+        """两面 L2 弱墙、两个持券工人 ⇒ 各修各的（认领账本，不挤同一面）。"""
         walls = (Wall(40000, self.WEAK, self.L2, 2), Wall(40001, self.OTHER, self.L2, 2))
         grid = _terrain(
             self.WEAPONS,
             {self.BASE: "station", self.WEAK: "wall", self.OTHER: "wall", self.SHOP: "weaponShop"},
         )
-        a = Worker(10010, Pos(12, 22), {"WallFixer": 1})
-        b = Worker(10012, Pos(12, 26), {"WallFixer": 1})
+        a = Worker(10010, Pos(12, 22), {self.V2: 1})
+        b = Worker(10012, Pos(12, 26), {self.V2: 1})
         grid |= {a.pos: "worker", b.pos: "worker"}
         cmds = plan(
             Turn(
                 round_no=1, map=Map((41, 32), grid), roles=(a, b), gold=0,
-                weapons=self.WEAPONS, shop_prices={"WallFixer": 10}, walls=walls,
+                weapons=self.WEAPONS, shop_prices={self.V2: 30}, walls=walls,
             )
         )
         targets = {
@@ -1507,15 +1547,15 @@ class WallPriorityTest(unittest.TestCase):
     def test_fundraising_beats_repairing_a_weak_wall(self):
         """武器有缺 + 钱不够 + 筹资可行 ⇒ 连**修墙**也让位（用户口径：武器 > 筹资 > 墙）。
 
-        弱墙就贴在脚边、包里还有修复包 —— 顺序反了这条会发出 `use`/`remove`，立即挂。
+        弱墙就贴在脚边、包里还有升级券 —— 顺序反了这条会发出 `use`，立即挂。
         """
-        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1, "stone": 1})
+        worker = Worker(10010, Pos(12, 22), {"WallUpgradeVoucher2": 1, "stone": 1})
         turn = self._turn(
             (worker,),
             {self.BASE: "station", Pos(6, 24): "copper", Pos(7, 26): "vendor"},
             prices={"copper": 5},
             walls=[Pos(13, 22)],  # 那格墙照旧挡路
-            weak=(Wall(40000, Pos(13, 22), 300, 2),),
+            weak=(Wall(40000, Pos(13, 22), 299, 2),),
         )
         cmd = plan(turn)[str(10010)]
         self.assertNotIn(cmd["action"], ("use", "remove"), f"别碰那面弱墙：{cmd}")
