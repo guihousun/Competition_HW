@@ -72,6 +72,9 @@ ROUNDS_PER_STONE = 3
 #: 容错余量（回合）：距离全按 BFS 真实步数算，这是给收尾动作留的真余量。5 是拍的。
 TIME_MARGIN = 5
 
+#: 白天收工闸门的缓冲（回合）：离天黑只剩"回程步数 + 这个数"就动身回炮位。3 是拍的。
+POST_MARGIN = 3
+
 #: 能卖给小贩的矿：三种（含多余的石头），挑哪种由 `Turn.vendor_prices` 现算。
 #: 石头只在"墙砌完了"那一支里才卖得出去 —— 调用点 `_build_walls` 已保证。
 SELLABLE = (STONE, IRON, COPPER)
@@ -301,6 +304,14 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             elif q.step(role, cell, avoid=frozenset(sites), with_paths=True):
                 continue
 
+        # 筹资：武器还有缺但钱不够、且筹资可行（有小贩有价可卖，见 `_can_fund`）⇒ 整条墙线
+        # 让位（含修墙），先卖背包里的货、再采最值钱的矿凑 25 金币（火力缺口比墙急；凑不成的
+        # 地图上墙仍是剩下最值得干的事）。
+        if weapon_gap and budget < WEAPON_COST and _can_fund(turn):
+            if not _sell_ore(role, turn, q, sites, with_paths=True):
+                _mine_spare_ore(role, turn, q, sites, ore_taken)
+            continue
+
         # 修墙：弱墙（< 满血 1/4）按等级分派修法（见 `_repair_line`）。
         if _repair_line(role, turn, q, sites, repair_taken):
             continue
@@ -308,14 +319,6 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
         # 安全闸门：墙格在手而砌下去会把人关住 ⇒ 待命（不发指令也不筹资 —— 别跑远，下回合
         # 缺口还在；`_build_walls` 里还有同一道闸兜底）。
         if target is not None and leaving:
-            continue
-
-        # 筹资：武器还有缺但钱不够、且筹资可行（有小贩有价可卖，见 `_can_fund`）⇒ 整条墙线
-        # 让位，先卖背包里的货、再采最值钱的矿凑 25 金币（火力缺口比墙急；凑不成的地图上墙
-        # 仍是剩下最值得干的事）。
-        if weapon_gap and budget < WEAPON_COST and _can_fund(turn):
-            if not _sell_ore(role, turn, q, sites, with_paths=True):
-                _mine_spare_ore(role, turn, q, sites, ore_taken)
             continue
 
         # 砌墙（平常时序）。
@@ -1183,8 +1186,8 @@ def _leave_for_the_post(
     第一回合就能开火。与 `_defend` 的唯一区别是它不调 `_fire`：`attack` 仅黑夜（§4.4），白天
     发就是非法指令、5 次出局。
 
-    先看时间、再看位置：判据是"到最近那个岗位的 BFS 步数 ≥ 白天还剩的回合 − 1"（− 1 = 留 1
-    回合余量，拍的）；已经在岗位上时步数是 0，于是只有白天最后一回合才轮得到"在岗待命"。
+    先看时间、再看位置：判据是"到最近那个岗位的 BFS 步数 ≥ 白天还剩的回合 − `POST_MARGIN`"
+    （缓冲，拍的）；已经在岗位上时步数是 0，于是只有白天最后那几回合才轮得到"在岗待命"。
     少了时间这一道，"到岗就待命"会让早上正好站在炮边的工人整天不动。
 
     返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；`False` =
@@ -1208,7 +1211,7 @@ def _leave_for_the_post(
     if not hops:
         return False
     steps, spot, group, onto = min(hops, key=lambda h: (h[0], h[1]))
-    if steps < turn.day_rounds_left - 1:
+    if steps < turn.day_rounds_left - POST_MARGIN:
         return False  # 还剩富裕回合 ⇒ 照常干活
     for w in group:
         taken.add(w.pos)  # 定下这组了：认领，免得另一个角色也奔这里（一人只能操一座）

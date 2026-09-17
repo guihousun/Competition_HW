@@ -19,7 +19,7 @@ from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game import planner  # noqa: E402
-from coregeek.game.planner import WALL, WEAPONS_BY_SITE, plan  # noqa: E402
+from coregeek.game.planner import POST_MARGIN, WALL, WEAPONS_BY_SITE, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -681,20 +681,24 @@ class DayEndGateTest(unittest.TestCase):
         self.assertEqual(cell, Pos(11, 25), "落点就是共用操作位本身")
 
     def test_the_gate_opens_exactly_when_the_walk_home_eats_the_day(self):
-        """回程步数 ≥ 白天剩余 − 1 ⇒ 这一回合就往炮位走。卡在边界上测（早一回合不动身）。"""
+        """回程步数 + `POST_MARGIN` ≥ 白天剩余 ⇒ 这一回合就往炮位走。卡在边界上测。
+
+        边界 = `day_rounds_left == steps + POST_MARGIN`（正好合上）；再多剩一回合就不许动身
+        （否则整个白天都在炮位上干等）。
+        """
         at = Pos(20, 24)
         steps = self._steps_home(at)
         self.assertGreater(steps, 0, "这个站位本来就该离炮位远一点")
-        # `day_rounds_left - 1 == steps` ⇒ 正好是闸门该合上的那一回合
-        cmds = plan(self._turn(round_no=DAY_ROUNDS - steps, at=at))
+        gate = DAY_ROUNDS - steps - POST_MARGIN + 1  # 这一回合的 day_rounds_left 正好是 steps + 3
+        cmds = plan(self._turn(round_no=gate, at=at))
         self.assertEqual(cmds["1"]["action"], "move", f"该往回赶：{cmds}")
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(at.dist(cell), 1, "一步一格")
         self.assertLess(
             self._steps_home(cell), steps, "这一格必须真的离家更近（不许在原地打转）"
         )
-        # 白天还富裕一回合 ⇒ 不许动身（否则整个白天都在炮位上干等）
-        self.assertEqual(plan(self._turn(round_no=DAY_ROUNDS - steps - 1, at=at)), {})
+        # 白天还富裕一回合 ⇒ 不许动身
+        self.assertEqual(plan(self._turn(round_no=gate - 1, at=at)), {})
 
     def test_a_day_round_never_fires(self):
         """红线守门员：白天任何回合、任何站位（含贴着炮）都只许有 `move`。
@@ -1286,6 +1290,7 @@ class WallPriorityTest(unittest.TestCase):
         gold: int = 0,
         prices: dict[str, int] | None = None,
         walls: Iterable[Pos] = (),
+        weak: tuple[Wall, ...] = (),
         phase_task: str = "",
         weapons: tuple[Weapon, ...] = (),
     ) -> Turn:
@@ -1298,6 +1303,7 @@ class WallPriorityTest(unittest.TestCase):
             gold=gold,
             phase_task=phase_task,
             weapons=weapons,
+            walls=weak,
             vendor_prices=prices if prices is not None else {},
         )
 
@@ -1332,6 +1338,50 @@ class WallPriorityTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "collect", "筹资采最值钱的矿，不是先采石砌墙")
         cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(6, 24), "铜（5 金）优先于石头（1 金）")
+
+    def test_fundraising_beats_repairing_a_weak_wall(self):
+        """武器有缺 + 钱不够 + 筹资可行 ⇒ 连**修墙**也让位（用户口径：武器 > 筹资 > 墙）。
+
+        弱墙就贴在脚边、包里还有修复包 —— 顺序反了这条会发出 `use`/`remove`，立即挂。
+        """
+        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1, "stone": 1})
+        turn = self._turn(
+            (worker,),
+            {self.BASE: "station", Pos(6, 24): "copper", Pos(7, 26): "vendor"},
+            prices={"copper": 5},
+            walls=[Pos(13, 22)],  # 那格墙照旧挡路
+            weak=(Wall(40000, Pos(13, 22), 300, 2),),
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertNotIn(cmd["action"], ("use", "remove"), f"别碰那面弱墙：{cmd}")
+        self.assertEqual(cmd["action"], "move", f"该往矿那边去：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(Pos(6, 24)), worker.pos.dist(Pos(6, 24)), "朝铜矿走一格")
+
+    def test_both_workers_fundraise_instead_of_walling(self):
+        """用户口径 1.2.2：钱不够建武器 ⇒ **两个工人一起挖矿**，谁都不去砌墙。
+
+        环上一格没砌（`target` 都非空）、石矿贴着脚 —— 顺序反了两人都会去砌墙/采石。
+        """
+        a = Worker(10010, Pos(5, 23))
+        b = Worker(10012, Pos(5, 25))
+        turn = self._turn(
+            (a, b),
+            {
+                self.BASE: "station",
+                Pos(4, 24): "stone", Pos(6, 24): "copper", Pos(6, 26): "iron",
+                Pos(7, 26): "vendor",
+            },
+            prices={"stone": 1, "iron": 3, "copper": 5},
+        )
+        cmds = plan(turn)
+        actions = {cid: cmd["action"] for cid, cmd in cmds.items()}
+        self.assertEqual(set(actions.values()), {"collect"}, f"两个人都该去挖矿筹资：{cmds}")
+        cells = {
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]) for cmd in cmds.values()
+        }
+        self.assertEqual(len(cells), 2, f"各挖一座，不挤同一座矿：{cmds}")
+        self.assertEqual(cells, {Pos(6, 24), Pos(6, 26)}, "挑最值钱的两座（铜 5、铁 3）")
 
     def test_fundraising_yields_to_walls_when_no_vendor(self):
         """筹资不可行（没小贩，矿卖不出去）⇒ 不筹资，照旧走墙线 —— 没有通往
