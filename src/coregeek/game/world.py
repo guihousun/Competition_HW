@@ -60,9 +60,9 @@ class Weapon(NamedTuple):
 class Wall(NamedTuple):
     """我方一座围墙实体，修墙线的判据来源。
 
-    与武器同住 `teamOur.roles`（`roleType == "wall"`，id 40000 系）。health 是修墙判据（半血
-    ⇒ 修复包/重建）；level 决定满血基准。已毁（health == 0）的在 `model._walls` 就丢掉 ——
-    那是一格缺口，归 `_ring` 管。
+    与武器同住 `teamOur.roles`（`roleType == "wall"`，id 40000 系）。health 是修墙判据（不到
+    满血 1/4 ⇒ 不完备，L1 拆掉重建、L2 起用修复包回满血）；level 决定满血基准。已毁
+    （health == 0）的在 `model._walls` 就丢掉 —— 那是一格缺口，归 `_ring` 管。
     """
 
     id: int

@@ -42,7 +42,7 @@ from .grid import (
 )
 from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
-from .world import ROUNDS_PER_DAY, Robot, Turn, Weapon
+from .world import ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ STATION_VOUCHERS = ("StationUpgradeVoucher1", "StationUpgradeVoucher2")
 #: 围墙修复包：10 金、目标墙回满血。
 WALLFIXER = "WallFixer"
 
-#: 建筑满血基准：修墙的"半血"判据与夜里基地升级的"残血"判据用。基地 1500/3000/4500 是表格
+#: 建筑满血基准：修墙的 1/4 血判据与夜里基地升级的"残血"判据用。基地 1500/3000/4500 是表格
 #: 实证；墙 L2/L3 的 1500/2000 按每级 +500 推断（表格被图片截断，待实盘校准）—— 推断偏小的
 #: 方向是"晚修"，安全。
 WALL_MAX_HP = {1: 1000, 2: 1500, 3: 2000}
@@ -301,7 +301,7 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             elif q.step(role, cell, avoid=frozenset(sites), with_paths=True):
                 continue
 
-        # 修墙：半血墙先修（包优先、重建兜底，见 `_repair_line`）。
+        # 修墙：弱墙（< 满血 1/4）按等级分派修法（见 `_repair_line`）。
         if _repair_line(role, turn, q, sites, repair_taken):
             continue
 
@@ -733,16 +733,19 @@ def _rescue(
     return q.step(role, site)
 
 
-def _half_walls(turn: Turn) -> tuple[Pos, ...]:
-    """血量不足一半的已砌墙，按坐标序（可复现）。
+def _weak_walls(turn: Turn, *, level_min: int = 1) -> tuple[Wall, ...]:
+    """血量不到满血 1/4 的已砌墙 —— "墙不完备"的判据，按坐标序（可复现）。
 
-    满血基准按等级查 `WALL_MAX_HP`（升级后回满血）。health 缺失（-1）⇒ 未知 ⇒ 不修；已毁（0）
-    的墙在 `model._walls` 就丢了 —— 那是一格缺口，归 `_ring` 管重建。
+    满血基准按等级查 `WALL_MAX_HP`（升级后回满血）。health 缺失（-1）⇒ 未知 ⇒ 不算弱；已毁（0）
+    的墙在 `model._walls` 就丢了 —— 那是一格缺口，归 `_ring` 管重建。`level_min` 按等级筛：
+    等级决定修法（L2 起用包回满血，L1 拆掉重建，见 `_repair_line`）。
     """
     return tuple(
-        w.pos
+        w
         for w in sorted(turn.walls, key=lambda w: w.pos)
-        if 0 < w.health and w.health * 2 < WALL_MAX_HP.get(w.level, WALL_MAX_HP[1])
+        if w.level >= level_min
+        and 0 < w.health
+        and w.health * 4 < WALL_MAX_HP.get(w.level, WALL_MAX_HP[1])
     )
 
 
@@ -753,52 +756,61 @@ def _repair_line(
     sites: set[Pos],
     taken: set[Pos],
 ) -> bool:
-    """半血墙的修复差事（包优先、重建兜底）。返回 `True` = 这一轮归它了。
+    """弱墙（见 `_weak_walls`）的修复差事，按等级分派。返回 `True` = 这一轮归它了。
 
-    ① 持包：走到最近的半血墙（认领在动身之前，两个修墙工人不挤同一面），贴着就
-       `use WallFixer`（目标 = 墙坐标；墙回满血、不塌，1 回合 + 10 金 —— 全面占优推倒重建的
-       2 石头 + 2 回合 + 洞开 2 回合）；
-    ② 没包：商店可达、价目里有它、金币够 ⇒ 走去商店 `Buy`；
-    ③ 没包也买不了 ⇒ 重建兜底：贴着半血墙且有石头 ⇒ `remove`（下一回合那格自然进 `_ring`）。
-       天黑前砌不回来的洞等于白开（`3 * TIME_MARGIN` 是那道时间门）。
+    ① L2+ 用修复包回满血（1 回合 + 10 金、墙不塌、不开洞）：持包 ⇒ 走到最近的那面（认领在
+       动身之前，两个修墙工人不挤同一面），贴着就 `use WallFixer`（目标 = 墙坐标）；没包 ⇒
+       商店可达、价目里有它、金币够就走去商店 `Buy`；
+    ② L1 拆掉重建：走到那一格、贴着就 `remove`（下一回合那格自然进 `_ring` 被重砌）—— 一块
+       1000 血的墙不值得 25 金的包。手里得有石头（拆了不回收，没石头就只是开个洞），且白天
+       还剩 `3 * TIME_MARGIN` 以上：天黑前砌不回来的洞等于整夜开着。
 
+    ① 优先于 ②：回血不开洞，等级越高越舍不得推倒；① 这一轮做不成（走不到/买不起）才轮到 ②。
     只在白天跑（与 `build` 同一条昼夜口径）。
     """
-    broken = _half_walls(turn)
-    if not broken:
-        return False
-    walk, size = _passable(turn), turn.map.size
     budget = turn.day_rounds_left - TIME_MARGIN
-    if WALLFIXER not in role.bag:
-        price = turn.shop_prices.get(WALLFIXER, 0)
-        hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
-        hops = [(d, s) for d, s in hops if d >= 0]
-        to_shop, shop = min(hops) if hops else (-1, None)
-        if shop is not None and price > 0 and turn.gold >= price and to_shop + 1 <= budget:
-            if to_shop == 0:
-                return _emit(q.cmds, role, actions.Buy, WALLFIXER, 1)
-            return q.step(role, shop, avoid=frozenset(sites))
-        # 买不了 ⇒ 重建兜底
-        if role.stone >= WALL_COST and turn.day_rounds_left > 3 * TIME_MARGIN:
-            near = [p for p in broken if role.pos.dist(p) <= 1 and p not in taken]
-            if near:
-                taken.add(near[0])
-                return _emit(q.cmds, role, actions.Remove, near[0])
+    walk, size = _passable(turn), turn.map.size
+
+    # ① L2+：包优先（回满血、不开洞），没包就去买
+    repair = _weak_walls(turn, level_min=2)
+    if repair:
+        if WALLFIXER not in role.bag:
+            price = turn.shop_prices.get(WALLFIXER, 0)
+            hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
+            hops = [(d, s) for d, s in hops if d >= 0]
+            to_shop, shop = min(hops) if hops else (-1, None)
+            if shop is not None and price > 0 and turn.gold >= price and to_shop + 1 <= budget:
+                if to_shop == 0:
+                    return _emit(q.cmds, role, actions.Buy, WALLFIXER, 1)
+                return q.step(role, shop, avoid=frozenset(sites))
+        else:
+            target = min(
+                (w for w in repair if w.pos not in taken),
+                key=lambda w: (role.pos.dist(w.pos), w.pos),
+                default=None,
+            )
+            if target is not None:
+                taken.add(target.pos)
+                if role.pos.dist(target.pos) <= 1:
+                    return _emit(q.cmds, role, actions.Use, WALLFIXER, target.pos)
+                to_wall = steps_between(role.pos, target.pos, walk, size)
+                if to_wall >= 0 and to_wall + 1 <= budget:
+                    return q.step(role, target.pos, avoid=frozenset(sites))
+
+    # ② L1：拆掉重建
+    if role.stone < WALL_COST or turn.day_rounds_left <= 3 * TIME_MARGIN:
+        return False  # 拆了砌不回来 ⇒ 不如留着那点血
+    low = [w for w in _weak_walls(turn) if w.level <= 1 and w.pos not in taken]
+    if not low:
         return False
-    target = min(
-        (p for p in broken if p not in taken),
-        key=lambda p: (role.pos.dist(p), p),
-        default=None,
-    )
-    if target is None:
-        return False
-    taken.add(target)
-    if role.pos.dist(target) <= 1:
-        return _emit(q.cmds, role, actions.Use, WALLFIXER, target)
-    to_wall = steps_between(role.pos, target, walk, size)
+    target = min(low, key=lambda w: (role.pos.dist(w.pos), w.pos))
+    taken.add(target.pos)
+    if role.pos.dist(target.pos) <= 1:
+        return _emit(q.cmds, role, actions.Remove, target.pos)
+    to_wall = steps_between(role.pos, target.pos, walk, size)
     if to_wall < 0 or to_wall + 1 > budget:
         return False  # 来不及 ⇒ 待命，明天接着走
-    return q.step(role, target, avoid=frozenset(sites))
+    return q.step(role, target.pos, avoid=frozenset(sites))
 
 
 def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, free: int) -> int:
@@ -958,12 +970,12 @@ def _mine_spare_ore(
 def _shopping_list(role: Worker, turn: Turn) -> str | None:
     """这一趟该顺路买什么 ⇒ 商品名；什么都不缺 ⇒ `None`。
 
-    只在买得起时才列：钱不够绕过去也白绕。优先级：WallFixer（有半血墙且包里没包 —— 10 金回满
-    血）> 升级链下一张券（别人包里已有一张就不再买 —— 没有转移指令，囤两张是白花金币）。
+    只在买得起时才列：钱不够绕过去也白绕。优先级：WallFixer（有 L2+ 弱墙且包里没包 —— 10 金
+    回满血；L1 那种是拆掉重建、用不上包）> 升级链下一张券（别人包里已有一张就不再买 —— 没有转移指令，囤两张是白花金币）。
     """
     prices = turn.shop_prices
     if (
-        _half_walls(turn)
+        _weak_walls(turn, level_min=2)
         and WALLFIXER not in role.bag
         and 0 < prices.get(WALLFIXER, 0) <= turn.gold
     ):
