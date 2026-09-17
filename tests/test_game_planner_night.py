@@ -17,7 +17,7 @@ from coregeek.game.grid import Pos, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import WALL, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
+from coregeek.game.world import Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
 
 
@@ -403,38 +403,55 @@ class NightPostTest(unittest.TestCase):
         self.assertEqual(cmds["1"]["action"], "move", "另一位该去加特林，不是干等")
 
 
-from coregeek.game.grid import Pos  # noqa: E402
-from coregeek.game.map import Map  # noqa: E402
-from coregeek.game.planner import NIGHT_WANDER, plan  # noqa: E402
-from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
-from coregeek.protocol import model  # noqa: E402
-
-
 class NightEconomyTest(unittest.TestCase):
-    """夜里怪清完（视野内无机器人）⇒ 工人出门近矿经济。
+    """夜里怪清完（视野内无机器人）⇒ 工人跑**整套**经济兜底：卖矿 → 升级券 → 采闲矿。
 
-    机器人列表是视野过滤的 —— "清完"只是看不见；近矿限制（回炮位 BFS ≤ `NIGHT_WANDER`）
-    让工人出得了事也回得了家。夜间经济只发 collect / move / sell（build/remove 夜里非法）。
+    与白天最后一级同一套（`_economy`），只把时间预算换成 `Turn.rounds_left` —— 夜里那段也是
+    "还剩多少回合"，而 `day_rounds_left` 在夜里恒为 0，用它的话什么差事都发不出去。机器人
+    列表是视野过滤的（"清完"只是看不见），所以"赶不回来就不去"由 `_sell_ore` 的第四道门与
+    `_mine_spare_ore` 的可行性筛选各自兜住：夜里的活动半径现在等于"这一段剩下多少回合"。
+    夜间经济只发 collect / move / sell / buy / use —— **build / remove 夜里非法**（§4.4）。
     """
 
     BASE = Pos(10, 24)
     WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)
-    NEAR = Pos(5, 24)   # 门侧近矿（出盒穿后方通道那 6 格，BFS ≤ 8）
-    FAR = Pos(30, 4)    # 远矿（超出门槛 ⇒ 不去）
+    NEAR = Pos(5, 24)    # 门侧近矿（穿后方通道出盒）
+    FAR = Pos(30, 4)     # 远矿（夜里这一段跑不完来回 ⇒ 不去）
+    VENDOR = Pos(20, 16)  # 样例的小贩位
+    SHOP = Pos(25, 20)    # 样例的武器商店位
+    PRICES = {"stone": 1, "iron": 4, "copper": 5}
+    SHOP_PRICES = {"WeaponUpgradeVoucher1": 100}
 
-    def _turn(self, worker: Worker, ore: Pos, robots=(), near_ore: bool = True):
+    def _turn(
+        self,
+        worker: Worker,
+        *,
+        ores: dict[Pos, str] | None = None,
+        vendor: bool = False,
+        shop: bool = False,
+        gold: int = 0,
+        robots=(),
+        walls: tuple[Wall, ...] = (),
+    ) -> Turn:
         grid = _terrain(
             self.WEAPONS,
-            {self.BASE: "station", ore: "iron"}
-            | ({self.NEAR: "stone"} if near_ore else {}),
+            {self.BASE: "station"},
             {c: "wall" for c in self.ring()},
+            {self.NEAR: "stone"} if ores is None else ores,
+            {self.VENDOR: "vendor"} if vendor else {},
+            {self.SHOP: "weaponShop"} if shop else {},
         )
         grid[worker.pos] = "worker"
         return Turn(
-            round_no=85, map=Map((41, 32), grid), roles=(worker,), gold=0,
-            weapons=self.WEAPONS, robots=robots,
-            vendor_prices={"iron": 4, "stone": 1},
+            round_no=85,  # 夜里（within = 85，夜里剩 46 回合）
+            map=Map((41, 32), grid),
+            roles=(worker,),
+            gold=gold,
+            weapons=self.WEAPONS,
+            robots=robots,
+            walls=walls,
+            vendor_prices=self.PRICES,
+            shop_prices=self.SHOP_PRICES,
         )
 
     def ring(self):
@@ -442,41 +459,67 @@ class NightEconomyTest(unittest.TestCase):
 
         return wall_cells(self.BASE, 41)
 
-    def test_a_cleared_night_sends_workers_to_near_ore(self):
-        """怪清完 + 近矿 ⇒ 出门走两步（夜里 collect 合法，§4.4 没给它写昼夜）。"""
+    def test_a_cleared_night_sells_the_load_before_mining(self):
+        """有货、小贩就在旁边 ⇒ 先卖掉（夜里 `sell` 合法：§4.4 没给它写昼夜）。
+
+        第 62 步之前这一支只认矿（`_mine_spare_ore`），背着铜的工人会转身去采那块石头。
+        """
+        worker = Worker(10010, Pos(20, 15), {"copper": 1})  # 切比雪夫 1 ⇒ "贴着小贩"
+        cmd = plan(self._turn(worker, vendor=True)).get("10010")
+        self.assertEqual(cmd, {"action": "sell", "name": "copper", "num": 1}, cmd)
+
+    def test_a_cleared_night_walks_to_the_shop_when_the_voucher_is_affordable(self):
+        """钱够买券 ⇒ 朝商店走（夜里的差事与白天同一套，只是预算换成 `rounds_left`）。
+
+        工人摆在盒外空地：盒内起步就往西（后方通道在背面），切比雪夫距离在绕墙时先增后减 ——
+        拿它当"朝哪儿走"的判据会在盒里判反，这条只钉"朝商店 vs 朝矿"这一件事。
+        """
+        worker = Worker(10010, Pos(20, 24), {})
+        cmd = plan(self._turn(worker, shop=True, gold=100)).get("10010")
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), Pos(20, 24).dist(self.SHOP), "朝商店走")
+
+    def test_a_cleared_night_mines_when_there_is_nothing_else_to_do(self):
+        """没货、买不起券 ⇒ 照旧出门采矿（夜里 collect 合法，§4.4 没给它写昼夜）。"""
         worker = Worker(10010, Pos(12, 24), {})
-        cmd = plan(self._turn(worker, self.NEAR)).get("10010")
+        cmd = plan(self._turn(worker)).get("10010")
         self.assertIsNotNone(cmd, "清完的夜里工人不该干等")
         self.assertIn(cmd["action"], ("move", "collect"))
 
-    def test_the_near_mine_limit_keeps_workers_close(self):
-        """远矿超出门槛 ⇒ 不出门（出得了事回不了家的活不干）。"""
-        worker = Worker(10010, Pos(12, 24), {})
-        self.assertNotIn("10010", plan(self._turn(worker, self.FAR, near_ore=False)))
+    def test_the_far_mine_is_still_out_of_reach_at_night(self):
+        """远矿连夜里这一段也跑不完来回 ⇒ 不去（出得了事回不了家的活不干）。
 
-    def test_night_economy_never_builds(self):
-        """夜里经济线绝不发 build（`build` 仅白天，§4.4）—— 环上留多少缺口都一样。"""
+        第 62 步把夜里的紧半径（`NIGHT_WANDER=8`）换成了"这一段还剩多少回合"，宽了很多 ——
+        这条钉的是它仍有上界。
+        """
+        worker = Worker(10010, Pos(12, 24), {})
+        self.assertNotIn("10010", plan(self._turn(worker, ores={self.FAR: "iron"})))
+
+    def test_night_economy_never_builds_or_removes(self):
+        """夜里经济线绝不发 build / remove（§4.4：两条都仅白天）—— 环上留多少缺口、包里有没有
+        石头、墙残不残血都一样。"""
         worker = Worker(10010, Pos(12, 24), {"stone": 5})
-        grid = _terrain(
-            self.WEAPONS,
-            {self.BASE: "station", self.NEAR: "stone"},  # 环一块没砌
-        )
+        grid = _terrain(self.WEAPONS, {self.BASE: "station", self.NEAR: "stone"})
         grid[worker.pos] = "worker"
         turn = Turn(
-            round_no=85, map=Map((41, 32), grid), roles=(worker,), gold=0,
+            round_no=85,
+            map=Map((41, 32), grid),
+            roles=(worker,),
+            gold=0,
             weapons=self.WEAPONS,
+            walls=(Wall(40001, Pos(13, 24), 100, 2),),  # L2 残血墙：白天会被修，夜里不许动
+            vendor_prices=self.PRICES,
         )
         cmds = plan(turn)
-        self.assertTrue(all(v["action"] != "build" for v in cmds.values()), cmds)
+        self.assertTrue(
+            all(v["action"] not in ("build", "remove") for v in cmds.values()), cmds
+        )
 
     def test_robots_present_at_night_still_defend(self):
         """视野里有机器人 ⇒ 照旧回炮位开火，不出门采矿。"""
         worker = Worker(10010, Pos(12, 24), {})
-        turn = self._turn(
-            worker,
-            self.NEAR,
-            robots=(Robot(pos=Pos(13, 24), health=40),),
-        )
+        turn = self._turn(worker, robots=(Robot(pos=Pos(13, 24), health=40),))
         cmds = plan(turn)
         self.assertTrue(
             all(v["action"] in ("attack", "move") for v in cmds.values()),

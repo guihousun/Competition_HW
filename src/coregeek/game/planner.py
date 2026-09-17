@@ -111,10 +111,6 @@ WALLFIXER = "WallFixer"
 WALL_MAX_HP = {1: 1000, 2: 1500, 3: 2000}
 STATION_MAX_HP = {1: 1500, 2: 3000, 3: 4500}
 
-#: 夜里怪清完后的出门半径（回炮位 BFS 步数上限，拍的）：机器人列表是视野过滤的，
-#: "清完"只是看不见 —— 近矿限制让工人出得了事也回得了家。
-NIGHT_WANDER = 8
-
 #: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
 DETOUR_MAX = 2
 
@@ -263,12 +259,12 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 
         if not turn.is_day:
             # 夜里：① 持基地券且基地残血（< 满血 1/4）⇒ 贴基地 `use` 升级（升级 + 回满血一次
-            # 到位，当回合放弃开火）；② 视野里有机器人 ⇒ 回炮位开火；③ 怪清完 ⇒ 工人出门近矿
-            # 经济（近矿限制，build/remove 夜里非法、绝不发），开拓者待命回炮位。
+            # 到位，当回合放弃开火）；② 视野里有机器人 ⇒ 回炮位开火；③ 怪清完 ⇒ 工人跑整套
+            # 经济兜底（与白天最后一级同一套；build/remove 夜里非法、绝不发），开拓者待命回炮位。
             if _upgrade_station(role, turn, q):
                 continue
             if not turn.robots and isinstance(role, Worker):
-                _mine_spare_ore(role, turn, q, sites, ore_taken, near=NIGHT_WANDER)
+                _economy(role, turn, q, sites, ore_taken, weapon_gap=weapon_gap)
                 continue
             _defend(role, turn, q, taken, assigned)
             continue
@@ -336,9 +332,7 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             continue
 
         # 经济线兜底：卖矿 →（武器齐了才升级）→ 采闲矿。
-        if not _sell_ore(role, turn, q, sites, with_paths=True):
-            if weapon_gap or not _upgrade_line(role, turn, q, sites):
-                _mine_spare_ore(role, turn, q, sites, ore_taken)
+        _economy(role, turn, q, sites, ore_taken, weapon_gap=weapon_gap)
 
     return q, sites
 
@@ -865,8 +859,9 @@ def _sell_ore(
     ③ 够本：已经不贴着才算 —— 货值 < 往返回合数（`2 × 步数`）就留在矿边接着采（贴着时这趟路
        早付过了）；"1 金币 ≈ 1 回合"是拍的，唯一的调参旋钮。`urgent=True` 跳过这一条：那趟路
        的回报不是矿价（是买券的钱，见 `_upgrade_line`）；
-    ④ 回得来：`走到小贩 + 从小贩回基地 ≤ 白天剩余 − TIME_MARGIN`（夜里必须在炮位上）—— 这条
-       `urgent` 也不跳：赶不回来就是白丢货。
+    ④ 回得来：`走到小贩 + 从小贩回基地 ≤ 本回合起这一天还剩的回合 − TIME_MARGIN`
+       （`Turn.rounds_left`，夜里同样成立 —— 夜里必须站回炮位）—— 这条 `urgent` 也不跳：
+       赶不回来就是白丢货。
 
     距离一律 BFS 真实步数（小贩常在盒子外，回基地要绕后方通道）；-1 一律当"这趟不去"。站位
     是 `sell` 要求的"小贩周围一格内"，与小贩格本身挡路正好对上。一回合只能发一条指令 ⇒ 一次
@@ -890,7 +885,7 @@ def _sell_ore(
     if not urgent and value < 2 * to_vendor:
         return False  # ③ 为这一堆货走这么远不划算，接着采
     back = steps_between(vendor, station, walk, size)
-    if back < 0 or to_vendor + back > turn.day_rounds_left - TIME_MARGIN:
+    if back < 0 or to_vendor + back > turn.rounds_left - TIME_MARGIN:
         return False  # ④ 去了就赶不回来
     # 差事差事之间要互相让路（with_paths：动身成功后整条路进预留账）
     return q.step(role, vendor, avoid=frozenset(sites), with_paths=with_paths, reserve=with_paths)
@@ -917,27 +912,44 @@ def _best_load(role: Worker, prices: Mapping[str, int]) -> tuple[str, int]:
     return kind, num
 
 
+def _economy(
+    role: Worker,
+    turn: Turn,
+    q: _Queue,
+    sites: set[Pos],
+    ore_taken: set[Pos],
+    *,
+    weapon_gap: bool,
+) -> None:
+    """经济线兜底：卖矿 →（武器有缺则跳过升级）→ 采闲矿。白天最后一级与夜里清场后共用一套。
+
+    不返回布尔：三级都是"能发就发"，一个都不成立时自然不落指令（合法空指令）。夜里也走这里
+    —— 时间预算由 `Turn.rounds_left` 兜着，走远了回不了炮位的活四道门自己会拦。
+    """
+    if not _sell_ore(role, turn, q, sites, with_paths=True):
+        if weapon_gap or not _upgrade_line(role, turn, q, sites):
+            _mine_spare_ore(role, turn, q, sites, ore_taken)
+
+
 def _mine_spare_ore(
     role: Worker,
     turn: Turn,
     q: _Queue,
     sites: set[Pos],
     ore_taken: set[Pos] | None = None,
-    near: int = 0,
 ) -> None:
-    """墙砌完了 ⇒ 白天不再闲着：就近采买得动、回得来的矿。
+    """墙砌完了 ⇒ 不再闲着：就近采买得动、回得来的矿。
 
     先把"走得动、回得来"的矿筛出来、再按性价比挑：`价 × 新闻修正 ÷ (到矿 + 采一块 + 回炮位)`，
     单位回合价值最高 —— 近的贱矿可能跑赢远的贵矿。回程参照 = 最近的武器位（没有武器才用基地）。
     新闻修正是 `AGENT.price_hint`（跨回合状态，退化 = 偏好偏一天）。先看 `_detour_buy`（修墙
-    缺包 / 升级缺券），再 `_detour_sell`。夜里（`near > 0`）：怪清完才出门，`max(到矿, 回炮位)
-    ≤ near` 的近矿限制 —— 机器人列表是视野过滤的，"清完"只是看不见，出得了事要回得了家。
-    距离一律 BFS 真实步数；-1（走不到）的矿直接作废。
+    缺包 / 升级缺券），再 `_detour_sell`。距离一律 BFS 真实步数；-1（走不到）的矿直接作废；
+    白天与夜里共用"这一趟赶不赶得回来"这一条（`Turn.rounds_left`），夜里没有额外的紧半径。
     """
     ore_taken = set() if ore_taken is None else ore_taken
     station = turn.map.station
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
-    budget = turn.day_rounds_left - TIME_MARGIN
+    budget = turn.rounds_left - TIME_MARGIN
     walk, size = _passable(turn), turn.map.size
     # 先筛可行（走过去 + 回得来），再按性价比挑。BFS 是"命中目标即停"的，开销跟距离相关、
     # 不是整张图 —— 最坏 12 矿 × (1 + 3 炮) 次，实测每回合几十毫秒。
@@ -950,11 +962,8 @@ def _mine_spare_ore(
         back = min((d for d in return_home if d >= 0), default=-1)
         if out < 0 or back < 0:
             continue
-        if near > 0:
-            if max(out, back) > near:
-                continue  # 夜里近矿限制
-        elif out + back > budget:
-            continue  # 白天：这一趟赶不回来
+        if out + back > budget:
+            continue  # 这一趟赶不回来
         feasible[p] = (kind, out, back)
     best: tuple[float, int, Pos] | None = None
     for p, (kind, out, back) in feasible.items():
@@ -1068,8 +1077,9 @@ def _upgrade_line(
 
     无状态：拿没拿券看背包（买完金变少、包里多一张，两个阶段天然可分，跨夜不丢）。跑腿者 =
     持券的那个角色（券在谁包里谁用 —— 没有转移物品的指令；开拓者也能持券）> 真空闲的开拓者
-    > 名册上第一个工人。只在白天跑（夜里 `_defend` 会把人接回炮位，明早预算重算、接着走）。
-    距离一律 BFS 真实步数：商店/炮位在盒子内外两侧，整趟要绕门；-1 一律当天不去。
+    > 名册上第一个工人。白天跑；夜里只有"清场后"那一支会走到这里（`_economy`），预算按
+    `Turn.rounds_left` 算 —— 一轮跑不完就待命，天亮接着走。
+    距离一律 BFS 真实步数：商店/炮位在盒子内外两侧，整趟要绕门；-1 一律这一轮不去。
 
     钱不够买券时，若"现钱 + 背包里最好那一堆货"够 ⇒ 先去卖矿（`_sell_ore(urgent=True)`）。
     用最好那一堆而不是背包总值：一回合只能发一条 `sell`，卖掉哪一种就到账哪一种 —— 拿总值
@@ -1090,7 +1100,7 @@ def _upgrade_line(
     if target is None:
         return False
     weapon, voucher = target
-    budget = turn.day_rounds_left - TIME_MARGIN
+    budget = turn.rounds_left - TIME_MARGIN
     walk, size = _passable(turn), turn.map.size
     if voucher in role.bag:
         # 持券阶段：终点就是炮位，用完正好站岗 —— 不用留回程

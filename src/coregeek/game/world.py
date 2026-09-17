@@ -168,6 +168,17 @@ class Turn(NamedTuple):
         """白天还剩几回合，含本回合；夜里为 0。`planner` 拿它算"这一趟还该采几块石头"。"""
         return DAY_ROUNDS - self.within + 1 if self.is_day else 0
 
+    @property
+    def rounds_left(self) -> int:
+        """本回合起、这一段（白天或夜里）还剩几回合，含本回合。
+
+        `day_rounds_left` 是白天语义（夜里为 0，"白天还剩多少"问不出东西）；经济线要的是
+        "在下一段开始之前还有多少回合可以支配"—— 夜里清场后也跑同一套差事，用这个。
+        """
+        return (
+            DAY_ROUNDS - self.within + 1 if self.is_day else ROUNDS_PER_DAY - self.within + 1
+        )
+
     def summary(self) -> str:
         """关键事实摘要 —— 图上推不出来的那些：金币 / 武器与射程 / 角色背包 / 血量 / 任务点。
 
