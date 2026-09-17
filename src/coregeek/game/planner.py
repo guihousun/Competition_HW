@@ -1261,9 +1261,15 @@ def _leave_for_the_post(
     （缓冲，拍的）；已经在岗位上时步数是 0，于是只有白天最后那几回合才轮得到"在岗待命"。
     少了时间这一道，"到岗就待命"会让早上正好站在炮边的工人整天不动。
 
+    开拓者是**补位炮手**（`_pioneer_mans_guns`）：工人够操满所有组时它不占岗位 —— 与 `_defend`
+    同一个判据，两处必须同源：只拦夜里那一处的话，白天照样把它送进岗位（火箭对只有一格岗位），
+    夜里它又不认领 ⇒ 那格被占着、整个火箭组没人操。
+
     返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；`False` =
     还来得及干活（或没有可去的岗位）。
     """
+    if isinstance(role, Pioneer) and not _pioneer_mans_guns(turn):
+        return False
     walk, size = _passable(turn), turn.map.size
     # 最近、还没人认领、而且真走得到的岗位 —— 一趟判定就够：最近的都赶不上，更远的更赶不上。
     # BFS -1（不可达）剔掉，切比雪夫给不出这个值；已经在岗位上 ⇒ 步数 0，与"还差 3 步"同一刻度。
@@ -1293,17 +1299,29 @@ def _leave_for_the_post(
 
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────
+def _pioneer_mans_guns(turn: Turn) -> bool:
+    """开拓者这一轮该不该上炮位：**只有工人不够覆盖全部武器组时才补位**（用户口径）。
+
+    工人夜里除了操炮没别的活（经济线只在场上没有活机器人时才跑），而开拓者是任务线的主力 ——
+    两个工人活着就能操满两组，让开拓者占一组等于把工人挤成闲置。工人阵亡（只可能在夜里）后
+    人手不够了，它才补位。昼夜同一个判据：白天用它决定收工回不回到炮位（`_leave_for_the_post`），
+    夜里用它决定认不认领武器（`_defend`）—— 两处必须同源，只改一处的话白天把人送进岗位、
+    夜里又不认领，那格被占着、整组没人操（火箭对只有一格岗位）。
+
+    名册里只有工人与开拓者两种角色 ⇒ "工人数"就是"没被钉住的角色数"，`_short_handed` 取用它。
+    """
+    workers = sum(1 for r in turn.roles if isinstance(r, Worker))
+    return workers < len(_weapon_groups(turn))
+
+
 def _short_handed(turn: Turn) -> bool:
     """夜里操炮的人手够不够：不够 ⇒ 被任务钉死的开拓者也得弃任务回炮位（用户口径"生存第一"）。
 
-    判据 = **没被任务钉住的角色数 < 武器组数**（一人只能操一组，少一个就有一组整夜空着）。
-    武器还没建齐 ⇒ 组数按场上已建的算，天然不报警。白天恒假：白天不能开火、回炮位没有意义
-    （那一支只发 `move`），于是白天那一支与这一条的判据都不带跨回合状态 —— 工人白天复活后自愈。
+    白天恒假：白天不能开火、回炮位没有意义（那一支只发 `move`）。武器还没建齐 ⇒ 组数按场上
+    已建的算，天然不报警。判据与 `_pioneer_mans_guns` 同源（一人只能操一组，少一人空一组），
+    两者都不带跨回合状态 —— 工人白天复活后自愈。
     """
-    if turn.is_day:
-        return False
-    pinned = sum(1 for r in turn.roles if isinstance(r, Pioneer))
-    return len(turn.roles) - pinned < len(_weapon_groups(turn))
+    return not turn.is_day and _pioneer_mans_guns(turn)
 
 
 def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
@@ -1406,8 +1424,14 @@ def _defend(
     站上整组的岗位、又都打不了 ⇒ 待命；只贴着一部分、或者压根没贴着 ⇒ 朝**多座组共用的
     那个操作位**走（那格要踩上去才同时贴着两座，`step_onto` 就是为它加的；走不上去 ⇒ 不动）。
     不换组 —— 每回合重挑会让角色在炮位之间来回走。场上没有武器 / 都够不着 ⇒ 不动。
+
+    开拓者是**补位炮手**（`_pioneer_mans_guns`）：工人够操满所有组时它一个组都不认领 ——
+    炮位留给工人，它腾出来（用户口径）。
     """
     if turn.round_no < 0:
+        return
+    # 工人够操满所有组 ⇒ 炮位留给工人，开拓者一个组都不认领（补位炮手）
+    if isinstance(role, Pioneer) and not _pioneer_mans_guns(turn):
         return
     groups = _weapon_groups(turn)
     for group in sorted(groups, key=lambda g: (min(role.pos.dist(w.pos) for w in g), min(w.id for w in g))):

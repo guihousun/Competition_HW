@@ -668,21 +668,41 @@ class DayEndGateTest(unittest.TestCase):
     WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
     SIZE = (41, 32)
 
-    def _turn(self, *, round_no: int = 1, ring: bool = True, at: Pos = Pos(20, 24), stone: int = 0) -> Turn:
-        """环默认砌满（闸门只在砌完之后生效）；没有矿、没有小贩、没有金 —— 只留闸门这一支。"""
+    def _turn(
+        self,
+        *,
+        round_no: int = 1,
+        ring: bool = True,
+        at: Pos = Pos(20, 24),
+        stone: int = 0,
+        weapons: tuple[Weapon, ...] | None = None,
+        pioneer: Pos | None = None,
+    ) -> Turn:
+        """环默认砌满（闸门只在砌完之后生效）；没有矿、没有小贩、没有金 —— 只留闸门这一支。
+
+        `weapons` 换名册（默认三座）；`pioneer` 给一名开拓者，**排在 payload 最前面** ——
+        用它验"炮位按工人优先挑"这类顺序相关的判据。
+        """
+        weapons = self.WEAPONS if weapons is None else weapons
         walls = {c: WALL for c in wall_cells(self.BASE, 41)} if ring else {}
         worker = Worker(1, at, {"stone": stone} if stone else {})
+        roles: tuple[BaseRole, ...] = (
+            (worker,) if pioneer is None else (Pioneer(2, pioneer), worker)
+        )
         return Turn(
             round_no=round_no,
             map=Map(
                 self.SIZE,
                 _terrain(
-                    self.WEAPONS, {self.BASE: "station"}, walls, {worker.pos: "worker"}
+                    weapons,
+                    {self.BASE: "station"},
+                    walls,
+                    {r.pos: "worker" for r in roles},
                 ),
             ),
-            roles=(worker,),
+            roles=roles,
             gold=0,
-            weapons=self.WEAPONS,
+            weapons=weapons,
         )
 
     def _steps_home(self, at: Pos) -> int:
@@ -748,6 +768,18 @@ class DayEndGateTest(unittest.TestCase):
                     self.assertNotIn(
                         "attack", {c["action"] for c in cmds.values()}, f"白天开火非法：{cmds}"
                     )
+
+    def test_the_gate_leaves_the_posts_to_the_workers(self):
+        """工人够操满所有组 ⇒ 收工闸门一个岗位都不给开拓者（与夜里 `_defend` 同一个判据）。
+
+        只拦夜里那一处是不够的：白天把开拓者送进岗位、夜里它又不认领，那格就被它占着 ——
+        而火箭对只有一个岗位格，整组就此没人操。这里一座炮（一组）、一个工人 ⇒ 开拓者让位。
+        """
+        only_gun = _records({Pos(12, 22): "gatling"})
+        late = DAY_ROUNDS - 1
+        cmds = plan(self._turn(round_no=late, weapons=only_gun, pioneer=Pos(20, 28)))
+        self.assertNotIn("2", cmds, f"开拓者不该占岗位：{cmds}")
+        self.assertEqual(cmds["1"]["action"], "move", "岗位归那个工人")
 
     def test_the_gate_never_preempts_the_wall(self):
         """环没砌完 ⇒ 闸门不生效，照旧砌墙（补墙优先于收工）。

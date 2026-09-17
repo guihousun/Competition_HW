@@ -116,10 +116,10 @@ class NightWeaponTest(unittest.TestCase):
         """武器全没了 ⇒ 不动（空指令合法），而不是瞎走。"""
         self.assertEqual(plan(self._turn(Worker(1, Pos(14, 26)), weapons=())), {})
 
-    def test_the_pioneer_also_mans_a_weapon(self):
-        """开拓者也在炮位上（§4.4 里 `attack` 的可用角色是"全部"）。
+    def test_the_pioneer_fills_in_when_the_workers_are_short(self):
+        """工人不够覆盖全部武器组 ⇒ 开拓者补位（§4.4 里 `attack` 的可用角色是"全部"）。
 
-        漏掉的话本地全绿，只是整夜少一门火力 —— 而它恰恰是离炮最远的那个。
+        一个工人、两组炮：它不去的话整夜少一门火力。
         """
         cmds = plan(
             self._turn(
@@ -130,6 +130,25 @@ class NightWeaponTest(unittest.TestCase):
         )
         self.assertEqual(set(cmds), {str(self.GUN)}, "开拓者开的那一炮在不在？")
         self.assertEqual(cmds[str(self.GUN)]["controllerId"], "1", "操控者是开拓者")
+
+    def test_the_pioneer_stays_off_the_guns_while_both_workers_are_alive(self):
+        """两个工人活着 ⇒ 炮位全归工人，开拓者一组都不认领（用户口径）。
+
+        开拓者排在 payload 最前面：不先把工人挑完，它会把最近的那一组抢走，被挤掉的那个工人
+        整夜站着不动 —— 火力没多，任务线的主力还被拴在炮位上。
+        """
+        cmds = plan(
+            self._turn(
+                Pioneer(1, Pos(14, 26)),  # 离 NEAR 更近，不拦的话它先抢
+                Worker(2, Pos(12, 24)),  # 贴着 NEAR
+                Worker(3, Pos(9, 19)),  # 还差三格到 FAR
+            )
+        )
+        self.assertNotIn("1", cmds, f"开拓者不该占炮位：{cmds}")
+        self.assertEqual(cmds[str(self.GUN)]["controllerId"], "2", "NEAR 归工人")
+        self.assertEqual(cmds["3"]["action"], "move", "另一个工人去 FAR，不是干等")
+        cell = Pos(cmds["3"]["targetPos"][0]["x"], cmds["3"]["targetPos"][0]["y"])
+        self.assertLess(cell.dist(self.FAR), Pos(9, 19).dist(self.FAR), "这一格得真的离 FAR 更近")
 
     def test_the_command_hangs_on_the_weapon_id(self):
         """`attack` 的 key 是武器 id，操控角色在 `controllerId` 里（`docs/response.txt`）。
