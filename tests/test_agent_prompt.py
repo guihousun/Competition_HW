@@ -179,15 +179,54 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("不要出现 `<answer>` 与 `</answer>` 这对标签", system)
 
     def test_the_attention_says_how_to_find_the_file(self):
-        """`# 【注意事项】` 那几条，附一段可以直接照抄的命令范式。
+        """`# 【注意事项】` 从第 1 条起编号、并附一段可以直接照抄的命令范式。
 
         任务信息里给的往往只是一个文件名 ⇒ 散文式提醒落到 LLM 手里就是"先 `find`、
         下一回合再 `cat`"（两条命令 = 两回合 = 直接掉分）。范式把"找 + 读"写成一条，
-        措辞是拍的，效果只能靠实盘。
-        """
+        现在挂在第 2 条的**成本模型**后面当例子（成本模型本身见
+        `test_the_attention_prices_a_round_and_packs_the_command`），措辞是拍的。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn("# 【注意事项】\n1. ", system)
         self.assertIn("f=$(find / -maxdepth 6 -name '*任务书*' -print -quit 2>/dev/null)", system)
+
+    def test_the_attention_prices_a_round_and_packs_the_command(self):
+        """回合是有价的、而且能被"一条胖命令"省下来 —— 措辞必须说透这件事。
+
+        协议的成本是死的：一次沙盒往返之后，LLM 的下一步动作要等**两个回合**（发命令那轮
+        拿不到回执、回执要下一轮才进 prompt）。所以"一个参数一个参数地试"是最贵的做法：
+        5 个候选 = 10 个回合，而压进一条命令 = 2 个回合。判据是资源约束（"一次调用 = 一个
+        回合"），不是"遇到 A 就做 B"的流程 —— 后者才是过拟合。这条错了本地一点异常都没有，
+        只是分数低（日志上数 `executeCmd` 的条数才看得出来）。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        attention = system.split("# 【注意事项】")[1]
+        self.assertIn("一次工具调用就是一个回合", attention)
+        self.assertIn("都属于同一条命令", attention)
+        self.assertIn("试完 5 个候选", attention)
+        self.assertIn("拆成 5 条就是 10 个回合", attention)
+        # 产出是写给下一轮的自己读的：不带标签就分不清哪条结果对哪次尝试
+        self.assertIn("自己带标签", attention)
+
+    def test_the_compression_keeps_the_failed_tries(self):
+        """压缩请求要明说"试过并失败的也列上"。
+
+        渲染窗口只留最近两轮（`Context._WINDOW`），试错一长，早先的尝试就掉出窗口 ——
+        摘要（压缩轮的产物）是唯一还记得"哪些路已经走死"的地方。不点破这一点，压缩器会
+        只留成功经验，"反复试同一条死路"就是它漏记的直接后果。"""
+        self.agent.chat("题目")
+        req = self.agent.compression_request()
+        self.assertIn("试过并且失败", req)
+        self.assertIn("反复试同一条死路", req)
+
+    def test_the_role_section_pins_the_deposit_to_what_actually_worked(self):
+        """沉淀以**实测**为准：文档可能过时或写错，存的是跑通的那一版。
+
+        "文档写的是某个参数、实际要的是另一个"正是试错任务最值钱的一条 —— 而 LLM 天然只
+        记成功经验、不记"文档错了"这件事。不写这一句，第一个任务白试、后面每个同类任务
+        再白试一遍（SOP 是整场跨任务的，这条结论对它才是资产）。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        role = system.split("# 【工具描述】")[0]
+        self.assertIn("以实测为准", role)
+        self.assertIn("跑通的那一版", role)
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))

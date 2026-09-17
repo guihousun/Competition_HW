@@ -45,7 +45,9 @@ class Agent:
                 self.python_exec,
                 "在本地即时执行一段**纯计算**的 Python：结果当回合就回到你面前"
                 "（不走判题器沙盒、没有 15 秒限制，但**看不见沙盒里的任务文件**——"
-                "读任务文件还是用 executeCmd）。只允许计算：import 仅限 "
+                "读任务文件还是用 executeCmd）。"
+                "沙盒一次往返要等一个回执、比它贵：解析、拼串、比对、构造下一条命令"
+                "这类活儿放这里算，别去占沙盒。只允许计算：import 仅限 "
                 "math/cmath/decimal/fractions/statistics/itertools/functools/collections/"
                 "heapq/bisect/array/json/re/string/datetime/random，"
                 "读写文件/网络/环境一律拒绝。用 print 输出，或只写一个表达式返回它的值；"

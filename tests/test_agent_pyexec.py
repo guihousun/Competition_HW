@@ -101,6 +101,16 @@ class AgentPythonExecTest(unittest.TestCase):
         self.assertIn("【本地 python 的执行结果", prompt)
         self.assertIn("42", prompt)
 
+    def test_the_description_states_its_cost_advantage(self):
+        """描述里要点破"它比沙盒便宜" —— 这是 LLM 唯一能看到的成本信号。
+
+        一次沙盒往返之后下一步动作要等两个回合，本地计算只要一个：解析、拼串、比对、
+        构造下一条命令都该走本地。不写清楚，LLM 会把纯计算的活儿也丢进沙盒，白花回合
+        （分数按回合算，本地一点异常都看不出来）。描述由注册表生成 ⇒ 这里钉的就是
+        `Agent.__init__` 那张表里的一行。"""
+        desc = AGENT._tools["python_exec"][1]
+        self.assertIn("别去占沙盒", desc)
+
     def test_a_call_without_code_does_nothing(self):
         """缺参数 ⇒ 调用不成立（`tool_call` 的闸门），什么都不进会话。"""
         AGENT.chat("题目")
