@@ -229,6 +229,19 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("动手之前先看清环境", attention)
         self.assertIn("一条命令就能把这些一次问清", attention)
 
+    def test_the_attention_says_to_follow_the_task_book_hints(self):
+        """任务书点到的文件 / 接口 / 脚本就是探索的路线，不许绕开自己另找路子。
+
+        这是用户报的"第一次尝试会偏"的原话：偏的是**探索方向** —— 任务书写着"需求在 spec.md、
+        用 check.sh 验证"，它却绕开这两样自己猜要做什么、自己另定一套验证标准。与第 5 条
+        （看清环境）分工：那条问"手边还有什么"（任务书之外的），这条管"它点到的一律走完"。
+        代价同样是回合：绕一圈回来，那两个回合的反馈照样得付。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        attention = system.split("# 【注意事项】")[1]
+        self.assertIn("任务书给的线索就是这一趟的路线", attention)
+        self.assertIn("一项不落地读完、跑到", attention)
+        self.assertIn("别自己另定一套标准", attention)
+
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
 
