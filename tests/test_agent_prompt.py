@@ -206,6 +206,29 @@ class ChatPromptTest(unittest.TestCase):
         # 产出是写给下一轮的自己读的：不带标签就分不清哪条结果对哪次尝试
         self.assertIn("自己带标签", attention)
 
+    def test_the_attention_says_a_failure_is_a_clue(self):
+        """失败的回执要**读**：报错里的字段名 / 缺什么 / 合法取值，直接指向下一次该试什么。
+
+        第一次尝试偏掉之后的默认行为是"换一个参数再来一遍"，一换就是两个回合 —— 而报错里
+        往往已经把答案写着了（"未知参数 x" ⇒ 参数名错；"值非法" ⇒ 值错）。不点破这一点，
+        LLM 会把每条回执当成二元的"成 / 不成"，然后一个接一个地穷举。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        attention = system.split("# 【注意事项】")[1]
+        self.assertIn("失败的回执是线索，不是噪音", attention)
+        self.assertIn("换下一个候选之前先把它读懂", attention)
+
+    def test_the_attention_says_to_see_the_environment_before_guessing(self):
+        """信息不足时先看清环境：一条命令问清"有哪些文件、哪份是接口文档、有没有验证脚本"。
+
+        这是"第一次尝试就偏"的正面对策 —— 偏的成因多半是**信息不足就动手**（照着一份可能
+        写错的文档猜参数）。成本账：看清环境 = 一条命令，猜错一次 = 两个回合才拿回反馈。
+        与 ROLE 段那句"信息不足就调用工具去取"是一件事的两面：那边讲该不该取，这边讲
+        **第一趟就把要用的都取齐**。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        attention = system.split("# 【注意事项】")[1]
+        self.assertIn("动手之前先看清环境", attention)
+        self.assertIn("一条命令就能把这些一次问清", attention)
+
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
 
