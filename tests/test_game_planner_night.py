@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _terrain  # noqa: E402
+from coregeek.game import planner  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
@@ -32,6 +33,11 @@ class NightWeaponTest(unittest.TestCase):
     NEAR, FAR = Pos(12, 25), Pos(9, 22)  # 两座加特林
     REACH = 4  # 加特林 L1 的射程，取自样例 payload（任务书表格写的是 3）
     GUN = 10020  # `_manned` 那座炮的 id —— `attack` 的 key 就是它
+
+    def setUp(self) -> None:
+        #: `_fired` 是 planner 的跨回合开火账（模块级），不清会跨用例串味
+        #: （上一条用例打出去的那发，会把这一条的同一座炮判成冷却中）。
+        planner._fired.clear()
 
     def _turn(
         self,
@@ -251,26 +257,29 @@ class NightWeaponTest(unittest.TestCase):
         """
         self.assertEqual(self._only_cmd(self._manned(Robot(Pos(12, 26), 40), cooldown=-1))["action"], "attack")
 
-    def test_the_rocket_pair_alternates_without_cooldown_data(self):
-        """双火箭组的交替开火不依赖 payload 的 `cooldown` 字段（样例不带 ⇒ -1）：
-        就绪的炮按回合号轮转。只按 id 挑的话，两座都"就绪"时永远只发 id 小的那座，
-        第二座整晚哑火。"""
+    def test_the_rocket_pair_alternates_by_local_record(self):
+        """双火箭交替靠**本地开火账**（用户方案）：发出 `attack` 那回合记下武器 id，
+        之后 3 回合不选它 —— payload 不带 `cooldown` 也能精确轮换，且不打冷却中的炮
+        （那是指令执行失败，白丢一回合火力）。序列：85 发一座、86 发另一座、
+        87~88 两座都在冷却 ⇒ 一发不发（待命）、89 第一座期满再发。"""
         rockets = (
             Weapon(id=200, kind="rocket", pos=Pos(12, 24), attack_range=10, cooldown=-1),
             Weapon(id=201, kind="rocket", pos=Pos(12, 25), attack_range=10, cooldown=-1),
         )
-        fired = []
-        for round_no in (85, 86):
-            turn = self._turn(
-                Worker(1, Pos(11, 25)),  # 双火箭的操作位：同时贴着两座
-                weapons=rockets,
-                robots=(Robot(Pos(15, 24), 40),),
-                round_no=round_no,
-            )
-            cmds = plan(turn)
-            self.assertEqual(len(cmds), 1, cmds)
-            fired.append(int(next(iter(cmds))))
-        self.assertEqual(fired, [201, 200], "两回合各发一座（round 85 奇 ⇒ 先发 id 大的，偶 ⇒ 先发 id 小的）")
+        worker = Worker(1, Pos(11, 25))  # 双火箭的操作位：同时贴着两座
+        expected = {85: {201}, 86: {200}, 87: set(), 88: set(), 89: {201}}
+        for round_no, want in expected.items():
+            with self.subTest(round_no=round_no):
+                cmds = plan(
+                    self._turn(
+                        worker, weapons=rockets,
+                        robots=(Robot(Pos(15, 24), 40),), round_no=round_no,
+                    )
+                )
+                self.assertEqual(
+                    {int(k) for k in cmds}, want,
+                    f"R{round_no} 该打的武器 id：{cmds}",
+                )
 
     def test_a_cooling_rocket_defers_to_its_partner(self):
         """组内一座冷却中 ⇒ 发另一座（cooldown 字段在场时，它优先于轮转）。"""

@@ -112,11 +112,20 @@ DETOUR_MAX = 2
 #: 回收）⇒ 单向 4 回合上下，5 是单趟回本点（工人一天出/回各过一趟就赚）。拍的，唯一旋钮。
 HOLE_MIN_SAVING = 5
 
-#: 白天还剩这么多回合以上才允许拆（门要开得够久才回本）；剩这么多回合以内必须补上。两个
-#: 窗口不相交 ⇒ 一天最多拆一次 —— 这才是防"拆了补、补了拆"净亏的真正机制（不是那个门槛）。
-#: 两个数都是拍的。
+#: 拆墙窗口：白天还剩这么多回合以上才允许拆（门要开得够久才回本）；剩这么多回合以内
+#: 必须补上。两个窗口不相交 ⇒ 一天最多拆一次 —— 这才是防"拆了补、补了拆"净亏的
+#: 真正机制。两个数都是拍的。
 HOLE_MIN_LEFT = 30
 HOLE_PATCH_LEFT = 15
+
+#: 本地开火账（跨回合观测状态）：{武器 id: 发出 attack 的回合号}。判题器不发
+#: cooldown 字段（样例如此）⇒ 火箭的冷却只能自己记：发出那回合记下，之后
+#: `ROCKET_COOLDOWN` 回合内不选它，期满自动过期。武器被毁/重建换了 id ⇒ 旧账
+#: 自然失效；卡住的最坏代价 = 某座火箭少打 ≤3 回合，自愈。
+_fired: dict[int, int] = {}
+
+#: 火箭发射后的冷却回合数（任务书 §4.5.1：发射后 3 回合空窗）。
+ROCKET_COOLDOWN = 3
 
 
 class _Move(NamedTuple):
@@ -1288,6 +1297,17 @@ def _operator_spots(
     return sorted(c for c in common if c not in blocked and 0 <= c.x < width and 0 <= c.y < height)
 
 
+def _cooling(weapon: Weapon, round_no: int) -> bool:
+    """这座炮这回合打不得吗：payload 的 `cooldown` 优先；火箭在字段缺失（-1）时
+    查本地开火账 `_fired`（判题器不发这个字段，样例如此）。加特林/电磁恒 0，不查。"""
+    if weapon.cooldown > 0:
+        return True
+    if weapon.kind != "rocket":
+        return False
+    last = _fired.get(weapon.id)
+    return last is not None and round_no - last <= ROCKET_COOLDOWN
+
+
 def _defend(
     role: BaseRole,
     turn: Turn,
@@ -1312,14 +1332,15 @@ def _defend(
         spots = _operator_spots(group, turn.map.blocked, turn.map.size)
         if not spots:
             continue
-        # 已经贴着组内某座 ⇒ 认领整组开火。就绪的炮按回合号轮转：payload 不带 cooldown 时组内
-        # 两座都算就绪，只按 id 挑会永远只发一座、另一座整晚哑火；冷却中的殿后。
+        # 已经贴着组内某座 ⇒ 认领整组开火。就绪的先挑（含本地开火账：发过的 3 回合内
+        # 不算就绪 —— 打冷却炮是指令执行失败、白丢一回合火力）；就绪的并列按回合号
+        # 轮转；都冷却 ⇒ 一发不发（待命，空指令合法）。
         adjacent = [w for w in group if role.pos.dist(w.pos) <= 1]
         if adjacent:
             for w in group:
                 taken.add(w.pos)
-            ready = sorted((w for w in adjacent if w.cooldown <= 0), key=lambda w: w.id)
-            cooling = sorted((w for w in adjacent if w.cooldown > 0), key=lambda w: w.id)
+            ready = sorted((w for w in adjacent if not _cooling(w, turn.round_no)), key=lambda w: w.id)
+            cooling = sorted((w for w in adjacent if _cooling(w, turn.round_no)), key=lambda w: w.id)
             if ready:
                 k = turn.round_no % len(ready)
                 ready = ready[k:] + ready[:k]
@@ -1383,7 +1404,8 @@ def _fire(
 ) -> bool:
     """贴着炮了：按最大伤害落点开火（方针：打死所有机器人）。打不了就什么都不发。
 
-    - 冷却中不打（`cooldown > 0`）。字段缺失时不算冷却（解析成 -1）—— 否则整晚一炮不开；
+    - 冷却中不打：payload 的 `cooldown` 优先；火箭字段缺失时查本地开火账 `_fired`
+      （发过之后 3 回合不选 —— 打冷却炮是指令执行失败、白丢一回合）；
     - 火箭（`_rocket_site`）：落点任选 ⇒ 中心 20 + 溅射 10 全场算账，取总分最高的落点；
     - 加特林 / 电磁（`_beam_site`）：弹道武器 ⇒ 落点打在某台机器人身上（终点必在弹道上 ⇒ 必
       命中；途中更近的先接住，那也是命中）。取有效伤害最高的，并列打近的；
@@ -1392,7 +1414,7 @@ def _fire(
     - 机器人 `health` 缺失（-1）时按"还活着"算：打空处只是执行失败，而"一律不打"会让整晚一炮
       不开。
     """
-    if weapon.cooldown > 0:
+    if _cooling(weapon, turn.round_no):
         return False
     # 只打打我方的机器人：`our_team` 缺失或 `target_team` 缺失 ⇒ 照打（安全降级）；明确是对方
     # 阵营 ⇒ 跳过（打它们既浪费火力、又帮对方减轻基地压力）。
@@ -1412,7 +1434,10 @@ def _fire(
         shot = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
         assigned[victim.pos] = assigned.get(victim.pos, 0) + shot
     # key 是武器 id，操控角色在报文的 `controllerId` 里
-    return _emit(cmds, role, actions.Attack, str(role.id), target, key=str(weapon.id))
+    fired = _emit(cmds, role, actions.Attack, str(role.id), target, key=str(weapon.id))
+    if fired and weapon.kind == "rocket":
+        _fired[weapon.id] = turn.round_no  # 判题器不发 cooldown ⇒ 发出的那发自己记
+    return fired
 
 
 def _beam_site(
