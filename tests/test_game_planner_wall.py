@@ -1,5 +1,5 @@
 """game/planner.py 建造线的用例：建武器 / 砌墙（沿环走一圈的顺序）/ 防关人闸门 /
-拆墙与临时门 / 救援 / 收工闸门。
+拆墙放人 / 修墙 / 收工闸门。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件 `py tests/<本文件>`）。
 必须用 `py` —— 本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
@@ -19,24 +19,10 @@ from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game import planner  # noqa: E402
-from coregeek.game.planner import HOLE_MIN_LEFT, HOLE_MIN_SAVING, HOLE_PATCH_LEFT, WALL, WEAPONS_BY_SITE, plan  # noqa: E402
+from coregeek.game.planner import WALL, WEAPONS_BY_SITE, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
-
-
-def _day2(within: int) -> int:
-    """第 2 天白天第 `within` 回合的回合号（within=1 即 131，白天共 70 回合）。"""
-    return ROUNDS_PER_DAY + within
-
-
-def _left(round_no: int) -> int:
-    """`round_no` 那一回合白天还剩几个回合（夜里会算出负数，本文件的用例只在白天用它）。
-
-    与 `Turn.day_rounds_left` 同一个式子、独立写一遍：用例卡"还剩正好 N 回合"的边界时，
-    自己推回合号极易差一。
-    """
-    return DAY_ROUNDS - ((round_no - 1) % ROUNDS_PER_DAY + 1) + 1
 
 
 class BuildWeaponTest(unittest.TestCase):
@@ -181,7 +167,7 @@ class WallRingTest(unittest.TestCase):
 
     @staticmethod
     def _ring20(base: Pos) -> set[Pos]:
-        """完整的 20 格围墙环（实际只砌其中 18 格，门那 2 格不砌）—— 两条用例的对照物。"""
+        """完整的 20 格围墙环（实际只砌其中 14/16 格，背面整列不砌）—— 对照物。"""
         return {
             Pos(x, y)
             for x in range(base.x - 2, base.x + 4)
@@ -189,76 +175,91 @@ class WallRingTest(unittest.TestCase):
             if x in (base.x - 2, base.x + 3) or y in (base.y - 3, base.y + 2)
         }
 
-    def test_ring_is_eighteen_cells_free_of_the_base_and_the_weapons(self):
+    def test_the_ring_is_fourteen_cells_free_of_the_base_and_the_weapons(self):
         cells = wall_cells(self.BASE, 41)
-        self.assertEqual(len(cells), 18, "6×6 边框 20 格减去背面中间那 2 格（门）")
-        self.assertEqual(len(set(cells)), 18, "不该有重复格")
+        self.assertEqual(len(cells), 14, "6×6 边框 20 格减去背面整列 6 格")
+        self.assertEqual(len(set(cells)), 14, "不该有重复格")
         self.assertEqual(set(cells) & base_cells(self.BASE), set(), "不能落在基地身上")
         self.assertEqual(set(cells) & set(weapon_cells(self.BASE)), set(), "不能占武器环")
 
-    def test_only_the_two_middle_back_cells_are_left_open(self):
-        """背面只留中间 2 格当门，其余 4 格照砌 —— 环一旦闭合工人就进出不得。
+    def test_the_third_day_seals_the_two_back_corners(self):
+        """第 3 天起补上背面两个角格（16 格）—— 后方通道从 6 格收窄到 4 格。
 
-        门收窄到 2 格的理由：入口从 6 路并行变 2 路串行（机器人只能挤在同一处进，
-        火箭溅射与加特林双弹的价值都翻倍），同时"堵门"从 6 格降到 2 格。
+        `sealed` 只往队尾插两格、不改已有那些格的相对次序：前 10 格逐格相同。
+        """
+        open_ring = wall_cells(self.BASE, 41)
+        sealed = wall_cells(self.BASE, 41, sealed=True)
+        self.assertEqual(len(sealed), 16)
+        self.assertEqual(
+            set(sealed) - set(open_ring), {Pos(8, 21), Pos(8, 26)}, "多出来的正好是背面两角"
+        )
+        self.assertEqual(open_ring[:10], sealed[:10], "已有的格照旧在自己位置上")
+
+    def test_the_back_column_is_left_open(self):
+        """背面整列常年敞开（14 格时 6 格、16 格时 4 格）—— 盒子唯一的进出口。
+
+        敞口放到一整列是这一版的取舍：白天的出行与回程不必再靠"拆一格当门"（那套机制整套
+        删了），代价是机器人也能从这一侧进来 —— 要守住的是正面那 6 格。
         """
         cells = set(wall_cells(self.BASE, 41))
-        door = {Pos(8, 23), Pos(8, 24)}  # 基地在左半 ⇒ 背面是 x = bx-2，正中那 2 格
-        self.assertEqual(cells & door, set(), "门那 2 格一格都不砌")
+        back = {Pos(8, y) for y in range(21, 27)}  # 基地在左半 ⇒ 背面是 x = bx-2
+        self.assertEqual(cells & back, set(), "背面整列一格都不砌")
         ring20 = self._ring20(self.BASE)
         self.assertEqual(len(ring20), 20)
-        self.assertEqual(ring20 - cells, door, "少掉的正好是门，不是别的")
+        self.assertEqual(ring20 - cells, back, "少掉的正好是背面整列，不是别的")
+        self.assertEqual(set(door_cells(self.BASE, 41)), back, "通道 = 背面列里不砌的格")
+        self.assertEqual(
+            set(door_cells(self.BASE, 41, sealed=True)),
+            back - {Pos(8, 21), Pos(8, 26)},
+            "补上两角之后通道只剩中段 4 格",
+        )
 
-    def test_the_front_column_comes_first_and_the_seal_comes_last(self):
-        """前 5 格 = 迎着机器人那一列（不含封口格），封口格 `(13,24)` 排在最末。
+    def test_the_front_column_comes_first(self):
+        """前 6 格 = 迎着机器人那一列 —— 回合数不够时先砌的就是它。
 
         判反了墙就砌在机器人不来的一侧 —— 不报错、不违规，只是整段白砌，而石头是工人
-        一块块背回来的。封口格排最末就是"白天开门通行、天黑前砌上封死"的落地方式
-        （`_build_walls` 取 `free[0]`，排最后 ⇒ 最后一格才砌它）。
+        一块块背回来的。
         """
         ring = wall_cells(self.BASE, 41)
         self.assertEqual(
-            ring[:5],
-            (Pos(13, 21), Pos(13, 22), Pos(13, 23), Pos(13, 25), Pos(13, 26)),
-            "左半 ⇒ 正面是 bx+3，从一端扫到另一端（跳过封口格）",
+            ring[:6],
+            (Pos(13, 21), Pos(13, 22), Pos(13, 23), Pos(13, 24), Pos(13, 25), Pos(13, 26)),
+            "左半 ⇒ 正面是 bx+3，一端扫到另一端",
         )
-        self.assertEqual({c.x for c in ring[:5]}, {13}, "前 5 格全在正面那一列")
-        self.assertEqual(ring[-1], Pos(13, 24), "封口格必须排最后 —— 白天最后才砌它")
-        self.assertEqual(
-            set(ring[:5]) | {ring[-1]},
-            {Pos(13, y) for y in range(21, 27)},
-            "正面 6 格一个不少（封口格在末尾）",
-        )
+        self.assertEqual({c.x for c in ring[:6]}, {13}, "前 6 格全在正面那一列")
 
     def test_the_order_walks_the_ring_in_one_sweep(self):
-        """顺序 = 沿环走一圈（起点在正面列的一端、终点紧挨封口格）。
+        """顺序 = 沿环走一圈：14 格与 16 格都只跳一次。
 
-        这不是好看，是回合预算（工人一天只有 70 回合）：分段走（正面列 → 顶行 → 底行 →
-        背面）横穿的来回收回的正是砌墙的回合，封口格会当天砌不上。允许的 3 处"不挨着"
-        各有理由：跳过封口格（它排最后）、穿过背面那道门、从侧行末尾走到封口格。
+        这不是好看，是回合预算（工人一天只有 70 回合）：来回横穿吃掉的是砌墙的回合。唯一
+        那处跳步是跨过后方那道敞口（5 步，绕不掉）；两行都从正面列那一端接着铺，就是为了
+        把跳步压到这一处。
         """
-        ring = wall_cells(self.BASE, 41)
-        jumps = [(prev, nxt) for prev, nxt in zip(ring, ring[1:]) if prev.dist(nxt) > 1]
-        self.assertEqual(len(set(ring)), 18, "每一格只走一次")
-        self.assertEqual(jumps, [
-            (Pos(13, 23), Pos(13, 25)),
-            (Pos(8, 25), Pos(8, 22)),
-            (Pos(12, 21), Pos(13, 24)),
-        ], "只该有这 3 处跳步")
+        for sealed, jump in (
+            (False, (Pos(9, 26), Pos(9, 21))),
+            (True, (Pos(8, 26), Pos(8, 21))),
+        ):
+            with self.subTest(sealed=sealed):
+                ring = wall_cells(self.BASE, 41, sealed=sealed)
+                self.assertEqual(len(set(ring)), len(ring), "每一格只走一次")
+                jumps = [(a, b) for a, b in zip(ring, ring[1:]) if a.dist(b) > 1]
+                self.assertEqual(jumps, [jump], "只该有这一处跳步")
 
     def test_the_ring_mirrors_for_a_right_half_base(self):
         """基地在右半 ⇒ 正面是 `bx-2`、背面是 `bx+3`（换边后自动跟着翻）。
 
         按基地坐标判而不用 `teamOur.type` —— 下半场换边后队伍身份不变、基地会挪。
         """
-        ring = wall_cells(Pos(30, 10), 41)
-        self.assertEqual(len(ring), 18)
-        self.assertEqual({c.x for c in ring[:5]}, {28}, "右半 ⇒ 正面是 bx-2")
-        self.assertEqual(ring[-1], Pos(28, 10), "封口格 = 正面列正中（bx-2, by）")
-        self.assertEqual({c.x for c in ring}, {28, 29, 30, 31, 32, 33}, "侧面两列都在（各缺中间 2 格）")
+        base = Pos(30, 10)
+        ring = wall_cells(base, 41)
+        self.assertEqual(len(ring), 14)
+        self.assertEqual({c.x for c in ring[:6]}, {28}, "右半 ⇒ 正面是 bx-2")
+        self.assertEqual(ring[:6], tuple(Pos(28, y) for y in range(7, 13)), "正面列自上而下")
+        self.assertEqual({c.x for c in ring}, {28, 29, 30, 31, 32}, "侧面两列都在（背面整列不砌）")
         self.assertEqual(
-            ring[10:13], (Pos(33, 11), Pos(33, 8), Pos(33, 7)), "背面自上而下：先收门、再落角"
+            set(door_cells(base, 41)), {Pos(33, y) for y in range(7, 13)}, "背面整列是 x = bx+3"
         )
+        self.assertEqual(len(wall_cells(base, 41, sealed=True)), 16)
 
     def test_the_box_is_the_whole_buildable_area(self):
         """盒子 = `base_cells` ∪ `weapon_cells` ∪ 完整 20 格围墙环 = 36 格（蓝圈那一块）。
@@ -276,22 +277,23 @@ class WallRingTest(unittest.TestCase):
                     box, base_cells(base) | set(weapon_cells(base)) | ring20, "三块拼起来正好是它"
                 )
 
-    def test_the_door_itself_never_holds_a_building(self):
-        """门那 2 格里没有任何建筑 —— 基地 / 武器 / 墙都不在。
+    def test_the_back_column_never_holds_a_building(self):
+        """后方通道里没有任何建筑 —— 基地 / 武器 / 墙都不在。
 
-        闸门"会不会把人关住"靠的就是这一条：门空着 ⇒ 只有单位能堵门（2 格门 = 2 个单位
-        堵满）。`wall_cells` 的背面列与 `weapon_sites` 的前排列由两个不同的式子给出，
-        钉成断言，别靠脑补。
+        闸门"会不会把人关住"靠的就是这一条：通道空着 ⇒ 只有单位能堵它。
+        `wall_cells` 的背面列与 `weapon_sites` 的前排列由两个不同的式子给出，钉成断言，
+        别靠脑补。
         """
         for base in (Pos(10, 24), Pos(30, 10)):
             with self.subTest(base=base):
-                door_x = min(c.x for c in box_cells(base))
-                if base.x * 2 >= 41:
-                    door_x = max(c.x for c in box_cells(base))  # 右半场镜像：门在最外那一列
-                door = {Pos(door_x, base.y - 1), Pos(door_x, base.y)}  # 背面列正中那 2 格
-                self.assertEqual(len(door), 2, "门是背面列正中那 2 格")
-                built = set(wall_cells(base, 41)) | set(weapon_sites(base, 41)) | base_cells(base)
-                self.assertEqual(built & door, set(), "门里不该有基地 / 武器 / 墙")
+                built = (
+                    set(wall_cells(base, 41, sealed=True))
+                    | set(weapon_sites(base, 41))
+                    | base_cells(base)
+                )
+                self.assertEqual(
+                    built & set(door_cells(base, 41, sealed=True)), set(), "通道里不该有建筑"
+                )
 
 
 class BuildWallTest(unittest.TestCase):
@@ -325,7 +327,7 @@ class BuildWallTest(unittest.TestCase):
         )
 
     def test_day_one_mines_then_walls_the_whole_ring_in_order(self):
-        """把白天串起来跑到砌满：18 格全砌上，且顺序与 `wall_cells` 逐格一致。
+        """把白天串起来跑到砌满：14 格全砌上，且顺序与 `wall_cells` 逐格一致。
 
         这一条把"回合预算 → 采矿 → 砌墙"整条线钉在一起：预算算大了天黑砌不完，
         算小了石头不够、工人在工地干等；顺序错了则会先把背面砌满、正面空着。
@@ -353,7 +355,35 @@ class BuildWallTest(unittest.TestCase):
                 self.worker = Worker(1, cell, {"stone": stone})
 
         self.assertEqual(built, list(wall_cells(self.BASE, 41)), "顺序必须与优先级表一致")
-        self.assertEqual(stone, 0, "别多采 —— 白天总共就 18 格墙可砌")
+        self.assertEqual(stone, 0, "别多采 —— 白天总共就 14 格墙可砌")
+
+    def test_the_third_day_seals_the_back_corners_without_rebuilding(self):
+        """第 3 天起补背面两个角格（14 → 16），已砌的那 14 格一格都不重砌。
+
+        "补哪两格"只能由回合号判（环上"没砌"与"砌了又被拆"在地图上同形）⇒ 这一条同时钉住
+        `_sealed_back` 的时间边界、两格的补齐顺序、以及"背面整列其余 4 格永远不砌"。
+        """
+        open_ring = wall_cells(self.BASE, 41)
+        corners = [c for c in wall_cells(self.BASE, 41, sealed=True) if c not in open_ring]
+        self.assertEqual(len(corners), 2, "只补两个角格")
+        self.entries.update({c: WALL for c in open_ring})
+        built: list[Pos] = []
+        stone = len(corners)  # 手里正好够那两格 ⇒ 不采也不卖
+        day3 = 2 * ROUNDS_PER_DAY + 1
+        for _ in range(70):
+            cmd = plan(self._turn(round_no=day3, stone=stone)).get("1")
+            if cmd is None:
+                break
+            cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+            if cmd["action"] == "build":
+                self.assertIn(cell, corners, f"只许补那两个角格，却砌了 {cell}")
+                self.entries[cell] = WALL
+                built.append(cell)
+                stone -= 1
+            else:
+                self.worker = Worker(1, cell, {"stone": stone})
+
+        self.assertEqual(built, corners, "两个角格按顺序补上、补完就收手")
 
     def test_a_late_start_stops_mining_and_goes_to_build(self):
         """白天快过完了（roundNo=60 ⇒ 只剩 11 回合）⇒ 不再采矿，拿着手里的石头直接去工地。
@@ -371,7 +401,7 @@ class BuildWallTest(unittest.TestCase):
         self.assertGreater(late_cell.dist(self.MINE), pos.dist(self.MINE), "时间不够 ⇒ 掉头去工地")
 
     def test_a_finished_ring_stops_the_stone_mining(self):
-        """18 格都砌满了 ⇒ 不再采石头（多采的只会压在背包里）。
+        """14 格都砌满了 ⇒ 不再采石头（多采的只会压在背包里）。
 
         这一支会转去采最值钱的矿（`SpareOreTest`），而本夹具没有价目表
         （`vendor_prices` 缺省为空）⇒ 挑不出"最值钱的矿" ⇒ 一条都不发：没有价格就无从挑，
@@ -390,15 +420,15 @@ class WallGateTest(unittest.TestCase):
     """建墙原则：不能把工人关起来。闸门两半：`_ring` 里"会关人就一格都不砌"
     （判据 = 砌满这一圈墙之后谁出不去），`plan` 里"要被关住的人先走出来"（仅白天）。
 
-    局面得手工搭：36 格的盒子里不可能有矿（任务书 L78），门那 2 格里也没有建筑 ⇒
-    现实里只有单位能堵门，2 个单位就够合上闸门；不摆机器人，有几条用例连坏的实现
+    局面得手工搭：36 格的盒子里不可能有矿（任务书 L78），后方通道里也没有建筑 ⇒
+    现实里只有单位能堵它，6 个单位才够合上闸门；不摆机器人，有几条用例连坏的实现
     都放不过去（夹具与真实路径不同形）。
     """
 
     BASE = Pos(10, 24)
     WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
-    #: 门 = 背面列正中的 2 格（基地在左半 ⇒ 背面是 x = bx-2）。`wall_cells` 一格都不砌它。
-    DOOR = {Pos(8, 23), Pos(8, 24)}
+    #: 后方通道 = 背面整列 6 格（基地在左半 ⇒ 背面是 x = bx-2）。`wall_cells` 一格都不砌它。
+    DOOR = {Pos(8, y) for y in range(21, 27)}
     #: 盒内一格空地（武器环上、没摆炮）、盒外一格
     INSIDE, OUTSIDE = Pos(12, 24), Pos(5, 24)
 
@@ -413,16 +443,19 @@ class WallGateTest(unittest.TestCase):
         robots: tuple[Robot, ...] = (),
         ores: dict[Pos, str] | None = None,
         prices: dict[str, int] | None = None,
+        robot_cells: Iterable[Pos] = (),
     ) -> Turn:
         """`at1` / `at2` = 两个工人的站位（默认 1 号在盒内、2 号在盒外且手里有一块石头）。
 
         站位是可以换到盒外的 —— "盒外的人不许否决这一圈墙"那条就得两个都在外面才测得出。
+        `robot_cells` 是额外的挡路机器人（"堵掉通道里的哪几格"要精确到格时才用）。
         """
         workers = (
             Worker(1, at1 or self.INSIDE, {}),
             Worker(2, at2 or self.OUTSIDE, {"stone": 1}),
         )
         robots_on_map = {c: "robot" for c in (self.DOOR if door_blocked else ())}
+        robots_on_map.update({c: "robot" for c in robot_cells})
         return Turn(
             round_no=round_no,
             map=Map(
@@ -445,20 +478,20 @@ class WallGateTest(unittest.TestCase):
         )
 
     def test_a_walled_box_never_holds_a_worker_in(self):
-        """18 格全砌满、门开着 ⇒ 盒里的人照样走得出去。这就是"正面砌满也关不住人"。
+        """14 格全砌满、通道开着 ⇒ 盒里的人照样走得出去。这就是"正面砌满也关不住人"。
 
         不能拿 `step_toward` 顶替：它的契约是"贴着 goal 即到"（`dist(goal) <= 1 ⇒ None`），
-        用来测"出不出得去"时，一个贴着门口、而门那格被堵住的角色会被判成"到不了"。
+        用来测"出不出得去"时，一个贴着通道口、而那格被堵住的角色会被判成"到不了"。
         """
         turn = self._turn(walls=wall_cells(self.BASE, 41))
-        self.assertNotIn(Pos(8, 24), turn.map.blocked, "门那一列连砌满之后也不该有东西")
+        self.assertNotIn(Pos(8, 24), turn.map.blocked, "背面那一列连砌满之后也不该有东西")
 
         step = step_outside(self.INSIDE, box_cells(self.BASE), turn.map.blocked, turn.map.size)
-        self.assertIsNotNone(step, "18 格砌满 + 门开着 ⇒ 出得去")
+        self.assertIsNotNone(step, "14 格砌满 + 通道开着 ⇒ 出得去")
         self.assertEqual(self.INSIDE.dist(step), 1, "返回的是从 pos 迈出的第一步")
 
     def test_a_blocked_door_holds_the_walls_back(self):
-        """门被堵满 ⇒ 盒外那个工人手里攥着石头也不许砌（砌下去就把 1 号关死了）。
+        """通道被堵满 ⇒ 盒外那个工人手里攥着石头也不许砌（砌下去就把 1 号关死了）。
 
         少砌这一回合的代价是墙晚砌完；砌下去的代价是把人关死在盒里。
         """
@@ -467,11 +500,11 @@ class WallGateTest(unittest.TestCase):
         self.assertNotIn(
             "2", cmds, "盒外那个工人该原地不动（没矿可采、价目表也空着），而不是去砌墙"
         )
-        # 顺带钉住"整面墙"这个判据：门一堵，18 格一格都不该砌
+        # 顺带钉住"整面墙"这个判据：通道一堵，14 格一格都不该砌
         self.assertNotIn("build", {c["action"] for c in cmds.values()})
 
     def test_a_blocked_door_sends_the_worker_out_first(self):
-        """同上门被堵，但墙上还一个缺口都没砌 ⇒ 被围的人趁缺口先出去。
+        """同上通道被堵，但墙上还一个缺口都没砌 ⇒ 被围的人趁缺口先出去。
 
         闸门两半的关键差别在两套障碍：`leaving` 按"假设墙砌满"判（砌完就真出不去了），
         而这迈出去的一步按"现在"的障碍算（缺口就是出路）。
@@ -482,7 +515,7 @@ class WallGateTest(unittest.TestCase):
         self.assertEqual(cmds["1"]["action"], "move")
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(self.INSIDE.dist(cell), 1, "一步一格，不能瞬移")
-        # 门那 2 格全堵着 ⇒ 出路只能是没砌的墙那几条边（正面 x = bx+3 最直接）
+        # 通道整列全堵着 ⇒ 出路只能是没砌的墙那几条边（正面 x = bx+3 最直接）
         self.assertIn(cell, box_cells(self.BASE), "迈出去的这一步还在盒内，方向朝缺口")
 
     def test_the_night_guard_never_walks_off_its_cannon(self):
@@ -516,11 +549,13 @@ class WallGateTest(unittest.TestCase):
         occupied = (
             set(base_cells(self.BASE)) | {w.pos for w in self.WEAPONS} | self.DOOR | {Pos(5, 24)}
         )
+        # 站位必须在**盒外** —— 盒里那个会被防关人闸门当成"砌满就出不去"、改走迈出盒子那一支
         spot = next(
             Pos(target.x + d.x, target.y + d.y)
             for d in STEPS
             if 0 <= target.x + d.x < 41 and 0 <= target.y + d.y < 32
             and Pos(target.x + d.x, target.y + d.y) not in occupied
+            and Pos(target.x + d.x, target.y + d.y) not in box_cells(self.BASE)
         )
         turn = self._turn(door_blocked=True, at1=Pos(5, 24), at2=spot)
         cmds = plan(turn)
@@ -567,18 +602,19 @@ class WallGateTest(unittest.TestCase):
         self.assertEqual(cmds["1"]["action"], "move", "被围的那个趁缺口先出来")
 
     def test_a_colleague_in_the_door_still_holds_the_wall_back(self):
-        """自己人站的那格也算障碍：门那 2 格，一格被机器人堵着、另一格站着同事 ⇒ 谁都砌不了。
+        """自己人站的那格也算障碍：通道 6 格里 5 格被机器人堵着、剩下一格站着同事 ⇒ 谁都砌不了。
 
         与 `_ring` 里"自己人算路过"故意相反：那处问"这一格要不要砌"（排掉路过的人，
         否则两个工人对着改目标来回踱步），这里问"会不会有人出不来"。
 
         光有同事挡路测不出这条 —— 他站在待砌的墙格上时那格本来就是"假设砌满"里的墙，
-        两种口径下都是障碍；必须是永远不砌的门那 2 格才算数（夹具让 2 号站到门的一格上）。
+        两种口径下都是障碍；必须是永远不砌的通道格才算数（夹具让 2 号站到通道的一格上）。
         """
-        turn = self._turn(door_blocked=True, at1=Pos(12, 24), at2=Pos(8, 24))
-        self.assertEqual(self.DOOR - turn.map.blocked, set(), "门那 2 格都该挡着")
+        door = sorted(self.DOOR)
+        turn = self._turn(at1=Pos(12, 24), at2=door[0], robot_cells=door[1:])
+        self.assertEqual(self.DOOR - turn.map.blocked, set(), "通道 6 格都该挡着")
         cmds = plan(turn)
-        self.assertEqual(set(cmds), {"1"}, f"盒内那个趁缺口走，站门上的那个不许砌：{cmds}")
+        self.assertEqual(set(cmds), {"1"}, f"盒内那个趁缺口走，站通道上的那个不许砌：{cmds}")
         self.assertEqual(cmds["1"]["action"], "move")
 
 
@@ -688,317 +724,48 @@ class DayEndGateTest(unittest.TestCase):
         )
 
 
-class DigTest(unittest.TestCase):
-    """绕路 ≥5 就拆墙（开洞省下的步数 ≥ `HOLE_MIN_SAVING` 才拆）。
-
-    `_dig` 钩在 `_step` 里（所有差事走路的公共出口，一处覆盖全部调用点），夹具走真差事；
-    夹具必须给价目表 —— 砌满环后工人靠 `_mine_spare_ore` 才动得起来，而它按收购价挑矿，
-    价目为空就挑不出矿、原地待命、压根走不到 `_step`，用例成了空转。
-    六重门槛（第 1 天 / 夜里 / 环没砌满 / 没石头 / 窗口关了 / 不贴墙）各有一条独立用例，
-    串跑那条在 `HoleLifecycleTest`。
-    """
-
-    BASE = Pos(10, 24)
-    SIZE = (41, 32)
-    #: 三座炮先摆好，否则金币会先把工人抽去建武器（那是 `BuildWeaponTest` 的事）
-    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
-    #: 价目表（见类 docstring：没有它工人不动）
-    PRICES = {"stone": 1, "iron": 3, "copper": 5}
-
-    def _turn(
-        self,
-        *,
-        round_no: int = ROUNDS_PER_DAY + 1,
-        at: Pos = Pos(12, 24),
-        mine: Pos | None = Pos(18, 24),
-        stone: int = 1,
-        missing: tuple[Pos, ...] = (),
-    ) -> Turn:
-        """默认：第 2 天白天第一回合、环砌满、工人贴着东面那 3 格墙、手里 1 块石头。
-
-        `round_no = ROUNDS_PER_DAY + 1` ⇒ 当天第 1 回合 ⇒ 白天还剩 70 回合（窗口全开）。
-        """
-        layers = [
-            {c: WALL for c in wall_cells(self.BASE, 41) if c not in missing},
-            {self.BASE: "station"},
-            {at: "worker"},
-        ]
-        if mine is not None:
-            layers.append({mine: "stone"})
-        worker = Worker(1, at, {"stone": stone} if stone else {})
-        return Turn(
-            round_no=round_no,
-            map=Map(self.SIZE, _terrain(self.WEAPONS, *layers)),
-            roles=(worker,),
-            gold=0,
-            weapons=self.WEAPONS,
-            vendor_prices=self.PRICES,
-        )
-
-    @staticmethod
-    def _hole(turn: Turn) -> Pos | None:
-        """这一回合拆的那一格；别的动作一律算"没拆"（`None`）。"""
-        cmd = plan(turn).get("1") or {}
-        if cmd.get("action") != "remove":
-            return None
-        point = cmd["targetPos"][0]
-        return Pos(point["x"], point["y"])
-
-    def test_walking_all_the_way_around_is_worth_a_hole(self):
-        """贴着墙、去盒子外那唯一一座矿：绕 16 步 vs 开洞后 5 步 ⇒ 拆。
-
-        省下 11 步，远超门槛 `HOLE_MIN_SAVING`。墙砌满之后盒子只有背面那 2 格门，
-        要往东就得先往西绕出去 —— 这正是"多绕 5 格以上"的典型场面。
-        """
-        at, goal, hole = Pos(12, 24), Pos(18, 24), Pos(13, 23)
-        turn = self._turn()
-        blocked = turn.map.blocked
-        now = steps_between(at, goal, blocked, self.SIZE)
-        after = steps_between(at, goal, blocked - {hole}, self.SIZE)
-        self.assertEqual((now, after), (16, 5), "先钉住两边的真实步数（不是切比雪夫那 6 步）")
-        self.assertGreaterEqual(now - after, HOLE_MIN_SAVING, "省的步数必须过门槛")
-        self.assertEqual(self._hole(turn), hole)
-
-    def test_the_hole_is_the_cell_that_leaves_the_fewest_steps(self):
-        """逐格试算 ⇒ 挑开洞后步数最少的那一格，并列时取坐标序（可复现）。
-
-        夹具特意挑成三个候选收益各不相同（6 / 7 / 8 步）的样子 —— 三格一样的话，
-        这条用例就分不出"挑最省的"与"挑第一个"。
-        """
-        at, mine = Pos(11, 25), Pos(18, 26)
-        turn = self._turn(at=at, mine=mine)
-        blocked = turn.map.blocked
-        table = {
-            c: steps_between(at, mine, blocked - {c}, self.SIZE)
-            for c in wall_cells(self.BASE, 41)
-            if at.dist(c) <= 1
-        }
-        self.assertEqual(sorted(table.values()), [6, 7, 8], "夹具必须让候选格彼此不同")
-        self.assertEqual(self._hole(turn), min(table, key=lambda c: (table[c], c)))
-        self.assertEqual(self._hole(turn), Pos(12, 26))
-
-    def test_a_short_detour_is_not_worth_a_hole(self):
-        """绕路不到 5 步 ⇒ 不拆。
-
-        矿在西边 `(4,24)`：背面那道门本来就在西侧，走它一点也不绕（7 步 vs 7 步）。
-        拆一格是净支出（1 回合 + 1 块不回收的石头，任务书 L209），不值得。
-        """
-        at, goal = Pos(12, 24), Pos(4, 24)
-        blocked = self._turn(mine=goal).map.blocked
-        savings = [
-            steps_between(at, goal, blocked, self.SIZE)
-            - steps_between(at, goal, blocked - {c}, self.SIZE)
-            for c in wall_cells(self.BASE, 41)
-            if at.dist(c) <= 1
-        ]
-        self.assertLess(max(savings), HOLE_MIN_SAVING, "夹具前提：每个候选省的步数都不过门槛")
-        self.assertIsNone(self._hole(self._turn(mine=goal)))
-
-    def test_the_first_day_never_digs(self):
-        """第 1 天不拆 —— 整套机制成立的前提。
-
-        环上"孤零零一个缺口"既是"刚挖的洞"也是"还差一格没砌"，地图上逐字节同形，
-        任何无状态判据都分不开，只能靠时间区分：第 1 天环在建、缺口是真的没砌；
-        第 2 天起环开局必然是满的，环上一切缺口只可能来自我们自己的 `remove`。
-        写漏的后果：第 1 天砌到只剩中段某一格时那一格被当成"洞"、白天再也不补
-        （守门：`test_a_worker_on_the_last_cell_still_finishes_the_ring`）。
-        """
-        turn = self._turn(round_no=1)
-        self.assertEqual(turn.round_no, 1, "第 1 天白天第一回合")
-        self.assertIsNone(self._hole(turn))
-
-    def test_the_night_never_digs(self):
-        """夜里不拆（仅白天）—— 与 `build` 同一条：闸门不管昼夜，由 `planner` 把关。
-
-        任务书 `remove` 那一格没写昼夜（`build` 写了"仅白天"），按保守口径执行：
-        夜里不发最多少拆一次；反过来若实际禁夜，发出去就是一次指令非法 —— 红线优先。
-        """
-        self.assertIsNone(self._hole(self._turn(round_no=85)))
-
-    def test_a_worker_without_a_spare_stone_never_digs(self):
-        """没石头不拆：拆掉的那块不回收，手里没石头就补不回来 —— 墙上留着洞过夜。
-
-        对照是同一天同一站位、手里有石头那一条（拆）。
-        """
-        self.assertIsNone(self._hole(self._turn(stone=0)))
-        self.assertIsNotNone(self._hole(self._turn(stone=1)), "对照：有石头就拆")
-
-    def test_an_unfinished_ring_is_never_dug(self):
-        """环没砌满 ⇒ 不拆（缺口本来就能当通道用，而"没砌到"与"挖出来的"分不开）。
-
-        夹具把缺口放在西侧 `(8,25)`：它帮不了东边那趟路的忙，所以"省不到 5 步"那道门
-        拦不住这一条 —— 拦住的只能是 `_ring`。对照：同一局面环砌满就拆。
-        """
-        self.assertIsNone(self._hole(self._turn(missing=(Pos(8, 25),))))
-        self.assertEqual(self._hole(self._turn()), Pos(13, 23), "对照：环砌满就拆")
-
-    def test_the_window_closes_thirty_rounds_before_night(self):
-        """白天剩 ≤ `HOLE_MIN_LEFT`(30) 回合就不再开洞（洞要开得够久才回本）。
-
-        这个窗口与补墙窗口（剩 ≤ `HOLE_PATCH_LEFT`=15）不相交 ⇒ 一天最多拆一次 ——
-        防"拆了补、补了拆"净亏靠的是它，不是门槛 5（门槛只管单趟划不划算）。
-        夹具用近矿 `(14,24)`：远矿在这个时点早被"回得来"滤掉了（`_mine_spare_ore`），
-        分不出是哪道门拦的。
-        """
-        mine = Pos(14, 24)
-        # 白天 70 回合 ⇒ 一定有"还剩正好 HOLE_MIN_LEFT 回合"的那一回合，由 `_left` 定位
-        boundary = next(r for r in range(_day2(1), _day2(DAY_ROUNDS) + 1) if _left(r) == HOLE_MIN_LEFT)
-        self.assertEqual(_left(boundary - 1), HOLE_MIN_LEFT + 1, "夹具前提：差一回合就是边界")
-        self.assertEqual(
-            self._hole(self._turn(round_no=boundary - 1, mine=mine)),
-            Pos(13, 23),
-            "多剩一回合还能拆",
-        )
-        self.assertIsNone(self._hole(self._turn(round_no=boundary, mine=mine)), "正好卡在门槛上就不拆")
-
-    def test_a_worker_away_from_the_wall_never_digs(self):
-        """候选只取当前已经贴着的墙格 —— 人不在墙边就没得拆。
-
-        `remove` 要求"指定与自身距离一格内的围墙"（§4.4），与 `build` 同一条站位契约；
-        "走到最优的那一格再拆"被刻意排除（会引入"在路上"的中间态、目标每回合重算 ⇒
-        来回抖，且省下的步数没扣掉走过去的回合 ⇒ 系统性高估收益）。
-        这一条只能用盒外的站位测：盒内每一格都贴着墙（环是 6×6 边框、距离取切比雪夫）。
-        """
-        at = Pos(16, 24)
-        self.assertEqual(
-            [c for c in wall_cells(self.BASE, 41) if at.dist(c) <= 1], [], "夹具前提：不在墙边"
-        )
-        self.assertIsNone(self._hole(self._turn(at=at, mine=Pos(4, 24))))
-
-    def test_a_digging_round_never_fires(self):
-        """红线守门员：拆墙只发生在白天，那一回合一条 `attack` 都不许有。
-
-        `attack` 仅黑夜可用（§4.4），白天发一条就是一次异常 —— 5 次整场不再被调度。
-        `_step` 是"走路"的公共出口，夜里回炮位也走它 ⇒ 拆墙的门必须自己把昼夜判死。
-        """
-        for round_no in (1, 85, ROUNDS_PER_DAY + 1, ROUNDS_PER_DAY + 40, ROUNDS_PER_DAY + 41, 200):
-            with self.subTest(round_no=round_no):
-                cmds = plan(self._turn(round_no=round_no, mine=Pos(14, 24)))
-                self.assertNotIn(
-                    "attack", {c["action"] for c in cmds.values()}, f"第 {round_no} 回合：{cmds}"
-                )
 
 
-class DoorTest(unittest.TestCase):
-    """环上那个缺口 = 白天的临时门：白天中段不补、天黑前补回去。
 
-    与封口格 `(13,24)` 同一个语义（"白天开着通行、天黑前砌上封死"），只是第 2 天起改由
-    时间窗表达：`_door_open` 一开，`_build_walls` 把 `free` 清空 ⇒ 工人自然掉进
-    "卖 → 升级 → 采闲矿"那一支，不需要单加一个"别补墙"的分支。
-    """
 
-    BASE = Pos(10, 24)
-    SIZE = (41, 32)
-    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
-    PRICES = {"stone": 1, "iron": 3, "copper": 5}
-    #: 白天开口的位置 = 封口格（`wall_cells` 的最后一格，正面列正中）
-    SEAL = wall_cells(Pos(10, 24), 41)[-1]
 
-    def _turn(
-        self,
-        *,
-        round_no: int = ROUNDS_PER_DAY + 1,
-        stone: int = 1,
-        at: Pos = Pos(12, 24),
-        missing: tuple[Pos, ...] = (SEAL,),
-    ) -> Turn:
-        layers = [
-            {c: WALL for c in wall_cells(self.BASE, 41) if c not in missing},
-            {self.BASE: "station"},
-            {at: "worker"},
-            {Pos(4, 24): "stone"},  # 环外西侧那座矿：环满了也够得着，用来证明"工人去干别的了"
-        ]
-        worker = Worker(1, at, {"stone": stone} if stone else {})
-        return Turn(
-            round_no=round_no,
-            map=Map(self.SIZE, _terrain(self.WEAPONS, *layers)),
-            roles=(worker,),
-            gold=0,
-            weapons=self.WEAPONS,
-            vendor_prices=self.PRICES,
-        )
 
-    def test_the_hole_stays_open_through_the_day(self):
-        """白天中段（还剩 70 / 17 回合）⇒ 不补，工人掉头去采那座矿。
-
-        最后那一回合仍在补墙窗口之外（剩 17 > `HOLE_PATCH_LEFT`）—— 差一回合的对照在
-        `test_the_last_fifteen_rounds_patch_it_back` 里。
-        """
-        for round_no in (_day2(1), _day2(DAY_ROUNDS - HOLE_PATCH_LEFT - 1)):
-            with self.subTest(round_no=round_no):
-                self.assertGreater(_left(round_no), HOLE_PATCH_LEFT, "夹具前提：在窗外")
-                cmds = plan(self._turn(round_no=round_no))
-                acts = {c["action"] for c in cmds.values()}
-                self.assertNotIn("build", acts, f"白天中段不许补墙：{cmds}")
-                self.assertIn("move", acts, f"该去干别的（采矿）：{cmds}")
-
-    def test_the_last_fifteen_rounds_patch_it_back(self):
-        """白天剩 ≤ `HOLE_PATCH_LEFT`(15) 回合 ⇒ 补回去，落点正好是那格洞。
-
-        "白天开着通行、天黑前封死"就靠这两个窗口表达；这一条守着后半句 ——
-        补不回去的话，墙上就是一个整夜的洞（机器人从正面长驱直入）。
-        """
-        first_patch = next(r for r in range(_day2(1), _day2(DAY_ROUNDS) + 1) if _left(r) <= HOLE_PATCH_LEFT)
-        for round_no in (first_patch, _day2(DAY_ROUNDS)):
-            with self.subTest(round_no=round_no):
-                cmd = plan(self._turn(round_no=round_no))["1"]
-                self.assertEqual(cmd["action"], "build")
-                self.assertEqual(cmd["name"], WALL)
-                self.assertEqual(
-                    Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.SEAL
-                )
-
-    def test_a_stone_short_worker_cannot_patch(self):
-        """补墙同样要 1 块石头 —— 没石头时那格只能空着过夜（空指令合法，不是崩）。
-
-        这也是 `_dig` 为什么要求手里先有一块石头（见 `DigTest`）：补不回来就别开洞。
-        """
-        self.assertEqual(plan(self._turn(round_no=ROUNDS_PER_DAY + DAY_ROUNDS, stone=0)), {})
-
-    def test_the_first_day_has_no_door_to_keep_open(self):
-        """第 1 天没有"洞"这回事 —— 那格只是还没砌到（封口格排在建墙顺序最后）⇒ 照砌。
-
-        首日豁免是整套机制的前提（见 `DigTest.test_the_first_day_never_digs`）。
-        """
-        cmd = plan(self._turn(round_no=1))["1"]
-        self.assertEqual(cmd["action"], "build")
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.SEAL)
 
 
 class RescueTest(unittest.TestCase):
     """有人被关在盒子里 ⇒ 工人去拆一格放人。
 
     与 `plan` 里的防关人闸门是预防 vs 补救：闸门管"还没砌完时别把谁关进去"，这一支管
-    "已经被关住了怎么办" —— 背面那 2 格门被机器人堵死，是闸门拦不住的。
+    "已经被关住了怎么办" —— 后方通道那一列被机器人堵死，是闸门拦不住的。
 
-    只有"被关住的不是工人"才走得到这里：工人自己出不来时朝差事目标的步数是 -1，`_dig`
-    那一支已在 `_step` 里接住；被任务钉死的开拓者只能靠别人救（守门：`TaskHoldTest`）。
+    工人自己被关住时也走这里（它在差事之前的 `_rescue` 被 `_stuck_inside` 捞出来）；
+    被任务钉死的开拓者只能靠别人救（守门：`TaskHoldTest`）。
     """
 
     BASE = Pos(10, 24)
     SIZE = (41, 32)
     WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
     PRICES = {"stone": 1, "iron": 3, "copper": 5}
-    #: 背面那 2 格门（唯一进出口）
+    #: 后方通道 = 背面整列 6 格（唯一进出口，14 格墙一格都不砌它）
     DOOR = door_cells(Pos(10, 24), 41)
 
     def _turn(
         self,
         *,
         round_no: int = ROUNDS_PER_DAY + 1,
-        rescuer: Pos = Pos(7, 24),
+        rescuer: Pos = Pos(14, 24),
         boxed: Pos = Pos(12, 24),
         stone: int = 1,
         robots: bool = True,
         colleagues: tuple[Pos, ...] = (),
         phase_task: str = "把石头运回基地",
     ) -> Turn:
-        """默认：门被两台机器人堵死、开拓者被关在盒子里、工人站在门外 `(7,24)`。"""
+        """默认：通道被 6 台机器人堵死、开拓者被关在盒子里、工人站在正面墙外 `(14,24)`。"""
         roles: list[BaseRole] = [Worker(1, rescuer, {"stone": stone} if stone else {}), Pioneer(2, boxed, {})]
         obstacles: dict[Pos, str] = {}
         if robots:
-            obstacles[self.DOOR[0]] = "robot:small"
-            obstacles[self.DOOR[1]] = "robot:small"
+            for cell in self.DOOR:
+                obstacles[cell] = "robot:small"
         for i, colleague in enumerate(colleagues):
             obstacles[colleague] = "worker"
             roles.append(Worker(3 + i, colleague, {}))
@@ -1032,42 +799,51 @@ class RescueTest(unittest.TestCase):
         }
 
     def test_a_worker_opens_the_wall_to_free_a_boxed_pioneer(self):
-        """门被机器人堵死 + 开拓者在盒内 ⇒ 工人拆一格放人，这一格是 `(8,25)`。
+        """通道被机器人堵死 + 开拓者在盒内 ⇒ 工人拆一格放人，这一格是 `(13,23)`（并列取坐标序，与 `_rescue` 的 min 同序）。
 
-        `(8,25)` 是门外那位工人唯一贴着的墙格（`remove` 的站位契约）：拆了它，
-        盒内的人就能从 `(7,25)` 一带迈出去。开拓者这一回合照旧只有 `submitAnswer`
-        —— 它被钉在任务上，谁也挪不动它。
+        `(13,23)` 是墙外那位工人贴着的墙格（`remove` 的站位契约）：拆了它，盒内的人就能
+        从 `(14,23)` 一带迈出去。开拓者这一回合照旧只有 `submitAnswer` —— 它被钉在任务上，
+        谁也挪不动它。
         """
         cmds = plan(self._turn())
-        self.assertEqual(self._holes(cmds), {"1": Pos(8, 25)})
+        self.assertEqual(self._holes(cmds), {"1": Pos(13, 23)})
         self.assertEqual(cmds["2"]["action"], "submitAnswer", "开拓者只交答案，不动")
         self.assertNotIn("attack", {c["action"] for c in cmds.values()})
 
     def test_the_rescuer_walks_to_the_wall_first(self):
-        """隔着几格 ⇒ 这一回合只挪一格，贴近了下一回合才拆（拆墙要贴着）。
+        """隔着半个盒子 ⇒ 这一回合只挪一格，贴近了下一回合才拆（拆墙要贴着）。
 
-        与 `_dig` 里"不做走到最优格再拆"是同一条取舍：候选只认当前已经贴着的墙格。
+        要拆哪一格由**被困者**定（开拓者贴着 `(13,23)`），不由救援者定 —— 救援者只负责朝它
+        走。候选只认当前已经贴着的墙格（`remove` 的站位契约），刻意不做"走到最优那一格再拆"。
+        判"更近"必须走 BFS：切比雪夫会被绕行骗过（第一步横着没动、直线距离一格不减）。
         """
         start = Pos(5, 24)
-        cmds = plan(self._turn(rescuer=start))
+        site = Pos(13, 23)  # 被困的开拓者贴着的那一格墙
+        turn = self._turn(rescuer=start)
+        cmds = plan(turn)
         self.assertEqual(cmds["1"]["action"], "move", f"还没贴近 ⇒ 只能挪一格：{cmds}")
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(start.dist(cell), 1, "一步一格")
-        self.assertLess(cell.dist(Pos(8, 25)), start.dist(Pos(8, 25)), "这一格必须真的更近")
+        walk, size = turn.map.blocked, turn.map.size
+        self.assertLess(
+            steps_between(cell, site, walk, size),
+            steps_between(start, site, walk, size),
+            "这一格必须真的更近",
+        )
 
     def test_colleagues_in_the_doorway_are_not_walls(self):
-        """同事把两格门都堵上 ⇒ 照旧不拆（他们只是路过，下一回合就走）。
+        """同事把整列通道都堵上 ⇒ 照旧不拆（他们只是路过，下一回合就走）。
 
         判据里"自己人一律不算障碍"（把全部角色从障碍里摘掉，起点除外）：算成墙就会白拆
         一次 —— 1 回合 + 1 块不回收的石头，换来一个下一回合就自动失效的洞。
-        夹具必须堵满两格门：只堵一格时盒内的人本来就走得出去，用例会空转
-        （反向验证：只堵一格的夹具在"自己人算障碍"的写法下也照样过）。
+        夹具必须堵满整列：只堵几格时盒内的人本来就走得出去，用例会空转
+        （反向验证：只堵几格的夹具在"自己人算障碍"的写法下也照样过）。
         """
         cmds = plan(self._turn(robots=False, colleagues=self.DOOR))
-        self.assertEqual(self._holes(cmds), {}, f"同事堵门不算被关：{cmds}")
+        self.assertEqual(self._holes(cmds), {}, f"同事堵通道不算被关：{cmds}")
 
     def test_the_first_day_never_rescues(self):
-        """第 1 天不救 —— 与 `_dig` 同源：那天环还在建，缺口本来就能走人。"""
+        """第 1 天不救：那天环还在建，缺口本来就能走人，拆了等于白拆一块石头。"""
         cmds = plan(self._turn(round_no=1))
         self.assertEqual(self._holes(cmds), {}, f"第 1 天不拆：{cmds}")
 
@@ -1081,87 +857,13 @@ class RescueTest(unittest.TestCase):
 
         这条走的是 `_rescue`：`_stuck_inside` 把"眼下真出不去"的人捞出来，
         而工人是唯一能发 `remove` 的角色 ⇒ 自己就是救援者。
-        （有差事的工人走另一条：朝目标的步数是 -1，`_dig` 的 `now < 0` 那一支接住。）
         """
         turn = self._turn(boxed=Pos(7, 24), rescuer=Pos(12, 24))
         self.assertEqual(self._holes(plan(turn)), {"1": Pos(13, 23)})
 
 
-class HoleLifecycleTest(unittest.TestCase):
-    """第 2 天整白天串跑：拆一次 → 当门用一天 → 天黑前补回去。
 
-    单帧看不出"一天拆了几次、收工时墙上有没有洞、同一格会不会拆两回"，必须走一遍时间。
 
-    一天最多拆一次靠的不是门槛 5，而是两个窗口不相交（`HOLE_MIN_LEFT` 30 >
-    `HOLE_PATCH_LEFT` 15）：拆只在"还剩 ≥31 回合"、补只在"还剩 ≤15 回合"。两个数一旦
-    被改成相交，这里会看到第二个洞、墙上开着口过夜。
-    """
-
-    BASE = Pos(10, 24)
-    SIZE = (41, 32)
-    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
-    PRICES = {"stone": 1, "iron": 3, "copper": 5}
-    #: 盒子外面、东侧那座石矿 —— 环砌满之后唯一值得跑的一趟（绕出背面那道门 → 再往东）
-    MINE = Pos(18, 24)
-
-    def test_one_hole_a_day_and_it_is_patched_before_night(self):
-        """第 2 天跑满 70 回合：恰好拆 1 次、下一回合就从洞里穿过去、收工时环 18/18。"""
-        entries = dict(
-            _terrain(
-                self.WEAPONS,
-                {c: WALL for c in wall_cells(self.BASE, 41)},
-                {self.BASE: "station"},
-                {self.MINE: "stone"},
-            )
-        )
-        stone, pos = 1, Pos(12, 24)
-        log: list[tuple[int, str, Pos]] = []
-        for round_no in range(ROUNDS_PER_DAY + 1, ROUNDS_PER_DAY + DAY_ROUNDS + 1):
-            worker = Worker(1, pos, {"stone": stone} if stone else {})
-            cmds = plan(
-                Turn(
-                    round_no=round_no,
-                    map=Map(self.SIZE, entries),
-                    roles=(worker,),
-                    gold=0,
-                    weapons=self.WEAPONS,
-                    vendor_prices=self.PRICES,
-                )
-            )
-            self.assertNotIn(
-                "attack", {c["action"] for c in cmds.values()}, f"第 {round_no} 回合是白天，不许开火"
-            )
-            cmd = cmds.get("1")
-            if cmd is None:
-                continue
-            cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-            log.append((round_no, cmd["action"], cell))
-            if cmd["action"] == "move":
-                pos = cell
-            elif cmd["action"] == "collect":
-                stone += 1
-            elif cmd["action"] == "build":
-                stone -= 1
-                entries[cell] = WALL
-            elif cmd["action"] == "remove":
-                del entries[cell]
-
-        holes = [(r, c) for r, a, c in log if a == "remove"]
-        self.assertEqual(len(holes), 1, f"一天最多拆一次（两个窗口不相交）：{holes}")
-        hole_round, hole = holes[0]
-        self.assertEqual(hole, Pos(13, 23))
-        # 洞是通道，不只是一个缺口：紧接着那一回合就从它身上穿过去
-        index = [i for i, (_, a, _) in enumerate(log) if a == "remove"][0]
-        self.assertEqual(log[index + 1][1:], ("move", hole), "下一回合要真的用它")
-        # 天黑前补回去（补墙窗口 = 白天最后 HOLE_PATCH_LEFT 回合）
-        patch = [r for r, a, c in log if a == "build" and c == hole]
-        self.assertTrue(patch, f"收工前必须补回那一格：{log}")
-        self.assertLessEqual(_left(patch[0]), HOLE_PATCH_LEFT, "补墙必须落在夜里之前的窗口里")
-        self.assertGreater(_left(hole_round), HOLE_MIN_LEFT, "拆墙必须落在白天足够早的窗口里")
-        # 收工时环是满的（拆了不补就是整夜的洞，机器人从正面长驱直入）
-        self.assertEqual(
-            [c for c in wall_cells(self.BASE, 41) if c not in entries], [], "收工时 18/18"
-        )
 
 
 class TwoWallBuildersTest(unittest.TestCase):
@@ -1186,7 +888,7 @@ class TwoWallBuildersTest(unittest.TestCase):
         entries = _terrain(
             self.WEAPONS, {self.BASE: "station", self.MINE: "stone"}, self.FRONT_BUILT
         )
-        # 石头给够：环 18 格 ⇒ 还剩 15 格要砌，兜里少于 15 块时
+        # 石头给够：环 14 格 ⇒ 还剩 11 格要砌，兜里少于 11 块时
         # `_stones_to_mine` 会把两人派去矿上（那时测的就不是"打不打转"了）。
         roles = {
             10010: Worker(10010, Pos(13, 21), {"stone": 20}),
@@ -1637,7 +1339,7 @@ class WallPriorityTest(unittest.TestCase):
 
     def test_a_gated_worker_stands_by(self):
         """`gated`（砌下去会把人关在墙里）⇒ 待命：开拓者被任务钉死在盒内（它走 ① 支路，
-        轮不到"先出来"那道闸），两个工人又恰好占住 2 格门口 ⇒ 盒外有墙格要砌的工人
+        轮不到"先出来"那道闸），两个工人又恰好占住后方通道的两格（通道共 6 格）⇒ 盒外有墙格要砌的工人
         这一回合不发指令（口径："安全：别跑远，下回合缺口还在" —— 比落经济线更保环的速度）。
         对照：没分到墙格的另一个工人照常落经济线干活。"""
         walls = set(wall_cells(self.BASE, 41)) - {Pos(13, 24)}  # 只剩封口格
@@ -1678,8 +1380,8 @@ class WallPriorityTest(unittest.TestCase):
 class DayOneFinishTest(unittest.TestCase):
     """第一天必须把墙建好、之后白天不许整天卡着 —— 全天模拟的验收网。
 
-    可行地图（两座石矿 = 20 块石头 ≥ 18 格墙）上跑满 70 个白天回合，照判题器口径结算
-    指令（move/build/collect/sell/buy、矿采满 `MINE_CHARGES` 次消失）：1) 环 18/18 砌完且同一格
+    可行地图（两座石矿 = 20 块石头 ≥ 14 格墙）上跑满 70 个白天回合，照判题器口径结算
+    指令（move/build/collect/sell/buy、矿采满 `MINE_CHARGES` 次消失）：1) 环 14/14 砌完且同一格
     不许砌两遍（石头白花）；2) 三座武器建满（开局 75 金恰好三座，夜里第一波机器人之前要有炮）；
     3) 环砌完之前工人不许闲 —— 环砌完后的白天末尾，预算拦住回不来的远矿 ⇒ 待命是保守
     方向的合法行为，不在本网范围。
@@ -1792,7 +1494,7 @@ class DayOneFinishTest(unittest.TestCase):
         if done_at is None and ring <= set(self.walls):
             done_at = 70  # 恰好最后一回合砌完的情形
         self.assertIsNotNone(
-            done_at, f"第 1 天没把 18 格墙砌完，缺：{sorted(ring - set(self.walls))}"
+            done_at, f"第 1 天没把 14 格墙砌完，缺：{sorted(ring - set(self.walls))}"
         )
         self.assertEqual(
             {(w.kind, w.pos) for w in self.weapons},

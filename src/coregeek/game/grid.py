@@ -190,47 +190,42 @@ def _front_back(base: Pos, width: int) -> tuple[int, int, int]:
     return (d, base.x + 1, base.x) if d > 0 else (d, base.x, base.x + 1)
 
 
-def wall_cells(base: Pos, width: int) -> tuple[Pos, ...]:
-    """可砌围墙的 18 格，按建造顺序排。6×6 边框 20 格里砌 18：正面列 6（含封口格）
-    + 两侧行各 5（含背面两角）+ 背面 2；正面/背面由 `_front_back` 给（左半基地 ⇒
-    正面 x = bx+3、背面 x = bx-2）。
+def wall_cells(base: Pos, width: int, *, sealed: bool = False) -> tuple[Pos, ...]:
+    """可砌围墙的格，按建造顺序排。正面列 6 + 上下两行各 4 = 14 格；`sealed` 再把背面
+    两个角格补上（16 格）—— 背面整列常年敞开，那是盒子唯一的进出口（`door_cells`）。
 
-    顺序 = 沿环走一圈：正面列 → 一侧行 → 背面（先砌中间 2 格、穿过门）→ 另一侧行 →
-    封口格。走一圈绕行量最小 —— 别的排法工人一天砌不满 18 格、封口格当天轮不到。
-    背面中间 2 格（`door_cells`）永远是门：环闭合后盒子唯一的进出口，门里没有建筑 ⇒
-    能堵门的只有单位。封口格 = 正面列正中 `(front_x, by)`、排最后 ⇒ 白天开着方便通行、
-    天黑前砌上封死。
+    正面/背面由 `_front_back` 给（左半基地 ⇒ 正面 x = bx+3、背面 x = bx-2）。顺序 =
+    沿环走一圈：正面列 → 下行（正面往背面）→〔背面两角〕→ 上行（背面往正面）。正面列排
+    第一位 ⇒ 回合不够时先砌的就是迎着机器人的那一面。
     """
     d, far, near = _front_back(base, width)
     front_x, back_x = far + 2 * d, near - 2 * d
     ys = list(range(base.y - 3, base.y + 3))  # 6 格
     xs = list(range(base.x - 2, base.x + 4))  # 6 格
-    # 侧面两条的中间 4 格（两端的角归正面列 / 背面列）
+    # 上下两行的中间 4 格（两端的角归正面列 / 背面列）
     side = xs[1:-1]
 
-    # 白天开口、天黑前封上的那一格（正面列正中）
-    seal = Pos(front_x, base.y)
-    # ① 正面列（迎着机器人）：一端扫到另一端（跳过封口格）、含上下两角，终点接 ②。
-    order = [Pos(front_x, y) for y in ys if Pos(front_x, y) != seal]
-    # ② `ys[-1]` 那一行：从正面往背面铺，末了补上背面那个角
-    order += [Pos(x, ys[-1]) for x in reversed(side)] + [Pos(back_x, ys[-1])]
-    # ③ 背面从那个角一路下来：先砌中间 2 格之一（门由这 2 格围出），穿门砌另一格，落到底角
-    order += [Pos(back_x, base.y + 1), Pos(back_x, base.y - 2), Pos(back_x, ys[0])]
-    # ④ 另一行：从背面往正面铺，终点紧挨封口格
-    order += [Pos(x, ys[0]) for x in side]
-    # ⑤ 封口格排最后 ⇒ 白天最后才砌它
-    return tuple(order + [seal])
+    order = [Pos(front_x, y) for y in ys]  # ① 正面列（迎着机器人）
+    order += [Pos(x, ys[-1]) for x in reversed(side)]  # ② 下行：正面 → 背面
+    if sealed:
+        # ③ 背面两角：下角紧接 ② 的终点，再穿背后那条通道到上角，正好接上 ④
+        order += [Pos(back_x, ys[-1]), Pos(back_x, ys[0])]
+    order += [Pos(x, ys[0]) for x in side]  # ④ 上行：背面 → 正面
+    return tuple(order)
 
 
-def door_cells(base: Pos, width: int) -> tuple[Pos, ...]:
-    """永远不砌的 2 格：背面列正中（基地纵深中心那一行及其下一行），盒子唯一的进出口。
+def door_cells(base: Pos, width: int, *, sealed: bool = False) -> tuple[Pos, ...]:
+    """后方通道：背面列里不砌的那些格（14 格时 6 个，16 格时 4 个），盒子唯一的进出口。
 
-    门里没有任何建筑 ⇒ 能堵门的只有单位 —— "自己人站在待砌格上算不算障碍"只在门口有意义
+    通道里没有任何建筑 ⇒ 能堵门的只有单位 —— "自己人站在待砌格上算不算障碍"只在这里有意义
     （`planner._walled` 的判据来源）。
     """
     d, _far, near = _front_back(base, width)
     back_x = near - 2 * d
-    return (Pos(back_x, base.y), Pos(back_x, base.y - 1))
+    walls = set(wall_cells(base, width, sealed=sealed))
+    return tuple(
+        Pos(back_x, y) for y in range(base.y - 3, base.y + 3) if Pos(back_x, y) not in walls
+    )
 
 
 def weapon_sites(base: Pos, width: int) -> tuple[Pos, ...]:

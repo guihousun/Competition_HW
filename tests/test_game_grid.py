@@ -310,9 +310,9 @@ class StepsBetweenTest(unittest.TestCase):
         self.assertEqual(steps_between(Pos(5, 5), goal, frozenset(ring), self.SIZE), -1)
 
     def test_walking_home_costs_more_than_the_straight_line(self):
-        """回炮位被低估的量：环砌满之后，从盒外回后列炮要绕背面那 2 格门。
+        """回炮位被低估的量：环砌满之后，从盒外回后列炮要绕到后方通道再横穿盒子。
 
-        切比雪夫把 `(14,24) → (9,25)` 说成 5 步；真实步数是先绕到背面门口再横穿盒子。
+        切比雪夫把 `(14,24) → (9,25)` 说成 5 步；真实步数是先绕到背面敞口再横穿盒子。
         断言只钉"严格大于"，不钉具体步数 —— 步数是几何的，几何一改这条就得跟着改。
         """
         ring = wall_cells(self.BASE, self.SIZE[0])
@@ -326,16 +326,16 @@ class StepsBetweenTest(unittest.TestCase):
         )
 
     def test_the_door_is_the_only_way_in(self):
-        """同一趟路的另一半：门那 2 格（`door_cells`）就是唯一的进出口。
+        """同一趟路的另一半：后方通道（`door_cells`）就是唯一的进出口。
 
-        把门也堵上 ⇒ -1（盒子里的人出不来、盒外的人进不去）。这条同时钉住
-        "门 = 背面中间那 2 格、环永远不闭合"这条不变量。
+        把通道也堵上 ⇒ -1（盒子里的人出不来、盒外的人进不去）。这条同时钉住
+        "背面整列不砌、环永远不闭合"这条不变量。
         """
         post, outside = Pos(9, 25), Pos(14, 24)
         ring = set(wall_cells(self.BASE, self.SIZE[0])) | set(door_cells(self.BASE, self.SIZE[0]))
         self.assertEqual(steps_between(outside, post, frozenset(ring), self.SIZE), -1, "进不去")
         self.assertEqual(steps_between(post, outside, frozenset(ring), self.SIZE), -1, "也出不来")
-        # 对照：只砌那 18 格（门开着）⇒ 两个方向都走得通
+        # 对照：只砌那 14 格（通道开着）⇒ 两个方向都走得通
         door_open = frozenset(wall_cells(self.BASE, self.SIZE[0]))
         self.assertGreater(steps_between(outside, post, door_open, self.SIZE), 0)
         self.assertGreater(steps_between(post, outside, door_open, self.SIZE), 0)

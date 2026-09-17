@@ -335,7 +335,7 @@ class NightPostTest(unittest.TestCase):
         planner._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
 
     def _turn(self, *roles: BaseRole, gatling: bool = False, round_no: int = NIGHT) -> Turn:
-        """基地 2×2 + 18 格围墙砌满 + 两座火箭（可带加特林），角色按 payload 的写法进网格。"""
+        """基地 2×2 + 14 格围墙砌满 + 两座火箭（可带加特林），角色按 payload 的写法进网格。"""
         weapons = tuple(
             Weapon(id=i, kind=kind, pos=pos, attack_range=10, cooldown=-1)
             for i, kind, pos in (
@@ -420,7 +420,7 @@ class NightEconomyTest(unittest.TestCase):
 
     BASE = Pos(10, 24)
     WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)
-    NEAR = Pos(5, 24)   # 门侧近矿（出盒穿背面那 2 格门，BFS ≤ 8）
+    NEAR = Pos(5, 24)   # 门侧近矿（出盒穿后方通道那 6 格，BFS ≤ 8）
     FAR = Pos(30, 4)    # 远矿（超出门槛 ⇒ 不去）
 
     def _turn(self, worker: Worker, ore: Pos, robots=(), near_ore: bool = True):

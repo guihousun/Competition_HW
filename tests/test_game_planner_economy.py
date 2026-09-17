@@ -85,7 +85,7 @@ class SpareOreTest(unittest.TestCase):
     BASE = Pos(10, 24)
     #: 三座武器先摆好 —— 否则名额/金币会先把工人抽去建武器（那是 `BuildWeaponTest` 的事）
     WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
-    #: 18 格全砌满 ⇒ `_ring` 空 ⇒ 进入"墙砌完了"那一支
+    #: 14 格全砌满 ⇒ `_ring` 空 ⇒ 进入"墙砌完了"那一支
     RING = {c: WALL for c in wall_cells(Pos(10, 24), 41)}
     #: 一近一远两座矿，近的便宜、远的贵 —— 远近与贵贱分开，才测得出按哪个排
     NEAR_IRON = Pos(34, 24)
