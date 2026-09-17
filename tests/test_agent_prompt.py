@@ -61,6 +61,26 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("接口", role)
         self.assertIn("SOP2Prompt", role)
 
+    def test_the_sop_section_tells_it_to_look_here_first(self):
+        """【沉淀的SOP】段要教"先查这里、命中就直接照做、不必重新探索"。
+
+        沉淀的全部回报就在这一条上：第二次遇到同类任务时把整个探索过程省掉。
+        只写"可以参考下面的SOP执行"，LLM 会照样从头摸一遍，SOP 白存。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        sop = system.split("# 【沉淀的SOP】")[1].split("# 【输出示例】")[0]
+        self.assertIn("动手前先看这里", sop)
+        self.assertIn("不必重新探索", sop)
+
+    def test_the_role_section_pins_the_name_to_a_class_of_tasks(self):
+        """`name` 要凝练到"一类问题"上（「订去某地的机票的流程」，不是「订去上海的机票」）。
+
+        名字写死成这一次的目标，下次同类任务就撞不上它 —— SOP 等于白存，而这条错了
+        本地一点异常都看不出来（存是存进去了，只是永远复用不到）。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        role = system.split("# 【工具描述】")[0]
+        self.assertIn("一类问题", role)
+        self.assertIn("订去某地", role)
+
     def test_the_role_section_pins_the_deposit_timing(self):
         """沉淀的时机 = 【沉淀的SOP】段里还没有这条经验 —— "值不值得"不再是门槛，
         只要没沉淀过就存；存过的不要重复存（拖到完成任务才存，任务超时经验就丢了）。"""

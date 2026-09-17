@@ -177,7 +177,7 @@ class AgentToolCallTest(unittest.TestCase):
         desc = gen_all_tool_prompt(self.agent._tools)
         self.assertIn("- Params:\n    - cmd: 命令原文", desc)
         self.assertIn("- Params:\n    - name: ", desc)
-        self.assertIn("    - sop: 做法总结或知识本身", desc)
+        self.assertIn("    - sop: ", desc)  # 用途是措辞、会改；钉的是"第二个参数叫 sop"
         self.assertNotIn("- answer:", desc)
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
         self.assertIn(
@@ -193,6 +193,18 @@ class AgentToolCallTest(unittest.TestCase):
         block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
         self.assertIn("环境知识", block)
         self.assertIn("接口", block)
+
+    def test_the_sop_tool_teaches_reuse_and_a_generic_name(self):
+        """描述里要有两层：① 沉淀是为了下次同类任务**直接复用、不必重新探索**；
+        ② `name` 要泛化到"一类问题"（「订去某地的机票的流程」），不能写死成本次的目标。
+
+        ROLE 段那头管"什么时候存、存成什么名"，这一头管参数怎么填 —— 两处都得说，
+        因为 LLM 读工具描述时未必回头翻 ROLE 段。"""
+        desc = gen_all_tool_prompt(self.agent._tools)
+        block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
+        self.assertIn("不必重新探索", block)
+        self.assertIn("泛化", block)
+        self.assertIn("订去某地", block)
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """加一个工具只改一处（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。
