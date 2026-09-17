@@ -581,7 +581,28 @@ def _build_walls(
     if role.stone >= WALL_COST:
         # 认领要发生在动身之前：等砌完再登记的话，另一个工人会在同一回合也奔着它去。
         sites.add(target)
-        if role.pos == target:
+        # 环上只剩最后一格 ⇒ 从盒子外面砌（用户口径）：站在环里把最后一格盖上，砌墙的人自己
+        # 就被封在环里了。盒外一个能站的邻格都没有（被占/出图）⇒ 照旧就近砌（环该封还得封）；
+        # 有格子却走不到 ⇒ 这回合不砌，交给别的差事（下一回合它还是环上的最后一格）。
+        outside = _outside_spots(turn, role, target) if len(_ring(turn)) == 1 else ()
+        if outside:
+            # 走到盒旁再砌（在盒内则先往外走一步）。**不避让 `target`**：环上那个缺口正是出
+            # 盒子的近路，避让它就得从后方通道绕整整一圈（实测 12 步）；绕路途中停在缺口上
+            # 也没关系 —— 下一回合这一支照样把它送到盒外，不会再对脚下那格砌一次。
+            if role.pos in outside:
+                if _emit(q.cmds, role, actions.Build, WALL, target):
+                    return True
+            for spot in outside:
+                if q.step(
+                    role,
+                    spot,
+                    avoid=frozenset(sites - {target}),
+                    onto=True,
+                    with_paths=True,
+                    reserve=True,
+                ):
+                    return True
+        elif role.pos == target:
             # 站在目标格上就先挪开一格、这一回合不砌：人站在墙上时那一格在网格里只剩
             # "worker"（单位铺在最后，墙被盖掉）⇒ 看不出砌过没有，而 `_ring` 的"自己人算
             # 路过"又把它复活成候选 ⇒ 每回合对同一格 `build`，石头白花。挪开一格两个方向
@@ -598,6 +619,29 @@ def _build_walls(
         elif q.step(role, target, avoid=frozenset(sites), with_paths=True, reserve=True):
             return True
     return False  # 没石头、采不到 ⇒ 调用方走其他差事
+
+
+def _outside_spots(turn: Turn, role: Worker, target: Pos) -> tuple[Pos, ...]:
+    """`target` 的邻格里"在防御盒子外、又站得上去"的那些 —— 最后一格墙的落脚点（按坐标排）。
+
+    唯一用途见 `_build_walls`：站在环里砌最后一格会把自己封在环里。**要站上去**（`onto`）——
+    这些格子是盒外的空地，`step_toward` 到不了；`role.pos` 自己那一格保留（已经站在盒外的
+    贴格上时直接就能砌）。盒外的邻格全被占 / 出图 ⇒ 空集，调用方这一回合不砌。
+    """
+    station = turn.map.station
+    if station is None:
+        return ()
+    box = box_cells(station)
+    # `blocked` 里混着队友和自己（`model._entries`）⇒ 只把自己的那格摘出来
+    taken = turn.map.blocked - {role.pos}
+    width, height = turn.map.size
+    return tuple(
+        sorted(
+            p
+            for p in (Pos(target.x + d.x, target.y + d.y) for d in STEPS)
+            if 0 <= p.x < width and 0 <= p.y < height and p not in box and p not in taken
+        )
+    )
 
 
 def _sealed_back(turn: Turn) -> bool:

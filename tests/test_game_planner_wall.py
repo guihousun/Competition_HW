@@ -1038,6 +1038,91 @@ class StandingOnTheTargetTest(unittest.TestCase):
         )
 
 
+class LastCellFromOutsideTest(unittest.TestCase):
+    """环上只剩最后一格 ⇒ 站到**盒子外面**去砌（用户口径）。
+
+    站在环里把最后一格盖上，砌墙的人自己就被封在封死的环里了（盒内只剩基地 + 武器环那点
+    走廊，而出入口在后方通道）。只在"环上只剩一格"时生效 —— 平常照旧就近站，否则每一格
+    都要先绕到盒外，第 1 天根本砌不完（`BuildWallTest` 那条整网用例钉的就是这个）。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "rocket", Pos(12, 25): "gatling"})
+    LAST = Pos(13, 24)  # 正面列中间那一格
+    INSIDE = Pos(12, 24)  # 贴着 `LAST` 的盒内格 —— 旧口径就在这儿砌
+
+    def _turn(self, built: set[Pos], worker: Worker, extra: dict[Pos, str] | None = None) -> Turn:
+        return Turn(
+            round_no=40,
+            map=Map(
+                (41, 32),
+                _terrain(
+                    self.WEAPONS,
+                    {self.BASE: "station"},
+                    extra or {},
+                    {c: WALL for c in built},
+                    {worker.pos: "worker"},
+                ),
+            ),
+            roles=(worker,),
+            gold=0,
+            weapons=self.WEAPONS,
+        )
+
+    def test_the_last_cell_is_built_from_outside_the_box(self):
+        """一路走到砌上，且**砌它的人站在盒子外面**。
+
+        这一条只能串起来跑：第一回合只是往门外挪一步（人还在盒里），得走到位才看得出
+        "从哪儿砌的"。旧口径下 `step_toward` 会把它停在盒内的 `(12,24)` 上就地砌上。
+
+        回合数卡了个上限：环上那个缺口**就是**出盒子的近路（穿过它 2 步），走去后方通道绕
+        整圈是 12 步 —— 把 `target` 圈进软避让就会退化成绕圈，卡住这条退化。
+        """
+        built = {c for c in wall_cells(self.BASE, 41) if c != self.LAST}
+        worker = Worker(1, self.INSIDE, {"stone": 5})
+        for rounds in range(40):
+            cmd = plan(self._turn(built, worker)).get("1")
+            self.assertIsNotNone(cmd, "最后一格必须有人去砌 —— 不能干等")
+            if cmd["action"] == "build":
+                self.assertEqual(
+                    Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]),
+                    self.LAST,
+                    "砌的还是最后那一格",
+                )
+                self.assertEqual(worker.pos.dist(self.LAST), 1, "站位即建造位")
+                self.assertNotIn(
+                    worker.pos, box_cells(self.BASE), "砌最后一格的人得站在盒子外面"
+                )
+                self.assertLessEqual(rounds, 4, "出盒子走的是环上那个缺口，不是绕后方通道整圈")
+                return
+            worker = Worker(1, Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), {"stone": 5})
+        self.fail("40 回合都没把最后一格砌上")
+
+    def test_a_second_last_cell_is_still_built_from_the_inside(self):
+        """环上还剩**两格**时照旧就近砌 —— 判据是"只剩一格"，不是"快砌完了"。
+
+        提前绕盒外的话每一步墙都要多走十几步，第 1 天砌不满 14 格。
+        """
+        built = {c for c in wall_cells(self.BASE, 41) if c not in (self.LAST, Pos(11, 26))}
+        cmds = plan(self._turn(built, Worker(1, self.INSIDE, {"stone": 5})))
+        self.assertEqual(
+            cmds["1"],
+            {"action": "build", "name": WALL, "targetPos": [{"x": 13, "y": 24}]},
+            "两格时照旧就近砌（就近 = 盒内的 (12,24)）",
+        )
+
+    def test_without_an_outside_cell_it_builds_from_the_inside_anyway(self):
+        """盒外三个邻格全被占 ⇒ 照旧就近砌：环该封还得封，不因为绕不出去就永远不封。
+
+        收尾动作是用户口径的**尽力而为**，不是闸门 —— 真要拦"封了会把人关住"的是
+        `_trapped` / `gated` 那套（见 `WallGateTest`）。
+        """
+        built = {c for c in wall_cells(self.BASE, 41) if c != self.LAST}
+        blocked = {Pos(14, 23): "robot:1", Pos(14, 24): "robot:1", Pos(14, 25): "robot:1"}
+        cmds = plan(self._turn(built, Worker(1, self.INSIDE, {"stone": 5}), extra=blocked))
+        self.assertEqual(cmds["1"]["action"], "build", "没地方站就就近砌上，不能干等")
+
+
 class SegmentSplitTest(unittest.TestCase):
     """两个工人的切段分配：A 领前段首格、B 领后段首格，沿环同向推进。
 
