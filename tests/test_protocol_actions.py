@@ -70,18 +70,21 @@ class MoveWireTest(unittest.TestCase):
         （key 由 `planner._emit` 给）。字段名 `controllerId` 写错（`controllerID` / `roleId`）
         就是一次"指令非法"。
         """
-        wire = actions.Attack("worker", "10010", Pos(29, 7)).to_wire()
+        wire = actions.Attack("worker", "10010", (Pos(29, 7),)).to_wire()
         self.assertEqual(
             wire,
             {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 29, "y": 7}]},
         )
         self.assertIsInstance(wire["controllerId"], str, "接口文档标的是 String")
 
-    def test_attack_target_pos_is_always_one_point(self):
-        """`targetPos` 数量 = 武器等级数；`Attack` 恒编一格（L1 的口径）。"""
-        for role_type in ("worker", "pioneer"):
-            with self.subTest(role_type=role_type):
-                self.assertEqual(len(actions.Attack(role_type, "7", Pos(1, 1)).to_wire()["targetPos"]), 1)
+    def test_attack_emits_every_target_it_was_given(self):
+        """照单编 `targetPos`：给几格编几格、顺序不变（重复的格也照编）。
+
+        **个数 = 武器等级**是 `planner._fire` 的账（接口文档 L218：多一个少一个都是指令非法），
+        这里只管形状。L2/L3 多发同点，所以"重复的格"是常态、不能顺手去重。
+        """
+        wire = actions.Attack("worker", "7", (Pos(4, 4), Pos(4, 4))).to_wire()
+        self.assertEqual(wire["targetPos"], [{"x": 4, "y": 4}, {"x": 4, "y": 4}])
 
     def test_sell_wire_shape(self):
         """`{"action":"sell","name":<矿种>,"num":<件数>}`：`num` 是 Int（§2.2，不填默认 1），
@@ -177,7 +180,7 @@ class GateTest(unittest.TestCase):
         bug 本地全绿，只是整夜少一门火力）。"""
         for role_type in ("worker", "pioneer"):
             with self.subTest(role_type=role_type):
-                self.assertEqual(actions.Attack(role_type, "10010", Pos(1, 1)).to_wire()["action"], "attack")
+                self.assertEqual(actions.Attack(role_type, "10010", (Pos(1, 1),)).to_wire()["action"], "attack")
 
     def test_worker_cannot_accept_a_task(self):
         """`acceptTask` 只在开拓者那一行（任务书 §4.4 最右列）。

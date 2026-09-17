@@ -52,8 +52,9 @@ LOGGER = logging.getLogger(__name__)
 WEAPONS_BY_SITE = ("rocket", "rocket", "gatling")
 
 #: 三种武器的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；电磁狙击炮能量 10
-#: （沿弹道穿透、逐台扣减）；火箭中心 20、落点周围 8 格溅射 10（指哪打哪、L1 一枚）。
-#: 机器人四种血量 40/60/500/800 全都 ≥ 20 ⇒ L1 对满血机器人不可能过量伤害。
+#: （沿弹道穿透、逐台扣减）；火箭中心 20、落点周围 8 格溅射 10（指哪打哪）。
+#: 每升一级多发一份：加特林/火箭 = 多发多目标（个数 = 等级，见 `_fire`），电磁恒 1 个目标
+#: 但能量翻倍。机器人四种血量 40/60/500/800 全都 ≥ 20 ⇒ 一发对满血机器人不可能过量伤害。
 GATLING_SHOT = 10
 RAILGUN_ENERGY = 10
 ROCKET_CENTER = 20
@@ -1514,7 +1515,10 @@ def _fire(
 
     - 冷却中不打：payload 的 `cooldown` 优先；火箭字段缺失时查本地开火账 `_fired`
       （发过之后 3 回合不选 —— 打冷却炮是指令执行失败、白丢一回合）；
-    - 火箭（`_rocket_site`）：落点任选 ⇒ 中心 20 + 溅射 10 全场算账，取总分最高的落点；
+    - `targetPos` 的**个数必须等于武器等级**（接口文档 L218，多一个少一个都是指令非法）：
+      电磁狙击炮恒 1 个，加特林/火箭 = 等级数。多发**全部指向同一个最优落点** —— 火箭同点
+      叠加、加特林同弹道连续吃掉同一台；
+    - 火箭（`_rocket_site`）：落点任选 ⇒ 中心 + 溅射全场算账，取总分最高的落点；
     - 加特林 / 电磁（`_beam_site`）：弹道武器 ⇒ 落点打在某台机器人身上（终点必在弹道上 ⇒ 必
       命中；途中更近的先接住，那也是命中）。取有效伤害最高的，并列打近的；
     - `assigned` 记账：先开火的炮把估计伤害记在机器人身上，后开的按剩余血算 —— 不挤同一个将死
@@ -1533,19 +1537,36 @@ def _fire(
         target = _rocket_site(weapon, foes, turn.map.size, assigned)
         if target is None:
             return False
-        _book_rocket(target, foes, assigned)
+        _book_rocket(weapon, target, foes, assigned)
     else:
         victim = _beam_site(weapon, foes, assigned)
         if victim is None:
             return False
         target = victim.pos
-        shot = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
-        assigned[victim.pos] = assigned.get(victim.pos, 0) + shot
+        assigned[victim.pos] = assigned.get(victim.pos, 0) + _beam_damage(weapon)
+    count = 1 if weapon.kind == "railgun" else weapon.level
     # key 是武器 id，操控角色在报文的 `controllerId` 里
-    fired = _emit(cmds, role, actions.Attack, str(role.id), target, key=str(weapon.id))
+    fired = _emit(
+        cmds, role, actions.Attack, str(role.id), (target,) * count, key=str(weapon.id)
+    )
     if fired and weapon.kind == "rocket":
         _fired[weapon.id] = turn.round_no  # 判题器不发 cooldown ⇒ 发出的那发自己记
     return fired
+
+
+def _beam_damage(weapon: Weapon) -> int:
+    """加特林/电磁这一炮打在一个落点上的总伤害：每级 +10（发出去的子弹/能量份数 = 等级）。
+
+    加特林的多颗子弹同落点 ⇒ 同一条弹道连着吃掉最近那台；电磁的一束能量翻倍。只用来挑目标
+    与记账，实际命中由判题器算。
+    """
+    base = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
+    return base * weapon.level
+
+
+def _rocket_damage(weapon: Weapon) -> tuple[int, int]:
+    """火箭这一炮的 `(中心, 溅射)` 伤害：导弹数 = 等级、同落点叠加 ⇒ 每级 +20 / +10。"""
+    return ROCKET_CENTER * weapon.level, ROCKET_SPLASH * weapon.level
 
 
 def _beam_site(
@@ -1553,11 +1574,11 @@ def _beam_site(
 ) -> Robot | None:
     """加特林/电磁的目标：有效伤害最高的那台（并列打近的、再并列按坐标序）。
 
-    "有效伤害" = min(伤害, 剩余血)：L1 的 10 点对满血机器人（≥40 血）等额，差别只在将死者
-    —— 别把整发浪费在已被打得差不多的人身上（`assigned` = 本回合先开火的炮记的账）。够得着的
-    目标全是将死的（有效 ≤ 0）⇒ 不打。
+    "有效伤害" = min(伤害, 剩余血)：对满血机器人（≥40 血）等额，差别只在将死者 —— 别把整发
+    浪费在已被打得差不多的人身上（`assigned` = 本回合先开火的炮记的账）。够得着的目标全是
+    将死的（有效 ≤ 0）⇒ 不打。
     """
-    shot = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
+    shot = _beam_damage(weapon)
 
     def effective(r: Robot) -> int:
         return min(shot, max(0, r.health - assigned.get(r.pos, 0)))
@@ -1573,7 +1594,7 @@ def _rocket_site(
     size: tuple[int, int],
     assigned: Mapping[Pos, int],
 ) -> Pos | None:
-    """火箭的最大伤害落点：中心 20 + 周围 8 格溅射 10，取总分最高的格子。
+    """火箭的最大伤害落点：中心 + 周围 8 格溅射，取总分最高的格子。
 
     候选 = 机器人占的格与其 8 邻格（别的格子一分伤害都摸不到），且落点须在射程内 ——
     溅射可以够到射程之外的机器人（射程只管落点）。评分 = Σ min(伤害, 剩余血)
@@ -1581,6 +1602,7 @@ def _rocket_site(
     越界格不进候选（越界落点 = 指令非法，红线不让赌）。
     """
     alive = _alive(robots)
+    center, splash = _rocket_damage(weapon)
     width, height = size
     cands = {
         cell
@@ -1592,7 +1614,7 @@ def _rocket_site(
     def score(cell: Pos) -> int:
         return sum(
             min(
-                ROCKET_CENTER if cell == r.pos else ROCKET_SPLASH if cell.dist(r.pos) == 1 else 0,
+                center if cell == r.pos else splash if cell.dist(r.pos) == 1 else 0,
                 max(0, r.health - assigned.get(r.pos, 0)),
             )
             for r in alive
@@ -1602,10 +1624,13 @@ def _rocket_site(
     return min(in_range, key=lambda cell: (-score(cell), cell), default=None)
 
 
-def _book_rocket(target: Pos, robots: tuple[Robot, ...], assigned: dict[Pos, int]) -> None:
+def _book_rocket(
+    weapon: Weapon, target: Pos, robots: tuple[Robot, ...], assigned: dict[Pos, int]
+) -> None:
     """把火箭这一发的估计伤害记到账上（同回合后开的炮按剩余血挑目标）。"""
+    center, splash = _rocket_damage(weapon)
     for r in _alive(robots):
-        hit = ROCKET_CENTER if r.pos == target else ROCKET_SPLASH if r.pos.dist(target) == 1 else 0
+        hit = center if r.pos == target else splash if r.pos.dist(target) == 1 else 0
         if hit:
             assigned[r.pos] = assigned.get(r.pos, 0) + hit
 

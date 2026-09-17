@@ -146,30 +146,32 @@ class Collect(BaseAction):
 
 
 class Attack(BaseAction):
-    """操作武器打一个格子。仅黑夜（昼夜门由 `planner` 把关，不进闸门），全部角色都能做
+    """操作武器打目标格。仅黑夜（昼夜门由 `planner` 把关，不进闸门），全部角色都能做
     （开拓者也在炮位上）。
 
     报文形状与其它动作是反的，最易写错：`roleCommandMap` 的 key 是武器 id，操控者在
     `controllerId` 里 ⇒ `planner` 那边要 `_emit(..., key=str(weapon.id))`。两条站位硬规则
     （不满足是执行失败、不计异常，但白打一发）：操控者须站在武器周围一格内、一人只能操
-    一座；目标格须在射程内（打空处 = 执行失败）。多目标（`targetPos` 数量 = 武器等级数）
-    不做：我们的武器永远是 L1。
+    一座；目标格须在射程内（打空处 = 执行失败）。
+
+    `targets` 的**个数必须等于武器当前等级**（接口文档 L218）：加特林/火箭 L2 发 2 个、
+    L3 发 3 个，电磁狙击炮恒 1 个 ⇒ 个数由 `planner` 按 `Weapon.level` 决定，这里照单编。
     """
 
     code = "attack"
     roles = ALL
 
-    def __init__(self, role_type: str, controller_id: str, target: Pos) -> None:
+    def __init__(self, role_type: str, controller_id: str, targets: tuple[Pos, ...]) -> None:
         super().__init__(role_type)
         # 接口文档标的是 String —— 在这里定死，别让 int 漏进 JSON
         self.controller_id = str(controller_id)
-        self.target = target
+        self.targets = targets
 
     def to_wire(self) -> dict[str, Any]:
         return {
             "action": self.code,
             "controllerId": self.controller_id,
-            "targetPos": [{"x": self.target.x, "y": self.target.y}],
+            "targetPos": [{"x": t.x, "y": t.y} for t in self.targets],
         }
 
 

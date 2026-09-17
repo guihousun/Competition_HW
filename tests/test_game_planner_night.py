@@ -76,14 +76,16 @@ class NightWeaponTest(unittest.TestCase):
         cooldown: int = 0,
         round_no: int | None = None,
         kind: str = "gatling",
+        level: int = 1,
     ) -> Turn:
-        """一名工人已经贴着那座炮（切比雪夫 1）—— 开火与否只看目标与冷却。"""
+        """一名工人已经贴着那座炮（切比雪夫 1）—— 开火与否只看目标、冷却与等级。"""
         gun = Weapon(
             id=self.GUN,
             kind=kind,
             pos=self.NEAR,
             attack_range=self.REACH if reach is None else reach,
             cooldown=cooldown,
+            level=level,
         )
         return self._turn(
             Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots, round_no=round_no
@@ -241,6 +243,72 @@ class NightWeaponTest(unittest.TestCase):
         far = Robot(Pos(17, 30), 40)  # 切比雪夫 5
         self.assertEqual(plan(self._manned(far, reach=4)), {})
         self.assertEqual(self._only_cmd(self._manned(far, reach=7))["targetPos"], [{"x": 17, "y": 30}])
+
+    def test_a_level_two_gun_fires_two_shots_at_the_same_cell(self):
+        """`targetPos` 的**个数必须等于武器等级**（接口文档 L218）：升到 L2 还只发一格就是
+        一次"指令非法"（红线），多发一格也一样。多发同点 —— 火箭同点叠加、加特林同弹道连着
+        吃掉最近那台。"""
+        cmd = self._only_cmd(self._manned(Robot(Pos(12, 27), 40), level=2))
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 27}, {"x": 12, "y": 27}])
+
+    def test_a_level_three_gun_fires_three_shots(self):
+        """L3 发三格（个数 = 等级，不是"最多两格"）。"""
+        cmd = self._only_cmd(self._manned(Robot(Pos(12, 27), 40), level=3))
+        self.assertEqual(len(cmd["targetPos"]), 3)
+
+    def test_a_level_two_rocket_fires_two_missiles(self):
+        """火箭的等级放的是**导弹枚数** ⇒ L2 的 `targetPos` 也是两格。"""
+        cmd = self._only_cmd(
+            self._manned(Robot(Pos(13, 25), 40), Robot(Pos(14, 25), 8), kind="rocket", level=2)
+        )
+        self.assertEqual(cmd["targetPos"], [{"x": 13, "y": 25}, {"x": 13, "y": 25}])
+
+    def test_the_railgun_never_fires_more_than_one_shot(self):
+        """电磁狙击炮是单目标武器（接口文档 L218 的"恒为 1"）：等级只翻倍能量、不加目标位。
+
+        照"加特林/火箭 = 等级"一刀切，L2 的电磁就会发出 2 格 ⇒ 指令非法。
+        """
+        cmd = self._only_cmd(self._manned(Robot(Pos(12, 27), 40), kind="railgun", level=3))
+        self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 27}])
+
+    def test_a_level_two_gun_is_worth_twice_the_damage(self):
+        """升级后伤害翻倍（每级 +10），挑目标要按新伤害算。
+
+        例：(13,25) 15 血（距 1）与 (15,25) 40 血（距 3）都够得着 —— L1 各值 10 点、并列取近，
+        打残血的；L2 前者仍只值 15 点、后者值满 20 点，转打满血的。
+        """
+        near, far = Robot(Pos(13, 25), 15), Robot(Pos(15, 25), 40)
+        self.assertEqual(
+            self._only_cmd(self._manned(near, far))["targetPos"], [{"x": 13, "y": 25}], "L1：并列取近"
+        )
+        self.assertEqual(
+            self._only_cmd(self._manned(near, far, level=2))["targetPos"],
+            [{"x": 15, "y": 25}, {"x": 15, "y": 25}],
+            "L2：15 血那只吸收不完 20 点伤害",
+        )
+
+    def test_a_level_two_rocket_is_worth_twice_the_splash(self):
+        """火箭的导弹数 = 等级 ⇒ 中心/溅射都按等级翻倍（L2 两枚 = 40/20），评分跟着变。
+
+        例：(13,25) 15 血与 (13,26) 15 血挨在一起（L1 吃 15+10=25 分），另一台 40 血在 (9,22)
+        （L1 只值 20 分）⇒ L1 打那簇残血的；L2 时那簇被血量封顶只值 30 分、满血那台值满 40 分
+        ⇒ 转打满血的（两枚都砸它 = 一炮带走）。
+        """
+        cluster = (Robot(Pos(13, 25), 15), Robot(Pos(13, 26), 15))
+        lone = Robot(Pos(9, 22), 40)  # 簇离它切比雪夫 4 ⇒ 没有落点能同时吃到两边
+        self.assertEqual(
+            self._only_cmd(self._manned(*cluster, lone, kind="rocket"))["targetPos"],
+            [{"x": 13, "y": 25}],
+            "L1：一簇残血比一台满血值钱",
+        )
+        # 火箭打出去的那发会记进本地开火账（`_fired`）⇒ 不擦干净，下面那次就是"冷却中"、一炮不发
+        planner._fired.clear()
+        self.assertEqual(
+            self._only_cmd(self._manned(*cluster, lone, kind="rocket", level=2))["targetPos"],
+            [{"x": 9, "y": 22}, {"x": 9, "y": 22}],
+            "L2：满血那台吸收得完 40 点",
+        )
 
     def test_a_cooling_rocket_holds_fire(self):
         """火箭发射台发射后有 3 回合空窗（`cooldown`）⇒ 冷却中一炮不发，
