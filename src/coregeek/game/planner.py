@@ -237,9 +237,10 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
     ore_taken: set[Pos] = set()
 
     for role in turn.roles:
-        # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，所以它连夜里都不回炮位）。
+        # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，所以它连夜里都不回炮位）——
+        # 唯一例外是夜里人手不够（`_short_handed`：工人阵亡 ⇒ 有炮没人操），生存第一、弃任务。
         # 判据是载荷事实 `phase_task`，不是自己记的"谁领了任务"；放在循环最前面，与昼夜无关。
-        if isinstance(role, Pioneer) and turn.phase_task:
+        if isinstance(role, Pioneer) and turn.phase_task and not _short_handed(turn):
             _answer_task(role, turn, cmds)
             continue
 
@@ -1264,6 +1265,19 @@ def _leave_for_the_post(
 
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────
+def _short_handed(turn: Turn) -> bool:
+    """夜里操炮的人手够不够：不够 ⇒ 被任务钉死的开拓者也得弃任务回炮位（用户口径"生存第一"）。
+
+    判据 = **没被任务钉住的角色数 < 武器组数**（一人只能操一组，少一个就有一组整夜空着）。
+    武器还没建齐 ⇒ 组数按场上已建的算，天然不报警。白天恒假：白天不能开火、回炮位没有意义
+    （那一支只发 `move`），于是白天那一支与这一条的判据都不带跨回合状态 —— 工人白天复活后自愈。
+    """
+    if turn.is_day:
+        return False
+    pinned = sum(1 for r in turn.roles if isinstance(r, Pioneer))
+    return len(turn.roles) - pinned < len(_weapon_groups(turn))
+
+
 def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
     """把武器分成操作组：同一组的武器由同一个角色操作。
 

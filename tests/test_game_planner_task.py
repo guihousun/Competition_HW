@@ -110,15 +110,18 @@ class TaskHoldTest(unittest.TestCase):
         self.assertEqual(plan(turn), {})
 
     def test_a_pinned_pioneer_does_not_man_a_weapon_at_night(self):
-        """夜里也不回炮位。
+        """人手够时夜里也不回炮位（`_short_handed` 为假）。
 
         开拓者已经贴着炮、射程内还有敌人 —— 不钉住的话它会开炮，而开炮要"走过去"，
-        任务当场作废。`phaseTask` 一空（下面那条）同样的局面就必须开炮，两相对照。
+        任务当场作废。判据是"没钉住的人够不够操满炮群"：两个工人 + 一座炮 ⇒ 够，
+        开拓者一条指令都不发。`phaseTask` 一空（下面那条）同样的局面就必须开炮，两相对照。
         """
         turn = self._turn(
             Pioneer(10011, Pos(12, 24)), self.NIGHT, self.TASK, robots=(Robot(Pos(12, 27), 40),)
         )
-        self.assertEqual(plan(turn), {})
+        cmds = plan(turn._replace(roles=(Pioneer(10011, Pos(12, 24)), Worker(1, Pos(40, 40)), Worker(2, Pos(40, 41)))))
+        self.assertNotIn("10011", cmds, "被钉着 ⇒ 一条指令都不发（含那条会作废任务的 move）")
+        self.assertNotIn("10020", cmds, "那一炮不是它开的（`attack` 的 key 是武器 id）")
 
     def test_a_free_pioneer_still_mans_a_weapon_at_night(self):
         """"所有角色都操炮"不能被任务线吃掉 —— 与上一条（钉住的开拓者不发炮）对照。"""
@@ -141,6 +144,53 @@ class TaskHoldTest(unittest.TestCase):
         cmds = plan(turn)
         self.assertEqual(list(cmds), ["10020"], "只有工人那一炮")
         self.assertEqual(cmds["10020"]["controllerId"], "1")
+
+    def _two_guns(self, *roles: BaseRole, round_no: int = NIGHT) -> Turn:
+        """两座炮、各自成组（都不在 `weapon_sites` 上 ⇒ `_weapon_groups` 一人操一座）、
+        开拓者手里有答案 —— "弃任务 / 钉住"两种结果在指令上分得开。"""
+        turn = self._turn(Pioneer(10011, Pos(20, 20)), round_no, self.TASK)
+        return turn._replace(
+            roles=roles,
+            weapons=(
+                turn.weapons[0],
+                Weapon(id=10021, kind="gatling", pos=Pos(9, 22), attack_range=self.REACH, cooldown=0),
+            ),
+            robots=(Robot(Pos(12, 27), 40),),
+            llm_resp="<answer>晴 26 度</answer>",
+        )
+
+    def test_a_dead_worker_at_night_pulls_the_pioneer_back_to_the_guns(self):
+        """工人阵亡（只可能在夜里）⇒ 被任务钉死的开拓者也得弃任务回炮位（用户口径"生存第一"）。
+
+        判据 = **没被任务钉住的角色数 < 武器组数**（一人只能操一组，少一个就有一组整夜空着）：
+        场上只剩开拓者一个人、两座炮 ⇒ 0 < 2。不放开的话这一夜一门火力都没有，而本地全绿
+        —— 报文合法、"行为也正常"，只是任务照做、炮没人操。
+        """
+        cmds = plan(self._two_guns(Pioneer(10011, Pos(20, 20))))
+        self.assertEqual(list(cmds), ["10011"])
+        self.assertEqual(cmds["10011"]["action"], "move", "弃任务 ⇒ 回炮位（这一回合先走一格）")
+
+    def test_two_live_workers_keep_the_pioneer_on_its_task(self):
+        """人手够（两个工人 + 两座炮）⇒ 开拓者照旧钉在任务上。
+
+        与上一条对照：判据是"没钉住的人够不够操满炮"，不是"有没有工人死过" —— 2 < 2 不成立，
+        两门炮都有人操，任务就该接着做。边界写成 `<=` 或只数工人都会在这里翻车。
+        """
+        cmds = plan(
+            self._two_guns(
+                Pioneer(10011, Pos(20, 20)), Worker(1, Pos(12, 24)), Worker(2, Pos(9, 21))
+            )
+        )
+        self.assertEqual(cmds["10011"]["action"], "submitAnswer", "钉住 ⇒ 交答案、不挪窝")
+
+    def test_a_pinned_pioneer_never_leaves_for_the_post_in_the_day(self):
+        """白天放人也不许弃任务：白天不能开火、回炮位没有意义（`_short_handed` 恒假）。
+
+        夜里人手不够与白天收工是两回事。收工闸门恰好在这条用例的回合号上允许回程
+        （`within=69` ⇒ 白天只剩 2 回合），漏掉昼夜那一半就会把开拓者从任务上拽走。
+        """
+        cmds = plan(self._two_guns(Pioneer(10011, Pos(30, 30)), round_no=69))
+        self.assertEqual(cmds["10011"]["action"], "submitAnswer", "白天照旧钉着")
 
 
 class TaskChannelTest(unittest.TestCase):
