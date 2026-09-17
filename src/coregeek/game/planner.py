@@ -69,6 +69,11 @@ WALL_COST = 1
 #: 一块石头的完整代价：采 1 回合 + 挪 1 回合 + 建 1 回合。
 ROUNDS_PER_STONE = 3
 
+#: 砌完墙后手里多留几块石头（用户口径）：墙夜里被打掉一格，第二天手里有货就能立刻补上。
+#: 只抬高 `_stones_to_mine` 的上限，不额外开"回合够不够多"的开关 —— 回合少时那个上限本来
+#: 就被回合预算压到很小。
+STONE_RESERVE = 3
+
 #: 容错余量（回合）：距离全按 BFS 真实步数算，这是给收尾动作留的真余量。5 是拍的。
 TIME_MARGIN = 5
 
@@ -825,9 +830,10 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
         = d_mine + d_wall + 2s − 1 + 3k        # 到达工地那一步已贴着首格
                                             # ⇒ 每多采一块净花 3 回合
 
-    令它 ≤ `白天还剩的回合 − TIME_MARGIN` 解出 k，再与"还差几格墙"取小（没有转移物品的指令，
-    多采的石头给不了别人）。距离一律用 BFS 真实步数：回工地常要绕整面围墙、从后方通道进来，
-    切比雪夫会把 10+ 步说成 3 步。-1（走不到）⇒ 一块都别采（宁可这回合不动）。
+    令它 ≤ `白天还剩的回合 − TIME_MARGIN` 解出 k，再与"还差几格墙 **+ `STONE_RESERVE`**"取小
+    —— 多出来的几块是砌完墙后的存货（没有转移物品的指令，多采的石头给不了别人，只能自己拿着，
+    墙被打掉一格时立刻补得上）。距离一律用 BFS 真实步数：回工地常要绕整面围墙、从后方通道
+    进来，切比雪夫会把 10+ 步说成 3 步。-1（走不到）⇒ 一块都别采（宁可这回合不动）。
     """
     if mine is None:
         return 0
@@ -837,7 +843,7 @@ def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, fre
     if to_mine < 0 or to_wall < 0:
         return 0
     budget = turn.day_rounds_left - TIME_MARGIN - to_mine - to_wall - 2 * role.stone + 1
-    return max(0, min(budget // ROUNDS_PER_STONE, free - role.stone))
+    return max(0, min(budget // ROUNDS_PER_STONE, free + STONE_RESERVE - role.stone))
 
 
 def _sell_ore(

@@ -19,7 +19,13 @@ from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game import planner  # noqa: E402
-from coregeek.game.planner import POST_MARGIN, WALL, WEAPONS_BY_SITE, plan  # noqa: E402
+from coregeek.game.planner import (  # noqa: E402
+    POST_MARGIN,
+    STONE_RESERVE,
+    WALL,
+    WEAPONS_BY_SITE,
+    plan,
+)
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -331,6 +337,7 @@ class BuildWallTest(unittest.TestCase):
 
         这一条把"回合预算 → 采矿 → 砌墙"整条线钉在一起：预算算大了天黑砌不完，
         算小了石头不够、工人在工地干等；顺序错了则会先把背面砌满、正面空着。
+        收工时手里剩 `STONE_RESERVE` 块 —— 每多采一块净花 3 回合，攒到上限就该收手。
         """
         built: list[Pos] = []
         stone = 0
@@ -355,7 +362,7 @@ class BuildWallTest(unittest.TestCase):
                 self.worker = Worker(1, cell, {"stone": stone})
 
         self.assertEqual(built, list(wall_cells(self.BASE, 41)), "顺序必须与优先级表一致")
-        self.assertEqual(stone, 0, "别多采 —— 白天总共就 14 格墙可砌")
+        self.assertEqual(stone, STONE_RESERVE, "砌完手里正好留 3 块存货，一块不多")
 
     def test_the_third_day_seals_the_back_corners_without_rebuilding(self):
         """第 3 天起补背面两个角格（14 → 16），已砌的那 14 格一格都不重砌。
@@ -368,7 +375,7 @@ class BuildWallTest(unittest.TestCase):
         self.assertEqual(len(corners), 2, "只补两个角格")
         self.entries.update({c: WALL for c in open_ring})
         built: list[Pos] = []
-        stone = len(corners)  # 手里正好够那两格 ⇒ 不采也不卖
+        stone = len(corners) + STONE_RESERVE  # 够那两格 + 存货 ⇒ 不采也不卖
         day3 = 2 * ROUNDS_PER_DAY + 1
         for _ in range(70):
             cmd = plan(self._turn(round_no=day3, stone=stone)).get("1")
@@ -399,6 +406,35 @@ class BuildWallTest(unittest.TestCase):
         late_cell = Pos(late["targetPos"][0]["x"], late["targetPos"][0]["y"])
         self.assertLess(early_cell.dist(self.MINE), pos.dist(self.MINE), "白天还长 ⇒ 继续朝矿走")
         self.assertGreater(late_cell.dist(self.MINE), pos.dist(self.MINE), "时间不够 ⇒ 掉头去工地")
+
+    def test_the_last_cell_still_mines_three_extra_stones(self):
+        """墙上只剩一格、手里一块石头都没有 ⇒ 也采够"那一格 + `STONE_RESERVE`"块再回去砌。
+
+        存货只能在这一趟里攒：环砌满之后墙线整个不参与（`target is None`），白天再没人采石头。
+        这几块是给"夜里被打掉一格、第二天立刻补上"备的（用户口径）。
+        """
+        self.entries.update({c: WALL for c in wall_cells(self.BASE, 41)[:-1]})
+        stone, collects, built = 0, 0, 0
+        for _ in range(70):
+            cmd = plan(self._turn(stone=stone)).get("1")
+            if cmd is None:
+                break
+            cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+            if cmd["action"] == "collect":
+                self.assertEqual(cell, self.MINE)
+                collects += 1
+                stone += 1
+            elif cmd["action"] == "build":
+                self.assertEqual(cell, wall_cells(self.BASE, 41)[-1], "砌的是最后那一格")
+                self.entries[cell] = WALL
+                built += 1
+                stone -= 1
+            else:
+                self.worker = Worker(1, cell, {"stone": stone})
+
+        self.assertEqual(built, 1, "最后那一格砌上了")
+        self.assertEqual(collects, 1 + STONE_RESERVE, "多采的正好是存货那 3 块")
+        self.assertEqual(stone, STONE_RESERVE, "砌完手里留着 3 块")
 
     def test_a_finished_ring_stops_the_stone_mining(self):
         """14 格都砌满了 ⇒ 不再采石头（多采的只会压在背包里）。
