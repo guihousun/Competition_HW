@@ -56,6 +56,36 @@ def step_toward(pos: Pos, goal: Pos, blocked: Set[Pos], size: tuple[int, int]) -
     return None
 
 
+def step_onto(pos: Pos, goal: Pos, blocked: Set[Pos], size: tuple[int, int]) -> Pos | None:
+    """朝 goal **自己**走一格（BFS 最短路）；`pos` 已经在 goal 上、或走不到，返回 None。
+
+    与 `step_toward` 的唯一差别是终点：那里要停"贴着 goal 的一格"（goal 通常挡路），这里要
+    停在 goal 上 —— 共用的武器操作位就是这种格子（那格是空地，得走上去才贴着两座炮）。
+    两个函数不能互换：`step_toward` 到不了这种格子，`step_onto` 停不进挡路的 goal。
+    """
+    if pos == goal:
+        return None  # 已经在上面（含"贴着"以外的情形：这里只能靠 == 判）
+    width, height = size
+    # 队列里存 `(当前格, 从 pos 迈出的第一步)`；pos 自己还没有"第一步"，故为 None
+    queue: deque[tuple[Pos, Pos | None]] = deque([(pos, None)])
+    seen = {pos}
+    while queue:
+        cell, first = queue.popleft()
+        for step in STEPS:
+            nxt = Pos(cell.x + step.x, cell.y + step.y)
+            if nxt in seen or nxt in blocked:
+                continue
+            if not (0 <= nxt.x < width and 0 <= nxt.y < height):
+                continue
+            seen.add(nxt)
+            # 用新变量：直接改 `first` 会让第二个邻居继承第一个的第一步。
+            nxt_first = nxt if first is None else first
+            if nxt == goal:
+                return nxt_first
+            queue.append((nxt, nxt_first))
+    return None
+
+
 def step_outside(pos: Pos, box: Set[Pos], blocked: Set[Pos], size: tuple[int, int]) -> Pos | None:
     """朝 `box` 外面走一格（BFS 最短路）；`pos` 已经在外面、或压根走不出去，返回 None。
 

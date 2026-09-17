@@ -614,9 +614,35 @@ class DayEndGateTest(unittest.TestCase):
         )
 
     def _steps_home(self, at: Pos) -> int:
-        """从 `at` 走到最近一座炮位的真实步数（与 `planner` 同一个口径）。"""
-        walk = frozenset(wall_cells(self.BASE, 41))
-        return min(steps_between(at, p, walk, self.SIZE) for p in weapon_sites(self.BASE, 41))
+        """从 `at` 走到最近那个**岗位**的真实步数（与 `planner` 同一个障碍、同一个口径）。
+
+        岗位两处：火箭对的共用操作位 `(11,25)` —— 它是空地、要**站上去**（比"贴着"多一步）；
+        加特林单列一组，岗位就是它的炮位 `(12,22)`（贴着它即可）。障碍取 `Map.blocked`
+        （含基地与武器格）：只在墙环上算的话，BFS 会穿过基地与炮位抄近路。
+        """
+        walk = self._turn(at=at).map.blocked
+        hops = []
+        for post, onto in ((Pos(11, 25), True), (Pos(12, 22), False)):
+            if at == post:
+                hops.append(0)  # 已经在岗位上
+                continue
+            steps = steps_between(at, post, walk, self.SIZE)
+            if steps >= 0:
+                hops.append(steps + 1 if onto else steps)
+        return min(hops)
+
+    def test_the_gate_aims_at_the_shared_operator_spot(self):
+        """收工的落点是那一组的**岗位**，不是"最近那座炮"：火箭对站到共用的操作位上去。
+
+        "站上去"是这件事的全部意义（`(10,25)` 只是进那个口袋的必经格）：天黑时人已经在岗，
+        夜里第一回合两座火箭就能交替；停在邻格则永远只贴着其中一座。
+        """
+        at = Pos(10, 25)
+        self.assertEqual(self._steps_home(at), 1, "就差站上操作位这一步")
+        cmds = plan(self._turn(round_no=DAY_ROUNDS - 1, at=at))
+        self.assertEqual(cmds["1"]["action"], "move", f"该走上岗位：{cmds}")
+        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertEqual(cell, Pos(11, 25), "落点就是共用操作位本身")
 
     def test_the_gate_opens_exactly_when_the_walk_home_eats_the_day(self):
         """回程步数 ≥ 白天剩余 − 1 ⇒ 这一回合就往炮位走。卡在边界上测（早一回合不动身）。"""

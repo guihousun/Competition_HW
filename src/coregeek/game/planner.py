@@ -5,7 +5,8 @@
 - 白天·开拓者：去最近一个能接的任务点 `acceptTask`；领到就被钉死（见 `_intents`）。
 - 白天·工人：建武器 → 修墙 → 砌墙 → 卖矿 → 升级 → 采最值钱的矿，一件不行才轮到下一件；
   武器是最高优先级（份额有缺且钱不够 ⇒ 筹资：卖货/采贵矿）；环砌完后的白天末尾提前回炮位。
-- 夜里·所有角色（含开拓者，`attack` 的可用角色是"全部"）：认领一座武器走过去，贴着就开火。
+- 夜里·所有角色（含开拓者，`attack` 的可用角色是"全部"）：认领一组武器，走到那一组的岗位
+  （两座火箭是共用的那一格、单座就站在炮旁）开火；能打就先打，打不了才挪岗。
 
 两个距离口径别混用：回合预算（来不来得及来回）一律用 BFS 真实步数（`steps_between`，绕障，
 -1 = 走不到）；选点/贴着用切比雪夫 `Pos.dist`（`dist <= 1` 是"站在建造位/采集位/炮位旁"的
@@ -32,6 +33,7 @@ from .grid import (
     base_cells,
     box_cells,
     door_cells,
+    step_onto,
     step_outside,
     step_toward,
     steps_between,
@@ -134,7 +136,8 @@ class _Move(NamedTuple):
     goal 型 = "朝 goal 挪一格"（BFS + 软避让，由 `_walk_out` 解）；provider 型 = 没有目标
     的走法（迈出盒子 / 挪开自己），第二段拿"当时的落子账"现算落脚格。`avoid` = 第一段已知
     的软避让；`with_paths` = 解的时候把已预留的路径也并进软避让；`reserve` = 动身成功后把
-    整条路记进预留账（矿 / 卖矿 / 砌墙这些差事要 —— 后解的同事整条让开，防双双停住）。
+    整条路记进预留账（矿 / 卖矿 / 砌墙这些差事要 —— 后解的同事整条让开，防双双停住）；
+    `onto` = 停在 goal 自己身上（默认停在贴着它的一格，见 `_Queue.step`）。
     """
 
     role: BaseRole
@@ -142,6 +145,7 @@ class _Move(NamedTuple):
     avoid: frozenset[Pos] = frozenset()
     with_paths: bool = False
     reserve: bool = False
+    onto: bool = False
     provider: Callable[[set[Pos]], Pos | None] | None = None
 
 
@@ -165,17 +169,22 @@ class _Queue:
         avoid: Set[Pos] = frozenset(),
         with_paths: bool = False,
         reserve: bool = False,
+        onto: bool = False,
         dig: bool = True,
     ) -> bool:
         """记一条"role 要走到 goal 去"。False = 硬障碍就走不到（调用方接着试下一个差事）；
         True = 意图已排，或这一步当场改成了拆墙（`_dig` 钩子在这里：拆墙是当场能定的 act，
-        "一天最多一个洞"的账决策段就得看见）。"""
+        "一天最多一个洞"的账决策段就得看见）。
+
+        `onto` = 停在 goal 自己身上（`step_onto`），默认停在贴着它的一格（`step_toward`）——
+        差事的 goal 都挡路（矿 / 建筑 / 炮位），只有共用的操作位那种空格才要走上去。
+        """
         walk = self.turn.map.blocked | self.claimed | avoid
         if dig and _dig(role, goal, self.turn, self.cmds, self.claimed, walk):
             return True
         if steps_between(role.pos, goal, self.turn.map.blocked | self.claimed, self.turn.map.size) < 0:
             return False
-        self.moves.append(_Move(role, goal, frozenset(avoid), with_paths, reserve))
+        self.moves.append(_Move(role, goal, frozenset(avoid), with_paths, reserve, onto))
         return True
 
     def beside(self, role: BaseRole, provider: Callable[[set[Pos]], Pos | None]) -> None:
@@ -371,9 +380,11 @@ def _walk_out(turn: Turn, q: _Queue, sites: set[Pos]) -> None:
             continue
         avoid = m.avoid | (paths if m.with_paths else frozenset())
         walk = blocked | claimed | avoid
-        step = step_toward(m.role.pos, m.goal, walk, size)
+        # `onto` 的意图要走 goal 自己（`step_onto`），其余停在贴着它的一格
+        walker = step_onto if m.onto else step_toward
+        step = walker(m.role.pos, m.goal, walk, size)
         if step is None and avoid:
-            step = step_toward(m.role.pos, m.goal, blocked | claimed, size)
+            step = walker(m.role.pos, m.goal, blocked | claimed, size)
         if step is None or not _emit(q.cmds, m.role, actions.Move, step):
             continue
         claimed.add(step)
@@ -1217,37 +1228,46 @@ def _leave_for_the_post(
     q: _Queue,
     taken: set[Pos],
 ) -> bool:
-    """白天收工：离夜里的第一波只剩回程步数了就回炮位；这一回合到此为止 ⇒ `True`。
+    """白天收工：离夜里的第一波只剩回程步数了就**回那一组的岗位**；这一回合到此为止 ⇒ `True`。
 
     白天就得动身：机器人在夜里第一个回合就全部出现，而回炮位常常要绕整面围墙、从背面那 2 格
-    门进来、再横穿盒子 —— 在正面墙外干活时直线三四步、BFS 十几步。与 `_defend` 的唯一区别是
-    它不调 `_fire`：`attack` 仅黑夜（§4.4），白天发就是非法指令、5 次出局。选炮口径一致。
+    门进来、再横穿盒子 —— 在正面墙外干活时直线三四步、BFS 十几步。目标与夜里 `_defend` 的
+    岗位同一个（`_post_spots`）：多座组站到共用的操作位、单座组站在炮旁，天黑时人已经在岗、
+    第一回合就能开火。与 `_defend` 的唯一区别是它不调 `_fire`：`attack` 仅黑夜（§4.4），白天
+    发就是非法指令、5 次出局。
 
-    先看时间、再看位置：判据是"到最近那座炮的 BFS 步数 ≥ 白天还剩的回合 − 1"（− 1 = 留 1
-    回合余量，拍的）；已经贴着那座炮时步数是 0，于是只有白天最后一回合才轮得到"在岗待命"。
+    先看时间、再看位置：判据是"到最近那个岗位的 BFS 步数 ≥ 白天还剩的回合 − 1"（− 1 = 留 1
+    回合余量，拍的）；已经在岗位上时步数是 0，于是只有白天最后一回合才轮得到"在岗待命"。
     少了时间这一道，"到岗就待命"会让早上正好站在炮边的工人整天不动。
 
     返回 `True` = 这一回合已由本函数处理（走了、或已在岗待命），调用方 `continue`；`False` =
-    还来得及干活（或没有可去的炮）。
+    还来得及干活（或没有可去的岗位）。
     """
     walk, size = turn.map.blocked, turn.map.size
-    # 最近、还没人认领、而且真走得到的那座炮 —— 一趟判定就够：最近的都赶不上，更远的更赶不上。
-    # BFS -1（不可达）剔掉，切比雪夫给不出这个值；已经贴着 ⇒ 步数 0，与"还差 3 步"同一刻度。
-    hops = [
-        (steps_between(role.pos, weapon.pos, walk, size), weapon.pos)
-        for weapon in turn.weapons
-        if weapon.pos not in taken
-    ]
-    hops = [(steps, pos) for steps, pos in hops if steps >= 0]
+    # 最近、还没人认领、而且真走得到的岗位 —— 一趟判定就够：最近的都赶不上，更远的更赶不上。
+    # BFS -1（不可达）剔掉，切比雪夫给不出这个值；已经在岗位上 ⇒ 步数 0，与"还差 3 步"同一刻度。
+    hops: list[tuple[int, Pos, tuple[Weapon, ...], bool]] = []
+    for group in _weapon_groups(turn):
+        if any(w.pos in taken for w in group):
+            continue
+        spots = _post_spots(group, turn, role)
+        if not spots:
+            continue
+        onto = len(group) > 1  # 多座组的岗位是空地、要站上去（与 `_defend` 同一个口径）
+        for spot in spots:
+            steps = _steps_to_post(role.pos, spot, onto, walk, size)
+            if steps >= 0:
+                hops.append((steps, spot, group, onto))
     if not hops:
         return False
-    steps, post = min(hops)
+    steps, spot, group, onto = min(hops, key=lambda h: (h[0], h[1]))
     if steps < turn.day_rounds_left - 1:
         return False  # 还剩富裕回合 ⇒ 照常干活
-    taken.add(post)  # 定下这座了：认领，免得另一个角色也奔这里（一人只能操一座）
+    for w in group:
+        taken.add(w.pos)  # 定下这组了：认领，免得另一个角色也奔这里（一人只能操一座）
     if steps == 0:
         return True  # 已经在岗 ⇒ 这一回合待命（什么都不发 = 合法空指令）
-    q.step(role, post)  # 只发 move，绝不调 `_fire`（白天发 attack = 非法指令）
+    q.step(role, spot, onto=onto)  # 只发 move，绝不调 `_fire`（白天发 attack = 非法指令）
     return True
 
 
@@ -1283,7 +1303,8 @@ def _operator_spots(
     """一组武器的操作站位：贴着组内所有武器的格子（去障碍）。
 
     单座组 ⇒ 返回那座本身（`step_toward` 会停在邻格）；多座组 ⇒ 所有武器 8 邻域的
-    交集里走得通的格子。
+    交集里走得通的格子（**要站上去** —— `step_onto` 就是为它加的）。调用者一律是
+    `_post_spots`：`blocked` 要预先剔掉自己人，还得再排除别人占着的岗位。
     """
     if len(group) == 1:
         return [group[0].pos]
@@ -1295,6 +1316,32 @@ def _operator_spots(
         return []
     width, height = size
     return sorted(c for c in common if c not in blocked and 0 <= c.x < width and 0 <= c.y < height)
+
+
+def _post_spots(group: tuple[Weapon, ...], turn: Turn, role: BaseRole) -> list[Pos]:
+    """这一组这一回合能用的岗位：贴着组内每一座、又没被别人占着的格子。
+
+    自己人一律从障碍里剔掉（`model._entries` 把我方角色写进网格 ⇒ 整份 `blocked` 里混着
+    队友和**自己**，不放行的话站在岗位上的操作者看不见自己的岗位）；但别人**站着**的岗位
+    要排除 —— 那格被占了就得换一组去（否则一个走不进去、一个干等着，两人一起卡住）。
+    自己那格保留：站在岗位上的人得认得出自己的岗位。
+    """
+    cells = {r.pos for r in turn.roles}
+    spots = _operator_spots(group, turn.map.blocked - cells, turn.map.size)
+    others = cells - {role.pos}
+    return [s for s in spots if s not in others]
+
+
+def _steps_to_post(pos: Pos, spot: Pos, onto: bool, blocked: Set[Pos], size: tuple[int, int]) -> int:
+    """到岗位的 BFS 步数（走不到 -1）。口径与 `_Queue.step` 一致。
+
+    多座组的岗位是空地、要站上去 ⇒ 比"贴着它"多一步；单座组的岗位就是那座炮本身 ⇒
+    `steps_between` 的口径就是答案。已经在岗位上 ⇒ 0。
+    """
+    if pos == spot:
+        return 0
+    steps = steps_between(pos, spot, blocked, size)
+    return steps + 1 if steps >= 0 and onto else steps
 
 
 def _cooling(weapon: Weapon, round_no: int) -> bool:
@@ -1320,7 +1367,10 @@ def _defend(
     回合号缺失（`round_no < 0`）时一发不发：`is_day` 把缺失的回合号判成夜里，那个降级方向对
     "白天不许建造"安全、对 `attack` 就反了（白天开火非法）。
 
-    选组：最近且没人认领的（组内任一座被认领 = 整组被认领），贴着任一座就认领整组并开火；
+    选组：最近且没人认领的（组内任一座被认领 = 整组被认领）。**先开火、打不了才挪岗**：
+    贴着组内某座就先打它（只贴着一座也打 —— 另一座就绪而这座冷却时，别白丢一回合），
+    站上整组的岗位、又都打不了 ⇒ 待命；只贴着一部分、或者压根没贴着 ⇒ 朝**多座组共用的
+    那个操作位**走（那格要踩上去才同时贴着两座，`step_onto` 就是为它加的；走不上去 ⇒ 不动）。
     不换组 —— 每回合重挑会让角色在炮位之间来回走。场上没有武器 / 都够不着 ⇒ 不动。
     """
     if turn.round_no < 0:
@@ -1329,9 +1379,11 @@ def _defend(
     for group in sorted(groups, key=lambda g: (min(role.pos.dist(w.pos) for w in g), min(w.id for w in g))):
         if any(w.pos in taken for w in group):
             continue
-        spots = _operator_spots(group, turn.map.blocked, turn.map.size)
+        spots = _post_spots(group, turn, role)
         if not spots:
             continue
+        # 多座组共用一个岗位格（要站上去）；单座组的"岗位"就是那座炮，停在它旁边就够
+        onto = len(group) > 1
         # 已经贴着组内某座 ⇒ 认领整组开火。就绪的先挑（含本地开火账：发过的 3 回合内
         # 不算就绪 —— 打冷却炮是指令执行失败、白丢一回合火力）；就绪的并列按回合号
         # 轮转；都冷却 ⇒ 一发不发（待命，空指令合法）。
@@ -1346,11 +1398,12 @@ def _defend(
                 ready = ready[k:] + ready[:k]
             for w in ready + cooling:
                 if _fire(role, w, turn, q.cmds, assigned):
-                    break
-            return
-        # 还没贴着 ⇒ 朝最近的操作位走一格（走路意图进第二段；走不到就换下一组）
+                    return
+            if len(adjacent) == len(group):
+                return  # 站在岗位上了、这回合又打不了 ⇒ 原地待命（不换组）
+        # 还差一座（或压根没贴着）⇒ 朝最近的操作位走一格（走路意图进第二段；走不到就换下一组）
         spot = min(spots, key=lambda s: (role.pos.dist(s), s))
-        if not q.step(role, spot):
+        if not q.step(role, spot, onto=onto):
             continue  # 走不到 → 换下一组
         for w in group:
             taken.add(w.pos)  # 认领发生在动身之后

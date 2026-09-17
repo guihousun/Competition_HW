@@ -13,9 +13,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _terrain  # noqa: E402
 from coregeek.game import planner  # noqa: E402
-from coregeek.game.grid import Pos  # noqa: E402
+from coregeek.game.grid import Pos, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
-from coregeek.game.planner import plan  # noqa: E402
+from coregeek.game.planner import WALL, plan  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -314,6 +314,93 @@ class NightWeaponTest(unittest.TestCase):
         """
         turn = self._manned(Robot(Pos(12, 26), 40), round_no=-1)
         self.assertEqual(plan(turn), {})
+
+
+class NightPostTest(unittest.TestCase):
+    """真几何下的岗位：两座火箭的共用操作位 `(11,25)` 得**站上去**，站上去才交替得起来。
+
+    这一组必须把角色铺进 `entries`：只有 `protocol.model._entries` 会把我方角色写进网格，
+    手搭地形漏掉这一步的话 `Map.blocked` 里就没有"自己挡自己"这回事 —— 用例连旧代码都放得
+    过去（`NightWeaponTest.test_the_rocket_pair_alternates_by_local_record` 就是这么写的）。
+    """
+
+    BASE = Pos(10, 24)
+    SIZE = (41, 32)
+    NIGHT = 85
+    GUN, ROCKET1, ROCKET2 = 202, 200, 201  # 加特林与两座火箭（`attack` 的 key 就是这些 id）
+    SPOT = Pos(11, 25)  # 两座火箭的共用操作位：站上去才同时贴着两座
+    ROBOT = Pos(15, 24)  # 射程 10 内的一台机器人
+
+    def setUp(self) -> None:
+        planner._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
+
+    def _turn(self, *roles: BaseRole, gatling: bool = False, round_no: int = NIGHT) -> Turn:
+        """基地 2×2 + 18 格围墙砌满 + 两座火箭（可带加特林），角色按 payload 的写法进网格。"""
+        weapons = tuple(
+            Weapon(id=i, kind=kind, pos=pos, attack_range=10, cooldown=-1)
+            for i, kind, pos in (
+                (self.ROCKET1, "rocket", Pos(12, 24)),
+                (self.ROCKET2, "rocket", Pos(12, 25)),
+                (self.GUN, "gatling", Pos(12, 22)),
+            )
+            if kind == "rocket" or gatling
+        )
+        walls = {c: WALL for c in wall_cells(self.BASE, self.SIZE[0])}
+        return Turn(
+            round_no=round_no,
+            map=Map(
+                self.SIZE,
+                _terrain(weapons, {self.BASE: "station"}, walls, {r.pos: "worker" for r in roles}),
+            ),
+            roles=roles,
+            gold=0,
+            weapons=weapons,
+            robots=(Robot(self.ROBOT, 40),),
+        )
+
+    def test_the_operator_on_the_shared_spot_alternates_rounds(self):
+        """站在共用操作位上的操作者：两座火箭按本地开火账交替，一夜不断火。
+
+        序列与 `test_the_rocket_pair_alternates_by_local_record` 同一个口径（85 发一座、
+        86 发另一座、87~88 都在冷却 ⇒ 待命、89 第一座期满再发）。
+        """
+        worker = Worker(1, self.SPOT)
+        expected = {85: {"201"}, 86: {"200"}, 87: set(), 88: set(), 89: {"201"}}
+        for round_no, want in expected.items():
+            with self.subTest(round_no=round_no):
+                cmds = plan(self._turn(worker, round_no=round_no))
+                self.assertEqual(set(cmds), want, f"R{round_no} 该打的武器 id：{cmds}")
+
+    def test_the_operator_beside_the_spot_walks_onto_it(self):
+        """`(10,25)` 是进那个口袋的必经格：这一回合就该踩上 `(11,25)`，不是原地不动。
+
+        旧的"贴着 goal 即到"口径在这格上只会返回 None（目标每回合重算 ⇒ 永远走不到），
+        而站不上去就开不了第二座炮 —— `grid.step_onto` 就是为这一格加的。
+        """
+        cmds = plan(self._turn(Worker(1, Pos(10, 25))))
+        self.assertEqual(cmds["1"]["action"], "move", f"该踩上操作位：{cmds}")
+        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertEqual(cell, self.SPOT)
+
+    def test_a_half_manned_pair_fires_first_then_reposts(self):
+        """只贴着 `200`（`(12,23)`）：这一回合先打它，它进冷却了才往操作位挪。
+
+        先开火再挪岗：打得了的那一回合不白丢火力，只有都打不了才走那 5~6 步去站共用操作位。
+        """
+        half = Worker(1, Pos(12, 23))
+        self.assertEqual(set(plan(self._turn(half, round_no=85))), {"200"}, "这一回合该打贴着的 200")
+        cmds = plan(self._turn(half, round_no=86))
+        self.assertEqual(set(cmds), {"1"}, f"200 冷却了 ⇒ 该挪岗：{cmds}")
+        self.assertEqual(cmds["1"]["action"], "move")
+        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertEqual(cell, Pos(11, 22), "绕开基地那一角、朝操作位去")
+
+    def test_a_colleague_on_the_spot_never_freezes_the_pair(self):
+        """同事站在操作位上 ⇒ 他照旧开火，另一位换一组去（岗位被占了，不是两人一起卡住）。"""
+        cmds = plan(self._turn(Worker(1, Pos(10, 25)), Worker(2, self.SPOT), gatling=True))
+        self.assertEqual(set(cmds), {"201", "1"}, f"火箭归站在岗位上的那位：{cmds}")
+        self.assertEqual(cmds["201"]["controllerId"], "2")
+        self.assertEqual(cmds["1"]["action"], "move", "另一位该去加特林，不是干等")
 
 
 from coregeek.game.grid import Pos  # noqa: E402

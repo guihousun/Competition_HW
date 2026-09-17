@@ -1,5 +1,5 @@
 """game/grid.py 的用例：Pos / 8 方向 / 两个距离口径（切比雪夫 vs BFS）/ `step_toward` /
-基地几何（武器环、围墙环、门、防御盒）。
+`step_onto` / 基地几何（武器环、围墙环、门、防御盒）。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import SAMPLE  # noqa: E402
-from coregeek.game.grid import Pos, STEPS, base_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
+from coregeek.game.grid import Pos, STEPS, base_cells, door_cells, step_onto, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import LEGEND, _NAMES, _RENDER_NEUTRAL, _RENDER_SIDED, Map, _char  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.roles import Worker  # noqa: E402
@@ -395,6 +395,50 @@ class PathTest(unittest.TestCase):
         blocked.add(goal)
 
         self.assertIsNone(step_toward(Pos(0, 5), goal, frozenset(blocked), (10, 10)))
+
+
+class StepOntoTest(unittest.TestCase):
+    """`step_onto` —— 走到 goal **自己**那一格上，`step_toward` 只走到它旁边。
+
+    两座火箭共用的那个操作位就是这种格子：它是空地，而角色要站在**上面**才同时贴着两座
+    （`BuildGeometryTest.test_the_two_rockets_share_an_operator_spot` 钉的是这格存在）。
+    拿 `step_toward` 顶替会停死在它旁边 —— 那格已经 `dist(goal) <= 1`，每回合都返回 None，
+    目标又每回合重算 ⇒ 角色永远走不到、永远开不了第二座炮。
+    """
+
+    BASE = Pos(10, 24)
+    SIZE = (41, 32)
+
+    def test_it_walks_across_the_box_onto_the_shared_spot(self):
+        """从盒子另一头一路走上去：跟着它走必然**落在 goal 上**，不是停在旁边。
+
+        终点 `(11,25)` = 左半基地那两座火箭的共用操作位（环内、非基地、非墙）。
+        """
+        ring = frozenset(wall_cells(self.BASE, self.SIZE[0]))
+        goal = Pos(11, 25)
+        at = Pos(11, 22)
+        for _ in range(10):
+            if at == goal:
+                break
+            step = step_onto(at, goal, ring, self.SIZE)
+            self.assertIsNotNone(step, f"{at} 该走得到 {goal}")
+            self.assertEqual(at.dist(step), 1, "一步一格")
+            at = step
+        self.assertEqual(at, goal, "十步之内必须站上去")
+        self.assertIsNone(step_onto(at, goal, ring, self.SIZE), "已经在上面 ⇒ None")
+        self.assertIsNone(
+            step_toward(at, goal, ring, self.SIZE), "对照：`step_toward` 在这格上只会返回 None"
+        )
+
+    def test_a_sealed_goal_is_unreachable(self):
+        """goal 被整个围死 ⇒ `None`（与"贴着 goal 即到"合流成一个值，调用方自己分得清）。"""
+        goal = Pos(20, 20)
+        ring = frozenset({Pos(x, y) for x in range(19, 22) for y in range(19, 22)} - {goal})
+        self.assertIsNone(step_onto(Pos(5, 5), goal, ring, self.SIZE))
+
+    def test_a_goal_off_the_map_is_unreachable(self):
+        """goal 在地图外 ⇒ `None`：BFS 不许越界（越界算不算非法文档没写，不走一定安全）。"""
+        self.assertIsNone(step_onto(Pos(1, 1), Pos(5, 5), frozenset(), (3, 3)))
 
 
 if __name__ == "__main__":
