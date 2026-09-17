@@ -78,7 +78,9 @@ class ChatPromptTest(unittest.TestCase):
         ② 是**步骤形式**（step1. …）并且把每遍花掉几个回合点出来：这是给 LLM 看的，
         要教的是"回合怎么花"，两份流程的回合差（4 → 3）本身就是那条规则。
         每一步还给到**具体命令与它的输出**（示例一 step1 那条 find+cat 同理）—— 摘要式的一句
-        "读任务书"教不会它怎么写命令。
+        "读任务书"教不会它怎么写命令。**`<sop>` 正文只演通用流程**：本次的目的地、本次拿到的
+        凭证、只对那一次成立的路径与参数都不进去（用例逐条钉住），而具体值照旧活在会话里
+        —— 会话是这一次的，SOP 是整场跨任务复用的。
         顺带钉示例自身的自洽：里面的 `<sop>` 正文不能出现 `<answer>` 对（否则 LLM 照抄，
         入库时被 `strip_answers` 静默吃掉）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
@@ -88,7 +90,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("第二次", second)
         self.assertIn("<tool_name>SOP2Prompt</tool_name>", second)
         self.assertIn("订去某地的机票的流程", second)
-        self.assertIn("不必再读 api.md", second)
+        self.assertIn("不必再试探", second)
         self.assertIn("一共 4 个回合", second)
         self.assertIn("只花 3 个回合", second)
         self.assertIn("step3.", second.split("第二次")[1])
@@ -98,7 +100,11 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("<answer>tk_2b8e41</answer>", second)
         # 示例一那条 find+cat 也点出来了
         self.assertIn("f=$(find / -maxdepth 6 -name 'problem.txt' -print -quit)", example)
-        self.assertNotIn("<answer>", second.split("<sop>")[1].split("</sop>")[0])
+        stored = second.split("<sop>")[1].split("</sop>")[0]
+        self.assertNotIn("<answer>", stored)
+        # SOP 正文里不许出现只对本次成立的东西（路径串 / 参数名 / 凭证 / 目的地）
+        for specific in ("xxxx:", "zzzz", "token", "北京", "上海", "api.md"):
+            self.assertNotIn(specific, stored, f"SOP 正文夹带了本次的具体值：{specific}")
 
     def test_the_role_section_pins_the_name_to_a_class_of_tasks(self):
         """`name` 要凝练到"一类问题"上（「订去某地的机票的流程」，不是「订去上海的机票」）。
@@ -109,6 +115,18 @@ class ChatPromptTest(unittest.TestCase):
         role = system.split("# 【工具描述】")[0]
         self.assertIn("一类问题", role)
         self.assertIn("订去某地", role)
+
+    def test_the_role_section_pins_the_body_to_a_generic_flow(self):
+        """SOP **正文**也要通用：写"这一类任务怎么做"，不夹带只对本次成立的东西。
+
+        名字泛化只挡住一半，正文照样能把"这次的路径/参数/拿到的东西"带进去 —— 条目是
+        整场存活、跨任务复用的，下一次同类任务会照着一条过期的具体路径去做，**而它看不出
+        那条路径已经过期**。只写"名字要泛化"时，示例里那条正文（路径串 + 参数名 + 答案形状）
+        正是 LLM 照抄的样板。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        role = system.split("# 【工具描述】")[0]
+        self.assertIn("正文也必须是通用的", role)
+        self.assertIn("不要夹带只对本次成立的东西", role)
 
     def test_the_role_section_pins_the_deposit_timing(self):
         """沉淀的时机 = 【沉淀的SOP】段里还没有这条经验 —— "值不值得"不再是门槛，

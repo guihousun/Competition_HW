@@ -80,7 +80,9 @@ src/coregeek/
 │   ├── prompt.py     **system 消息的段模板与生成函数**：六段
 │   │                 （role定位 / 工具描述 / 输出格式 / 示例 / 沉淀的SOP / 注意事项；
 │   │                   输出约定含 `<summary>` 四槽那条；ROLE 段带**沉淀时机**、
-│   │                   【沉淀的SOP】段里没有就存、存过不重复；
+│   │                   【沉淀的SOP】段里没有就存、存过不重复、**正文只写通用流程**
+│   │                   （名字与正文都不许夹带本次的值/路径/参数/答案形状 —— 条目整场存活、
+│   │                    跨任务复用，夹带了具体值的比不沉淀更糟）；
 │   │                   示例段两例 = "从 problem.txt 到 token"的范式 + **同一类任务两次的
 │   │                   few-shot**（第一次沉淀、第二次跳过探索直接照做））
 │   │                 + `gen_system_prompt(tools, sop)` / `gen_all_tool_prompt` / `gen_tool_prompt`
