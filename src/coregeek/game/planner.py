@@ -1370,6 +1370,20 @@ def _operator_spots(
     return sorted(c for c in common if c not in blocked and 0 <= c.x < width and 0 <= c.y < height)
 
 
+def _near_spots(
+    group: tuple[Weapon, ...], blocked: set[Pos], size: tuple[int, int]
+) -> list[Pos]:
+    """贴着组内**任意一座**的格子（去障碍、去武器自己那几格）：共用操作位没了时的退路。
+
+    那一格只打得了其中一座，但总比整组无人可打强 —— 共用操作位被机器人踩死、或者进不去
+    那条一格宽的走廊时，整组会被跳过 ⇒ 两个火箭一发不打的死锁。
+    """
+    width, height = size
+    cells = {Pos(w.pos.x + d.x, w.pos.y + d.y) for w in group for d in STEPS}
+    cells -= {w.pos for w in group}
+    return sorted(c for c in cells if c not in blocked and 0 <= c.x < width and 0 <= c.y < height)
+
+
 def _post_spots(group: tuple[Weapon, ...], turn: Turn, role: BaseRole) -> list[Pos]:
     """这一组这一回合能用的岗位：贴着组内每一座、又没被别人占着的格子。
 
@@ -1382,6 +1396,14 @@ def _post_spots(group: tuple[Weapon, ...], turn: Turn, role: BaseRole) -> list[P
     spots = _operator_spots(group, _passable(turn), turn.map.size)
     others = cells - {role.pos}
     return [s for s in spots if s not in others]
+
+
+def _stands_on_a_post(role: BaseRole, turn: Turn) -> bool:
+    """这个角色是不是正站在某组的操作位上（多座组那格要踩上去；单座组的岗位就是炮自己）。"""
+    blocked = _passable(turn)
+    return any(
+        role.pos in _operator_spots(g, blocked, turn.map.size) for g in _weapon_groups(turn)
+    )
 
 
 def _steps_to_post(pos: Pos, spot: Pos, onto: bool, blocked: Set[Pos], size: tuple[int, int]) -> int:
@@ -1422,23 +1444,34 @@ def _defend(
     选组：最近且没人认领的（组内任一座被认领 = 整组被认领）。**先开火、打不了才挪岗**：
     贴着组内某座就先打它（只贴着一座也打 —— 另一座就绪而这座冷却时，别白丢一回合），
     站上整组的岗位、又都打不了 ⇒ 待命；只贴着一部分、或者压根没贴着 ⇒ 朝**多座组共用的
-    那个操作位**走（那格要踩上去才同时贴着两座，`step_onto` 就是为它加的；走不上去 ⇒ 不动）。
+    那个操作位**走（那格要踩上去才同时贴着两座，`step_onto` 就是为它加的）。
     不换组 —— 每回合重挑会让角色在炮位之间来回走。场上没有武器 / 都够不着 ⇒ 不动。
 
+    岗位去不了时**不许整组无人可打**：主岗位被非我方单位堵死（机器人踩着那一格）或者走不
+    进去（进洞那条一格宽的走廊被堵）⇒ 退到 `_near_spots` 给的邻座格子上，只打得了其中一座
+    也照打。岗位**被同事占着**不在此列 —— 站在那格上的人贴得到每一座，那一组归他。
+
     开拓者是**补位炮手**（`_pioneer_mans_guns`）：工人够操满所有组时它一个组都不认领 ——
-    炮位留给工人，它腾出来（用户口径）。
+    炮位留给工人，它腾出来（用户口径）。例外：它已经站在某组的操作位上 ⇒ 认领那一组 ——
+    "工人够操满"是名册口径、"谁真站得上岗位"才是事实，它蹲在岗位上一发不打、工人又进不去
+    （岗位只有一格），整组就白丢一夜。
     """
     if turn.round_no < 0:
         return
     # 工人够操满所有组 ⇒ 炮位留给工人，开拓者一个组都不认领（补位炮手）
-    if isinstance(role, Pioneer) and not _pioneer_mans_guns(turn):
+    if (
+        isinstance(role, Pioneer)
+        and not _pioneer_mans_guns(turn)
+        and not _stands_on_a_post(role, turn)
+    ):
         return
     groups = _weapon_groups(turn)
+    blocked = _passable(turn)
+    # 退路（贴着组内任意一座的格子）：主岗位**一个都站不上**时才用 —— 二选一时站位更重要，
+    # 主岗位能站就先站（多座组那格交替得起来，退路只守得了一座）。
+    fallbacks: list[tuple[Pos, tuple[Weapon, ...]]] = []
     for group in sorted(groups, key=lambda g: (min(role.pos.dist(w.pos) for w in g), min(w.id for w in g))):
         if any(w.pos in taken for w in group):
-            continue
-        spots = _post_spots(group, turn, role)
-        if not spots:
             continue
         # 多座组共用一个岗位格（要站上去）；单座组的"岗位"就是那座炮，停在它旁边就够
         onto = len(group) > 1
@@ -1459,13 +1492,28 @@ def _defend(
                     return
             if len(adjacent) == len(group):
                 return  # 站在岗位上了、这回合又打不了 ⇒ 原地待命（不换组）
-        # 还差一座（或压根没贴着）⇒ 朝最近的操作位走一格（走路意图进第二段；走不到就换下一组）
-        spot = min(spots, key=lambda s: (role.pos.dist(s), s))
-        if not q.step(role, spot, onto=onto):
-            continue  # 走不到 → 换下一组
-        for w in group:
-            taken.add(w.pos)  # 认领发生在动身之后
-        return
+        spare = _operator_spots(group, blocked, turn.map.size)
+        spots = _post_spots(group, turn, role)
+        if spots:
+            spot = min(spots, key=lambda s: (role.pos.dist(s), s))
+            if q.step(role, spot, onto=onto):
+                for w in group:
+                    taken.add(w.pos)  # 认领发生在动身之后
+                return
+        elif spare and not adjacent:
+            continue  # 岗位被同事占着 ⇒ 那一组归他（他站得上去、交替得起来），换下一组
+        if not adjacent:
+            # 主岗位站不上（被堵死 / 走不到）⇒ 记下退路，别的组都没得站时再用（走路意图进第二段）
+            near = _near_spots(group, blocked, turn.map.size)
+            if near:
+                fallbacks.append((min(near, key=lambda s: (role.pos.dist(s), s)), group))
+    for spot, group in fallbacks:
+        if any(w.pos in taken for w in group):
+            continue
+        if q.step(role, spot, onto=True):
+            for w in group:
+                taken.add(w.pos)
+            return
 
 
 def _upgrade_station(

@@ -421,8 +421,17 @@ class NightPostTest(unittest.TestCase):
     def setUp(self) -> None:
         planner._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
 
-    def _turn(self, *roles: BaseRole, gatling: bool = False, round_no: int = NIGHT) -> Turn:
-        """基地 2×2 + 14 格围墙砌满 + 两座火箭（可带加特林），角色按 payload 的写法进网格。"""
+    def _turn(
+        self,
+        *roles: BaseRole,
+        gatling: bool = False,
+        round_no: int = NIGHT,
+        extra_robots: tuple[Robot, ...] = (),
+    ) -> Turn:
+        """基地 2×2 + 14 格围墙砌满 + 两座火箭（可带加特林），角色与机器人都按 payload 的写法进网格。
+
+        `extra_robots` 是**踩着格子**的机器人（堵 `(11,25)` 那种）；默认那台在盒外只当靶子。
+        """
         weapons = tuple(
             Weapon(id=i, kind=kind, pos=pos, attack_range=10, cooldown=-1)
             for i, kind, pos in (
@@ -432,17 +441,24 @@ class NightPostTest(unittest.TestCase):
             )
             if kind == "rocket" or gatling
         )
+        robots = (Robot(self.ROBOT, 40),) + extra_robots
         walls = {c: WALL for c in wall_cells(self.BASE, self.SIZE[0])}
         return Turn(
             round_no=round_no,
             map=Map(
                 self.SIZE,
-                _terrain(weapons, {self.BASE: "station"}, walls, {r.pos: "worker" for r in roles}),
+                _terrain(
+                    weapons,
+                    {self.BASE: "station"},
+                    walls,
+                    {r.pos: "worker" for r in roles},
+                    {r.pos: "robot:small" for r in extra_robots},
+                ),
             ),
             roles=roles,
             gold=0,
             weapons=weapons,
-            robots=(Robot(self.ROBOT, 40),),
+            robots=robots,
         )
 
     def test_the_operator_on_the_shared_spot_alternates_rounds(self):
@@ -488,6 +504,38 @@ class NightPostTest(unittest.TestCase):
         self.assertEqual(set(cmds), {"201", "1"}, f"火箭归站在岗位上的那位：{cmds}")
         self.assertEqual(cmds["201"]["controllerId"], "2")
         self.assertEqual(cmds["1"]["action"], "move", "另一位该去加特林，不是干等")
+
+    def test_a_gunner_beside_a_rocket_fires_it_though_the_spot_is_taken(self):
+        """贴着 `200` 的那位该把它打出去 —— 岗位格被占不能让这一组变成无人可打。
+
+        `_post_spots` 返回空说的是"这回合没地方站"，不是"这组没人打得了"：先看贴没贴着、
+        再谈挪岗。旧判据把岗位格当成了这一组的总开关，站在火箭旁边的人跟着一发不发。
+        """
+        cmds = plan(self._turn(Worker(1, Pos(12, 23)), Worker(2, self.SPOT), gatling=True))
+        self.assertEqual(cmds["200"]["controllerId"], "1", f"贴着的 200 该打出去：{cmds}")
+
+    def test_the_pioneer_fires_the_pair_it_is_standing_on(self):
+        """开拓者蹲在共用操作位上 ⇒ 它操这一组。
+
+        它不认领就真没人操得了：那一格被它占着、工人站不上去（岗位只有一格），而它自己
+        又一发不打 —— 两个火箭整夜沉默。"工人够操满 ⇒ 开拓者不认领"是名册口径，"谁真站得上
+        岗位"才是事实。
+        """
+        cmds = plan(
+            self._turn(Worker(1, Pos(9, 22)), Worker(2, Pos(10, 22)), Pioneer(3, self.SPOT))
+        )
+        self.assertEqual(cmds["201"]["controllerId"], "3", f"蹲在岗位上的开拓者该开火：{cmds}")
+
+    def test_a_robot_on_the_shared_spot_still_leaves_a_rocket_to_fire(self):
+        """共用操作位被机器人踩死 ⇒ 退到贴着 `200` 的 `(12,23)`。
+
+        没有退路时整组被跳过：两个火箭整夜一发不打，而这不是没人手 —— 是判据把"岗位格用不了"
+        当成了"这一组不用管"。退路只守得了一座，但那一座照打。
+        """
+        cmds = plan(self._turn(Worker(1, Pos(11, 22)), extra_robots=(Robot(self.SPOT, 40),)))
+        self.assertEqual(cmds["1"]["action"], "move", f"该朝 (12,23) 挪：{cmds}")
+        step = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertLess(step.dist(Pos(12, 23)), Pos(11, 22).dist(Pos(12, 23)), "朝贴着 200 的那格走")
 
 
 class NightEconomyTest(unittest.TestCase):
