@@ -31,7 +31,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - ⚠️ **具体字节数、量法（三个坑）都在 `app._log` 的 docstring 里**，那里是权威副本 —— **别凭记忆写，也别在本文件里维护第二份**。**只有带 prompt 的那两行会动**（跨步骤比绝对值没意义，同一次测量的增量才是信号）。
    - ⚠️ **有两条日志不在 `app` 名下**：SOP 那条走 `coregeek.agent.tools.sop`，任务行与沙盒行走 `coregeek.game.planner`（那两样字段只在 `task_channel` 的作用域里）⇒ 只盯 `coregeek.app` 的守卫**看不见它们**。守卫一律 `assertLogs(level="INFO")`（root）。**加任何新 logger 之前先想这一条。**
    - ⚠️ **banner 是 `_log` 管不到的那一条**（`handle` 打的 `###第N回合###`）：它不受上限约束，数记录数时要单独算。
-   - **加密落点**（`logfile.py`）：`main3.py` 在 stdout 之外又挂一个 `EncryptedFileHandler`（`log/match-<年月日-时分秒>-<pid>.enc`，一条记录一行 base64，含换行的记录切不开）。**明文那份照旧 ⇒ 上面 64KB 管道那条账一分没变**（加密是**加的一份**，不是替换）。挂不上（只读盘 / 没权限）⇒ `encrypted_handler()` 返回 `None`、退成只打 stdout + stderr 一行 —— 入口绝不因为"写不了日志"起不来。赛后 `py log/decode_log.py <那个 .enc>` ⇒ `decode_log.log`。
+   - **加密落点**（`logfile.py`）：**两个 sink（stdout 与 `log/match-<年月日-时分秒>-<pid>.enc`）输出那一刻就是同一套密文**（用户口径「打日志的时候就加密」）—— 一条记录一行 base64，含换行的记录切不开；**进程的日志输出没有明文落点**。看日志的唯一路子是 `py log/decode_log.py <那个 .enc>` ⇒ `decode_log.log`（stdout 那份要先 `bash run.sh <port> > run.enc` 落成文件）。
+   - ⚠️ 上面 64KB 管道那条账**因加密变重了**：密文 ≈ 明文 ×4/3 + 每行 32 字节的头（实测小回合 ×1.57）⇒ 顶格回合 ≈806KB，**结论不变**（照样一回合写满）。**加密不是"多存了一份"，是把那一份换了个模样**。
+   - 文件 sink 挂不上（只读盘 / 没权限）⇒ `encrypted_handler()` 返回 `None`、退成只打 stdout + stderr 一行 —— 入口绝不因为"写不了日志"起不来。
 
 ## 架构
 
@@ -45,9 +47,10 @@ src/coregeek/
 ├── utils.py          **叶子模块**：日志层的两条**规则** —— `LOG_TEXT_MAX` 与 `_clip`。
 │                     不放状态、不放 logger、不放格式化函数
 ├── logfile.py        **叶子模块**：加密日志的落点 —— `seal`/`unseal`（逐条 nonce + HMAC 密钥流
-│                     + tag）、`EncryptedFileHandler`（**只改 `format`**，其余沿用 FileHandler）、
+│                     + tag）、`EncryptedStreamHandler`（**只改 `format`** —— 它的返回值就是写出去的
+│                     那一行）、`EncryptedFileHandler`（继承前者 + `FileHandler`）、
 │                     `encrypted_handler()`（**建不出来返回 `None`** ⇒ 入口退成只打 stdout）。
-│                     密钥内置在本文件里；只有标准库
+│                     **两个 sink 共用同一个 `format`** ⇒ 输出那一刻就是密文；密钥内置在本文件里；只有标准库
 ├── app.py            组装根：handle(bytes) + run(port) + 每回合复盘日志 `_log`。**红线所在**，异常一律退化成空指令
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
@@ -423,6 +426,8 @@ bash run.sh 18085                                          # 起服务（自动�
 curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 PYTHONUTF8=1 py -m unittest discover -s tests -v           # 跑用例；不加 PYTHONUTF8 中文会乱码
 py log/decode_log.py log/match-20260919-000514-1152.enc    # 解密日志 ⇒ decode_log.log（当前目录）
+bash run.sh 18085 > run.enc                                # stdout 也是密文：要看内容得先落成文件
+py log/decode_log.py run.enc                               # （解出来和上面那份逐字相同）
 ```
 
 ⚠️ **起服务前先确认端口上只有一个监听者**：`netstat -ano | grep LISTENING | grep 18085`。

@@ -2,7 +2,7 @@
 """入口。文件名必须是 `main3.py`：平台按官方 demo 的约定拉起它，不许重命名。
 
 改错名字的症状：进程从未启动、没有日志、判题器也不报错，只是"所有单位一动不动"。
-职责：读端口 → chdir → `src/` 进 `sys.path` → 起服务，不放任何策略代码。
+职责：读端口 → chdir → `src/` 进 `sys.path` → 挂日志 handler → 起服务，不放任何策略代码。
 """
 
 import logging
@@ -22,11 +22,12 @@ def main() -> None:
 
     from coregeek import logfile
 
-    handlers = [logging.StreamHandler(sys.stdout)]
-    sink = logfile.encrypted_handler()  # stdout 那份照旧，加密文件是新增的第二份
+    # 两个 sink 都加密：日志没有明文落点，读它只能走 log/decode_log.py。
+    handlers = [logfile.EncryptedStreamHandler(sys.stdout)]
+    sink = logfile.encrypted_handler()
     if sink is None:
         # 建不出来也要起服务：进程没启动的症状是"所有单位一动不动"，比没有日志严重得多。
-        print("加密日志建不起来，只往 stdout 打", file=sys.stderr)
+        print("加密日志文件建不起来，只有 stdout 那份", file=sys.stderr)
     else:
         handlers.append(sink)
 

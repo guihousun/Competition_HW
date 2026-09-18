@@ -1,9 +1,10 @@
-"""logfile.py 的用例：`seal`/`unseal` 的往返与防篡改、加密 handler 落盘的内容，
+"""logfile.py 的用例：`seal`/`unseal` 的往返与防篡改、两个 sink（stdout 与文件）写出去的内容，
 以及 `log/decode_log.py` 的端到端（起子进程跑一次，解出来的要逐字等于原文）。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
+import io
 import logging
 import subprocess
 import sys
@@ -57,7 +58,26 @@ class SealTest(unittest.TestCase):
 
 
 class EncryptedHandlerTest(unittest.TestCase):
-    """handler 落盘的必须是密文：解回来要逐字等于格式化后的记录。"""
+    """两个 sink 写出去的都必须是密文：解回来要逐字等于格式化后的记录。"""
+
+    def test_the_stream_decodes_back_to_the_records(self):
+        stream = io.StringIO()
+        handler = logfile.EncryptedStreamHandler(stream)
+        handler.setFormatter(logging.Formatter("%(asctime)s | %(message)s"))
+        logger = logging.getLogger("coregeek.logfile.stream")
+        logger.propagate = False
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
+        try:
+            logger.info("###第1回合###")
+            written = stream.getvalue()  # stdout 上看到的就是这个（`close` 会把流关掉）
+        finally:
+            logger.removeHandler(handler)
+            handler.close()
+
+        self.assertNotIn("第1回合", written)
+        self.assertEqual(len(written.splitlines()), 1)
+        self.assertRegex(logfile.unseal(written), r"\| ###第1回合###$")
 
     def test_the_file_decodes_back_to_the_records(self):
         with tempfile.TemporaryDirectory() as tmp:

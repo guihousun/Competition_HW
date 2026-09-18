@@ -1,10 +1,13 @@
-"""加密的日志落点：一条记录一行、一个文件一场对局。
+"""加密的日志落点：一条记录一行、两个 sink（stdout 与 `log/` 下的文件）同一套密文。
 
 格式：每行 = `base64(nonce(16) | tag(16) | 密文)`，密文 = 明文与
 `HMAC-SHA256(密钥, nonce | 计数器)` 生成的密钥流异或。逐条换随机 nonce —— 日志行首那段
 时间戳是可猜的明文，固定密钥流会把它漏出去。`tag` 认截断与改字节。
 
-密钥内置（判题机是黑盒，没有可配的地方；`log/decode_log.py` 直接 import 这里，格式只一份）。
+**进程的日志输出没有明文落点**（`src/` 里一处裸 `print` 都没有）：stdout 上也是这套 base64，
+`log/decode_log.py log/match-*.enc` 与 `... > run.enc` 抓下来的 stdout 解出来是同一份正文。
+
+密钥内置（判题机是黑盒，没有可配的地方；解密脚本直接 import 这里，格式只一份）。
 只有标准库。**不放状态、不放格式化函数** —— 那两样分别归 `logging` 与 `utils.py`。
 """
 
@@ -76,22 +79,30 @@ def new_path(dir_=LOG_DIR) -> Path:
     return Path(dir_) / f"match-{stamp}-{os.getpid()}.enc"
 
 
-class EncryptedFileHandler(logging.FileHandler):
-    """落盘前加密的 `FileHandler`：**只改 `format`** —— 它的返回值就是写出去的那一行。
+class EncryptedStreamHandler(logging.StreamHandler):
+    """写出去之前加密的 handler：**只改 `format`** —— 它的返回值就是写出去的那一行。
 
-    建目录、每条写完就 flush、写失败吞进 `handleError` 全部沿用父类：写日志绝不能反过来
-    把请求打挂（父类那条 except 就是最后一道防线）。同步写不排队、不压缩、不 fsync ——
-    省掉这三样之后单条记录的加密在毫秒级，不值得为它引入一个写线程。
+    每条写完就 flush、写失败吞进 `handleError` 全部沿用父类：写日志绝不能反过来把请求打挂
+    （父类那条 except 就是最后一道防线）。同步写不排队、不压缩、不 fsync —— 省掉这三样之后
+    单条记录的加密在毫秒级，不值得为它引入一个写线程。
     """
 
     def format(self, record: logging.LogRecord) -> str:
         return seal(super().format(record))
 
 
+class EncryptedFileHandler(EncryptedStreamHandler, logging.FileHandler):
+    """落盘那一份，格式同上（`log/match-<年月日-时分秒>-<pid>.enc`）。
+
+    类顺序有意：`__init__` 得从 `FileHandler` 取（它开文件、设 `self.stream`），
+    `format` 从 `EncryptedStreamHandler` 取。
+    """
+
+
 def encrypted_handler(dir_=LOG_DIR):
-    """建好本次运行的加密 handler。**建不出来（只读盘 / 没权限 / 名字被文件占着）返回 `None`**，
+    """建好本次运行的加密文件 sink。**建不出来（只读盘 / 没权限 / 名字被文件占着）返回 `None`**，
     绝不抛 —— 入口因为"写不了日志"起不来的症状是"所有单位一动不动"，与 `main3.py` 改名事故同形、
-    极难排查。调用者拿到 `None` 时去 stderr 说一声。"""
+    极难排查。调用者拿到 `None` 时去 stderr 说一声（stdout 那个 sink 照旧可用）。"""
     try:
         Path(dir_).mkdir(parents=True, exist_ok=True)
         return EncryptedFileHandler(new_path(dir_), encoding="utf-8")

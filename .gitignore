@@ -1,6 +1,7 @@
 # 加密日志。含完整对局状态，绝不入库；`decode_log.py` 是源码，跟着走
 log/*
 !log/decode_log.py
+*.enc
 decode_log.log
 # 运行期产物 / 草稿：`logs/` 是历次排查留下的临时脚本，`tmp/` 是沙盒探查落盘的文件
 logs/
