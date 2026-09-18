@@ -528,6 +528,21 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn(self.TASK, prompt)
         self.assertEqual(execute, cmd_explore._LIST_CMD)
 
+    def test_the_probed_paths_reach_the_next_prompt(self):
+        """探查的**产出**从下一轮起进 system 的【沙盒知识】段 —— 命令槽那条边只出命令，
+        路径走的是 `Agent.chat` 每轮现刷 system 这条路（与 SOP 段同源）。
+
+        一轮都不落下：列清单那轮 prompt 里还没有（回执这轮才回来），认领之后立刻就有。
+        """
+        cmd_explore.reset()
+        first, _ = task_channel(self._turn(self.TASK))
+        self.assertNotIn("【沙盒知识】", first, "清单还没回来，不能凭空断言沙盒里有什么")
+        prompt, _ = task_channel(
+            self._turn(self.TASK, cmd_result="[exitCode:0]\n/opt/task/rescue.md;")
+        )
+        self.assertIn("# 【沙盒知识】", prompt)
+        self.assertIn("- /opt/task/rescue.md", prompt)
+
     def test_no_task_means_no_probe(self):
         """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""
         cmd_explore.reset()

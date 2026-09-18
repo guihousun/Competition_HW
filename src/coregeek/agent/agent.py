@@ -8,6 +8,7 @@
 
 from collections.abc import Callable
 
+from . import cmd_explore
 from .chat import is_prices_reply, is_summary_reply, strip_answers
 from .context import Context
 from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
@@ -80,7 +81,8 @@ class Agent:
         返回值是标准 messages JSON（`[{role, content}]`）。
 
         system（`prompt.py` 的段模板）每次现刷：SOP 是活的，任务进行中沉淀的下一轮就得看得见
-        —— 那是 `SOP2Prompt` "调用成功"的回执（它不产出命令）。
+        —— 那是 `SOP2Prompt` "调用成功"的回执（它不产出命令）；沙盒探查摸到的路径同理，
+        下一轮就有（`cmd_explore.known_paths`）。
         """
         fresh = self._context is None or self._context.task != request
         if fresh:
@@ -90,7 +92,9 @@ class Agent:
             self._context.feed(result, retry)
         elif not fresh:
             self._context.nudge()
-        self._context.system = gen_system_prompt(self._tools, self._sop)
+        self._context.system = gen_system_prompt(
+            self._tools, self._sop, cmd_explore.known_paths()
+        )
         return self._context.render()
 
     def hear(self, reply: str) -> None:

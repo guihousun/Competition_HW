@@ -1,4 +1,4 @@
-"""构建 system prompt 的地方，分为六段：role定位、工具描述、输出格式、示例、沉淀的SOP、注意事项。
+"""构建 system prompt 的地方，分为七段：role定位、工具描述、输出格式、示例、沉淀的SOP、沙盒知识、注意事项。
 
 任务 prompt 专注任务：摘要由命令轮同发的压缩请求产出（`COMPRESSION_PROMPT`，只进压缩
 prompt、不进 system）。两个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT`
@@ -79,7 +79,14 @@ SOP_PROMPT = """
 {sop}
 """
 
-# 5. 示例：两例，进 `gen_system_prompt` 的 sections。示例一 = "从 problem.txt 到 token"
+# 5. 沙盒知识：探查（`cmd_explore`）摸到的沙箱 md 路径，只列路径（正文还没人消费）
+SANDBOX_PROMPT = """
+# 【沙盒知识】
+下面这些文件已在沙盒环境里探明（完整路径）：
+{paths}
+"""
+
+# 6. 示例：两例，进 `gen_system_prompt` 的 sections。示例一 = "从 problem.txt 到 token"
 # 的四步范式；示例二 = 同一类任务两次，第一次沉淀、第二次跳过探索
 EXAMPLE_PROMPT = """
 # 【输出示例】
@@ -126,7 +133,7 @@ step4. 提交答案
 
 """
 
-# 6. 注意事项
+# 7. 注意事项
 ATTENTION = """
 # 【注意事项】
 1. 任务信息里给的往往只是一个文件名、不是完整路径。
@@ -151,22 +158,35 @@ ATTENTION = """
 """
 
 
-def gen_system_prompt(tools, sop) -> str:
-    """组装整份 system 消息：六段生效。
+def gen_system_prompt(tools, sop, knowledge=()) -> str:
+    """组装整份 system 消息：七段，【沙盒知识】只在有内容时占位。
 
     `tools` = `Agent` 的工具注册表（名 → (实现, 描述, 参数表)），`sop` = 流程表
-    `{流程名: 正文}`，两个槽分别填进工具段与 SOP 段。各段 `strip()` 后再拼 —— 三引号串
-    首尾各带一个换行，直接 join 会出现三连空行。
+    `{流程名: 正文}`，`knowledge` = 探查摸到的沙箱路径 —— 三个值分别填进工具段、SOP 段、
+    沙盒知识段。各段 `strip()` 后再拼 —— 三引号串首尾各带一个换行，直接 join 会出现
+    三连空行（空段也要在这里滤掉）。
     """
     sections = [
         ROLE_PROMPT,
         gen_all_tool_prompt(tools=tools),
         OUTPUT_PROMPT,
         gen_sop_prompt(sop=sop),
+        gen_sandbox_prompt(knowledge),
         EXAMPLE_PROMPT,
         ATTENTION,
     ]
-    return "\n\n".join(section.strip() for section in sections)
+    return "\n\n".join(text for text in (section.strip() for section in sections) if text)
+
+
+def gen_sandbox_prompt(paths) -> str:
+    """「沙盒知识」整段：探明的沙箱 md 路径逐条列出（现在只有路径，正文还没接）。
+
+    还没探明 ⇒ `""`，整段不出现 —— 空段不能写「（暂无）」：**"我们还没摸过"不等于
+    "沙盒里没有"**，写出去就是让 LLM 干脆不去找那些文件。
+    """
+    if not paths:
+        return ""
+    return SANDBOX_PROMPT.format(paths="\n".join(f"- {path}" for path in paths))
 
 
 def gen_all_tool_prompt(tools) -> str:

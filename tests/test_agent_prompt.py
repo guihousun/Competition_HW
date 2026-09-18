@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coregeek.agent import Agent  # noqa: E402
+from coregeek.agent import Agent, cmd_explore  # noqa: E402
 from coregeek.agent.chat import answer_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 
@@ -28,6 +28,9 @@ class ChatPromptTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.agent = Agent()
+        # 探查的已知路径表也是跨回合状态（模块级）⇒ 不清会跨用例串味
+        cmd_explore.reset()
+        self.addCleanup(cmd_explore.reset)
 
     def test_the_placeholders_are_all_filled(self):
         prompt = self.agent.chat("题目")
@@ -70,6 +73,30 @@ class ChatPromptTest(unittest.TestCase):
         sop = system.split("# 【沉淀的SOP】")[1].split("# 【输出示例】")[0]
         self.assertIn("动手前先看这里", sop)
         self.assertIn("不必重新探索", sop)
+
+    def test_the_sandbox_section_is_absent_until_something_is_probed(self):
+        """还没探明 ⇒ 整段不出现。
+
+        不能写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"** —— 写出去就是让 LLM
+        干脆不去找那些文件（空段是它自己的一种断言）。
+        """
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        self.assertNotIn("【沙盒知识】", system)
+
+    def test_the_sandbox_section_lists_the_probed_paths(self):
+        """探查列完清单 ⇒ 下一轮 system 就带【沙盒知识】段，逐条列完整路径。
+
+        与 SOP 段同一个机制（`Agent.chat` 每轮现刷）：探查是个异步的活儿，摸到的路径
+        必须自己走进 prompt —— 走 `planner` 那条边就要求它认识会话，而那条边的契约是
+        "只收字符串、不收 Turn"。段位在 SOP 之后、示例之前。
+        """
+        cmd_explore.next_command()
+        cmd_explore.observe("[exitCode:0]\n/opt/task/a.md;/opt/task/b.md;")
+        system = json.loads(self.agent.chat("题"))[0]["content"]
+        self.assertIn("# 【沙盒知识】", system)
+        self.assertIn("- /opt/task/a.md", system)
+        self.assertIn("- /opt/task/b.md", system)
+        self.assertLess(system.index("【沙盒知识】"), system.index("【输出示例】"))
 
     def test_the_example_shows_a_deposit_then_a_reuse(self):
         """【输出示例】有两例，第二例是 few-shot：同一类任务演两遍 —— 第一次
