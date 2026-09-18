@@ -18,14 +18,9 @@ from _fixtures import _records, _terrain  # noqa: E402
 from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
-from coregeek.game import planner  # noqa: E402
-from coregeek.game.planner import (  # noqa: E402
-    POST_MARGIN,
-    STONE_RESERVE,
-    WALL,
-    WEAPONS_BY_SITE,
-    plan,
-)
+from coregeek.game import planner, states  # noqa: E402
+from coregeek.game.planner import WEAPONS_BY_SITE, plan  # noqa: E402
+from coregeek.game.states import POST_MARGIN, STONE_RESERVE, WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -1288,7 +1283,7 @@ class PathReserveTest(unittest.TestCase):
         walker = Worker(1, Pos(5, 5), {})
         grid[walker.pos] = "worker"
         turn = Turn(round_no=1, map=Map((41, 32), grid), roles=(walker,), gold=0)
-        q = planner._Queue(turn)
+        q = states._Queue(turn)
         self.assertTrue(q.step(walker, Pos(9, 5), avoid={Pos(6, 5), Pos(7, 5), Pos(8, 5)}))
         planner._walk_out(turn, q, set())
         self.assertEqual(

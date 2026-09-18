@@ -15,7 +15,8 @@ from _fixtures import _terrain  # noqa: E402
 from coregeek.game import planner  # noqa: E402
 from coregeek.game.grid import Pos, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
-from coregeek.game.planner import WALL, plan  # noqa: E402
+from coregeek.game.planner import plan  # noqa: E402
+from coregeek.game.states import WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402

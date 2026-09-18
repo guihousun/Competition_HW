@@ -1491,6 +1491,35 @@
 
 ---
 
+## 第 94 步：白天工人链独立成 `game/states.py`（纯重构，行为一字不改；用户口径：planner 退回胶水）
+
+**目标** 用户口径：「你并没有重构成状态类啊，独立出一个文件来存放这些状态类，`plan` 只是用来组装的胶水代码」。第 93 步把那条链做成了类，但**类还留在 1885 行的 `planner.py` 里** —— 状态类夹在常量、走路解算、任务线、夜里防守线中间，图（`docs/pic/白天工人状态机.png`）上那条链在代码里仍然看不见。
+三条拍板：① **只拆白天工人链**（夜里防守线、任务线、`_rescue` 等闸门留在 `planner.py`）；② **逻辑搬进类里** —— 只被一个状态调用的控制流直接装进那个类的 `run`；③ 新文件名 **`states.py`**。
+
+**产出** `planner.py` 1885 → **834 行**，新增 `src/coregeek/game/states.py` **1073 行**；每回合的指令**逐字节不变**。
+
+- **`states.py` 必须是下层模块**（`planner` 单向 import 它，反过来就是循环导入）—— 这是本步唯一的结构性代价，不是选择：链和 `planner` 都要用的那几样只能跟着下移。搬过去的是：常量（`WEAPON_COST` / `WALL` / `WALL_COST` / `ROUNDS_PER_STONE` / `STONE_RESERVE` / `STONE_KEEP_RAISING` / `TIME_MARGIN` / `POST_MARGIN` / `SELLABLE` / `UPGRADE_CHAIN` / `VOUCHER` / `WALL_VOUCHER` / `WALLFIXER` / `WALL_MAX_HP` / `DETOUR_MAX`）、走路账与指令出口（`_Move` / `_Queue` / `_emit`）、黑板 `_Ctx`、`State` 一族 + `ECONOMY_CHAIN` / `DAY_CHAIN` / `BACK_TO_POST`、墙线几何（`_sealed_back` / `_ring` / `_outside_spots` / `_aside_cell`）、经济线 13 个助手、岗位几何（`_weapon_groups` / `_operator_spots` / `_near_spots` / `_post_spots` / `_steps_to_post` / `_pioneer_mans_guns`）、`_passable`。
+- **三个类把函数内联进 `run`**（形参换成 `ctx.*`，逐行照抄）：`BuildWalls.run` ← `_build_walls`、`RepairWalls.run` ← `_repair_line`、`BackToPost.run` ← `_leave_for_the_post`。第 93 步的三个类当时是**薄壳**（`run` 里一两句 `return _xxx(...)`），头几句判据留在壳里 —— 内联时这几句要**一起**搬进去。
+- **仍留模块级的三个助手各有第二个调用者**：`_sell_ore`（`RaiseForWeapons` + `SellCargo` + `_upgrade_line`）、`_mine_spare_ore`（`RaiseForWeapons` + `MineSpareOre`）、`_upgrade_line`（`UpgradeWeapons` + `planner._intents` 的开拓者空闲支）。这条规则写在 `states.py` 的模块 docstring 里。
+- **搬法是脚本切的、不是手抄**：`logs/_split.py`（排查草稿，不入库）读开工前的快照、按行区间切顶层块拼两个文件，三个类另配手写的类头。切完用 AST 逐名比对"搬过去的模块级函数与原文逐字节相同"，再靠黄金扫场验收。
+- **连带改动**：`tests/` 4 处 import（三个文件拆成 `planner` / `states` 两条，`planner._Queue` → `states._Queue`），**用例体一字未动**；`CLAUDE.md`（`game/` 树加 `states.py` 一支、`planner.py` 那支改成"组装 + 任务线 + 夜里线"、依赖方向图补 `game/states → protocol/actions` 与 `game/states → agent`、`planner._passable` → `states._passable`、logger 那段注明 planner 里那处越权告警改走 `coregeek.game.states`）；`strategy.md` / `worker.md` 只改符号路径。
+
+**验证**
+1. **黄金输出比对（主网，先跑）**：动手前的基线是第 93 步那份 289 行局面。⚠️ 基线本身先复核过一遍 —— 把 `planner.py` 退回 HEAD 重跑，`diff` 为空，确认基线没被第 93 步之后的改动污染。重构后重跑 ⇒ `diff` **为空**。
+2. 用例 **464 → 464 全绿**。
+3. `py -c "import coregeek.game.planner"` 干净退出（无循环导入）。
+4. **端到端真服务**：`bash run.sh 18085` + curl 官方样例 ⇒ 回报文与基线 `sample@85` 那行逐条相同；`run.enc` 解密后看到 `###第85回合###` 与 `【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)`。
+
+**仍生效的已知不确定性**
+
+1. **"该搬的头几句没搬"只有黄金扫场抓得住**。第一次跑它时 289 行里有 **7 行**不一致：`sample@60/68/69/70/200` 与 `night-foes@200` / `night-other-team@200` —— 全是**白天末段**的局面。根因是内联 `BackToPost.run` 时漏了薄壳里的头一句 `if _ring(ctx.turn): return False`（补墙优先于收工）⇒ 白天链被整个短路。⚠️ **AST 比对挡不住这一类**：它证明的是"搬过去的函数没变"，而漏掉的那几句**恰恰在函数之外**。同理 464 条用例一条都没抓到 —— 没有一条覆盖"环没砌满 + 白天末尾 + 开拓者的任务点可用"这个组合。以后任何"把函数搬进类"的重构，**先存基线再动手**。
+2. **`states.py` 装了两边共用的东西 ⇒ 再拆一次会更难**：`_passable` / `_ring` / `_sealed_back` / 岗位几何服务的是 `planner` 的任务线与夜里线，住在 `states.py` 只是为了让依赖单向。读 `planner` 的人因此要跳文件（`_defend` 调的 `_post_spots` 在另一个模块）。下一个想继续拆（比如把夜里线也独立出去）的人要么把共用层再往下沉一层，要么接受两个模块互相 import。
+3. **"只有一个调用者才内联"这条规则没有门禁**：今天靠人读判据。以后给某个 `run` 内联新逻辑、同时又在别处加了调用，就会得到一段复制体而没人拦。判据本身简单（`grep` 数调用点），但没人会想起来数。
+4. **`tests/` 里还有 6 处 docstring 提到旧函数名**（`test_game_planner_economy.py` 2 处、`test_game_planner_wall.py` 4 处 提到 `_build_walls` / `_repair_line` / `_leave_for_the_post`）—— 本步**故意没改**：改注释等于动第 93 步"用例一条不改"那条判据的字面，而收益只是一个名字。代价是 `grep _build_walls tests/` 会命中这些陈旧引用，**留痕成本随文件漂移累积**。
+5. **图上那五处"图与代码对不上"（表 #59）一处没动**：本步只搬结构。现在每个盒子在 `states.py` 里有个同名类了，"按盒子逐个改行为"的那一步比第 93 步更容易落地。
+
+---
+
 ## 当前仍悬着的事
 
 跨步重复、或不归属某一步的未了结项。**已实现的下一步不在此列。**
