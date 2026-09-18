@@ -543,6 +543,25 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn("# 【沙盒知识】", prompt)
         self.assertIn("- /opt/task/rescue.md", prompt)
 
+    def test_the_probe_dies_with_the_task_that_owned_it(self):
+        """沙箱文件每道任务刷新一次 ⇒ 任务一结束就把探查清掉：下道题里【沙盒知识】从零开始、
+        命令槽重新去列清单 —— 上一个任务的路径不许沿用（它那个沙盒已经不在了）。
+
+        判据挂在"没任务"那一轮而不是"新任务开始"那一轮：同文再现时两次的题目原文一模一样，
+        只有中间那段空档分得出是两次任务。
+        """
+        cmd_explore.reset()
+        task_channel(self._turn(self.TASK))
+        prompt, _ = task_channel(
+            self._turn(self.TASK, cmd_result="[exitCode:0]\n  420 /opt/task/rescue.md\n")
+        )
+        self.assertIn("- /opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
+        task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
+        self.assertEqual(cmd_explore.known_paths(), [])
+        again, execute = task_channel(self._turn(self.TASK))
+        self.assertNotIn("【沙盒知识】", again, "上个任务的路径不许跟进新任务")
+        self.assertEqual(execute, cmd_explore._LIST_CMD)
+
     def test_no_task_means_no_probe(self):
         """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""
         cmd_explore.reset()
@@ -896,6 +915,9 @@ class TaskChannelTest(unittest.TestCase):
         ]
         for i, turn in enumerate(turns):
             with self.subTest(i=i):
+                # 这道题问的是"命令与提问不同轮"，探查不在这条契约里（它就是在空槽里发命令的）。
+                # 每轮先让它闭嘴：任务结束那一轮（i=0）会把探查复位，`setUp` 里一次 `stop` 不够。
+                cmd_explore.stop()
                 prompt, execute = task_channel(turn)
                 if execute:
                     self.assertTrue(

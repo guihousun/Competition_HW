@@ -14,11 +14,13 @@
 它没要过的输出、它自己的工具命令也不会被挤掉（两本账一轮一条交替跑）。清单里没有带 task 的 md /
 取完 / 落盘失败 ⇒ 收工，此后一条都不发，任务线那边什么都察觉不到。
 
-认出来的路径留在 `_known` 里给 system 的【沙盒知识】段（`known_paths`）—— **收工不清**：路径
-本身在整场里一直有用，只有 `reset` 清。
+认出来的路径留在 `_known` 里给 system 的【沙盒知识】段（`known_paths`）。⚠️ **沙箱文件每道任务
+刷新一次** ⇒ 探查的生命周期就是一道任务：任务一结束（`planner.task_channel` 在 `phase_task`
+空的那一轮）`reset` 掉，下一道题从列清单重新摸一遍 —— 旧路径不许跨任务沿用（同文再现也是
+新的一次，沙箱已经换了一批文件）。
 
-跨回合状态（整场一次，住在本模块）：`_phase` / `_pending` / `_known` / `_waiting`。退化路径：
-沙盒没跑起来（回执里解析不出路径）⇒ 直接收工，只丢这一次探查。
+跨回合状态（住在本模块）：`_phase` / `_pending` / `_known` / `_waiting`。退化路径：沙盒没跑起来
+（回执里解析不出路径）⇒ 直接收工，只丢这一次探查。
 """
 
 import logging
@@ -49,7 +51,7 @@ BODY_LOG_MAX = 4000
 _IDLE, _LIST, _FETCH, _DONE = "idle", "list", "fetch", "done"
 
 _phase = _IDLE
-#: 清单里认出来的路径（`known_paths` 交给 system 的【沙盒知识】段，收工不清）
+#: 清单里认出来的路径（`known_paths` 交给 system 的【沙盒知识】段，任务结束即清）
 _known: list[str] = []
 #: 待取的批，每批一组沙箱路径（清单回执按字节预算装好，取一批 pop 一批）
 _pending: deque[list[str]] = deque()
@@ -60,7 +62,10 @@ _waiting = False
 
 
 def known_paths() -> list[str]:
-    """探明的沙箱 md 路径（清单回执里认出来的那些，正文取没取回都一样）。还没列过清单 ⇒ 空表。"""
+    """探明的沙箱 md 路径（清单回执里认出来的那些，正文取没取回都一样）。还没列过清单 ⇒ 空表。
+
+    只在**当前这道任务**里有效：任务结束复位，下道题重新列。
+    """
     return list(_known)
 
 
@@ -110,8 +115,11 @@ def stop() -> None:
 
 
 def reset() -> None:
-    """回到"一次都没探查过"（整场开局就是这个状态）。只给用例用 —— 状态在模块里，
-    同一个测试进程里会跨用例串味。"""
+    """回到"一次都没探查过"（整场开局、每道任务起手都是它）。
+
+    两处调用：任务结束（`planner.task_channel` 在没任务那一轮 —— 沙箱文件每道任务刷新一次）
+    与用例隔离（状态在模块里，同一个测试进程里会跨用例串味）。
+    """
     global _phase, _fetching, _waiting
     _phase, _fetching, _waiting = _IDLE, [], False
     _known.clear()
