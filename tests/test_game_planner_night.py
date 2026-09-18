@@ -542,9 +542,9 @@ class NightEconomyTest(unittest.TestCase):
     """夜里机器人全被打光 ⇒ 工人跑**整套**经济兜底：卖矿 → 升级券 → 采闲矿。
 
     与白天最后一级同一套（`_economy`），只把时间预算换成 `Turn.rounds_left` —— 夜里那段也是
-    "还剩多少回合"，而 `day_rounds_left` 在夜里恒为 0，用它的话什么差事都发不出去。"全打光"是
-    真清完：机器人全图可见（任务书 L95）、一夜一波（L352）⇒ 判据过 `_alive`（已毁的照旧留在
-    `turn.robots` 里，见 `model._robots`）。"赶不回来就不去"由 `_sell_ore` 的第四道门与
+    "还剩多少回合"，而 `day_rounds_left` 在夜里恒为 0，用它的话什么差事都发不出去。"清完"的判据
+    是**没有打我方的活机器人**（`_alive(_foe_robots(turn))`）：一夜一波（任务书 L352）但全图可见
+    （L95）⇒ 打对方那一波也在 `turn.robots` 里，我们从不打它；已毁的照旧留在表里（`model._robots`）。"赶不回来就不去"由 `_sell_ore` 的第四道门与
     `_mine_spare_ore` 的可行性筛选各自兜住：夜里的活动半径等于"这一段剩下多少回合"。
     夜间经济只发 collect / move / sell / buy / use —— **build / remove 夜里非法**（§4.4）。
     """
@@ -588,6 +588,7 @@ class NightEconomyTest(unittest.TestCase):
             walls=walls,
             vendor_prices=self.PRICES,
             shop_prices=self.SHOP_PRICES,
+            our_team="challenger",
         )
 
     def ring(self):
@@ -670,6 +671,24 @@ class NightEconomyTest(unittest.TestCase):
         """
         worker = Worker(10010, Pos(20, 15), {"copper": 1})  # 贴着小贩
         turn = self._turn(worker, vendor=True, robots=(Robot(pos=Pos(20, 14), health=0),))
+        self.assertEqual(
+            plan(turn).get("10010"),
+            {"action": "sell", "name": "copper", "num": 1},
+        )
+
+    def test_a_robot_that_attacks_the_other_team_does_not_hold_the_worker_either(self):
+        """场上只剩打**对方**阵营的活机器人 ⇒ 按"清完"算，工人照样出门卖货。
+
+        `robots` 全图可见（L95）⇒ 对方那一波的 `targetTeam` 指向对面。我们从不打它（`_fire` 也
+        过 `_foe_robots`）⇒ 照"场上没有活机器人"判的话它整夜都在，工人被钉在炮位上、经济线
+        永远进不去（这就是"清完机器人后不出门干活"）。
+        """
+        worker = Worker(10010, Pos(20, 15), {"copper": 1})  # 贴着小贩
+        turn = self._turn(
+            worker,
+            vendor=True,
+            robots=(Robot(pos=Pos(20, 14), health=800, target_team="defender"),),
+        )
         self.assertEqual(
             plan(turn).get("10010"),
             {"action": "sell", "name": "copper", "num": 1},

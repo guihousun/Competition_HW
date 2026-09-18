@@ -269,13 +269,14 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 
         if not turn.is_day:
             # 夜里：① 持基地券且基地残血（< 满血 1/4）⇒ 贴基地 `use` 升级（升级 + 回满血一次
-            # 到位，当回合放弃开火）；② 还有活机器人 ⇒ 回炮位开火；③ 全打光 ⇒ 工人跑整套
-            # 经济兜底（与白天最后一级同一套；build/remove 夜里非法、绝不发），开拓者待命回炮位。
-            # 机器人在夜晚第一个回合统一出现、一夜一波（任务书 L352）、全图可见（L95）⇒ "场上没有
-            # 活的"就是真清完，不是看不见。已毁的照旧留在 `turn.robots` 里 ⇒ 必须过 `_alive`。
+            # 到位，当回合放弃开火）；② 还有会打我方的活机器人 ⇒ 回炮位开火；③ 没有了 ⇒ 工人跑
+            # 整套经济兜底（与白天最后一级同一套；build/remove 夜里非法、绝不发），开拓者待命回炮位。
+            # 判据是"没有打我方的活机器人"，不是"场上全空"：一夜一波（L352）但全图可见（L95）⇒
+            # 打对方那一波也在 `turn.robots` 里，我们从不打它（`_fire` 同样过 `_foe_robots`）⇒
+            # 照全空判的话它们整夜钉住工人、经济线永远进不去。已毁的照旧留表 ⇒ 过 `_alive`。
             if _upgrade_station(role, turn, q):
                 continue
-            if not _alive(turn.robots) and isinstance(role, Worker):
+            if not _alive(_foe_robots(turn)) and isinstance(role, Worker):
                 _economy(role, turn, q, sites, ore_taken, weapon_gap=weapon_gap)
                 continue
             _defend(role, turn, q, taken, assigned)
