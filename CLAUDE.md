@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 2. **每一步都要在 `docs/design/code-task.md` 留痕。** 每节三段：目标 / 产出（含验证结果）/ **仍生效的已知不确定性**。**新增一律只追加**；已完成的小节可压缩成"目的 + 结果"（决策理由、已失效的「不做什么」、粘贴的逐条命令输出都可以删）。⚠️ **仍生效的已知不确定性一条都不准删** —— 那是**重新推导代价最高**的部分，删了等于把学费再交一遍（已经兑现或被后续步骤推翻的可以删，就地写明）。未完成的下一步统一收在文末「**当前仍悬着的事**」一张表里，不散在各步。
 3. **红线优先于一切优雅。** 见下节——5 次异常即出局，任何设计取舍在这一条面前让步。
 4. 判题环境只有标准库：`pyproject.toml` 的 `dependencies` 保持为空，语法不得超出 3.11。
-5. `logs/` 等运行期产物**绝不入库**。
+5. `log/`（加密日志）与 `logs/`（历次排查的草稿脚本）等运行期产物**绝不入库**（`.gitignore` 里只有 `log/decode_log.py` 一处例外）。
 6. **代码注释只写"现在"，且写到最短。** 格式以 **`planner.task_channel`** 为准：docstring = **是什么 + 契约**（一两行，必要时补几行边界/坑）；内联 `#` = **一句话的"做什么"标签**（例 `# ② 回灌结果、这轮绝不发命令（必须压在 ③ 前）`）。**关键判据压成一句保留，成段论证与决策史删掉**；`#:` 只留给模块级/类级常量，函数体内一律收成 `#`。
    只回答：是什么、契约（参数/返回/边界）、读代码必须知道的坑与红线。**不写步骤号（"第 N 步"）、决策史（谁拍板、口径、旧版如何、何时改的）——那些只进 `docs/design/code-task.md`**；也不用 `**加粗**`、`⚠️` 这类标记，平实中文。**"拍的/未实测"的一句话标注保留**，指向守门用例的 `test_xxx` 也保留。
 
@@ -31,17 +31,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - ⚠️ **具体字节数、量法（三个坑）都在 `app._log` 的 docstring 里**，那里是权威副本 —— **别凭记忆写，也别在本文件里维护第二份**。**只有带 prompt 的那两行会动**（跨步骤比绝对值没意义，同一次测量的增量才是信号）。
    - ⚠️ **有两条日志不在 `app` 名下**：SOP 那条走 `coregeek.agent.tools.sop`，任务行与沙盒行走 `coregeek.game.planner`（那两样字段只在 `task_channel` 的作用域里）⇒ 只盯 `coregeek.app` 的守卫**看不见它们**。守卫一律 `assertLogs(level="INFO")`（root）。**加任何新 logger 之前先想这一条。**
    - ⚠️ **banner 是 `_log` 管不到的那一条**（`handle` 打的 `###第N回合###`）：它不受上限约束，数记录数时要单独算。
+   - **加密落点**（`logfile.py`）：`main3.py` 在 stdout 之外又挂一个 `EncryptedFileHandler`（`log/match-<年月日-时分秒>-<pid>.enc`，一条记录一行 base64，含换行的记录切不开）。**明文那份照旧 ⇒ 上面 64KB 管道那条账一分没变**（加密是**加的一份**，不是替换）。挂不上（只读盘 / 没权限）⇒ `encrypted_handler()` 返回 `None`、退成只打 stdout + stderr 一行 —— 入口绝不因为"写不了日志"起不来。赛后 `py log/decode_log.py <那个 .enc>` ⇒ `decode_log.log`。
 
 ## 架构
 
 骨架（逐步记录见 `docs/design/code-task.md`）：
 
 ```
-main3.py              入口：读端口 → chdir → src/ 进 sys.path → 起服务。不放策略
+main3.py              入口：读端口 → chdir → src/ 进 sys.path → 挂 handler → 起服务。不放策略
 run.sh                接口文档规定的 bash run.sh <port>；陪跑本地（python3 / py）
+log/decode_log.py     解密脚本（加密格式唯一的消费者）：`py log/decode_log.py log/match-*.enc` ⇒ `decode_log.log`
 src/coregeek/
 ├── utils.py          **叶子模块**：日志层的两条**规则** —— `LOG_TEXT_MAX` 与 `_clip`。
 │                     不放状态、不放 logger、不放格式化函数
+├── logfile.py        **叶子模块**：加密日志的落点 —— `seal`/`unseal`（逐条 nonce + HMAC 密钥流
+│                     + tag）、`EncryptedFileHandler`（**只改 `format`**，其余沿用 FileHandler）、
+│                     `encrypted_handler()`（**建不出来返回 `None`** ⇒ 入口退成只打 stdout）。
+│                     密钥内置在本文件里；只有标准库
 ├── app.py            组装根：handle(bytes) + run(port) + 每回合复盘日志 `_log`。**红线所在**，异常一律退化成空指令
 ├── web/server.py     HTTP：收字节 → handler → 回字节。handler 由 app 注入，不认识游戏概念
 ├── protocol/         线上格式：读与写，**只有这里知道字段名**
@@ -399,7 +405,8 @@ game/planner → utils                  ← 任务行自己打 ⇒ 要 `_clip`�
 ## 当前工作区状态
 
 本次是**推倒重写**：`main3.py` / `src/` 等已按第 1 步重写（旧版本在 git 历史里，`git show 5b4dfcf^:<path>` 可取回）。
-`tools/`（selfcheck / smoke / decrypt_log）、`README.md` 目前**不存在**——按需再加，别凭惯性建。
+`tools/`（selfcheck / smoke）、`README.md` 目前**不存在**——按需再加，别凭惯性建；旧版的 `tools/decrypt_log.py` 已按用户口径换成 **`log/decode_log.py`**（加密与解密一起由 `src/coregeek/logfile.py` 实现）。
+⚠️ **`log/`（加密日志，本步新增）与 `logs/`（历次排查留下的草稿脚本，旧）是两个目录**，都在 `.gitignore` 里（只有 `log/decode_log.py` 例外）。
 进度、每一步的产出与**仍生效的已知不确定性**全在 `docs/design/code-task.md`（文末「当前仍悬着的事」是唯一一张未了结项的表）。**本文件不记步骤流水**。
 
 `tests/` **按 src 拆分**（改哪个模块只读/只跑对应文件），**不建自研测试框架**：标准库 `unittest` 够用。
@@ -415,6 +422,7 @@ game/planner → utils                  ← 任务行自己打 ⇒ 要 `_clip`�
 bash run.sh 18085                                          # 起服务（自动挑 python3/py 并验版本）
 curl -s -X POST --data-binary @docs/request.txt http://127.0.0.1:18085/
 PYTHONUTF8=1 py -m unittest discover -s tests -v           # 跑用例；不加 PYTHONUTF8 中文会乱码
+py log/decode_log.py log/match-20260919-000514-1152.enc    # 解密日志 ⇒ decode_log.log（当前目录）
 ```
 
 ⚠️ **起服务前先确认端口上只有一个监听者**：`netstat -ano | grep LISTENING | grep 18085`。

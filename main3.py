@@ -20,11 +20,23 @@ def main() -> None:
     os.chdir(root)  # 同 demo：判题器的启动目录未知，相对路径一律以仓库根为基准
     sys.path.insert(0, str(root / "src"))
 
+    from coregeek import logfile
+
+    handlers = [logging.StreamHandler(sys.stdout)]
+    sink = logfile.encrypted_handler()  # stdout 那份照旧，加密文件是新增的第二份
+    if sink is None:
+        # 建不出来也要起服务：进程没启动的症状是"所有单位一动不动"，比没有日志严重得多。
+        print("加密日志建不起来，只往 stdout 打", file=sys.stderr)
+    else:
+        handlers.append(sink)
+
     logging.basicConfig(
-        stream=sys.stdout,
         level=logging.INFO,
         format="%(asctime)s | %(message)s",
+        handlers=handlers,
     )
+    if sink is not None:
+        logging.info("加密日志：%s", sink.baseFilename)  # 赛后要捞的就是这个文件
 
     from coregeek.app import run
 
