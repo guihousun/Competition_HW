@@ -91,7 +91,7 @@ class ChatPromptTest(unittest.TestCase):
         "只收字符串、不收 Turn"。段位在 SOP 之后、示例之前。
         """
         cmd_explore.next_command()
-        cmd_explore.observe("[exitCode:0]\n/opt/task/a.md;/opt/task/b.md;")
+        cmd_explore.observe("[exitCode:0]\n  120 /opt/task/a.md\n  300 /opt/task/b.md\n")
         system = json.loads(self.agent.chat("题"))[0]["content"]
         self.assertIn("# 【沙盒知识】", system)
         self.assertIn("- /opt/task/a.md", system)

@@ -538,7 +538,7 @@ class TaskChannelTest(unittest.TestCase):
         first, _ = task_channel(self._turn(self.TASK))
         self.assertNotIn("【沙盒知识】", first, "清单还没回来，不能凭空断言沙盒里有什么")
         prompt, _ = task_channel(
-            self._turn(self.TASK, cmd_result="[exitCode:0]\n/opt/task/rescue.md;")
+            self._turn(self.TASK, cmd_result="[exitCode:0]\n  420 /opt/task/rescue.md\n")
         )
         self.assertIn("# 【沙盒知识】", prompt)
         self.assertIn("- /opt/task/rescue.md", prompt)
@@ -559,7 +559,7 @@ class TaskChannelTest(unittest.TestCase):
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))  # 问模型那轮：题目走 prompt，槽给探查去列清单
         prompt, execute = task_channel(
-            self._turn(self.TASK, call, cmd_result="[exitCode:0]\n/a/x.md;")
+            self._turn(self.TASK, call, cmd_result="[exitCode:0]\n  420 /opt/task/x.md\n")
         )
         self.assertEqual(execute, "ls", "探查的回执不该把 LLM 的命令挤掉")
         self.assertNotIn(self.RESULT_MARK, prompt, "探查的回执不回灌给 LLM")
