@@ -3,8 +3,9 @@
 每个角色每回合只有一个动作：
 
 - 白天·开拓者：去最近一个能接的任务点 `acceptTask`；领到就被钉死（见 `_intents`）。
-- 白天·工人：建武器 → 修墙 → 砌墙 → 卖矿 → 升级 → 采最值钱的矿，一件不行才轮到下一件；
-  武器是最高优先级（份额有缺且钱不够 ⇒ 筹资：卖货/采贵矿）；环砌完后的白天末尾提前回炮位。
+- 白天·工人：走 `DAY_CHAIN` 那条状态链 —— 建武器 → 筹资（武器有缺但钱不够）→ 砌墙 → 修墙 →
+  卖矿 → 升级 → 采最值钱的矿，第一个"认领了这一回合"的状态说了算；武器是最高优先级；
+  环砌完后的白天末尾提前回炮位（`BackToPost`，挂在链之前）。
 - 夜里·所有角色（含开拓者，`attack` 的可用角色是"全部"）：认领一组武器，走到那一组的岗位
   （两座火箭是共用的那一格、单座就站在炮旁）开火；能打就先打，打不了才挪岗。
 
@@ -207,29 +208,203 @@ def plan(turn: Turn) -> dict[str, dict[str, Any]]:
     return q.cmds
 
 
+class _Ctx:
+    """回合内的决策黑板：白天工人链与夜里经济线共用的那几本账。
+
+    每本账都是同一个对象被各状态原地改（`sites.add` 而不是并集、`budget -= WEAPON_COST`
+    而不是重新赋值）—— 后一个状态读到的必须是前一个刚写下的那一份（建武器的落点要立刻进
+    走路避让、认领过的矿格不能再来一个人）。逐角色顺序累计，回合一过就没了。
+    """
+
+    def __init__(
+        self,
+        turn: Turn,
+        q: _Queue,
+        *,
+        sites: set[Pos] | None = None,
+        ore_taken: set[Pos] | None = None,
+        weapon_gap: bool = False,
+        leaving: frozenset[str] = frozenset(),
+        slots: Iterator[tuple[str, Pos]] | None = None,
+    ) -> None:
+        self.turn = turn
+        self.q = q
+        self.sites = set() if sites is None else sites
+        self.ore_taken = set() if ore_taken is None else ore_taken
+        self.weapon_gap = weapon_gap  # 份额有缺的名额还在（建武器与升级线的开关）
+        self.leaving = leaving  # `_trapped`：砌满墙就会被关在盒子里的人
+        self.taken: set[Pos] = set()  # 炮位（夜里一人一座；白天只有收工闸门读）
+        self.repair_taken: set[Pos] = set()  # 待修墙格认领
+        self.budget = turn.gold  # 金币预留：认领一座武器就扣一份，宁可少建不可超支
+        self.slots = iter(()) if slots is None else slots  # 待建武器名额（一次性迭代器）
+        self.target: Pos | None = None  # 分给本工人的环缺口头一格
+        self.remaining = 0  # 那一段还剩几格（回合预算用）
+
+
+class State:
+    """白天工人链上的一个状态：`run` 返回 True = 这一回合归它了（驱动方就此停在这一个）。
+
+    契约两条，写状态的人都要守：
+
+    一是 `False` 必须意味着"我什么都没排、什么都没发"，后一个状态接着往下跑。谁发了指令或
+    排了走路意图还返回 False，这个角色就会落两条动作 —— 第二段两条都解，后解的把前一条的
+    `cmds[角色]` 盖掉，报文仍然合法、本地全绿，脏账只在日志里。
+    二是无状态：只读 `ctx` 与 `turn`，不往自己身上记东西。跨回合的标志位一旦卡住会静默关掉
+    整条线（`_fired` 是 planner 里唯一的跨回合账，它不在这条链上）。
+
+    链上顺序就是策略，见 `DAY_CHAIN`（与 `docs/pic/白天工人状态机.png` 的盒子一一对应）。
+    """
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        raise NotImplementedError
+
+
+class BuildWeapons(State):
+    """建立武器：份额有缺且钱够 ⇒ 就地建或走向落点。
+
+    `_emit` 被拒 / `q.step` 走不到 ⇒ 返回 False，这一回合落到筹资（不是"建不了就待命"）。
+    名额在钱的判据之前就吃掉：`budget` 一回合内只降不升，两种写法今天等价，别顺手调换。
+    """
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        slot = next(ctx.slots, None)
+        if slot is None or ctx.budget < WEAPON_COST:
+            return False
+        kind, cell = slot
+        ctx.budget -= WEAPON_COST  # 认领即预留：宁可这回合少建，不可超支
+        ctx.sites.add(cell)
+        if role.pos.dist(cell) <= 1:
+            if _emit(ctx.q.cmds, role, actions.Build, kind, cell):
+                return True
+        elif ctx.q.step(role, cell, avoid=frozenset(ctx.sites), with_paths=True):
+            return True
+        return False
+
+
+class RaiseForWeapons(State):
+    """采矿收集（为武器）：有缺但钱不够、筹资又可行（有小贩有价可卖）⇒ 整条墙线让位（含修墙），
+    先卖背包里的货、再采最值钱的矿凑钱。
+
+    与链上别的状态不同：条件成立就无条件认领这一回合（内层卖/采成不成都不再往下走）——
+    火力缺口比墙急。石头只留 `STONE_KEEP_RAISING` 块。
+    """
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        if not (ctx.weapon_gap and ctx.budget < WEAPON_COST and _can_fund(ctx.turn)):
+            return False
+        if not _sell_ore(
+            role, ctx.turn, ctx.q, ctx.sites, with_paths=True, keep=STONE_KEEP_RAISING
+        ):
+            _mine_spare_ore(role, ctx.turn, ctx.q, ctx.sites, ctx.ore_taken)
+        return True
+
+
+class BuildWalls(State):
+    """建墙（含采矿）：把墙砌到分给本工人的那一格上 —— 缺石头先去采、手上有石头就砌，一回合只干
+    其中一件。
+
+    `target` 是 None（环砌满）⇒ False，让给修墙；有人会被砌满的墙关住（`ctx.leaving`）⇒ True
+    而一条指令都不发：待命，别跑远，下回合缺口还在。
+    """
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        if ctx.target is None:
+            return False
+        if ctx.leaving:
+            return True
+        return _build_walls(
+            role,
+            ctx.turn,
+            ctx.q,
+            ctx.sites,
+            target=ctx.target,
+            remaining=ctx.remaining,
+            ore_taken=ctx.ore_taken,
+        )
+
+
+class RepairWalls(State):
+    """围墙修复：弱墙（血 < 满血 1/5）升级当修 —— L1/L2 用围墙升级券，L3 到顶才用修复包。
+
+    排在砌墙后面：环砌满了才轮得到补血。
+    """
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        return _repair_line(role, ctx.turn, ctx.q, ctx.sites, ctx.repair_taken)
+
+
+class SellCargo(State):
+    """采矿收集（变现）：背包里有值得卖的东西、这趟够本 ⇒ 卖给小贩。经济兜底的第一级。"""
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        return _sell_ore(role, ctx.turn, ctx.q, ctx.sites, with_paths=True)
+
+
+class UpgradeWeapons(State):
+    """武器升级：买券 → 走到目标武器 → 用券。武器还有缺 ⇒ 整条不跑（用户口径"武器 ok 才升级"）。"""
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        if ctx.weapon_gap:
+            return False
+        return _upgrade_line(role, ctx.turn, ctx.q, ctx.sites)
+
+
+class MineSpareOre(State):
+    """挖矿赚钱：按"买得动、回得来"筛一遍，再按性价比挑一座闲矿去采。链尾终态（永远认领）。"""
+
+    def run(self, role: Worker, ctx: _Ctx) -> bool:
+        _mine_spare_ore(role, ctx.turn, ctx.q, ctx.sites, ctx.ore_taken)
+        return True
+
+
+class BackToPost:
+    """回防守位：环砌完了、离夜里第一波只剩回程步数 ⇒ 回那一组的岗位。
+
+    不放进 `DAY_CHAIN`：它在链之前（补墙优先于收工），且开拓者也要走它，而链上只跑工人。
+    只发 `move` —— 白天发 `attack` 是非法指令（红线），所以这一支绝不能复用夜里那套 `_defend`。
+    """
+
+    def run(self, role: BaseRole, ctx: _Ctx) -> bool:
+        if _ring(ctx.turn):
+            return False
+        return _leave_for_the_post(role, ctx.turn, ctx.q, ctx.taken)
+
+
+#: 经济兜底三级：卖货 →（武器有缺则跳过升级）→ 采闲矿。白天链尾与夜里清场后走同一条
+#: （`_economy` 就是这条链的驱动器）—— 一份实现，两个时段不会漂成两套。
+ECONOMY_CHAIN: tuple[State, ...] = (SellCargo(), UpgradeWeapons(), MineSpareOre())
+
+#: 白天工人链：从上往下第一个"认领了这一回合"的状态说了算。顺序即策略。
+DAY_CHAIN: tuple[State, ...] = (
+    BuildWeapons(),  # 建立武器：名额有缺、钱够 ⇒ 建 / 走向落点
+    RaiseForWeapons(),  # 采矿收集（为武器）：有缺但钱不够、筹资可行 ⇒ 整条墙线让位
+    BuildWalls(),  # 建墙（含采矿）：补缺口 / 采石 / 待命
+    RepairWalls(),  # 围墙修复：弱墙"升级当修"，环砌满才轮得到
+) + ECONOMY_CHAIN
+
+#: 收工闸门（白天工人链之前的一道，见 `BackToPost`）
+BACK_TO_POST = BackToPost()
+
+
 def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
     """第一段：逐角色出"初步行为"。act 直接落 `q.cmds`；走路的交 `q.step` / `q.beside`（不在
-    这时算路）。黑板都是回合内的决策账：`sites` 建造格、`taken` 炮位、`repair_taken` 待修墙格、
-    `ore_taken` 矿格、`budget` 金币（认领即预留）、`segments` 环缺口切段 —— 逐角色顺序累计，
-    不跨回合。
+    这时算路）。黑板都是回合内的决策账（建造格 / 矿格 / 炮位 / 待修墙格 / 金币预留，装在
+    `_Ctx` 里，环缺口切段在本函数），逐角色顺序累计、不跨回合。工人的一串判据在 `DAY_CHAIN`。
     """
     q = _Queue(turn)
     cmds = q.cmds
-    sites: set[Pos] = set()
-    # 已被认领的武器（夜里一人只能操一座）
-    taken: set[Pos] = set()
     # 本回合各机器人已被许掉的伤害（多炮协防的账：先开火的记上，后开的按剩余血挑目标）
     assigned: dict[Pos, int] = {}
-    repair_taken: set[Pos] = set()
-    budget = turn.gold
     # 武器缺口（份额有缺且落点为空的名额）：建武器最优先的判据，也是筹资线的开关。
+    # 一次算好、链上只读 —— 改从 `ctx.slots` 现算会把那条一次性迭代器吃掉。
     pending = list(_slots(turn))
-    slots = iter(pending)
     weapon_gap = bool(pending)
     # 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
     box = box_cells(turn.map.station) if turn.map.station else frozenset()
-    # 砌满墙就会被关在盒子里的人：闸门 (2) 按人放行，闸门 (1) 随 `gated` 传给 `_build_walls`
+    # 砌满墙就会被关在盒子里的人：闸门 (2) 按人放行，建墙状态随 `leaving` 待命
     leaving = _trapped(turn, box)
+    # 回合内的决策账（建造格 / 矿格 / 炮位 / 待修墙格 / 金币预留）：循环里逐角色原地累计
+    ctx = _Ctx(turn, q, weapon_gap=weapon_gap, leaving=leaving, slots=iter(pending))
 
     # 环缺口按在场工人数切段（A 领前段、B 领后段沿环同向推进 ⇒ 后段任何一格都不低于前段
     # 剩下的，优先级保住；一个工人 ⇒ 整段）；`ore_taken` 矿格认领让 B 就近换一座、不跟 A
@@ -239,7 +414,6 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
     bounds = [len(gaps) * i // max(len(workers_no), 1) for i in range(len(workers_no) + 1)]
     segments = [gaps[bounds[i]: bounds[i + 1]] for i in range(len(workers_no))]
     worker_no = 0
-    ore_taken: set[Pos] = set()
 
     for role in turn.roles:
         # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，所以它连夜里都不回炮位）——
@@ -277,15 +451,14 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             if _upgrade_station(role, turn, q):
                 continue
             if not _alive(_foe_robots(turn)) and isinstance(role, Worker):
-                _economy(role, turn, q, sites, ore_taken, weapon_gap=weapon_gap)
+                _economy(role, turn, q, ctx.sites, ctx.ore_taken, weapon_gap=weapon_gap)
                 continue
-            _defend(role, turn, q, taken, assigned)
+            _defend(role, turn, q, ctx.taken, assigned)
             continue
 
         # 白天收工：环砌完了 ⇒ 只在"离夜里第一波只剩回程步数"时才回家（判据在
-        # `_leave_for_the_post` 里）。补墙优先于收工，环没砌完时这一支不生效；这一支只发
-        # move，绝不能复用 `_defend` —— 它会发 attack，白天发就是非法指令。
-        if not _ring(turn) and _leave_for_the_post(role, turn, q, taken):
+        # `BackToPost` 里）。补墙优先于收工，环没砌完时这一支不生效。
+        if BACK_TO_POST.run(role, ctx):
             continue
 
         if isinstance(role, Pioneer):
@@ -294,61 +467,25 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
             else:
                 # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事（武器齐了才跑）；卖矿兜底
                 # （接住它从任务/宝藏拿到可卖物的情形）；没货 ⇒ 待命。
-                if not weapon_gap and not _upgrade_line(role, turn, q, sites):
-                    _sell_ore(role, turn, q, sites)
+                if not weapon_gap and not _upgrade_line(role, turn, q, ctx.sites):
+                    _sell_ore(role, turn, q, ctx.sites)
             continue
 
         if not isinstance(role, Worker):
             continue  # 不该出现的角色（`roles.make` 已挡过一道）
 
+        # 环缺口切段：段号在这一支的最前面就吃掉（走过前面那些闸门的角色不占段）
         segment = segments[worker_no] if worker_no < len(segments) else ()
         worker_no += 1
-        target = segment[0] if segment else None
+        ctx.target = segment[0] if segment else None
+        ctx.remaining = len(segment)
 
-        # 建武器最优先（口径：无论哪一天，武器没了先建）：份额有缺且钱够 ⇒ 建/走向落点。
-        # 造武器与墙无关，不参与下面的安全闸门。
-        slot = next(slots, None)
-        if slot is not None and budget >= WEAPON_COST:
-            kind, cell = slot
-            budget -= WEAPON_COST  # 认领即预留：宁可这回合少建，不可超支
-            sites.add(cell)
-            if role.pos.dist(cell) <= 1:
-                if _emit(cmds, role, actions.Build, kind, cell):
-                    continue
-            elif q.step(role, cell, avoid=frozenset(sites), with_paths=True):
-                continue
+        # 白天工人链：从上往下第一个"认领了这一回合"的状态说了算（顺序即策略，见 `DAY_CHAIN`）
+        for state in DAY_CHAIN:
+            if state.run(role, ctx):
+                break
 
-        # 筹资：武器还有缺但钱不够、且筹资可行（有小贩有价可卖，见 `_can_fund`）⇒ 整条墙线
-        # 让位（含修墙），先卖背包里的货、再采最值钱的矿凑 25 金币（火力缺口比墙急；凑不成的
-        # 地图上墙仍是剩下最值得干的事）。石头只留 `STONE_KEEP_RAISING` 块（用户口径）。
-        if weapon_gap and budget < WEAPON_COST and _can_fund(turn):
-            if not _sell_ore(role, turn, q, sites, with_paths=True, keep=STONE_KEEP_RAISING):
-                _mine_spare_ore(role, turn, q, sites, ore_taken)
-            continue
-
-        # 安全闸门：墙格在手而砌下去会把人关住 ⇒ 待命（不发指令也不筹资 —— 别跑远，下回合
-        # 缺口还在；`_build_walls` 里还有同一道闸兜底）。
-        if target is not None and leaving:
-            continue
-
-        # 砌墙（平常时序）：环上有缺口就先补缺口 —— 硬洞比弱墙急，一格又只要 1 块石头
-        # （环砌满时 `target` 是 `None`，这里直接落空、让给下面的修墙）。
-        if target is not None and _build_walls(
-            role, turn, q, sites,
-            gated=bool(leaving), target=target,
-            remaining=len(segment),
-            ore_taken=ore_taken,
-        ):
-            continue
-
-        # 修墙：弱墙（< 满血 1/5）升级当修，L3 才用修复包（见 `_repair_line`）。
-        if _repair_line(role, turn, q, sites, repair_taken):
-            continue
-
-        # 经济线兜底：卖矿 →（武器齐了才升级）→ 采闲矿。
-        _economy(role, turn, q, sites, ore_taken, weapon_gap=weapon_gap)
-
-    return q, sites
+    return q, ctx.sites
 
 
 def _walk_out(turn: Turn, q: _Queue, sites: set[Pos]) -> None:
@@ -557,7 +694,6 @@ def _build_walls(
     turn: Turn,
     q: _Queue,
     sites: set[Pos],
-    gated: bool = False,
     target: Pos | None = None,
     remaining: int = 0,
     ore_taken: set[Pos] | None = None,
@@ -568,13 +704,11 @@ def _build_walls(
     墙被别人砌了，下一回合都能自动跟着变。
 
     `target` / `remaining` = 黑板切段分给本工人的那一格与本段还剩几格（A 领前段、B 领后段，
-    两人不挤同一段墙）。`gated` = 这一回合不许砌（砌下去会把谁关在墙里，见 `_trapped`）。
+    两人不挤同一段墙）。"砌下去会把谁关住就待命"那道闸在 `BuildWalls.run` 里，不在这里。
     """
     if target is None:
         return False  # 没分到墙格 ⇒ 调用方走经济线
     ore_taken = set() if ore_taken is None else ore_taken
-    if gated:
-        return True  # 砌下去会把人关住 ⇒ 待命（安全：别跑远，下回合缺口还在）
     # 只认石矿：墙只吃石头，铁/铜再多也砌不了墙。排除本回合别人认领的矿格（B 就近换一座）。
     # 认领只发生在"真要采"之后（want > 0）：石头已够的工人不该占住矿格 —— 它这回合用不上。
     mine = _pick_ore(
@@ -974,14 +1108,16 @@ def _economy(
     *,
     weapon_gap: bool,
 ) -> None:
-    """经济线兜底：卖矿 →（武器有缺则跳过升级）→ 采闲矿。白天最后一级与夜里清场后共用一套。
+    """经济线兜底：卖矿 →（武器有缺则跳过升级）→ 采闲矿。白天最后一级与夜里清场后共用一套
+    （就是 `ECONOMY_CHAIN` 那三个状态）。
 
     不返回布尔：三级都是"能发就发"，一个都不成立时自然不落指令（合法空指令）。夜里也走这里
     —— 时间预算由 `Turn.rounds_left` 兜着，走远了回不了炮位的活四道门自己会拦。
     """
-    if not _sell_ore(role, turn, q, sites, with_paths=True):
-        if weapon_gap or not _upgrade_line(role, turn, q, sites):
-            _mine_spare_ore(role, turn, q, sites, ore_taken)
+    ctx = _Ctx(turn, q, sites=sites, ore_taken=ore_taken, weapon_gap=weapon_gap)
+    for state in ECONOMY_CHAIN:
+        if state.run(role, ctx):
+            break
 
 
 def _mine_spare_ore(
