@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _terrain  # noqa: E402
-from coregeek.agent import AGENT, Agent  # noqa: E402
+from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
 from coregeek.agent.chat import answer_of, looks_like_tool, tool_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.game.grid import Pos, step_toward  # noqa: E402
@@ -204,6 +204,10 @@ class TaskChannelTest(unittest.TestCase):
     def setUp(self) -> None:
         # SOP 是单实例上的跨回合状态，不清就会跨用例串味。
         AGENT.reset()
+        # 沙盒探查同理（状态在模块里），而且它会把空着的命令槽全部吃掉 ⇒ 先隔离、再让它闭嘴；
+        # 要看它的用例自己 `reset()` 打开。落盘目录不动：这些用例一条文件都不取。
+        cmd_explore.reset()
+        cmd_explore.stop()
 
     DAY = 1
     TASK = "请查询北京天气"
@@ -516,6 +520,34 @@ class TaskChannelTest(unittest.TestCase):
         messages = json.loads(prompt)
         self.assertEqual(messages[-1]["role"], "tool")
         self.assertIn(output, messages[-1]["content"])
+
+    def test_an_idle_command_slot_carries_the_sandbox_probe(self):
+        """命令槽空着的回合全部拿去摸沙箱环境（问模型这一轮就是），prompt 那半边照旧是题目。"""
+        cmd_explore.reset()
+        prompt, execute = task_channel(self._turn(self.TASK))
+        self.assertIn(self.TASK, prompt)
+        self.assertEqual(execute, cmd_explore._LIST_CMD)
+
+    def test_no_task_means_no_probe(self):
+        """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""
+        cmd_explore.reset()
+        self.assertEqual(task_channel(self._turn(news="北部铁矿区塌方"))[1], "")
+
+    def test_our_own_result_is_not_fed_back_and_does_not_block_the_llm_command(self):
+        """两本账一轮一条交替跑：探查的回执不回灌（判据 ② 不命中），LLM 那条命令照发。
+
+        漏掉"认领"这半边，回灌分支会把 LLM 的命令整轮挤掉 —— 探查队列排空前它一条都发不出去。
+        """
+        call = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
+        )
+        cmd_explore.reset()
+        task_channel(self._turn(self.TASK))  # 问模型那轮：题目走 prompt，槽给探查去列清单
+        prompt, execute = task_channel(
+            self._turn(self.TASK, call, cmd_result="[exitCode:0]\n/a/x.md;")
+        )
+        self.assertEqual(execute, "ls", "探查的回执不该把 LLM 的命令挤掉")
+        self.assertNotIn(self.RESULT_MARK, prompt, "探查的回执不回灌给 LLM")
 
     def test_the_reply_is_remembered_even_on_command_rounds(self):
         """发命令那一轮也记回复（`AGENT.hear` 的存在理由）：③ 那轮没有 prompt，但它的工具

@@ -23,7 +23,7 @@ import logging
 from collections.abc import Callable, Iterator, Mapping, Set
 from typing import Any, NamedTuple
 
-from ..agent import AGENT  # 与 LLM 说什么不在策略层
+from ..agent import AGENT, cmd_explore  # 与 LLM 说什么不在策略层
 from ..agent.chat import answer_of, is_prices_reply, is_summary_reply, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
@@ -393,9 +393,13 @@ def task_channel(turn: Turn) -> tuple[str, str]:
             _clip(turn.phase_task) or "无",
             _clip(turn.llm_resp) or "无",
         )
-    # 打印CMD执行结果日志
-    if turn.cmd_result:
-        LOGGER.info("【CMD命令执行结果】：「%s」", _clip(turn.cmd_result))
+    # 上回合若是探查命令，回执归探查收走：任务线当它没发生（见 `agent.cmd_explore`）。
+    # 必须压在早返回之前 —— 任务在回执回来前就结束了的话，不认领它就粘住 `_waiting`。
+    result = cmd_explore.observe(turn.cmd_result)
+    # 打印CMD执行结果日志（探查自己那份不在这儿再抄一遍：原文已落盘 tmp/，而它的
+    # 回执是整份文件、抄进日志只是把磁盘上的东西再写一次 stdout）
+    if result:
+        LOGGER.info("【CMD命令执行结果】：「%s」", _clip(result))
 
     llmReply = turn.llm_resp.strip()
     # 获取摘要
@@ -418,9 +422,9 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     if not turn.phase_task:
         return AGENT.news_question(turn.news), ""
 
-    # 任务回合，但没有开拓者参与 ⇒ 不发 prompt、也不发命令（任务线只在开拓者身上）。
+    # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
     if not any(isinstance(r, Pioneer) for r in turn.roles):
-        return "", ""
+        return "", cmd_explore.next_command()
     # 解析任务答案
     answer = answer_of(llmReply) 
     # 解析工具调用
@@ -438,25 +442,28 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     elif rejected:
         retry = f"【判题器反馈】：{why}" if why else "（判题器未说明错在哪一项）"
 
-    if turn.cmd_result:  # ② 回灌结果、这轮绝不发命令（必须压在 ③ 前）
+    if result:  # ② 回灌结果、这轮绝不发命令（必须压在 ③ 前）
         # 有回执 ⇒ 回灌结果
-        prompt, cmd = AGENT.chat(turn.phase_task, result=turn.cmd_result, retry=retry), ""
+        prompt, cmd = AGENT.chat(turn.phase_task, result=result, retry=retry), ""
     elif command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽留给链尾的压缩闸门
         # 有命令 ⇒ 交给沙盒
         prompt, cmd = "", command
     elif retry:
         # 答错了 ⇒ 带纠错重问
         prompt, cmd = AGENT.chat(turn.phase_task, retry=retry), ""
-    elif answer:  
+    elif answer:
         # 拿到了答案 ⇒ 只交答案：不发模型请求、也不压缩
-        return "", ""
-    else:  
+        prompt, cmd = "", ""
+    else:
         # 首问：把题目问出去
         prompt, cmd = AGENT.chat(turn.phase_task), ""
 
-    # 链尾压缩闸门：只剩命令轮会到这里
+    # 链尾压缩闸门：答案轮不压缩（压缩与 `<answer>` 互斥），只剩命令轮会填上
     if not answer and prompt == "":
         prompt = AGENT.compression_request()
+    # 链尾探查闸门：命令槽还空着 ⇒ 拿去摸沙箱环境（回执归探查自己收，不回灌）
+    if cmd == "":
+        cmd = cmd_explore.next_command()
     return prompt, cmd
 
 
