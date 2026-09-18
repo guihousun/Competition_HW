@@ -16,8 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import SAMPLE  # noqa: E402
 from coregeek.app import handle  # noqa: E402
-from coregeek.game.grid import Pos, step_toward  # noqa: E402
+from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
+from coregeek.game.path import step_toward  # noqa: E402
 from coregeek.game.roles import BaseRole  # noqa: E402
 from coregeek.game.world import Error, Turn  # noqa: E402
 from coregeek.protocol import model  # noqa: E402

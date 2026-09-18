@@ -32,17 +32,8 @@ from ..agent import AGENT, cmd_explore  # 与 LLM 说什么不在策略层
 from ..agent.chat import answer_of, is_prices_reply, is_summary_reply, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
-from .grid import (
-    STEPS,
-    Pos,
-    base_cells,
-    box_cells,
-    step_onto,
-    step_outside,
-    step_toward,
-    wall_cells,
-    weapon_sites,
-)
+from .grid import STEPS, Pos, base_cells, box_cells, wall_cells, weapon_sites
+from .path import step_onto, step_outside, step_toward
 from .roles import BaseRole, Pioneer, Worker
 from .states import (
     BACK_TO_POST,

@@ -14,8 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from _fixtures import _records, _terrain  # noqa: E402
 from coregeek.agent import AGENT  # noqa: E402
 from coregeek.app import handle  # noqa: E402
-from coregeek.game.grid import Pos, step_toward, wall_cells  # noqa: E402
+from coregeek.game.grid import Pos, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
+from coregeek.game.path import step_toward  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.states import TIME_MARGIN, WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402

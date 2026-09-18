@@ -9,7 +9,8 @@
 一个拦住人，口径故意不同，见各自的 docstring。
 """
 
-from .grid import Pos, door_cells, step_outside, wall_cells, weapon_sites
+from .grid import Pos, door_cells, wall_cells, weapon_sites
+from .path import step_outside
 from .roles import BaseRole, Worker
 from .world import ROUNDS_PER_DAY, Turn, Weapon
 

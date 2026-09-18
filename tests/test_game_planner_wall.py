@@ -16,8 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _records, _terrain  # noqa: E402
 from coregeek.agent import AGENT  # noqa: E402
-from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, step_outside, steps_between, step_toward, wall_cells, weapon_cells, weapon_sites  # noqa: E402
+from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
+from coregeek.game.path import step_outside, step_toward, steps_between  # noqa: E402
 from coregeek.game import planner, states  # noqa: E402
 from coregeek.game.planner import WEAPONS_BY_SITE, plan  # noqa: E402
 from coregeek.game.states import POST_MARGIN, STONE_RESERVE, WALL  # noqa: E402

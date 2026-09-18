@@ -23,8 +23,9 @@ from typing import Any, NamedTuple
 
 from ..agent import AGENT  # 价格期望表：闲矿排序要读它（跨回合状态，退化 = 偏好偏一天）
 from ..protocol import actions  # 指令只能经 Action 产出
-from .grid import STEPS, Pos, box_cells, steps_between
+from .grid import STEPS, Pos, box_cells
 from .map import COPPER, IRON, STONE
+from .path import steps_between
 from .roles import BaseRole, Pioneer, Worker
 from .utils import _passable, _pioneer_mans_guns, _ring, _sealed_back, _weapon_groups
 from .world import Turn, Wall, Weapon

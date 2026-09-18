@@ -17,8 +17,9 @@ from _fixtures import _terrain  # noqa: E402
 from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
 from coregeek.agent.chat import answer_of, looks_like_tool, tool_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
-from coregeek.game.grid import Pos, step_toward  # noqa: E402
+from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
+from coregeek.game.path import step_toward  # noqa: E402
 from coregeek.game.planner import plan, task_channel  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
