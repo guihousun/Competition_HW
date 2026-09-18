@@ -1305,6 +1305,9 @@ class RepairTest(unittest.TestCase):
     建筑回满血（任务书 L297）⇒ 升级 = 回满血 + 上限抬高一档，所以 L1/L2 的弱墙一律升级，L3
     到顶升不动了才用修复包。两件的站位契约同源（站墙一格内 `use`）。**不再拆墙** —— `remove`
     只剩 `_rescue` 一个调用点。守门：`_weak_walls` 的阈值 + `_repair_line` 的分派。
+
+    两类夹具前提：① 环**砌满**（修墙线排在砌墙之后，有缺口就轮不到它）；② 工人站在**非环格**
+    上（自己站的待砌墙格会留在 `_ring` 里，见其 docstring ⇒ 否则这回合先去砌那一格）。
     """
 
     BASE = Pos(10, 24)
@@ -1316,9 +1319,15 @@ class RepairTest(unittest.TestCase):
     L1 = 199  # L1 满血 1000 ⇒ 199×5 < 1000
     V1, V2 = "WallUpgradeVoucher1", "WallUpgradeVoucher2"
 
+    @classmethod
+    def _ring(cls) -> dict[Pos, str]:
+        """满环的地形层（`WEAK` / `OTHER` 本来就在环上，不用另加）。"""
+        return {c: WALL for c in wall_cells(cls.BASE, 41)}
+
     def _turn(self, worker: Worker, *, walls=None, shop=True, gold=0, prices=None, ores=()):
-        grid = _terrain(self.WEAPONS, {self.BASE: "station", self.WEAK: "wall"})
-        grid |= {p: WALL for p in ores}
+        # 环必须砌满：`_repair_line` 排在 `_build_walls` 之后，环上还有缺口就轮不到修复差事。
+        grid = _terrain(self.WEAPONS, {self.BASE: "station", **self._ring()})
+        grid |= {p: "stone" for p in ores}  # 矿：装进 `ores` 的得是真矿种，否则不成矿
         if shop:
             grid[self.SHOP] = "weaponShop"
         grid[worker.pos] = "worker"
@@ -1336,7 +1345,7 @@ class RepairTest(unittest.TestCase):
 
     def test_a_worker_upgrades_the_second_level_wall_it_has_the_voucher_for(self):
         """持券2 + 贴着 L2 弱墙 ⇒ `use WallUpgradeVoucher2`（升级 = 回满血 + 上限 1500→2000）。"""
-        worker = Worker(10010, Pos(12, 22), {self.V2: 1})
+        worker = Worker(10010, Pos(12, 23), {self.V2: 1})
         cmd = plan(self._turn(worker))[str(10010)]
         self.assertEqual(cmd["action"], "use")
         self.assertEqual(cmd["name"], self.V2)
@@ -1347,7 +1356,7 @@ class RepairTest(unittest.TestCase):
 
         旧的"拆掉重建"这条路整个删了：拆墙要石头、当天还得砌回来，而升级券更便宜且顺带抬上限。
         """
-        worker = Worker(10010, Pos(12, 22), {self.V1: 1, "stone": 1})
+        worker = Worker(10010, Pos(12, 23), {self.V1: 1, "stone": 1})
         cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[str(10010)]
         self.assertEqual(cmd["action"], "use", "L1 升级当修，不是 remove")
         self.assertEqual(cmd["name"], self.V1)
@@ -1355,7 +1364,7 @@ class RepairTest(unittest.TestCase):
 
     def test_a_third_level_wall_falls_back_to_the_pack(self):
         """L3 到顶升不动了 ⇒ 只剩 `use WallFixer`（10 金回满血）。"""
-        worker = Worker(10010, Pos(12, 22), {"WallFixer": 1})
+        worker = Worker(10010, Pos(12, 23), {"WallFixer": 1})
         cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, 399, 3),)))[str(10010)]
         self.assertEqual(cmd["action"], "use")
         self.assertEqual(cmd["name"], "WallFixer", "L3 没有券可用")
@@ -1366,7 +1375,7 @@ class RepairTest(unittest.TestCase):
         walls = (Wall(40000, self.WEAK, self.L2, 2), Wall(40001, self.OTHER, self.L1, 1))
         grid = _terrain(
             self.WEAPONS,
-            {self.BASE: "station", self.WEAK: "wall", self.OTHER: "wall", self.SHOP: "weaponShop"},
+            {self.BASE: "station", self.SHOP: "weaponShop", **self._ring()},
         )
         worker = Worker(10010, Pos(12, 24), {self.V1: 1, self.V2: 1})
         self.assertEqual(worker.pos.dist(self.WEAK), worker.pos.dist(self.OTHER), "夹具前提：两面一样远")
@@ -1423,7 +1432,7 @@ class RepairTest(unittest.TestCase):
     def test_a_level_one_wall_is_left_alone_when_the_voucher_is_out_of_reach(self):
         """没券又买不起/商店走不到 ⇒ 什么都不发 —— **尤其不拆墙**（拆了那格不回收，砌不回来
         就只是白开一个洞）。"""
-        worker = Worker(10010, Pos(12, 22), {"stone": 1})
+        worker = Worker(10010, Pos(12, 23), {"stone": 1})
         cmd = plan(
             self._turn(worker, shop=False, gold=0, prices={},
                        walls=(Wall(40000, self.WEAK, self.L1, 1),))
@@ -1432,7 +1441,7 @@ class RepairTest(unittest.TestCase):
 
     def test_a_second_level_wall_is_never_demolished(self):
         """L2 弱墙没券又买不起 ⇒ 什么墙都不拆（推倒会把等级赔进去）。"""
-        worker = Worker(10010, Pos(12, 22), {"stone": 1})
+        worker = Worker(10010, Pos(12, 23), {"stone": 1})
         cmd = plan(
             self._turn(worker, shop=False, gold=0, prices={})
         ).get(str(10010), {})
@@ -1445,7 +1454,7 @@ class RepairTest(unittest.TestCase):
         正好 1/5（L1 = 200、L2 = 300）算**达标**（"少于"是严格小于），差一点（199 / 299）就
         要修 —— 按 1/4 判的话 199 与 299 都会被放过去。满血那两条顺带一起过。
         """
-        worker = Worker(10010, Pos(12, 22), {self.V1: 1, self.V2: 1, "WallFixer": 1})
+        worker = Worker(10010, Pos(12, 23), {self.V1: 1, self.V2: 1, "WallFixer": 1})
         for level, hp, fixed in ((1, 200, False), (2, 300, False), (1, 1000, False),
                                  (2, 1500, False), (1, 199, True), (2, 299, True),
                                  (3, 399, True), (3, 400, False)):
@@ -1460,8 +1469,8 @@ class RepairTest(unittest.TestCase):
                     self.assertNotIn(action, ("use", "remove"), f"L{level} {hp} 血没到线")
 
     def test_repair_beats_mining(self):
-        """修墙 > 挖矿 —— 贴着弱墙又贴着矿，先升级券（差事顺序，不是距离顺序）。"""
-        worker = Worker(10010, Pos(12, 22), {self.V2: 1})
+        """环砌满 ⇒ 修墙压过经济线：手里的券先花在那面弱墙上，别去采旁边那块石头。"""
+        worker = Worker(10010, Pos(12, 23), {self.V2: 1})
         cmd = plan(self._turn(worker, ores=(Pos(12, 20),)))[str(10010)]
         self.assertEqual(cmd["action"], "use")
 
@@ -1470,9 +1479,9 @@ class RepairTest(unittest.TestCase):
         walls = (Wall(40000, self.WEAK, self.L2, 2), Wall(40001, self.OTHER, self.L2, 2))
         grid = _terrain(
             self.WEAPONS,
-            {self.BASE: "station", self.WEAK: "wall", self.OTHER: "wall", self.SHOP: "weaponShop"},
+            {self.BASE: "station", self.SHOP: "weaponShop", **self._ring()},
         )
-        a = Worker(10010, Pos(12, 22), {self.V2: 1})
+        a = Worker(10010, Pos(12, 23), {self.V2: 1})
         b = Worker(10012, Pos(12, 26), {self.V2: 1})
         grid |= {a.pos: "worker", b.pos: "worker"}
         cmds = plan(
@@ -1488,11 +1497,12 @@ class RepairTest(unittest.TestCase):
 
 
 class WallPriorityTest(unittest.TestCase):
-    """白天工人的优先级链：建武器 > 修墙 > 砌墙 > 经济线 —— 一件不行才轮到下一件。
+    """白天工人的优先级链：建武器 > 筹资 > 砌墙 > 修墙 > 经济线 —— 一件不行才轮到下一件。
 
     武器最高（口径：无论哪一天，武器没了先建）：份额有缺且钱够 ⇒ 建/走向落点；
     钱不够但筹资可行（有小贩、有价可卖）⇒ 整条墙线让位，先卖背包的货、再采最值钱的
-    矿，凑够 25 金币回来建；筹资不可行 ⇒ 照旧走墙线。升级线只在武器齐了之后才跑。
+    矿，凑够 25 金币回来建；筹资不可行 ⇒ 照旧走墙线。墙线内部**先补缺口、后补血**：
+    环砌满了（`target` 是 `None`）才轮到修弱墙。升级线只在武器齐了之后才跑。
     `_build_walls` 返回 `True` = 本回合指令已由墙线产出（或 gated 待命）；`False` =
     什么都没发过，兜底链接手。
     """
@@ -1579,9 +1589,10 @@ class WallPriorityTest(unittest.TestCase):
     def test_fundraising_beats_repairing_a_weak_wall(self):
         """武器有缺 + 钱不够 + 筹资可行 ⇒ 连**修墙**也让位（用户口径：武器 > 筹资 > 墙）。
 
-        弱墙就贴在脚边、包里还有升级券 —— 顺序反了这条会发出 `use`，立即挂。
+        弱墙就贴在脚边、包里还有升级券 —— 筹资让到墙线后面的话，这条会去砌墙（环上一格
+        没砌）或者 `use` 那面弱墙，立即挂。
         """
-        worker = Worker(10010, Pos(12, 22), {"WallUpgradeVoucher2": 1, "stone": 1})
+        worker = Worker(10010, Pos(12, 23), {"WallUpgradeVoucher2": 1, "stone": 1})
         turn = self._turn(
             (worker,),
             {self.BASE: "station", Pos(6, 24): "copper", Pos(7, 26): "vendor"},
@@ -1594,6 +1605,29 @@ class WallPriorityTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "move", f"该往矿那边去：{cmd}")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(Pos(6, 24)), worker.pos.dist(Pos(6, 24)), "朝铜矿走一格")
+
+    def test_a_gap_is_filled_before_a_weak_wall_is_repaired(self):
+        """墙线内部：**先补缺口、后补血**。
+
+        环上敞着两个缺口、脚边就有一面弱墙，手里正好有那面墙要的券**和**一块石头 —— 先砌墙。
+        补洞比补血急：缺口是敞开的（夜里机器人从那儿进来），弱墙好歹还挡着；补一格又只要
+        1 块石头、当场就能合上。修墙线排到 `_build_walls` 前面时这条会发出 `use`，立即挂。
+
+        缺口留**两格**（一格会走"从盒外砌"那一支，发出的是 `move`）。
+        """
+        worker = Worker(10010, Pos(12, 23), {"WallUpgradeVoucher2": 1, "stone": 1})
+        gaps = {Pos(13, 24), Pos(13, 26)}  # 正面列上的两格
+        weak = Pos(13, 22)  # 也是正面列，与工人切比雪夫 1（修墙线一开火就是它）
+        self.assertEqual(worker.pos.dist(weak), 1, "夹具前提：弱墙与缺口都贴着工人")
+        turn = self._turn(
+            (worker,),
+            {self.BASE: "station", **{c: WALL for c in set(wall_cells(self.BASE, 41)) - gaps}},
+            weak=(Wall(40000, weak, 299, 2),),
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "build", f"先补环上的缺口：{cmd}")
+        self.assertEqual(cmd["name"], "wall")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(13, 24))
 
     def test_both_workers_fundraise_instead_of_walling(self):
         """用户口径 1.2.2：钱不够建武器 ⇒ **两个工人一起挖矿**，谁都不去砌墙。

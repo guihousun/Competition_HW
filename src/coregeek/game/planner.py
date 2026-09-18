@@ -325,22 +325,23 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
                 _mine_spare_ore(role, turn, q, sites, ore_taken)
             continue
 
-        # 修墙：弱墙（< 满血 1/5）升级当修，L3 才用修复包（见 `_repair_line`）。
-        if _repair_line(role, turn, q, sites, repair_taken):
-            continue
-
         # 安全闸门：墙格在手而砌下去会把人关住 ⇒ 待命（不发指令也不筹资 —— 别跑远，下回合
         # 缺口还在；`_build_walls` 里还有同一道闸兜底）。
         if target is not None and leaving:
             continue
 
-        # 砌墙（平常时序）。
+        # 砌墙（平常时序）：环上有缺口就先补缺口 —— 硬洞比弱墙急，一格又只要 1 块石头
+        # （环砌满时 `target` 是 `None`，这里直接落空、让给下面的修墙）。
         if target is not None and _build_walls(
             role, turn, q, sites,
             gated=bool(leaving), target=target,
             remaining=len(segment),
             ore_taken=ore_taken,
         ):
+            continue
+
+        # 修墙：弱墙（< 满血 1/5）升级当修，L3 才用修复包（见 `_repair_line`）。
+        if _repair_line(role, turn, q, sites, repair_taken):
             continue
 
         # 经济线兜底：卖矿 →（武器齐了才升级）→ 采闲矿。
@@ -815,8 +816,9 @@ def _repair_line(
 ) -> bool:
     """弱墙（见 `_weak_walls`）的修复差事：**升级当修**（用户口径）。返回 `True` = 这一轮归它了。
 
-    用哪件东西看墙的等级（`_wall_item`）：L1/L2 用围墙升级券（样例价目 20 / 30 金）—— 升级同时
-    回满血（任务书 L297）并把上限抬高一档；L3 到顶只剩 10 金的修复包。取**等级最低**的一面
+    环上还有缺口时轮不到这里（调用点在 `_intents`，排在 `_build_walls` 之后）；环砌满了才轮到
+    "补血"。用哪件东西看墙的等级（`_wall_item`）：L1/L2 用围墙升级券（样例价目 20 / 30 金）
+    —— 升级同时回满血（任务书 L297）并把上限抬高一档；L3 到顶只剩 10 金的修复包。取**等级最低**的一面
     （最便宜、每金币换到的血量最多），同等级取近的（认领在动身之前，两个修墙工人不挤同一面）。
 
     持券 ⇒ 走到那面墙、贴着就 `use`（目标 = 墙坐标，站位契约与修复包同源，任务书 L292）；没券
