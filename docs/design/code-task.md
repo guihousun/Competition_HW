@@ -1513,10 +1513,38 @@
 **仍生效的已知不确定性**
 
 1. **"该搬的头几句没搬"只有黄金扫场抓得住**。第一次跑它时 289 行里有 **7 行**不一致：`sample@60/68/69/70/200` 与 `night-foes@200` / `night-other-team@200` —— 全是**白天末段**的局面。根因是内联 `BackToPost.run` 时漏了薄壳里的头一句 `if _ring(ctx.turn): return False`（补墙优先于收工）⇒ 白天链被整个短路。⚠️ **AST 比对挡不住这一类**：它证明的是"搬过去的函数没变"，而漏掉的那几句**恰恰在函数之外**。同理 464 条用例一条都没抓到 —— 没有一条覆盖"环没砌满 + 白天末尾 + 开拓者的任务点可用"这个组合。以后任何"把函数搬进类"的重构，**先存基线再动手**。
-2. **`states.py` 装了两边共用的东西 ⇒ 再拆一次会更难**：`_passable` / `_ring` / `_sealed_back` / 岗位几何服务的是 `planner` 的任务线与夜里线，住在 `states.py` 只是为了让依赖单向。读 `planner` 的人因此要跳文件（`_defend` 调的 `_post_spots` 在另一个模块）。下一个想继续拆（比如把夜里线也独立出去）的人要么把共用层再往下沉一层，要么接受两个模块互相 import。
+2. **`states.py` 装了两边共用的东西 ⇒ 再拆一次会更难**：`_passable` / `_ring` / `_sealed_back` / 岗位几何服务的是 `planner` 的任务线与夜里线，住在 `states.py` 只是为了让依赖单向。读 `planner` 的人因此要跳文件（`_defend` 调的 `_post_spots` 在另一个模块）。~~下一个想继续拆（比如把夜里线也独立出去）的人要么把共用层再往下沉一层，要么接受两个模块互相 import。~~ **第 95 步把九条共用判定沉到了 `game/utils.py`，这一条大半兑现**；仍成立的是**岗位几何那部分**（`_post_spots` / `_near_spots` / `_operator_spots` 照旧在 `states.py`，理由见第 95 步不确定性 2）。
 3. **"只有一个调用者才内联"这条规则没有门禁**：今天靠人读判据。以后给某个 `run` 内联新逻辑、同时又在别处加了调用，就会得到一段复制体而没人拦。判据本身简单（`grep` 数调用点），但没人会想起来数。
 4. **`tests/` 里还有 6 处 docstring 提到旧函数名**（`test_game_planner_economy.py` 2 处、`test_game_planner_wall.py` 4 处 提到 `_build_walls` / `_repair_line` / `_leave_for_the_post`）—— 本步**故意没改**：改注释等于动第 93 步"用例一条不改"那条判据的字面，而收益只是一个名字。代价是 `grep _build_walls tests/` 会命中这些陈旧引用，**留痕成本随文件漂移累积**。
 5. **图上那五处"图与代码对不上"（表 #59）一处没动**：本步只搬结构。现在每个盒子在 `states.py` 里有个同名类了，"按盒子逐个改行为"的那一步比第 93 步更容易落地。
+
+---
+
+## 第 95 步：通用判定下沉成 `game/utils.py`（纯重构，行为一字不改；用户口径：通用的状态判定提取出去）
+
+**目标** 用户口径：「下一个任务：把那些通用的状态判定函数提取到一个新文件 `utils.py` 中，我现在要重构代码」。第 94 步的共用层留在 `states.py` 里，那只是为了让依赖单向的妥协（见第 94 步不确定性 2）—— 共用层住在一个"逻辑上属于白天链"的模块里，名字上就错位了。
+判据（AskUserQuestion 拍板）：**只装"两个模块都要问"的判定**；只有一个消费者的判据留在各自的模块里。
+
+**产出** 新增 `src/coregeek/game/utils.py` **159 行**，装九条：`_passable` `_sealed_back` `_ring` `_walled` `_trapped` `_stuck_inside` `_weapon_groups` `_pioneer_mans_guns` `_short_handed`。`states.py` 1073 → **997 行**、`planner.py` 834 → **773 行**；每回合的指令**逐字节不变**。
+
+- **依赖是一条干净的链**：`planner → states → utils`（`planner` 另有一条直连 `utils`）。`states.py` 从 `utils` 取 5 个、`planner.py` 取 9 个（含 `_short_handed` —— 它只在夜里那一支用，是这一层里唯一 `states` 不碰的）。
+- ⚠️ **`_weapon_groups` 是被"顺带"拉下来的**：`_pioneer_mans_guns` 拿它算组数 ⇒ 不搬它，`utils` 就得反过来 import `states`（环）。**闭包是这条规则的一部分**：搬一个判据 = 把它独占的依赖一起搬。
+- ⚠️ **`_can_fund` 留在 `states.py`**（预设名单里有它）：grep 下来只有一个调用者（`RaiseForWeapons.run`）⇒ 按判据当场剔除。**"两边都要问"要数，不能凭印象。**
+- 搬法仍是脚本切（`logs/_split2.py`，排查草稿不入库）：AST 取顶层 `def` 的整段行区间，从两个宿主里删掉、按 `ORDER` 拼进 `utils.py`。
+- **连带改动**：`CLAUDE.md`（`game/` 树加 `utils.py` 一支、依赖方向图补 `game/planner → game/utils` 与 `game/states → game/utils`、7 处 `states._xxx` / `planner._xxx` → `utils._xxx`、另加一句"两个 `utils` 不是一回事"）、`strategy.md` 1 处、`worker.md` 头部一句；**测试与用例体一条没动**。
+
+**验证**
+1. **黄金输出比对（主网）**：基线沿用第 94 步那份 289 行局面（第 94 步刚验过它与 HEAD 一致）。重跑 ⇒ `diff` **为空**。
+2. 用例 **464 → 464 全绿**。
+3. `py -c "import coregeek.game.{planner,states,utils}"` 干净退出（无循环导入）。
+4. **端到端真服务**：`bash run.sh 18085` + curl 官方样例 ⇒ 动作行与基线逐条相同（`【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)`），`###第85回合###` 一条；首回合响应 = 新闻查价（prompt 218 字）、次回合 prompt 空（新闻指纹去重），与第 94 步一致。
+
+**仍生效的已知不确定性**
+
+1. **旧路径 `planner._trapped` / `states._ring` 之类仍然取得到**：`from .utils import _trapped` 把名字**绑进了取用方的命名空间** ⇒ 陈旧的引用（日志、文档、以后的用例）不会报错，只会静默解析到同一份实现。搬走之后 `grep -n "def _trapped" planner.py` 才看得见真相，而**没有任何机械检查**把这层"名字在谁家"钉住。
+2. **岗位几何也是两边共用，但留在 `states.py`**（`_post_spots` / `_near_spots` / `_operator_spots`；`_steps_to_post` 已只剩 `BackToPost.run` 一个调用者）。留的理由是**"谓词 vs 构造器"**：这一层是"算出落点"，不是"拿一个 `Turn` 回答一个问题"。⚠️ 这条线**没有门禁**，也没写进任何 docstring 之外的判据表 —— 下一个人可能觉得它们该在 `utils`、也可能顺手把 `_pick_ore` / `_best_load` 也搬下去（那几个真的只有一个模块问）。
+3. **`coregeek/utils.py` 与 `coregeek/game/utils.py` 同名**（文件名是用户拍板的）：`planner.py` 顶部相邻两行 `from ..utils import _clip` / `from .utils import …`，只差点数。`CLAUDE.md` 里补了一句提醒，但**读代码时看错一眼的代价是 import 到错的模块**（会当场 ImportError，不会静默）。
+4. **`utils.py` 的模块 docstring 是这一层的唯一契约**（"两个模块都要问" + 两种走路口径的分工）。它没有守门用例 —— 往 `utils.py` 里塞一个只用一次的函数、或改坏某个判据的口径，用例层面看不出来（`_passable` / `_walled` 那两条口径各有实测背书，但背书在注释里不在断言里）。
 
 ---
 

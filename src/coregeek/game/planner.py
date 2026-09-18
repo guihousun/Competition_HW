@@ -4,6 +4,8 @@
 白天工人那条链在 `states.py`（`DAY_CHAIN` / `BACK_TO_POST`，本模块只调用）：建武器 → 筹资 →
 砌墙 → 修墙 → 卖矿 → 升级 → 采最值钱的矿；武器是最高优先级。本模块管另外两件事：任务线
 （`task_channel`）与夜里那一段（闸门 + 认领武器组 + `_defend` 开火）。
+"两个模块都要问"的通用判定在 `game/utils.py`（谁能走 / 环砌在哪 / 谁会被关住 / 人手够不够）——
+`_passable` / `_ring` / `_walled` / `_trapped` 这些不在本文件里定义。
 
 每个角色每回合只有一个动作：
 
@@ -35,7 +37,6 @@ from .grid import (
     Pos,
     base_cells,
     box_cells,
-    door_cells,
     step_onto,
     step_outside,
     step_toward,
@@ -53,13 +54,19 @@ from .states import (
     _emit,
     _near_spots,
     _operator_spots,
-    _passable,
-    _pioneer_mans_guns,
     _post_spots,
-    _ring,
-    _sealed_back,
     _sell_ore,
     _upgrade_line,
+)
+from .utils import (
+    _passable,
+    _pioneer_mans_guns,
+    _ring,
+    _sealed_back,
+    _short_handed,
+    _stuck_inside,
+    _trapped,
+    _walled,
     _weapon_groups,
 )
 from .world import Robot, Turn, Weapon
@@ -400,63 +407,7 @@ def _answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) ->
         _emit(cmds, role, actions.SubmitAnswer, answer)
 
 
-def _walled(turn: Turn) -> frozenset[Pos]:
-    """"假设墙砌满"时的障碍集：现已挡路的照原样 + 那一圈墙（14 或 16 格）。
-
-    闸门问的是将来 —— 现在走得出去不代表砌完还走得出去。补救通道（`remove` + `_rescue`）不
-    构成撤销它的理由：闸门是预防（零成本），`_rescue` 是补救（1 回合 + 1 块不退的石头）。
-
-    自己人算不算障碍只看后方通道那几格（与 `_ring` 的"自己人一律算路过"故意相反）：那圈墙里
-    没有建筑 ⇒ 能堵门的只有单位，"自己人站在格子上"只在通道口有意义；环内站着的自己人是
-    过路的。一律算障碍会让走廊另一头的工人被判成"砌满就出不去"⇒ 两人来回踱步、一整天不砌
-    墙（实测）。守门：`test_a_colleague_in_the_door_still_holds_the_wall_back`。
-    """
-    station = turn.map.station
-    if station is None:
-        return frozenset()
-    blocked = turn.map.blocked
-    sealed = _sealed_back(turn)
-    # 自己人站在后方通道格上的照旧算障碍；站在别处的从障碍里摘掉（见 docstring）
-    door = set(door_cells(station, turn.map.size[0], sealed=sealed))
-    mine = {r.pos for r in turn.roles} - door
-    return (blocked - mine) | set(wall_cells(station, turn.map.size[0], sealed=sealed))
-
-
-def _trapped(turn: Turn, box: frozenset[Pos]) -> frozenset[str]:
-    """砌满这一圈墙之后就出不去的我方角色 id；没有就空集。
-
-    判据是"整面墙"不是"某一格"（障碍集里永远有整圈墙）⇒ 调用方要的是一个布尔量。返回
-    id 是因为配套的闸门 (2) 得知道谁先出来。后方通道就那么几格 ⇒ 能堵门的单位只要几个 ⇒
-    这条判据相当常真的命中。
-    """
-    station = turn.map.station
-    if station is None or not box:
-        return frozenset()  # 没基地 ⇒ 既没有盒子也没有围墙，谁都关不住
-    walled = _walled(turn)
-    return frozenset(
-        r.id
-        for r in turn.roles
-        # `r.pos in box` 这一半不能省：`step_outside` 对"本来就在外面"也返回 None，不看这一半
-        # 会把所有在盒外干活的角色判成被关住（于是墙一格都不砌）。
-        if r.pos in box and step_outside(r.pos, box, walled, turn.map.size) is None
-    )
-
-
 # ── 拆墙放人 ────────────────────────────────────────────────────────
-def _stuck_inside(turn: Turn, box: frozenset[Pos]) -> tuple[BaseRole, ...]:
-    """现在真的走不出盒子的人；没有就空元组。
-
-    与 `_trapped` 的区别是用"现在"的障碍而不是"假设砌满"：闸门是预防，这里是补救，两者并存。
-    自己人一律不算障碍 —— 同事站在门格上只是路过，把他算成障碍会白拆一次（1 回合 + 1 块不退
-    的石头）。
-    """
-    if not box:
-        return ()
-    walk = _passable(turn)
-    size = turn.map.size
-    return tuple(
-        r for r in turn.roles if r.pos in box and step_outside(r.pos, box, walk, size) is None
-    )
 
 
 def _rescue(
@@ -537,16 +488,6 @@ def _reserve_path(
 
 
 # ── 夜里：回炮位、开火 ──────────────────────────────────────────────
-
-
-def _short_handed(turn: Turn) -> bool:
-    """夜里操炮的人手够不够：不够 ⇒ 被任务钉死的开拓者也得弃任务回炮位（用户口径"生存第一"）。
-
-    白天恒假：白天不能开火、回炮位没有意义（那一支只发 `move`）。武器还没建齐 ⇒ 组数按场上
-    已建的算，天然不报警。判据与 `_pioneer_mans_guns` 同源（一人只能操一组，少一人空一组），
-    两者都不带跨回合状态 —— 工人白天复活后自愈。
-    """
-    return not turn.is_day and _pioneer_mans_guns(turn)
 
 
 def _stands_on_a_post(role: BaseRole, turn: Turn) -> bool:

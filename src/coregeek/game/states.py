@@ -2,9 +2,9 @@
 
 图见 `docs/pic/白天工人状态机.png`，图上每个盒子一个类，链上顺序即策略（`DAY_CHAIN`）。
 
-本模块是 `planner` 的**下层**（`planner` 单向 import 本模块，反过来会循环导入）—— 所以"链和
-`planner` 都要用"的那几样（`_passable` / `_ring` / `_sealed_back` / 岗位几何）留在这里、由
-`planner` 取用。`run` 的契约两条写在 `State` 的 docstring 里。
+本模块是 `planner` 的**下层**（`planner` 单向 import 本模块，反过来会循环导入），而"本模块与
+`planner` 都要问"的通用判定在更下一层 `game/utils.py`（`_passable` / `_ring` / `_sealed_back` /
+岗位几何都在那里）。`run` 的契约两条写在 `State` 的 docstring 里。
 
 只有一个调用者的控制流直接装进那个类的 `run`（`BuildWalls` / `RepairWalls` / `BackToPost` 三个
 类里就是原先的 `_build_walls` / `_repair_line` / `_leave_for_the_post`）。仍留在模块级的三个
@@ -23,10 +23,11 @@ from typing import Any, NamedTuple
 
 from ..agent import AGENT  # 价格期望表：闲矿排序要读它（跨回合状态，退化 = 偏好偏一天）
 from ..protocol import actions  # 指令只能经 Action 产出
-from .grid import STEPS, Pos, box_cells, steps_between, wall_cells, weapon_sites
+from .grid import STEPS, Pos, box_cells, steps_between
 from .map import COPPER, IRON, STONE
 from .roles import BaseRole, Pioneer, Worker
-from .world import ROUNDS_PER_DAY, Turn, Wall, Weapon
+from .utils import _passable, _pioneer_mans_guns, _ring, _sealed_back, _weapon_groups
+from .world import Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -159,17 +160,6 @@ class _Queue:
     def beside(self, role: BaseRole, provider: Callable[[set[Pos]], Pos | None]) -> None:
         """记一条没有目标的走法（迈出盒子 / 挪开自己）—— 第二段拿落子账现算。"""
         self.moves.append(_Move(role, None, provider=provider))
-
-
-def _passable(turn: Turn) -> set[Pos]:
-    """估算距离用的地形：`map.blocked` 剔掉我方角色站着的格子。
-
-    与"这一回合实际怎么走"是两套口径（`_Queue.step` / `_walk_out` 那边必须把同事当硬障碍：
-    撞上就是执行失败、双双停住）。这里问的是"路有多远"：`model._entries` 把我方角色写进网格，
-    而环砌满之后盒子里只剩一格宽的走廊 ⇒ 同事停在走廊上就让估算判成不可达（-1），整条经济线
-    跟着静默放弃、工人一整天不动。与 `_stuck_inside` / `_post_spots` 同一个口径：自己人算路过。
-    """
-    return turn.map.blocked - {r.pos for r in turn.roles}
 
 
 def _can_fund(turn: Turn) -> bool:
@@ -511,32 +501,6 @@ def _outside_spots(turn: Turn, role: Worker, target: Pos) -> tuple[Pos, ...]:
             if 0 <= p.x < width and 0 <= p.y < height and p not in box and p not in taken
         )
     )
-
-
-def _sealed_back(turn: Turn) -> bool:
-    """第 3 天起把背面两个角格补上（前两天的环只有 14 格，背面整列敞开）。
-
-    判据只能用回合号：环上"没砌"与"砌了又被拆"在地图上同形（第 1 天的缺口是真的没砌）。
-    """
-    return turn.round_no > 2 * ROUNDS_PER_DAY
-
-
-def _ring(turn: Turn) -> tuple[Pos, ...]:
-    """按优先级排的围墙格；基地没了 ⇒ 空。
-
-    既不在 `wall_cells` 里、也不挡路的格才算候选 —— 但自己人站的那一格除外。工人站在待砌的
-    墙格上只是路过，若把它划掉，另一个工人的 `free[0]` 会整体后移、等那人一挪窝目标又变回来
-    —— 两个工人在两格之间对着改目标，一格都砌不上。
-
-    这里只管"哪些格能砌"（几何 + 占用），"这一回合还砌不砌"是 `_trapped` 的事，两者正交。
-    """
-    station = turn.map.station
-    if station is None:
-        return ()
-    # 我方角色当前站的格（角色能走的都在这）
-    mine = {r.pos for r in turn.roles}
-    cells = wall_cells(station, turn.map.size[0], sealed=_sealed_back(turn))
-    return tuple(c for c in cells if c not in turn.map.blocked or c in mine)
 
 
 def _weak_walls(turn: Turn) -> tuple[Wall, ...]:
@@ -927,46 +891,6 @@ def _pick_ore(
     )
     # 价 0 ⇒ 小贩不收，不为它多走一步；一张空价目表也就自然落成"谁也不采"
     return best[2] if best is not None and best[0] < 0 else None
-
-
-def _pioneer_mans_guns(turn: Turn) -> bool:
-    """开拓者这一轮该不该上炮位：**只有工人不够覆盖全部武器组时才补位**（用户口径）。
-
-    工人夜里除了操炮没别的活（经济线只在场上没有活机器人时才跑），而开拓者是任务线的主力 ——
-    两个工人活着就能操满两组，让开拓者占一组等于把工人挤成闲置。工人阵亡（只可能在夜里）后
-    人手不够了，它才补位。昼夜同一个判据：白天用它决定收工回不回到炮位（`BackToPost`），
-    夜里用它决定认不认领武器（`_defend`）—— 两处必须同源，只改一处的话白天把人送进岗位、
-    夜里又不认领，那格被占着、整组没人操（火箭对只有一格岗位）。
-
-    名册里只有工人与开拓者两种角色 ⇒ "工人数"就是"没被钉住的角色数"，`_short_handed` 取用它。
-    """
-    workers = sum(1 for r in turn.roles if isinstance(r, Worker))
-    return workers < len(_weapon_groups(turn))
-
-
-def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
-    """把武器分成操作组：同一组的武器由同一个角色操作。
-
-    当前阵形 = 2 火箭（相邻）+ 1 加特林 ⇒ 两组：`(rocket1, rocket2)` 和 `(gatling,)`。分组依据
-    是 `weapon_sites` 的下标（0,1 = 火箭对；2 = 加特林），不按场上已有武器的种类猜（种类重复
-    时猜不准）。某座还没建出来 ⇒ 那一组就只含已建的。
-    """
-    station = turn.map.station
-    sites = weapon_sites(station, turn.map.size[0]) if station is not None else ()
-    by_pos = {w.pos: w for w in turn.weapons}
-    grouped: set[Pos] = set()
-    groups: list[tuple[Weapon, ...]] = []
-    for indices in ((0, 1), (2,)):
-        group = tuple(by_pos[sites[i]] for i in indices if i < len(sites) and sites[i] in by_pos)
-        if group:
-            groups.append(group)
-            grouped.update(w.pos for w in group)
-    # 不在 `weapon_sites` 里的武器（测试手搭的位置 / 摧毁后重建的偏移）⇒ 单独成组，降级为
-    # "一人操一座"，避免测试里手搭的炮没人认领。
-    for w in turn.weapons:
-        if w.pos not in grouped:
-            groups.append((w,))
-    return tuple(groups)
 
 
 def _operator_spots(
