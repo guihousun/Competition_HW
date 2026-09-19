@@ -16,9 +16,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from coregeek.logfile import unseal  # noqa: E402
 
-#: 要解密的原始日志（判题器落的那份 `log/match-<年月日-时分秒>-<pid>.enc`），相对仓库根 ——
-#: 在这行改路径即可，从哪个目录跑都认同一份。
-raw_path = "log/match-20260919-020301-19400.enc"
+#: 要解密的原始日志，相对仓库根 —— 在这行改路径即可，从哪个目录跑都认同一份。三种落点都是同一套
+#: 密文：判题器把进程 stdout 落成的 `team.log`、本地重定向出来的 `run.enc`、文件 sink 的
+#: `log/match-<年月日-时分秒>-<pid>.enc`。
+raw_path = "team.log"
 
 #: 解密结果的落点（当前目录）。
 OUT = "decode_log.log"

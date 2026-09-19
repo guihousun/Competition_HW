@@ -29,12 +29,12 @@ py tests/test_game_path.py                        # 单文件可直跑，只查�
 
 用例按 `src/coregeek/` 一一对应拆分（`test_<模块>.py`），标准库 `unittest`，不自研框架。
 
-**日志是加密的，没有明文落点**（含完整对局状态，绝不入库）：
+**日志是加密的，没有明文落点**（含完整对局状态，绝不入库）。三种落点是同一套密文：判题器把进程 stdout 落成的 **`team.log`**、本地重定向出来的 `run.enc`、文件 sink 的 `log/match-<年月日-时分秒>-<pid>.enc`。
 
 ```bash
 py log/decode_log.py                                       # 解脚本里 raw_path 指的那份（改那一行即可）
-py log/decode_log.py log/match-20260919-020301-19400.enc   # 或直接给文件 ⇒ 当前目录 decode_log.log
-bash run.sh 18085 > run.enc                               # stdout 那份也是密文，先落成文件
+py log/decode_log.py log/match-20260919-020301-19400.enc    # 或直接给文件 ⇒ 当前目录 decode_log.log
+bash run.sh 18085 > run.enc                                # stdout 那份也是密文，先落成文件
 py log/decode_log.py run.enc
 ```
 
