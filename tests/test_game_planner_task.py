@@ -25,6 +25,9 @@ from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
 
+#: 沙盒探查那条命令的回执形状：`[exitCode:0]` + 每份一段 `@@@FILE <路径>@@@` 与正文 + 末尾剩余数
+PROBE_RESULT = "[exitCode:0]\n@@@FILE /opt/task/rescue.md@@@\n# 任务\n正文\n@@@MORE 0@@@\n"
+
 
 class TaskAcceptTest(unittest.TestCase):
     """白天：开拓者走到最近一个能接的任务点旁边，贴着就 `acceptTask`。
@@ -527,19 +530,19 @@ class TaskChannelTest(unittest.TestCase):
         cmd_explore.reset()
         prompt, execute = task_channel(self._turn(self.TASK))
         self.assertIn(self.TASK, prompt)
-        self.assertEqual(execute, cmd_explore._LIST_CMD)
+        self.assertEqual(execute, cmd_explore._command(0))
 
     def test_the_probed_paths_reach_the_next_prompt(self):
         """探查的**产出**从下一轮起进 system 的【沙盒知识】段 —— 命令槽那条边只出命令，
         路径走的是 `Agent.chat` 每轮现刷 system 这条路（与 SOP 段同源）。
 
-        一轮都不落下：列清单那轮 prompt 里还没有（回执这轮才回来），认领之后立刻就有。
+        一轮都不落下：发命令那轮 prompt 里还没有（回执这轮才回来），认领之后立刻就有。
         """
         cmd_explore.reset()
         first, _ = task_channel(self._turn(self.TASK))
-        self.assertNotIn("【沙盒知识】", first, "清单还没回来，不能凭空断言沙盒里有什么")
+        self.assertNotIn("【沙盒知识】", first, "回执还没回来，不能凭空断言沙盒里有什么")
         prompt, _ = task_channel(
-            self._turn(self.TASK, cmd_result="[exitCode:0]\n  420 /opt/task/rescue.md\n")
+            self._turn(self.TASK, cmd_result=PROBE_RESULT)
         )
         self.assertIn("# 【沙盒知识】", prompt)
         self.assertIn("- /opt/task/rescue.md", prompt)
@@ -553,15 +556,13 @@ class TaskChannelTest(unittest.TestCase):
         """
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))
-        prompt, _ = task_channel(
-            self._turn(self.TASK, cmd_result="[exitCode:0]\n  420 /opt/task/rescue.md\n")
-        )
+        prompt, _ = task_channel(self._turn(self.TASK, cmd_result=PROBE_RESULT))
         self.assertIn("- /opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
         task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
         self.assertEqual(cmd_explore.known_paths(), [])
         again, execute = task_channel(self._turn(self.TASK))
         self.assertNotIn("【沙盒知识】", again, "上个任务的路径不许跟进新任务")
-        self.assertEqual(execute, cmd_explore._LIST_CMD)
+        self.assertEqual(execute, cmd_explore._command(0))
 
     def test_no_task_means_no_probe(self):
         """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""

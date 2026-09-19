@@ -84,14 +84,19 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("【沙盒知识】", system)
 
     def test_the_sandbox_section_lists_the_probed_paths(self):
-        """探查列完清单 ⇒ 下一轮 system 就带【沙盒知识】段，逐条列完整路径。
+        """探查取回正文 ⇒ 下一轮 system 就带【沙盒知识】段，逐条列完整路径。
 
         与 SOP 段同一个机制（`Agent.chat` 每轮现刷）：探查是个异步的活儿，摸到的路径
         必须自己走进 prompt —— 走 `planner` 那条边就要求它认识会话，而那条边的契约是
         "只收字符串、不收 Turn"。段位在 SOP 之后、示例之前。
         """
         cmd_explore.next_command()
-        cmd_explore.observe("[exitCode:0]\n  120 /opt/task/a.md\n  300 /opt/task/b.md\n")
+        cmd_explore.observe(
+            "[exitCode:0]\n"
+            "@@@FILE /opt/task/a.md@@@\n甲\n"
+            "@@@FILE /opt/task/b.md@@@\n乙\n"
+            "@@@MORE 0@@@\n"
+        )
         system = json.loads(self.agent.chat("题"))[0]["content"]
         self.assertIn("# 【沙盒知识】", system)
         self.assertIn("- /opt/task/a.md", system)
