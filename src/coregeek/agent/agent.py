@@ -6,6 +6,8 @@
 任务分区（身份 = 题目原文）。`planner.task_channel` 每次都用包根那个 `AGENT`。
 """
 
+import logging
+import shlex
 from collections.abc import Callable
 
 from . import cmd_explore
@@ -15,6 +17,8 @@ from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
 from .tools import pyexec
 from .tools.cmd import executeCmd
 from .tools.sop import store
+
+LOGGER = logging.getLogger(__name__)
 
 
 class Agent:
@@ -42,11 +46,18 @@ class Agent:
                 "在判题器的沙盒里执行一条命令（能跑基础 shell 与 python 指令，不能访问外网）。",
                 (("cmd", "命令原文"),),
             ),
+            "readSandboxFile": (
+                self.read_sandbox_file,
+                "读出沙盒里**已探明**的文件正文：路径用【沙盒知识】段里列的那些。"
+                "比 executeCmd 快一回合（正文当回合就回到你面前）；"
+                "路径没探到时自动转给沙盒去取。",
+                (("path", "沙盒里的文件全路径（【沙盒知识】段里列的那些）"),),
+            ),
             "python_exec": (
                 self.python_exec,
                 "在本地即时执行一段**纯计算**的 Python：结果当回合就回到你面前"
                 "（不走判题器沙盒、没有 15 秒限制，但**看不见沙盒里的任务文件**——"
-                "读任务文件还是用 executeCmd）。"
+                "读任务文件用 readSandboxFile 或 executeCmd）。"
                 "沙盒一次往返要等一个回执、比它贵：解析、拼串、比对、构造下一条命令"
                 "这类活儿放这里算，别去占沙盒。只允许计算：import 仅限 "
                 "math/cmath/decimal/fractions/statistics/itertools/functools/collections/"
@@ -127,6 +138,23 @@ class Agent:
             return ""
         return gen_compression_prompt(self._context.material())
 
+    def read_sandbox_file(self, path: str) -> str:
+        """读沙盒里的一份文件：手边有正文 ⇒ 进会话、不产命令（省一回合）；没有 ⇒ 拼一条读
+        命令交沙盒去取。
+
+        判据是"这个全路径在不在探查的字典里"（`cmd_explore.body_of`）—— 本地**不执行任何
+        东西**，所以沙盒那边该失败还是失败、该免费还是免费。没命中那一支的返回值就是命令，
+        与 LLM 自己发 `cat` 走的是同一条路（`tool_call` 的铁律：返回值即命令）。
+        """
+        body = cmd_explore.body_of(path)
+        if not body:
+            LOGGER.info("【沙盒文件】：%s 手边没有 ⇒ 转沙盒取", path)
+            return f"cat -- {shlex.quote(path)}"
+        if self._context is not None:
+            self._context.tool_output(body, f"【沙盒文件 {path} 的正文（本地已探明）】")
+        LOGGER.info("【沙盒文件】：%s 本地取回 %d 字", path, len(body))
+        return ""
+
     def python_exec(self, code: str) -> str:
         """本地即时计算：`pyexec.run` 跑代码，产出当场记进会话（`tool` 消息，跟着 LLM 那条
         调用走），返回 `""` —— 不产命令。重问的 prompt 窗口里它看得见自己的调用与产出，
@@ -138,7 +166,7 @@ class Agent:
         """
         output = pyexec.run(code)
         if self._context is not None:
-            self._context.tool_output(output)
+            self._context.tool_output(output, "【本地 python 的执行结果（原文）】")
         return ""
 
     def news_question(self, news: str) -> str:

@@ -540,7 +540,7 @@ class TaskChannelTest(unittest.TestCase):
         """
         cmd_explore.reset()
         first, _ = task_channel(self._turn(self.TASK))
-        self.assertNotIn("【沙盒知识】", first, "回执还没回来，不能凭空断言沙盒里有什么")
+        self.assertNotIn("# 【沙盒知识】", first, "回执还没回来，不能凭空断言沙盒里有什么")
         prompt, _ = task_channel(
             self._turn(self.TASK, cmd_result=PROBE_RESULT)
         )
@@ -561,7 +561,7 @@ class TaskChannelTest(unittest.TestCase):
         task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
         self.assertEqual(cmd_explore.known_paths(), [])
         again, execute = task_channel(self._turn(self.TASK))
-        self.assertNotIn("【沙盒知识】", again, "上个任务的路径不许跟进新任务")
+        self.assertNotIn("# 【沙盒知识】", again, "上个任务的路径不许跟进新任务")
         self.assertEqual(execute, cmd_explore._command(0))
 
     def test_no_task_means_no_probe(self):

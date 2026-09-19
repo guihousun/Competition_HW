@@ -81,7 +81,7 @@ class ChatPromptTest(unittest.TestCase):
         干脆不去找那些文件（空段是它自己的一种断言）。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertNotIn("【沙盒知识】", system)
+        self.assertNotIn("# 【沙盒知识】", system)  # 钉的是段头：这四个字在别处（工具描述里）有
 
     def test_the_sandbox_section_lists_the_probed_paths(self):
         """探查取回正文 ⇒ 下一轮 system 就带【沙盒知识】段，逐条列完整路径。
@@ -101,7 +101,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("# 【沙盒知识】", system)
         self.assertIn("- /opt/task/a.md", system)
         self.assertIn("- /opt/task/b.md", system)
-        self.assertLess(system.index("【沙盒知识】"), system.index("【输出示例】"))
+        self.assertLess(system.index("# 【沙盒知识】"), system.index("【输出示例】"))
 
     def test_the_example_shows_a_deposit_then_a_reuse(self):
         """【输出示例】有两例，第二例是 few-shot：同一类任务演两遍 —— 第一次

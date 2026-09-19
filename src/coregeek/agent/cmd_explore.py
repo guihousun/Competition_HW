@@ -12,7 +12,8 @@
 任务线那边什么都察觉不到。
 
 正文进 `_files`（全局路径 → 正文，**不落盘**）；认出来的**路径**交给 system 的【沙盒知识】段
-（`known_paths`）。⚠️ **沙箱文件每道任务刷新一次** ⇒ 探查的生命周期就是一道任务：任务一结束
+（`known_paths`），正文由 `body_of` 按需交给 LLM 的 `readSandboxFile` 工具。
+⚠️ **沙箱文件每道任务刷新一次** ⇒ 探查的生命周期就是一道任务：任务一结束
 （`planner.task_channel` 在 `phase_task` 空的那一轮）`reset` 掉，下一道题从头摸一遍
 （同文再现也是新的一次，沙箱已经换了一批文件）。
 
@@ -82,6 +83,15 @@ def known_paths() -> list[str]:
     只在**当前这道任务**里有效：任务结束复位，下道题重新摸。
     """
     return list(_files)
+
+
+def body_of(path: str) -> str:
+    """按全路径取已探明的正文；手边没这份 ⇒ `""`。
+
+    命中与否只认**精确的全路径**（【沙盒知识】列的就是它）—— 不做短名/后缀匹配：那会把
+    "哪一份"变成需要猜的事，而没命中只是回到走沙盒那条路。
+    """
+    return _files.get(path, "")
 
 
 def observe(result: str) -> str:

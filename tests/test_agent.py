@@ -4,6 +4,7 @@
 """
 
 import json
+import shlex
 import sys
 import unittest
 from pathlib import Path
@@ -12,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coregeek.agent import AGENT, Agent  # noqa: E402
+from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
 from coregeek.agent.chat import answer_of, tool_of  # noqa: E402
 from coregeek.agent.prompt import gen_all_tool_prompt  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
@@ -221,6 +222,65 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("    - 参数: 测试参数", gen_all_tool_prompt(self.agent._tools))
         self.assertEqual(self.agent.tool_call("测试用工具", [("参数", "实参")]), "命令:实参")
         self.assertNotIn("测试用工具", gen_all_tool_prompt(Agent()._tools))
+
+
+class ReadSandboxFileTest(unittest.TestCase):
+    """`readSandboxFile`：探明过的文件走本地字典（当回合进会话＝省一回合），没探到就转沙盒。
+
+    `_files` 住在 `cmd_explore` 的模块层 ⇒ 每个用例复位（既有先例，见那个文件）。
+    """
+
+    def setUp(self) -> None:
+        cmd_explore.reset()
+        self.addCleanup(cmd_explore.reset)
+        self.agent = Agent()
+        self.agent.chat("题")  # 开会话：命中的正文得有地方落
+
+    def test_a_probed_file_lands_in_the_next_prompt(self):
+        """命中：返回空串（不产命令）＋正文进会话 —— 下一份 prompt 里就看得见。
+
+        真流程的顺序与 `task_channel` 一致：先 `hear` 记下那条调用，再 `tool_call`。
+        """
+        path = "/opt/task/one.md"
+        cmd_explore._files[path] = "# 任务\n正文"
+        self.agent.hear(f"<tool><tool_name>readSandboxFile</tool_name></tool>")
+        self.assertEqual(self.agent.tool_call("readSandboxFile", [("path", path)]), "")
+        contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
+        self.assertTrue(any(path in c and "正文" in c for c in contents), contents)
+
+    def test_an_unprobed_path_is_forwarded_to_the_sandbox(self):
+        """没探到 ⇒ 返回值就是一条读命令（`tool_call` 的铁律），走 LLM 自己发 `cat` 那条路。"""
+        self.assertEqual(
+            self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")]),
+            "cat -- /opt/task/none.md",
+        )
+
+    def test_a_path_with_shell_characters_survives_the_round_trip(self):
+        """路径里的引号/空格不能把命令拆开：`shlex.split` 解回去必须还是"cat 读这一个文件"。"""
+        path = "/opt/task/a b'; rm -rf /.md"
+        cmd = self.agent.tool_call("readSandboxFile", [("path", path)])
+        self.assertEqual(shlex.split(cmd), ["cat", "--", path])
+
+    def test_without_a_session_the_body_is_dropped(self):
+        """还没开过会话（这道题一次都没问过）⇒ 只丢产出，绝不抛。"""
+        cmd_explore._files["/opt/task/one.md"] = "正文"
+        self.assertEqual(Agent().tool_call("readSandboxFile", [("path", "/opt/task/one.md")]), "")
+
+    def test_a_missing_or_blank_path_means_no_call(self):
+        """声明的参数没给上 / 编的名字 ⇒ 不成立（既有闸门，这条钉的是真工具那一条）。"""
+        self.assertEqual(self.agent.tool_call("readSandboxFile", []), "")
+        self.assertEqual(self.agent.tool_call("readSandboxFile", [("文件", "/opt/task/one.md")]), "")
+
+    def test_both_branches_say_so_in_the_log(self):
+        """两条分支都留痕 —— 实盘上"LLM 用没用这个工具、命中过几次"只有这两行能回答。"""
+        with self.assertLogs(level="INFO") as caught:
+            cmd_explore._files["/opt/task/one.md"] = "正文"
+            self.agent.tool_call("readSandboxFile", [("path", "/opt/task/one.md")])
+            self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")])
+        hits = [line for line in caught.output if "【沙盒文件】" in line]
+        self.assertEqual(len(hits), 2)
+        self.assertTrue(any("/opt/task/one.md" in line for line in hits))
+        self.assertTrue(any("/opt/task/none.md" in line for line in hits))
 
 
 class AdoptSummaryTest(unittest.TestCase):
