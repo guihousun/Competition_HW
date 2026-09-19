@@ -32,7 +32,8 @@ py tests/test_game_path.py                        # 单文件可直跑，只查�
 **日志是加密的，没有明文落点**（含完整对局状态，绝不入库）：
 
 ```bash
-py log/decode_log.py log/match-20260919-000514-1152.enc   # 文件 sink ⇒ decode_log.log
+py log/decode_log.py                                       # 解脚本里 raw_path 指的那份（改那一行即可）
+py log/decode_log.py log/match-20260919-020301-19400.enc   # 或直接给文件 ⇒ 当前目录 decode_log.log
 bash run.sh 18085 > run.enc                               # stdout 那份也是密文，先落成文件
 py log/decode_log.py run.enc
 ```

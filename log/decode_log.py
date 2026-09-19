@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """解密加密日志。
 
-用法：`py log/decode_log.py <encode_file>`
-读 `encode_file`（`log/` 下那份 `.enc`），写出 `decode_log.log`（当前目录，明文）。
+改下面那个 `raw_path`，然后直接跑：`py log/decode_log.py` ⇒ 明文写进当前目录的 `decode_log.log`。
+带文件参数时用参数、不看 `raw_path`（用例走这一支）。
 
 解不开的行**不中止**：进程被杀在半条记录上时尾巴是残的，前面的内容照旧要拿到。
 格式与密钥都在 `coregeek.logfile` 里 —— 那边改了口令，这里的旧文件也就解不开了。
@@ -11,19 +11,24 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
 from coregeek.logfile import unseal  # noqa: E402
+
+#: 要解密的原始日志（判题器落的那份 `log/match-<年月日-时分秒>-<pid>.enc`），相对仓库根 ——
+#: 在这行改路径即可，从哪个目录跑都认同一份。
+raw_path = "log/match-20260919-020301-19400.enc"
 
 #: 解密结果的落点（当前目录）。
 OUT = "decode_log.log"
 
 
 def main(argv) -> int:
-    if len(argv) != 2:
-        print(f"用法：{Path(argv[0]).name} <encode_file>", file=sys.stderr)
+    if len(argv) > 2:
+        print(f"用法：{Path(argv[0]).name} [encode_file]", file=sys.stderr)
         return 2
-    src = Path(argv[1])
+    src = Path(argv[1]) if len(argv) == 2 else ROOT / raw_path
     if not src.is_file():
         print(f"读不到：{src}", file=sys.stderr)
         return 1
