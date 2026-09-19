@@ -189,10 +189,12 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(messages[1]["content"], "短题目")
         for piece in (
             "# 【ROLE定位】",
+            "# 【每回合流程】",
             "# 【工具描述】",
             "## ToolName - SOP2Prompt",
+            "# 【沉淀规则】",
             "# 【沉淀的SOP】",
-            "# 【注意事项】",
+            "# 【输出示例】",
         ):
             self.assertIn(piece, messages[0]["content"])
 

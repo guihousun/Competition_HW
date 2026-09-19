@@ -245,7 +245,7 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_the_question_carries_the_task_text(self):
-        """第一次提问 = 段模板（prompt.py 六段）+ 题目原文，不带任何回灌。
+        """第一次提问 = 段模板（prompt.py 八段）+ 题目原文，不带任何回灌。
 
         断言用 `assertNotIn` 而不是"等于生成函数的返回值"：后者是同义反复
         （模板与断言一起改，永远过得去），而"第一次问不该有任何回灌"才是真要求。
@@ -257,10 +257,12 @@ class TaskChannelTest(unittest.TestCase):
         self.assertNotIn(self.RETRY_MARK, prompt)
         for header in (
             "# 【ROLE定位】",
+            "# 【每回合流程】",
             "# 【工具描述】",
-            "# 【输出约定】",
+            "# 【沉淀规则】",
             "# 【沉淀的SOP】",
-            "# 【注意事项】",
+            "# 【输出约定】",
+            "# 【输出示例】",
         ):
             self.assertIn(header, prompt)
 
