@@ -92,10 +92,24 @@ class ChatPromptTest(unittest.TestCase):
         self.assertLess(len(system), 7000)
 
     def test_every_tool_appears_in_the_prompt(self):
-        """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具都得在。"""
-        prompt = self.agent.chat("题目")
+        """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具都得在。
+
+        唯一会缺席的是 `readSandboxFile`，而且只在**沙盒里一份都没探明**的时候：它的 `path`
+        只有【沙盒知识】段列出的那些是合法值 —— 清单空着时它一个合法参数都没有，列出来只会
+        换来一次"调用不成立"的空转。探明之后自动回来（`Agent.prompt_tools`，两向都钉）。
+        断言按**整份 prompt** 查这个名字（不只是工具块）：别处的描述里点它的名，等于给它留了
+        一条悬空指引 —— 隐藏就没意义了。
+        """
+        empty = self.agent.chat("题目")
         for name in self.agent._tools:
-            self.assertIn(name, prompt)
+            if name != "readSandboxFile":
+                self.assertIn(name, empty)
+        self.assertNotIn("readSandboxFile", empty)
+
+        cmd_explore._files["/opt/task/one.md"] = "正文"
+        probed = self.agent.chat("题目")
+        for name in self.agent._tools:
+            self.assertIn(name, probed)
 
     def test_the_deposit_rules_cover_environment_knowledge(self):
         """探索到的环境知识（接口描述等）也要沉淀成 SOP。

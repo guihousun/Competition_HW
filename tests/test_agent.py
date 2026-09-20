@@ -4,7 +4,6 @@
 """
 
 import json
-import shlex
 import sys
 import unittest
 from pathlib import Path
@@ -225,7 +224,8 @@ class AgentToolCallTest(unittest.TestCase):
 
 
 class ReadSandboxFileTest(unittest.TestCase):
-    """`readSandboxFile`：探明过的文件走本地字典（当回合进会话＝省一回合），没探到就转沙盒。
+    """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（【沙盒知识】段列出的）
+    允许调用；命中就当回合把正文送进会话（省一回合），其余一律"调用不成立"、不发命令。
 
     `_files` 住在 `cmd_explore` 的模块层 ⇒ 每个用例复位（既有先例，见那个文件）。
     """
@@ -248,18 +248,46 @@ class ReadSandboxFileTest(unittest.TestCase):
         contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
         self.assertTrue(any(path in c and "正文" in c for c in contents), contents)
 
-    def test_an_unprobed_path_is_forwarded_to_the_sandbox(self):
-        """没探到 ⇒ 返回值就是一条读命令（`tool_call` 的铁律），走 LLM 自己发 `cat` 那条路。"""
-        self.assertEqual(
-            self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")]),
-            "cat -- /opt/task/none.md",
-        )
+    def test_an_unprobed_path_is_not_a_call(self):
+        """清单以外的路径 ⇒ 调用不成立（不产命令）＋把清单回给 LLM：那就是它的枚举值。
 
-    def test_a_path_with_shell_characters_survives_the_round_trip(self):
-        """路径里的引号/空格不能把命令拆开：`shlex.split` 解回去必须还是"cat 读这一个文件"。"""
+        ⚠️ 别退回"拼一条 `cat` 交给沙盒"（第 101 步删掉的旧支）：LLM 编出来的路径（比如
+        题目里只给了文件名、它自己拼了个目录）那趟必然报错，白烧一个沙盒往返还引它接着猜。
+        """
+        cmd_explore._files["/opt/task/one.md"] = "正文"
+        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
+        self.assertEqual(
+            self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")]), ""
+        )
+        note = [c for c in (m["content"] for m in json.loads(self.agent.chat("题")))
+                if "不在可选清单里" in c]
+        self.assertEqual(len(note), 1, "未命中要在会话里留一条说明")
+        self.assertIn("/opt/task/none.md", note[0])   # 点明是哪一次调用
+        self.assertIn("- /opt/task/one.md", note[0])  # 清单 = 枚举值
+
+    def test_an_empty_inventory_points_at_execcmd(self):
+        """一份都没探明（探查还没跑完）⇒ 说明里让它自己用 executeCmd 读。
+
+        "我们还没摸过"不等于"沙盒里没有"（与【沙盒知识】段空段不写「（暂无）」同一条）：
+        这里回一句"沙盒里就这些"，LLM 就不会再去读它本来需要的那份文件了。
+        """
+        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
+        self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")])
+        note = [c for c in (m["content"] for m in json.loads(self.agent.chat("题")))
+                if "不在可选清单里" in c]
+        self.assertEqual(len(note), 1)
+        self.assertIn("executeCmd", note[0])
+
+    def test_a_path_never_becomes_a_command(self):
+        """LLM 给的字符串不再进任何命令（第 101 步）：带引号/分号的路径照样只是"不成立"。
+
+        旧支那句 `shlex.quote` 连同拼命令一起删了 ⇒ 命令注入面随之消失，留它一条守门。
+        """
         path = "/opt/task/a b'; rm -rf /.md"
-        cmd = self.agent.tool_call("readSandboxFile", [("path", path)])
-        self.assertEqual(shlex.split(cmd), ["cat", "--", path])
+        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
+        self.assertEqual(self.agent.tool_call("readSandboxFile", [("path", path)]), "")
+        contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
+        self.assertTrue(any(path in c for c in contents), contents)  # 原样带回去、没被转义
 
     def test_without_a_session_the_body_is_dropped(self):
         """还没开过会话（这道题一次都没问过）⇒ 只丢产出，绝不抛。"""

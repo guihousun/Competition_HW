@@ -7,7 +7,6 @@
 """
 
 import logging
-import shlex
 from collections.abc import Callable
 
 from . import cmd_explore
@@ -19,6 +18,22 @@ from .tools.cmd import executeCmd
 from .tools.sop import store
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _probed_note(path: str) -> str:
+    """未命中时回给 LLM 的说明：`path` 是枚举值，可选的只有探明过的那几份。
+
+    空清单（探查还没取回东西）另说一句 —— "我们还没摸过"不等于"沙盒里没有"（照
+    `prompt.SANDBOX_PROMPT` 那条），不能让它以为沙盒里就这些。
+    """
+    paths = cmd_explore.known_paths()
+    if not paths:
+        return (
+            f"{path} 不在可选清单里 —— 沙盒里还没有探明任何文件（探查可能还没跑完）。"
+            "要读文件请用 executeCmd 自己找、自己读。"
+        )
+    listed = "\n".join(f"- {p}" for p in paths)
+    return f"{path} 不在可选清单里，path 只能取下面这些（照抄）：\n{listed}"
 
 
 class Agent:
@@ -50,17 +65,17 @@ class Agent:
             ),
             "readSandboxFile": (
                 self.read_sandbox_file,
-                "读沙盒里的一份文件：给它完整路径就行，沙盒里已经探明过的那几份"
-                "（system 里列出来的那些）当回合就把正文送到你面前，比 executeCmd 省一个回合；"
-                "路径没探到、或者你给的根本不对，它会自动转给沙盒去取，不会白问。"
-                "要读的文件若已经在列出的路径里，优先用它，别再发 executeCmd 去找。",
-                (("path", "沙盒里的文件全路径"),),
+                "读沙盒里的一份文件：`path` 只能取【沙盒知识】段列出的那些完整路径（照抄，"
+                "别自己拼目录），当回合就把正文送到你面前，比 executeCmd 省一个回合。"
+                "清单以外的路径它不会去取，只会回给你现有的路径清单 —— 那种文件用 executeCmd "
+                "自己找、自己读。",
+                (("path", "沙盒里已探明的文件全路径（只能取【沙盒知识】段列出的那些）"),),
             ),
             "python_exec": (
                 self.python_exec,
                 "在本地即时执行一段**纯计算**的 Python：结果当回合就回到你面前"
                 "（不走判题器沙盒、没有 15 秒限制，但**看不见沙盒里的任务文件**——"
-                "读任务文件用 readSandboxFile 或 executeCmd）。"
+                "读任务文件得走沙盒那条路）。"
                 "沙盒一次往返要等一个回执、比它贵：解析、拼串、比对、构造下一条命令"
                 "这类活儿放这里算，别去占沙盒。纯计算、字符串处理、JSON 解析、数据转换、"
                 "拼命令参数、比较多个候选结果都归它。只允许计算：import 仅限 "
@@ -109,9 +124,20 @@ class Agent:
         elif not fresh:
             self._context.nudge()
         self._context.system = gen_system_prompt(
-            self._tools, self._sop, cmd_explore.known_paths()
+            self.prompt_tools(), self._sop, cmd_explore.known_paths()
         )
         return self._context.render()
+
+    def prompt_tools(self) -> dict:
+        """这一轮给 LLM 看的工具表：沙盒里一份都没探明时**不列** `readSandboxFile`。
+
+        它的 `path` 只有【沙盒知识】段列出的那些是合法值 —— 清单空着时这个工具一个合法参数
+        都没有（那段自己也不出现），列出来只会换来一次"调用不成立"的空转。探明过之后自动回来。
+        调度那一侧不看这张表（`tool_call` 照旧认得它、给同一条不成立的结论），两处口径一致。
+        """
+        if cmd_explore.known_paths():
+            return self._tools
+        return {name: entry for name, entry in self._tools.items() if name != "readSandboxFile"}
 
     def hear(self, reply: str) -> None:
         """记下判题器 LLM 这回合的回复（`planner.task_channel` 每回合都调 —— 发命令/交答案
@@ -144,17 +170,20 @@ class Agent:
         return gen_compression_prompt(self._context.material())
 
     def read_sandbox_file(self, path: str) -> str:
-        """读沙盒里的一份文件：手边有正文 ⇒ 进会话、不产命令（省一回合）；没有 ⇒ 拼一条读
-        命令交沙盒去取。
+        """读沙盒里的一份文件：`path` 是枚举值，只能取探明过的那些（【沙盒知识】段列出的
+        完整路径），命中就当回合把正文送进会话、不产命令。
 
-        判据是"这个全路径在不在探查的字典里"（`cmd_explore.body_of`）—— 本地**不执行任何
-        东西**，所以沙盒那边该失败还是失败、该免费还是免费。没命中那一支的返回值就是命令，
-        与 LLM 自己发 `cat` 走的是同一条路（`tool_call` 的铁律：返回值即命令）。
+        不在清单里 ⇒ 调用不成立（返回 `""`）＋把清单回给 LLM：**绝不替它往沙盒发 `cat`** ——
+        它编出来的路径那趟必然报错，白烧一个沙盒往返还引它接着猜下一个。清单以外的文件用
+        executeCmd 自己读（与摘要段那条同一个道理：不能把"我们还没摸过"说成"沙盒里没有"）。
+        返回值恒为 `""`：这个工具只会把东西送进会话，从不产出命令。
         """
         body = cmd_explore.body_of(path)
         if not body:
-            LOGGER.info("【沙盒文件】：%s 手边没有 ⇒ 转沙盒取", path)
-            return f"cat -- {shlex.quote(path)}"
+            LOGGER.info("【沙盒文件】：%s 不在探明的清单里 ⇒ 调用不成立", path)
+            if self._context is not None:
+                self._context.tool_output(_probed_note(path), "【沙盒文件：路径不在可选清单里】")
+            return ""
         if self._context is not None:
             self._context.tool_output(body, f"【沙盒文件 {path} 的正文（本地已探明）】")
         LOGGER.info("【沙盒文件】：%s 本地取回 %d 字", path, len(body))
