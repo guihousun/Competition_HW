@@ -256,6 +256,7 @@ class TaskChannelTest(unittest.TestCase):
         self.assertNotIn(self.RESULT_MARK, prompt)
         self.assertNotIn(self.RETRY_MARK, prompt)
         for header in (
+            "# 【背景】",
             "# 【ROLE定位】",
             "# 【每回合流程】",
             "# 【工具描述】",

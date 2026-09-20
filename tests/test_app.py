@@ -188,6 +188,7 @@ class HandleTest(unittest.TestCase):
         self.assertEqual([m["role"] for m in messages], ["system", "user"])
         self.assertEqual(messages[1]["content"], "短题目")
         for piece in (
+            "# 【背景】",
             "# 【ROLE定位】",
             "# 【每回合流程】",
             "# 【工具描述】",
@@ -279,9 +280,9 @@ class HandleTest(unittest.TestCase):
             "提问那一格该是『上限字 + 留痕那句话』—— 超长必须留痕、且有界",
         )
         # prompt 是 messages JSON：截断从头截，开头一定是 system 消息（content 直接以
-        # `# 【ROLE定位】` 开头）
+        # 首段的段头 `# 【背景】` 开头 —— 段头前不许有空白，靠 `gen_system_prompt` 的 join）
         self.assertTrue(
-            asked.startswith('[{"role":"system","content":"# 【ROLE定位】'), asked[:40]
+            asked.startswith('[{"role":"system","content":"# 【背景】'), asked[:40]
         )
         self.assertIn(f"共 {len(full)} 字", asked)
 

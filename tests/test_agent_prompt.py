@@ -20,6 +20,7 @@ from coregeek.agent.tools import sop  # noqa: E402
 #: system 的段头，按 `prompt.SECTIONS` 的顺序 —— 段名只在这里写一次，切段一律走 `_section`。
 #: 段头改名/换序时改这一处，用例不会退化成 IndexError。
 SECTIONS = (
+    "# 【背景】",
     "# 【ROLE定位】",
     "# 【每回合流程】",
     "# 【工具描述】",
@@ -68,11 +69,12 @@ class ChatPromptTest(unittest.TestCase):
             self.assertNotIn(leftover, prompt)
 
     def test_the_sections_appear_once_each_and_in_the_declared_order(self):
-        """八段按声明的顺序出现、每段头只出现一次。
+        """九段按声明的顺序出现、每段头只出现一次。
 
         段序就是四层的落地（决策 → 工具 → 知识 → 输出）；「只一次」是"同一条规则只写
         一处"的机械保证 —— 重复的规则会稀释注意力，而这件事在实盘上测不出来。
-        ROLE 段还必须是整份 system 的第一个字节（`test_app` 的日志链路按它断言）。"""
+        【背景】段还必须是整份 system 的第一个字节（`test_app` 的日志链路按它断言，
+        它前面不许有空白 —— 段与段之间靠 `gen_system_prompt` 的 join 排版）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertTrue(system.startswith(SECTIONS[0]))
         present = [h for h in SECTIONS if h != "# 【沙盒知识】"]
@@ -87,8 +89,10 @@ class ChatPromptTest(unittest.TestCase):
         守的是"措辞只增不减"的漂移：每次加一句话都看不出什么，几十次之后 prompt 就
         被稀释得没法看了。阈值是拍的：重排后干净 system 实测 5821 字（重排前 5574），
         上浮两成。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
-        两个基线数字会漂，量的时候看是**哪一档**：工具块随沙箱清单浮动（`Agent.prompt_tools`
-        —— 没探明时 `readSandboxFile` 整块不列），第 100 / 101 步分别实测 5821 / 5569。
+        基线数字会漂，量的时候看是**哪一档**：工具块随沙箱清单浮动（`Agent.prompt_tools`
+        —— 没探明时 `readSandboxFile` 整块不列）。**没探明那一档**：第 100 / 101 / 102 /
+        103 步分别实测 5821 / 5569 / 5808 / 6265；探明一条路径再多 285 上下。第 103 步把
+        余量吃到 ~11%（6265 + 探明 ≈ 6550，阈值 7000）—— 再往里加东西必须先删旧话。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertLess(len(system), 7000)
@@ -268,25 +272,57 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("不要出现 `<answer>` 与 `</answer>` 这对标签", system)
 
     def test_the_answer_round_says_the_tags_are_mandatory(self):
-        """作答必须包在 `<answer></answer>` 里、且标签外面不许有别的内容。
+        """作答**一定**包在 `<answer></answer>` 里；解释、推演写在标签外面，不许写进标签里。
 
         裸文本（"答案是：3"、一段解释后跟个数字）在我们这一侧**会被当答案整段交上去**
         （`chat.answer_of` 第三级：原文即答案）⇒ 判题器按字段算通过率，多写的字直接扣分，
         而本地一切自洽、只有在任务行里看得到交出去的那一段不对劲。措辞就是唯一的杠杆。
+        两句后果各自钉住：**没有标签** ⇒ 整段被交上去（所以标签必须有）；**写进标签里**
+        ⇒ 判题器只认标签里那一段（所以推演得留在外面）。
         `sop` 那条禁令紧挨着这条，必须写明它**只**管 `sop` 文本 —— 否则 LLM 把
         "不要出现这对标签"读成"作答也别用"，正是它不守格式的一个入口。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         output = _section(system, "# 【输出约定】")
-        self.assertIn("标签外面写的字会跟答案一起被交上去", output)
+        self.assertIn("没带这个标签的回复会被**整段**当成答案交上去", output)
         self.assertIn("标签里面只放任务书要的那个答案本身", output)
+        self.assertIn("判题器只认标签里那一段", output)
         self.assertIn("只写一个这个块", output)
         self.assertIn("这条只管 `sop` 那段文本", output)
         # 示例里也得有一次**不沉淀、纯作答**的整条回复（第二轮那道题的 step4）——
         # 只讲规则不给形状，它照样有别的写法可选
         rerun = _section(system, "# 【输出示例】").rsplit("第二次：", 1)[1]
         self.assertIn("<answer>tk_7a2b1c</answer>", rerun)
-        self.assertIn("标签外面一个字都不写", rerun)
+        self.assertIn("推演在外面、标签里只有答案本身", rerun)
+
+    def test_the_background_frames_where_the_two_requirements_come_from(self):
+        """【背景】段只写处境，并由它推出"以实测为准"与"沉淀"两条要求的来处。
+
+        与【每回合流程】/【工具描述】的分工是**机制不重复**：回合怎么算、回执什么时候
+        回来、沙盒里能跑什么，各段写各的；背景段回答"我为什么在这儿、这活儿替谁干"。
+        它必须是整份 system 的第一段（`test_app` 的日志链路按段头断言）。
+        """
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        background = _section(system, "# 【背景】")
+        self.assertIn("远程沙盒", background)
+        self.assertIn("判题器", background)
+        self.assertIn("以实测为准", background)
+        # 机制不在这里复述（成本模型在【每回合流程】、沙盒能力在【工具描述】）
+        self.assertNotIn("一个回合", background)
+        self.assertNotIn("15 秒", background)
+
+    def test_the_flow_asks_for_the_reasoning_before_the_blocks(self):
+        """先写推演、再给工具块或答案块（用户口径：COT 引导）。
+
+        推演是写给**下一回合的自己**看的：会话窗口只留最近两轮（`Context._WINDOW`），
+        不写下来就只剩一个结果、没有"上一步为什么没成"。落点必须在块**前面** —— 写进
+        `<answer>` 里会被当成答案的一部分交上去。
+        """
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        flow = _section(system, "# 【每回合流程】")
+        self.assertIn("先把自己的判断写出来", flow)
+        self.assertIn("前面", flow)
+        self.assertIn("会话只留最近两轮", flow)
 
     def test_the_flow_numbered_steps_start_at_one(self):
         """`# 【每回合流程】` 从第 1 步起编号、并附一段可以直接照抄的命令范式。
