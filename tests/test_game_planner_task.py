@@ -550,6 +550,7 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertIn("## ToolName - readSandboxFile", prompt)
         self.assertIn("- /opt/task/rescue.md", prompt)
+        self.assertIn("文件名 rescue.md", prompt, "两种写法都给到 —— 题目里给的往往就是文件名")
 
     def test_the_probe_survives_the_task_that_probed_it(self):
         """探明的东西**整场存活**（第 104 步，用户口径"一次找到、整个进程生命周期保存"）：

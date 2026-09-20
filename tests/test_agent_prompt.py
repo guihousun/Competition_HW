@@ -88,9 +88,10 @@ class ChatPromptTest(unittest.TestCase):
         上浮两成。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
         基线数字会漂，量的时候看是**哪一档**：工具块随沙箱清单浮动（`Agent.prompt_tools`
         —— 没探明时 `readSandboxFile` 整块不列）。**没探明那一档**：第 100 / 101 / 102 /
-        103 / 104 步分别实测 5821 / 5569 / 5808 / 6265 / 6265；探明一条路径再多 275 上下
-        （第 104 步把清单从独立一段挪进工具描述 ⇒ 探明那一档基本没动）。余量仍 ~11%
-        （6265 + 探明 ≈ 6550，阈值 7000）—— 再往里加东西必须先删旧话。
+        103 / 104 / 105 步分别实测 5821 / 5569 / 5808 / 6265 / 6265 / 6265；探明一条路径再多
+        349（第 104 步 275 ⇒ 第 105 步 349：清单每行多给一个文件名 + 描述教两种写法），
+        此后**每多探明一条路径 +32**。余量从 ~11% 收到 ~5.5%（6265 + 349 = 6614，阈值 7000）
+        —— 阈值是拍的，但这一档只剩 386 字：下一步再往里加东西得先删旧话。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertLess(len(system), 7000)
@@ -144,6 +145,9 @@ class ChatPromptTest(unittest.TestCase):
         探查是个异步的活儿，摸到的路径必须自己走进 prompt。还没探明 ⇒ 清单与工具块**一起**
         缺席，不许写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"** —— 写出去就是让 LLM
         干脆不去找那些文件。
+
+        每一行两种写法都给到（第 105 步，用户口径"枚举值再把独立的文件名加上"）：题目里给的
+        往往就是个裸文件名，只列全路径等于逼它自己拼目录 —— 实测的坑（第 101 步那条日志）。
         """
         empty = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertNotIn("/opt/task", empty)
@@ -159,9 +163,12 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("# 【沙盒知识】", system, "清单只有工具描述这一处，不许有第二个家")
         tools = _section(system, "# 【工具描述】")
         self.assertIn("## ToolName - readSandboxFile", tools)
+        spellings = ("- /opt/task/a.md", "- /opt/task/b.md", "文件名 a.md", "文件名 b.md")
+        for spelling in spellings:
+            self.assertIn(spelling, tools, f"清单里少了这一种写法：{spelling}")
         block = tools.index("## ToolName - readSandboxFile")
-        self.assertLess(block, tools.index("- /opt/task/a.md"))
-        self.assertLess(block, tools.index("- /opt/task/b.md"))
+        for spelling in spellings:
+            self.assertLess(block, tools.index(spelling), "清单要落在工具块里，不是别处")
 
     def test_the_example_shows_a_deposit_then_a_reuse(self):
         """【输出示例】是 few-shot：同一类任务演两遍 —— 第一次「探索 → 调接口 →

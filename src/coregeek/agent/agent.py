@@ -24,18 +24,25 @@ LOGGER = logging.getLogger(__name__)
 def _probed_note(path: str) -> str:
     """未命中时回给 LLM 的说明：`path` 是枚举值，可选的只有探明过的那几份。
 
+    三种未命中各说各的话：清单空着（探查还没取回东西 —— "我们还没摸过"不等于"沙盒里没有"）、
+    文件名撞了（要它改写成完整路径）、其余（让它回去照抄，或改用 executeCmd）。
     清单不在这里重抄 —— 它挂在 `readSandboxFile` 的描述里（`Agent.prompt_tools` 现挂），
-    与这条说明同处一份 prompt。空清单（探查还没取回东西）另说一句 —— "我们还没摸过"
-    不等于"沙盒里没有"，不能让它以为沙盒里就这些。
+    与这条说明同处一份 prompt；撞名那一支只列**撞上的那几份**，那是回答"你指的是哪一份"。
     """
     if not cmd_explore.known_paths():
         return (
             f"{path} 不在可选清单里 —— 沙盒里还没有探明任何文件（探查可能还没跑完）。"
             "要读文件请用 executeCmd 自己找、自己读。"
         )
+    hits = cmd_explore.matches(path)
+    if len(hits) > 1:
+        return (
+            f"{path} 对上了不止一份已探明的文件：{'、'.join(hits)}。"
+            "`path` 请照抄完整路径 —— 只写文件名时它定不下是哪一份。"
+        )
     return (
         f"{path} 不在可选清单里：`path` 只能取 `readSandboxFile` 描述里列出的那些完整路径"
-        "（照抄）；清单以外的文件请用 executeCmd 自己找、自己读。"
+        "或文件名（照抄）；清单以外的文件请用 executeCmd 自己找、自己读。"
     )
 
 
@@ -68,11 +75,12 @@ class Agent:
             ),
             "readSandboxFile": (
                 self.read_sandbox_file,
-                "读沙盒里的一份文件：`path` 只能取本描述里列出的那些完整路径（照抄，"
-                "别自己拼目录），当回合就把正文送到你面前，比 executeCmd 省一个回合。"
+                "读沙盒里的一份文件：`path` 只能取本描述里列出的那些（照抄，别自己拼目录），"
+                "写整条全路径、或只写它的文件名都行（文件名对上不止一份时它会要求你写全路径）。"
+                "当回合就把正文送到你面前，比 executeCmd 省一个回合。"
                 "清单以外的路径它不会去取 —— 那种文件用 executeCmd 自己找、自己读。"
                 "清单由我们探查沙盒得出、逐回合变长：暂时没列出的文件不代表沙盒里没有。",
-                (("path", "沙盒里已探明的文件全路径（只能取本工具描述里列出的那些）"),),
+                (("path", "已探明文件的全路径、或它的文件名（只能取本工具描述里列出的那些）"),),
             ),
             "python_exec": (
                 self.python_exec,
@@ -132,16 +140,19 @@ class Agent:
     def prompt_tools(self) -> dict:
         """这一轮给 LLM 看的工具表：`readSandboxFile` 的描述尾部**现挂**探明的路径清单。
 
-        `path` 是枚举值，合法取值就是探明过的那几份 ⇒ 那张取值表跟着参数自己所在的那块走
-        （不再单独占 system 的一段）。一份都没探明 ⇒ **不列**这个工具：它一个合法参数都没有，
-        列出来只会换来一次"调用不成立"的空转；探明过就自动回来。
-        调度那一侧不看这张表（`tool_call` 照旧认得它、给同一条不成立的结论），两处口径一致。
+        `path` 是枚举值，合法取值就是探明过的那几份（整条全路径、或它的文件名 —— 两种写法
+        都列出来）⇒ 那张取值表跟着参数自己所在的那块走（不再单独占 system 的一段）。
+        一份都没探明 ⇒ **不列**这个工具：它一个合法参数都没有，列出来只会换来一次"调用不成立"
+        的空转；探明过就自动回来。调度那一侧不看这张表（`tool_call` 照旧认得它、给同一条不成立
+        的结论），两处口径一致。
         """
         paths = cmd_explore.known_paths()
         if not paths:
             return {n: e for n, e in self._tools.items() if n != "readSandboxFile"}
         impl, desc, params = self._tools["readSandboxFile"]
-        listed = "\n".join(f"- {path}" for path in paths)
+        listed = "\n".join(
+            f"- {path}（文件名 {cmd_explore.file_name(path)}）" for path in paths
+        )
         tools = dict(self._tools)
         tools["readSandboxFile"] = (
             impl,
@@ -182,18 +193,20 @@ class Agent:
 
     def read_sandbox_file(self, path: str) -> str:
         """读沙盒里的一份文件：`path` 是枚举值，只能取探明过的那些（`readSandboxFile` 描述
-        里现挂的那份清单），命中就当回合把正文送进会话、不产命令。
+        里现挂的那份清单），写整条全路径或只写文件名都行；命中就当回合把正文送进会话、不产命令。
 
-        不在清单里 ⇒ 调用不成立（返回 `""`）＋把说明回给 LLM：**绝不替它往沙盒发 `cat`** ——
-        它编出来的路径那趟必然报错，白烧一个沙盒往返还引它接着猜下一个。清单以外的文件用
-        executeCmd 自己读（与摘要段那条同一个道理：不能把"我们还没摸过"说成"沙盒里没有"）。
-        返回值恒为 `""`：这个工具只会把东西送进会话，从不产出命令。
+        不在清单里、或文件名对上不止一份 ⇒ 调用不成立（返回 `""`）＋把说明回给 LLM：
+        **绝不替它往沙盒发 `cat`** —— 它编出来的路径那趟必然报错，白烧一个沙盒往返还引它接着猜
+        下一个。清单以外的文件用 executeCmd 自己读（与摘要段那条同一个道理：不能把"我们还没摸过"
+        说成"沙盒里没有"）。返回值恒为 `""`：这个工具只会把东西送进会话，从不产出命令。
         """
         body = cmd_explore.body_of(path)
         if not body:
-            LOGGER.info("【沙盒文件】：%s 不在探明的清单里 ⇒ 调用不成立", path)
+            # 对上几条决定它是"没这份"还是"文件名撞了"，回给 LLM 的话不同（`_probed_note`）
+            hits = cmd_explore.matches(path)
+            LOGGER.info("【沙盒文件】：%s 这次调用不成立（对上 %d 条探明的路径）", path, len(hits))
             if self._context is not None:
-                self._context.tool_output(_probed_note(path), "【沙盒文件：路径不在可选清单里】")
+                self._context.tool_output(_probed_note(path), "【沙盒文件：这次调用不成立】")
             return ""
         if self._context is not None:
             self._context.tool_output(body, f"【沙盒文件 {path} 的正文（本地已探明）】")

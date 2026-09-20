@@ -225,8 +225,8 @@ class AgentToolCallTest(unittest.TestCase):
 
 class ReadSandboxFileTest(unittest.TestCase):
     """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（现挂在工具描述里的
-    那份清单）允许调用；命中就当回合把正文送进会话（省一回合），其余一律"调用不成立"、
-    不发命令。
+    那份清单）允许调用，写整条全路径、或只写它的文件名都行（文件名对上不止一份 ⇒ 不成立，
+    第 105 步）；命中就当回合把正文送进会话（省一回合），其余一律"调用不成立"、不发命令。
 
     `_files` 住在 `cmd_explore` 的模块层 ⇒ 每个用例复位（既有先例，见那个文件）。
     """
@@ -248,6 +248,36 @@ class ReadSandboxFileTest(unittest.TestCase):
         self.assertEqual(self.agent.tool_call("readSandboxFile", [("path", path)]), "")
         contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
         self.assertTrue(any(path in c and "正文" in c for c in contents), contents)
+
+    def test_a_bare_file_name_reaches_the_body_too(self):
+        """`path` 的第二种写法：只写文件名（第 105 步，用户口径"枚举值再把独立的文件名加上"）。
+
+        题目里给的往往正是个文件名 —— 逼它先拼出一条全路径纯属白费一回合（实测吃过：
+        它拼出来的目录沙盒里根本没有）。两种写法落到同一份正文、都不产命令。
+        """
+        cmd_explore._files["/opt/task/one.md"] = "正文"
+        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
+        self.assertEqual(self.agent.tool_call("readSandboxFile", [("path", "one.md")]), "")
+        contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
+        self.assertTrue(any("正文" in c and "one.md" in c for c in contents), contents)
+        self.assertFalse(any("不在可选清单里" in c for c in contents), contents)
+
+    def test_a_name_that_matches_two_files_asks_for_the_full_path(self):
+        """文件名撞了 ⇒ 不成立，并**只把撞上的那几份**列出来（"你指的是哪一份"）。
+
+        替它挑一份 = 把错的那份正文交出去而它看不出；指回整份清单也没用（它写字名时正是
+        照清单抄的）。列撞上的那几份是能落地的那一句话。
+        """
+        cmd_explore._files["/opt/task/a.md"] = "甲"
+        cmd_explore._files["/home/task/a.md"] = "乙"
+        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
+        self.assertEqual(self.agent.tool_call("readSandboxFile", [("path", "a.md")]), "")
+        contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
+        note = [c for c in contents if "对上了不止一份" in c]
+        self.assertEqual(len(note), 1, "撞名要在会话里留一条说明")
+        self.assertIn("/opt/task/a.md", note[0])
+        self.assertIn("/home/task/a.md", note[0])
+        self.assertFalse(any("甲" in c or "乙" in c for c in contents), "撞名时一份正文都不许交出去")
 
     def test_an_unprobed_path_is_not_a_call(self):
         """清单以外的路径 ⇒ 调用不成立（不产命令）＋回一条说明。说明**不重抄清单**（第 104

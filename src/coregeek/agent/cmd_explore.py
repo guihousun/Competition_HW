@@ -13,7 +13,9 @@
 
 正文进 `_files`（全局路径 → 正文，**不落盘**）；认出来的**路径**现挂在 LLM 那个
 `readSandboxFile` 工具的描述尾部（`Agent.prompt_tools` 取 `known_paths`）—— 那张表就是那个
-`path` 参数的合法取值表，正文由 `body_of` 按需交给它。
+`path` 参数的合法取值表，正文由 `body_of` 按需交给它。取值表有两种写法：**整条全路径**与
+**它的文件名**（`file_name`），`matches` 是这套对法的唯一一处；两种写法都落在同一条路径上才算
+命中，**文件名撞了（不同目录下的同名文件）一律不成立** —— 替它挑一份就是把错的那份正文交出去。
 ⚠️ **探明的东西整场存活**（第 104 步，用户口径"一次找到、整个进程生命周期保存"）：任务换了
 也不复位，清单与正文一直用到进程结束。代价是**清单可能过期** —— 若沙箱按任务换了文件，我们
 既不重新走一遍、`readSandboxFile` 还可能把上一道题的正文当这一道题的正文交出去；首场看日志里
@@ -87,14 +89,30 @@ def known_paths() -> list[str]:
     return list(_files)
 
 
-def body_of(path: str) -> str:
-    """按全路径取已探明的正文；手边没这份 ⇒ `""`。
+def file_name(path: str) -> str:
+    """这条全路径的文件名（最后一段）—— `path` 的另一种合法写法。"""
+    return path.rsplit("/", 1)[-1]
 
-    命中与否只认**精确的全路径**（描述里列的就是它）—— 不做短名/后缀匹配：那会把
-    "哪一份"变成需要猜的事。这张表就是 `readSandboxFile` 的**枚举值**：没命中 = 那次调用
-    不成立（不转沙盒，见 `Agent.read_sandbox_file`）。
+
+def matches(name: str) -> list[str]:
+    """这个名字对上了哪些已探明的文件：整条全路径优先，其次按文件名对。
+
+    0 个 = 没这份；1 个 = 就是它；≥2 个 = 文件名撞了（不同目录下的同名文件）—— 调用方
+    一律当"不成立"：替它挑一份会把错的那份正文交出去，而它看不出拿错了。
     """
-    return _files.get(path, "")
+    if name in _files:
+        return [name]
+    return [path for path in _files if file_name(path) == name]
+
+
+def body_of(path: str) -> str:
+    """按全路径或文件名取已探明的正文；对不上、或文件名对上不止一份 ⇒ `""`。
+
+    这张表就是 `readSandboxFile` 的**枚举值**（两种写法都列在那个工具的描述里）：没命中 =
+    那次调用不成立（不转沙盒，见 `Agent.read_sandbox_file`）。
+    """
+    hits = matches(path)
+    return _files[hits[0]] if len(hits) == 1 else ""
 
 
 def observe(result: str) -> str:

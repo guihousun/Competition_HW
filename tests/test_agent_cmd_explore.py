@@ -113,6 +113,34 @@ class CmdExploreStateTest(unittest.TestCase):
         self.assertEqual(cmd_explore.next_command(), "")
         self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
 
+    def test_a_bare_file_name_reaches_the_same_body(self):
+        """取值表的第二种写法：只写文件名（最后一段）与整条全路径落到同一份正文。
+
+        `file_name` 是这条对法的唯一定义处，`matches` 两种写法都认 —— 枚举值的两种形状
+        都由它回答（`Agent.prompt_tools` 也拿它拼清单）。"""
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt((ONE, "一"), (TWO, "二")))
+        self.assertEqual(cmd_explore.file_name(ONE), "one.md")
+        for spelling in (ONE, "one.md"):
+            with self.subTest(spelling=spelling):
+                self.assertEqual(cmd_explore.matches(spelling), [ONE])
+                self.assertEqual(cmd_explore.body_of(spelling), "一")
+        self.assertEqual(cmd_explore.body_of("nope.md"), "", "对不上就是空的，别拿别份顶替")
+        self.assertEqual(cmd_explore.matches("nope.md"), [])
+
+    def test_a_name_that_matches_two_files_is_not_a_hit(self):
+        """文件名撞了（不同目录下的同名文件）⇒ 不成立。
+
+        替它挑一份会把**错的那份**正文交出去，而它看不出拿错了 —— 宁可让它改写成全路径
+        （`Agent._probed_note` 那一支会把撞上的几份列出来）。全路径那一侧照旧是唯一的。
+        """
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt(("/opt/task/a.md", "甲"), ("/home/task/a.md", "乙")))
+        self.assertEqual(len(cmd_explore.matches("a.md")), 2)
+        self.assertEqual(cmd_explore.body_of("a.md"), "")
+        self.assertEqual(cmd_explore.body_of("/opt/task/a.md"), "甲")
+        self.assertEqual(cmd_explore.body_of("/home/task/a.md"), "乙")
+
     def test_a_reset_forgets_the_paths_too(self):
         """`reset` 回到"一次都没探查过"：正文与跳过数一起清。
 
