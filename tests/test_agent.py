@@ -224,8 +224,9 @@ class AgentToolCallTest(unittest.TestCase):
 
 
 class ReadSandboxFileTest(unittest.TestCase):
-    """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（【沙盒知识】段列出的）
-    允许调用；命中就当回合把正文送进会话（省一回合），其余一律"调用不成立"、不发命令。
+    """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（现挂在工具描述里的
+    那份清单）允许调用；命中就当回合把正文送进会话（省一回合），其余一律"调用不成立"、
+    不发命令。
 
     `_files` 住在 `cmd_explore` 的模块层 ⇒ 每个用例复位（既有先例，见那个文件）。
     """
@@ -249,7 +250,8 @@ class ReadSandboxFileTest(unittest.TestCase):
         self.assertTrue(any(path in c and "正文" in c for c in contents), contents)
 
     def test_an_unprobed_path_is_not_a_call(self):
-        """清单以外的路径 ⇒ 调用不成立（不产命令）＋把清单回给 LLM：那就是它的枚举值。
+        """清单以外的路径 ⇒ 调用不成立（不产命令）＋回一条说明。说明**不重抄清单**（第 104
+        步）：清单就挂在 `readSandboxFile` 的描述里，与它会话里这条说明同处一份 prompt。
 
         ⚠️ 别退回"拼一条 `cat` 交给沙盒"（第 101 步删掉的旧支）：LLM 编出来的路径（比如
         题目里只给了文件名、它自己拼了个目录）那趟必然报错，白烧一个沙盒往返还引它接着猜。
@@ -262,14 +264,15 @@ class ReadSandboxFileTest(unittest.TestCase):
         note = [c for c in (m["content"] for m in json.loads(self.agent.chat("题")))
                 if "不在可选清单里" in c]
         self.assertEqual(len(note), 1, "未命中要在会话里留一条说明")
-        self.assertIn("/opt/task/none.md", note[0])   # 点明是哪一次调用
-        self.assertIn("- /opt/task/one.md", note[0])  # 清单 = 枚举值
+        self.assertIn("/opt/task/none.md", note[0])    # 点明是哪一次调用
+        self.assertIn("描述里列出的那些", note[0])      # 指回枚举值的唯一出处
+        self.assertNotIn("- /opt/task/one.md", note[0])  # 清单不在这里重抄一份
 
     def test_an_empty_inventory_points_at_execcmd(self):
         """一份都没探明（探查还没跑完）⇒ 说明里让它自己用 executeCmd 读。
 
-        "我们还没摸过"不等于"沙盒里没有"（与【沙盒知识】段空段不写「（暂无）」同一条）：
-        这里回一句"沙盒里就这些"，LLM 就不会再去读它本来需要的那份文件了。
+        "我们还没摸过"不等于"沙盒里没有"（与清单空着时连工具块一起缺席同一条）：这里回一句
+        "沙盒里就这些"，LLM 就不会再去读它本来需要的那份文件了。
         """
         self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
         self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")])

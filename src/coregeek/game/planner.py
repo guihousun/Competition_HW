@@ -287,9 +287,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 
     # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）
     if not turn.phase_task:
-        # 沙箱文件每道任务刷新一次 ⇒ 任务一结束就把探查清掉，下道题从列清单重新摸（同文再现
-        # 也是新的一次）。回执认领在上面（`observe` 压在函数最上头）⇒ 在途那条照旧收下、落盘。
-        cmd_explore.reset()
+        # 沙箱探查的成果**不在这里复位**（第 104 步：探明一次就整场用，取回来的清单与正文
+        # 一直留到进程结束）。回执认领在上面（`observe` 压在函数最上头）⇒ 在途那条照旧收下。
         return AGENT.news_question(turn.news), ""
 
     # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。

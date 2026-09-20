@@ -114,7 +114,10 @@ class CmdExploreStateTest(unittest.TestCase):
         self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
 
     def test_a_reset_forgets_the_paths_too(self):
-        """`reset` 回到"一次都没探查过"：正文与跳过数一起清（沙箱文件每道任务刷新一次）。"""
+        """`reset` 回到"一次都没探查过"：正文与跳过数一起清。
+
+        它现在**只为用例隔离存在**（第 104 步起生产代码不调：探明的东西整场存活）。
+        """
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), more=3))
         cmd_explore.reset()

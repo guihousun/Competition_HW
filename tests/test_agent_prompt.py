@@ -17,7 +17,8 @@ from coregeek.agent import Agent, cmd_explore  # noqa: E402
 from coregeek.agent.chat import answer_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 
-#: system 的段头，按 `prompt.SECTIONS` 的顺序 —— 段名只在这里写一次，切段一律走 `_section`。
+#: system 的段头，按 `prompt.gen_system_prompt` 那份列表的顺序 —— 段名只在这里写一次，
+#: 切段一律走 `_section`。
 #: 段头改名/换序时改这一处，用例不会退化成 IndexError。
 SECTIONS = (
     "# 【背景】",
@@ -26,7 +27,6 @@ SECTIONS = (
     "# 【工具描述】",
     "# 【沉淀规则】",
     "# 【沉淀的SOP】",
-    "# 【沙盒知识】",
     "# 【输出约定】",
     "# 【输出示例】",
 )
@@ -61,15 +61,13 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_placeholders_are_all_filled(self):
         prompt = self.agent.chat("题目")
         for header in SECTIONS:
-            if header == "# 【沙盒知识】":  # 要探明过才出现，见下一条用例
-                continue
             self.assertIn(header, prompt)
-        # 会话记录是拼接出来的（不走 `str.format`），会漏的只有模板自己那三个槽
-        for leftover in ("{tool_desc}", "{sop}", "{paths}"):
+        # 会话记录是拼接出来的（不走 `str.format`），会漏的只有模板自己那两个槽
+        for leftover in ("{tool_desc}", "{sop}"):
             self.assertNotIn(leftover, prompt)
 
     def test_the_sections_appear_once_each_and_in_the_declared_order(self):
-        """九段按声明的顺序出现、每段头只出现一次。
+        """八段按声明的顺序出现、每段头只出现一次。
 
         段序就是四层的落地（决策 → 工具 → 知识 → 输出）；「只一次」是"同一条规则只写
         一处"的机械保证 —— 重复的规则会稀释注意力，而这件事在实盘上测不出来。
@@ -77,10 +75,9 @@ class ChatPromptTest(unittest.TestCase):
         它前面不许有空白 —— 段与段之间靠 `gen_system_prompt` 的 join 排版）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertTrue(system.startswith(SECTIONS[0]))
-        present = [h for h in SECTIONS if h != "# 【沙盒知识】"]
-        positions = [system.index(h) for h in present]
+        positions = [system.index(h) for h in SECTIONS]
         self.assertEqual(positions, sorted(positions), "段序与 SECTIONS 声明的不一致")
-        for header in present:
+        for header in SECTIONS:
             self.assertEqual(system.count(header), 1, f"这一段出现了不止一次：{header}")
 
     def test_the_system_stays_within_its_budget(self):
@@ -91,8 +88,9 @@ class ChatPromptTest(unittest.TestCase):
         上浮两成。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
         基线数字会漂，量的时候看是**哪一档**：工具块随沙箱清单浮动（`Agent.prompt_tools`
         —— 没探明时 `readSandboxFile` 整块不列）。**没探明那一档**：第 100 / 101 / 102 /
-        103 步分别实测 5821 / 5569 / 5808 / 6265；探明一条路径再多 285 上下。第 103 步把
-        余量吃到 ~11%（6265 + 探明 ≈ 6550，阈值 7000）—— 再往里加东西必须先删旧话。
+        103 / 104 步分别实测 5821 / 5569 / 5808 / 6265 / 6265；探明一条路径再多 275 上下
+        （第 104 步把清单从独立一段挪进工具描述 ⇒ 探明那一档基本没动）。余量仍 ~11%
+        （6265 + 探明 ≈ 6550，阈值 7000）—— 再往里加东西必须先删旧话。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertLess(len(system), 7000)
@@ -101,8 +99,8 @@ class ChatPromptTest(unittest.TestCase):
         """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具都得在。
 
         唯一会缺席的是 `readSandboxFile`，而且只在**沙盒里一份都没探明**的时候：它的 `path`
-        只有【沙盒知识】段列出的那些是合法值 —— 清单空着时它一个合法参数都没有，列出来只会
-        换来一次"调用不成立"的空转。探明之后自动回来（`Agent.prompt_tools`，两向都钉）。
+        只有探明过的那几份是合法值 —— 清单空着时它一个合法参数都没有，列出来只会换来一次
+        "调用不成立"的空转。探明之后自动回来（`Agent.prompt_tools`，两向都钉）。
         断言按**整份 prompt** 查这个名字（不只是工具块）：别处的描述里点它的名，等于给它留了
         一条悬空指引 —— 隐藏就没意义了。
         """
@@ -138,22 +136,18 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("动手前先看这里", sop)
         self.assertIn("不必重新探索", sop)
 
-    def test_the_sandbox_section_is_absent_until_something_is_probed(self):
-        """还没探明 ⇒ 整段不出现。
+    def test_the_probed_paths_ride_along_in_the_tools_own_block(self):
+        """探明的路径清单挂在 `readSandboxFile` 自己的描述里（第 104 步），不单独占一段。
 
-        不能写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"** —— 写出去就是让 LLM
-        干脆不去找那些文件（空段是它自己的一种断言）。
+        那张清单就是这个 `path` 参数的合法取值表 —— 归到参数自己所在的那块是它唯一的家；
+        与 SOP 段同一条现刷机制（`Agent.prompt_tools` 每轮跟 `self._sop` 一起进 system）：
+        探查是个异步的活儿，摸到的路径必须自己走进 prompt。还没探明 ⇒ 清单与工具块**一起**
+        缺席，不许写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"** —— 写出去就是让 LLM
+        干脆不去找那些文件。
         """
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertNotIn("# 【沙盒知识】", system)  # 钉的是段头：这四个字在别处（工具描述里）有
+        empty = json.loads(self.agent.chat("题目"))[0]["content"]
+        self.assertNotIn("/opt/task", empty)
 
-    def test_the_sandbox_section_lists_the_probed_paths(self):
-        """探查取回正文 ⇒ 下一轮 system 就带【沙盒知识】段，逐条列完整路径。
-
-        与 SOP 段同一个机制（`Agent.chat` 每轮现刷）：探查是个异步的活儿，摸到的路径
-        必须自己走进 prompt —— 走 `planner` 那条边就要求它认识会话，而那条边的契约是
-        "只收字符串、不收 Turn"。段位在 SOP 之后、示例之前。
-        """
         cmd_explore.next_command()
         cmd_explore.observe(
             "[exitCode:0]\n"
@@ -162,10 +156,12 @@ class ChatPromptTest(unittest.TestCase):
             "@@@MORE 0@@@\n"
         )
         system = json.loads(self.agent.chat("题"))[0]["content"]
-        self.assertIn("# 【沙盒知识】", system)
-        self.assertIn("- /opt/task/a.md", system)
-        self.assertIn("- /opt/task/b.md", system)
-        self.assertLess(system.index("# 【沙盒知识】"), system.index("【输出示例】"))
+        self.assertNotIn("# 【沙盒知识】", system, "清单只有工具描述这一处，不许有第二个家")
+        tools = _section(system, "# 【工具描述】")
+        self.assertIn("## ToolName - readSandboxFile", tools)
+        block = tools.index("## ToolName - readSandboxFile")
+        self.assertLess(block, tools.index("- /opt/task/a.md"))
+        self.assertLess(block, tools.index("- /opt/task/b.md"))
 
     def test_the_example_shows_a_deposit_then_a_reuse(self):
         """【输出示例】是 few-shot：同一类任务演两遍 —— 第一次「探索 → 调接口 →

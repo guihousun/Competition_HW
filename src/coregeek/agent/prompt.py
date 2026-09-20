@@ -1,12 +1,14 @@
-"""构建 system prompt 的地方，九段，按四层排：决策（背景、role定位、每回合流程）→ 工具（工具
-描述）→ 知识（沉淀规则、沉淀的SOP、沙盒知识）→ 输出（输出约定、输出示例）。同一条规则只写
-一处，段名即唯一入口 —— 顺序就是 `gen_system_prompt` 里那份字面量列表，改序改那里。
+"""构建 system prompt 的地方，八段，按四层排：决策（背景、role定位、每回合流程）→ 工具（工具
+描述）→ 知识（沉淀规则、沉淀的SOP）→ 输出（输出约定、输出示例）。同一条规则只写一处，段名即
+唯一入口 —— 顺序就是 `gen_system_prompt` 里那份字面量列表，改序改那里。
 
 任务 prompt 专注任务：摘要由命令轮同发的压缩请求产出（`COMPRESSION_PROMPT`，只进压缩
-prompt、不进 system）。三个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT`
-的 `{sop}`、`SANDBOX_PROMPT` 的 `{paths}`）正文里不许出现别的裸 `{}`：`str.format` 会把它
-当占位符 ⇒ 运行期 `KeyError` ⇒ 整回合退化成空指令。替换值（工具描述、流程正文）里的 `{}`
-不会被二次扫描。
+prompt、不进 system）。两个带 `{}` 槽的模板（`TOOL_PROMPT` 的 `{tool_desc}`、`SOP_PROMPT`
+的 `{sop}`）正文里不许出现别的裸 `{}`：`str.format` 会把它当占位符 ⇒ 运行期 `KeyError` ⇒
+整回合退化成空指令。替换值（工具描述、流程正文）里的 `{}` 不会被二次扫描。
+
+**探明的沙箱路径不在本模块**（第 104 步）：它们是 `readSandboxFile` 那个参数的取值表，跟着
+**工具描述**走（`Agent.prompt_tools` 现刷），不单独占一段。
 """
 
 import json
@@ -138,14 +140,7 @@ SOP_PROMPT = """
 {sop}
 """
 
-# 6. 沙盒知识：探查（`cmd_explore`）摸到的沙箱 md 路径，只列路径（正文还没人消费）
-SANDBOX_PROMPT = """
-# 【沙盒知识】
-下面这些文件已在沙盒环境里探明（完整路径）：
-{paths}
-"""
-
-# 7. 输出约定
+# 6. 输出约定
 OUTPUT_PROMPT = """
 # 【输出约定】
 严格按照以下格式进行输出，不允许采用其他格式。
@@ -171,7 +166,7 @@ OUTPUT_PROMPT = """
 这条只管 `sop` 那段文本，不管你的作答 —— 你的答卷照旧**必须**用这对标签包起来。
 """
 
-# 8. 示例：同一类任务两次 —— 第一次沉淀、第二次跳过探索直接照做。这是唯一演示
+# 7. 示例：同一类任务两次 —— 第一次沉淀、第二次跳过探索直接照做。这是唯一演示
 # 「沉淀与作答同轮」的地方；范例里的命令与输出都保留原文，别改成概括。
 EXAMPLE_PROMPT = """
 # 【输出示例】
@@ -210,8 +205,8 @@ step4. 作答 —— 不用沉淀、不再调工具：先写一句判断，再�
 
 """
 
-def gen_system_prompt(tools, sop, knowledge=()) -> str:
-    """组装整份 system 消息：九段，【沙盒知识】只在有内容时占位。
+def gen_system_prompt(tools, sop) -> str:
+    """组装整份 system 消息：八段，全是固定段（没有"有内容才占位"的段）。
 
     下面这份列表**就是段的顺序**（同一条规则只写一处：段名不在这之外再声明一遍）。
     【沉淀规则】与【沉淀的SOP】排在【每回合流程】之后（那段引用它们）；首段必须是
@@ -219,9 +214,8 @@ def gen_system_prompt(tools, sop, knowledge=()) -> str:
     【本轮提问】）按"prompt 以这个段头开头"断言过，见 `test_app.HandleTest`。
 
     `tools` = `Agent` 的工具注册表（名 → (实现, 描述, 参数表)），`sop` = 流程表
-    `{流程名: 正文}`，`knowledge` = 探查摸到的沙箱路径 —— 三个值分别填进工具段、SOP 段、
-    沙盒知识段。各段 `strip()` 后再拼 —— 三引号串首尾各带一个换行，直接 join 会出现
-    三连空行（空段也要在这里滤掉）。
+    `{流程名: 正文}` —— 两个值分别填进工具段与 SOP 段。各段 `strip()` 后再拼 ——
+    三引号串首尾各带一个换行，直接 join 会出现三连空行（空段也要在这里滤掉）。
     """
     sections = [
         BACKGROUND_PROMPT,
@@ -230,22 +224,10 @@ def gen_system_prompt(tools, sop, knowledge=()) -> str:
         gen_all_tool_prompt(tools=tools),
         DEPOSIT_PROMPT,
         gen_sop_prompt(sop=sop),
-        gen_sandbox_prompt(knowledge),
         OUTPUT_PROMPT,
         EXAMPLE_PROMPT,
     ]
     return "\n\n".join(text for text in (section.strip() for section in sections) if text)
-
-
-def gen_sandbox_prompt(paths) -> str:
-    """「沙盒知识」整段：探明的沙箱 md 路径逐条列出（现在只有路径，正文还没接）。
-
-    还没探明 ⇒ `""`，整段不出现 —— 空段不能写「（暂无）」：**"我们还没摸过"不等于
-    "沙盒里没有"**，写出去就是让 LLM 干脆不去找那些文件。
-    """
-    if not paths:
-        return ""
-    return SANDBOX_PROMPT.format(paths="\n".join(f"- {path}" for path in paths))
 
 
 def gen_all_tool_prompt(tools) -> str:

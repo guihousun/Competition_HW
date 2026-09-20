@@ -536,36 +536,37 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, cmd_explore._command(0))
 
     def test_the_probed_paths_reach_the_next_prompt(self):
-        """探查的**产出**从下一轮起进 system 的【沙盒知识】段 —— 命令槽那条边只出命令，
-        路径走的是 `Agent.chat` 每轮现刷 system 这条路（与 SOP 段同源）。
+        """探查的**产出**从下一轮起现挂在 `readSandboxFile` 的描述里 —— 命令槽那条边只出命令，
+        清单走的是 `Agent.chat` 每轮现刷 system 这条路（与 SOP 段同源，第 104 步从独立一段
+        挪进工具块）。
 
         一轮都不落下：发命令那轮 prompt 里还没有（回执这轮才回来），认领之后立刻就有。
         """
         cmd_explore.reset()
         first, _ = task_channel(self._turn(self.TASK))
-        self.assertNotIn("# 【沙盒知识】", first, "回执还没回来，不能凭空断言沙盒里有什么")
+        self.assertNotIn("readSandboxFile", first, "回执还没回来，不能凭空断言沙盒里有什么")
         prompt, _ = task_channel(
             self._turn(self.TASK, cmd_result=PROBE_RESULT)
         )
-        self.assertIn("# 【沙盒知识】", prompt)
+        self.assertIn("## ToolName - readSandboxFile", prompt)
         self.assertIn("- /opt/task/rescue.md", prompt)
 
-    def test_the_probe_dies_with_the_task_that_owned_it(self):
-        """沙箱文件每道任务刷新一次 ⇒ 任务一结束就把探查清掉：下道题里【沙盒知识】从零开始、
-        命令槽重新去列清单 —— 上一个任务的路径不许沿用（它那个沙盒已经不在了）。
+    def test_the_probe_survives_the_task_that_probed_it(self):
+        """探明的东西**整场存活**（第 104 步，用户口径"一次找到、整个进程生命周期保存"）：
+        任务结束不复位，下道题直接沿用那份清单、也不再重列一遍沙箱。
 
-        判据挂在"没任务"那一轮而不是"新任务开始"那一轮：同文再现时两次的题目原文一模一样，
-        只有中间那段空档分得出是两次任务。
+        ⚠️ 反面风险随这条一起生效：清单没准已经过期（沙箱换了文件我们既不会重新走一遍、
+        还可能把上一道题的正文当这一道题的正文交出去）。见 `code-task.md` 第 104 步。
         """
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))
         prompt, _ = task_channel(self._turn(self.TASK, cmd_result=PROBE_RESULT))
         self.assertIn("- /opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
         task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
-        self.assertEqual(cmd_explore.known_paths(), [])
+        self.assertEqual(cmd_explore.known_paths(), ["/opt/task/rescue.md"], "不许随任务复位")
         again, execute = task_channel(self._turn(self.TASK))
-        self.assertNotIn("# 【沙盒知识】", again, "上个任务的路径不许跟进新任务")
-        self.assertEqual(execute, cmd_explore._command(0))
+        self.assertIn("- /opt/task/rescue.md", again, "上个任务的路径照旧带进新任务")
+        self.assertEqual(execute, "", "探查已收工 ⇒ 命令槽不再跑探查")
 
     def test_no_task_means_no_probe(self):
         """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""
