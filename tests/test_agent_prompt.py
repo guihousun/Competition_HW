@@ -87,6 +87,8 @@ class ChatPromptTest(unittest.TestCase):
         守的是"措辞只增不减"的漂移：每次加一句话都看不出什么，几十次之后 prompt 就
         被稀释得没法看了。阈值是拍的：重排后干净 system 实测 5821 字（重排前 5574），
         上浮两成。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
+        两个基线数字会漂，量的时候看是**哪一档**：工具块随沙箱清单浮动（`Agent.prompt_tools`
+        —— 没探明时 `readSandboxFile` 整块不列），第 100 / 101 步分别实测 5821 / 5569。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertLess(len(system), 7000)
@@ -264,6 +266,27 @@ class ChatPromptTest(unittest.TestCase):
             system,
         )
         self.assertIn("不要出现 `<answer>` 与 `</answer>` 这对标签", system)
+
+    def test_the_answer_round_says_the_tags_are_mandatory(self):
+        """作答必须包在 `<answer></answer>` 里、且标签外面不许有别的内容。
+
+        裸文本（"答案是：3"、一段解释后跟个数字）在我们这一侧**会被当答案整段交上去**
+        （`chat.answer_of` 第三级：原文即答案）⇒ 判题器按字段算通过率，多写的字直接扣分，
+        而本地一切自洽、只有在任务行里看得到交出去的那一段不对劲。措辞就是唯一的杠杆。
+        `sop` 那条禁令紧挨着这条，必须写明它**只**管 `sop` 文本 —— 否则 LLM 把
+        "不要出现这对标签"读成"作答也别用"，正是它不守格式的一个入口。
+        """
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        output = _section(system, "# 【输出约定】")
+        self.assertIn("标签外面写的字会跟答案一起被交上去", output)
+        self.assertIn("标签里面只放任务书要的那个答案本身", output)
+        self.assertIn("只写一个这个块", output)
+        self.assertIn("这条只管 `sop` 那段文本", output)
+        # 示例里也得有一次**不沉淀、纯作答**的整条回复（第二轮那道题的 step4）——
+        # 只讲规则不给形状，它照样有别的写法可选
+        rerun = _section(system, "# 【输出示例】").rsplit("第二次：", 1)[1]
+        self.assertIn("<answer>tk_7a2b1c</answer>", rerun)
+        self.assertIn("标签外面一个字都不写", rerun)
 
     def test_the_flow_numbered_steps_start_at_one(self):
         """`# 【每回合流程】` 从第 1 步起编号、并附一段可以直接照抄的命令范式。
