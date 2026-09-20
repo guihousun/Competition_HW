@@ -307,8 +307,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 解析工具调用
     call = tool_of(llmReply)
     if call is None and looks_like_tool(llmReply):
-        # 想调工具但形状没写对（严格解析取不出名字）⇒ 这轮落重问。它是「请继续。」的唯一线索
-        LOGGER.info("【工具调用】：形状没写对（取不出工具名）⇒ 这一轮落重问")
+        # 想调工具但形状没写对（严格解析取不出名字）⇒ 记日志 + 把说明回灌进会话，这轮落重问
+        AGENT.reject_shape()
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
     # 判题器本轮报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件
     rejected = any(e.code == 2 for e in turn.errors)

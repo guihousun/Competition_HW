@@ -6,6 +6,7 @@
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -97,9 +98,10 @@ class AgentPythonExecTest(unittest.TestCase):
     def test_the_tool_yields_no_command_but_records_the_output(self):
         AGENT.chat("题目")  # 首问（开会话；工具回复只会在提问之后到 ⇒ 一定有会话）
         self.assertEqual(AGENT.tool_call("python_exec", [("code", "print(6*7)")]), "")
-        prompt = AGENT.chat("题目")  # 无新内容 ⇒ nudge；窗口里该有产出
+        prompt = AGENT.chat("题目")  # 窗口里该有产出（产出在尾巴上 ⇒ 不补「请继续。」）
         self.assertIn("【本地 python 的执行结果", prompt)
         self.assertIn("42", prompt)
+        self.assertEqual(json.loads(prompt)[-1]["role"], "tool")
 
     def test_the_description_states_its_cost_advantage(self):
         """描述里要点破"它比沙盒便宜" —— 这是 LLM 唯一能看到的成本信号。

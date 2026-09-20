@@ -268,6 +268,64 @@ class ToolCallLogTest(unittest.TestCase):
         self.assertIn(f"…（共 {len(cmd)} 字）", caught.records[0].getMessage())
 
 
+class FailedCallFeedbackTest(unittest.TestCase):
+    """「调用不成立」的回灌（第 110 步）：三种失败 + 形状没写对，LLM 都得在下一份
+    prompt 里看见"这次调用没有发出去 + 原因"—— 没有它，这一轮它只看得见「请继续。」，
+    会以为命令已在跑、等一个不会来的回执，逐字重发同一条失败调用就原地空转。
+    """
+
+    def setUp(self) -> None:
+        self.agent = Agent()
+        self.agent.chat("题")  # 开会话：说明得有地方落
+
+    def _notes(self) -> list[str]:
+        """render 里标着「这次调用不成立」的那几条 tool 消息。"""
+        return [
+            c
+            for c in (m["content"] for m in json.loads(self.agent.chat("题")))
+            if "【工具调用：这次调用不成立】" in c
+        ]
+
+    def test_each_failure_names_the_culprit(self):
+        """三条不成立各有各的话：编的工具名 ⇒ 点名它并给出真名单（注册表现拼，不手写
+        第二份）；缺参数 ⇒ 点名缺哪个、指回 Params；参数形状不对 ⇒ 指回调用格式。"""
+        self.agent.tool_call("查不到的工具", [("cmd", "ls")])
+        self.agent.tool_call("executeCmd", [])
+        self.agent.tool_call("executeCmd", "ls")
+        notes = self._notes()
+        self.assertEqual(len(notes), 3, "三次失败三条说明，一条不少")
+        self.assertIn("查不到的工具", notes[0])
+        for name in ("executeCmd", "readSandboxFile", "python_exec", "SOP2Prompt"):
+            self.assertIn(name, notes[0])
+        self.assertIn("缺了参数 cmd", notes[1])
+        self.assertIn("Params", notes[1])
+        self.assertIn("<tool_param>", notes[2])
+
+    def test_the_note_says_no_receipt_will_come(self):
+        """共同的那句"没有发出去、不会有执行结果"是回执幻觉的解药，每条都得带上。"""
+        self.agent.tool_call("executeCmd", [])
+        (note,) = self._notes()
+        self.assertIn("没有发出去", note)
+        self.assertIn("不会有它的执行结果", note)
+
+    def test_a_broken_shape_is_rejected_with_the_format(self):
+        """`reject_shape`：日志一行（原文与第 109 步那条相同）+ 会话里重述调用格式。"""
+        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
+            self.assertEqual(self.agent.reject_shape(), "")
+        self.assertIn(
+            "形状没写对（取不出工具名）⇒ 这一轮落重问",
+            caught.records[0].getMessage(),
+        )
+        (note,) = self._notes()
+        self.assertIn("<tool_name>", note)
+        self.assertIn("<tool_param>", note)
+
+    def test_without_a_session_the_note_is_dropped(self):
+        """还没开过会话（这道题一次都没问过）⇒ 只留日志、说明丢弃，绝不抛。"""
+        with self.assertLogs("coregeek.agent.agent", level="INFO"):
+            self.assertEqual(Agent().tool_call("executeCmd", []), "")
+
+
 class ReadSandboxFileTest(unittest.TestCase):
     """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（现挂在工具描述里的
     那份清单）允许调用，写整条全路径、或只写它的文件名都行（文件名对上不止一份 ⇒ 不成立，

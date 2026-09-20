@@ -63,7 +63,15 @@ class Context:
             )
 
     def nudge(self) -> None:
-        """无新内容的重问轮：追加一句固定收尾（见 `NUDGE`）。"""
+        """无新内容的重问轮：追加一句固定收尾（见 `NUDGE`）。
+
+        尾巴上是 `tool` 产出（本地工具当回合写进来的结果、或"调用不成立"的说明）⇒
+        什么都不加：这一轮已经有新东西进表，会话停在工具产出上不含糊 —— 与沙盒回执
+        那一轮（判据 ② 的 `feed`）同一条形状。「请继续。」只在会话真停在它自己的
+        输出上时才需要。
+        """
+        if self._messages[-1].role == _TOOL:
+            return
         self._messages.append(Message(_USER, NUDGE))
 
     def tool_output(self, text: str, label: str) -> None:

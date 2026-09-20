@@ -442,6 +442,17 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
         """矿种的新闻期望系数。没问过新闻 ⇒ 1.0（无修正）。"""
         return self._price_hints.get(kind, 1.0)
 
+    def _note_failed_call(self, why: str) -> str:
+        """把"这次调用不成立"的说明回灌进会话 —— LLM 侧的唯一线索：没有它，这一轮它
+        只看得见「请继续。」，会以为命令已在跑、等一个不会来的回执。没开会话 ⇒ 只留
+        日志（迟到的回复，与 `read_sandbox_file` 掉正文同一条纪律）。"""
+        if self._context is not None:
+            self._context.tool_output(
+                f"这次工具调用没有发出去，也不会有它的执行结果。{why}。",
+                "【工具调用：这次调用不成立】",
+            )
+        return ""
+
     def tool_call(self, tool_name: str, params: list[tuple[str, str]]) -> str:
         """顶层调度入口：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。
 
@@ -454,13 +465,16 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
         `app.handle` 的 `try` 里，抛出去会把整回合所有角色的指令一起带走）。边界校验只在
         这一处：这是唯一一个由外部字符串驱动的入口。
 
-        四条出口各打一条 `【工具调用】`（含"调用不成立"那三条 —— 那是 LLM 白等一回合的唯一
-        线索，回复原文在任务行里但看不出它没发出去）。
+        四条出口各打一条 `【工具调用】`（含"调用不成立"那三条）；不成立的那三条另把原因
+        回灌进会话（`_note_failed_call`）—— 日志给我们看、说明给 LLM 看：没有它，这一轮
+        它只看得见「请继续。」，会以为命令已在跑、等一个不会来的回执。
         """
         entry = self._tools.get(tool_name)
         if entry is None:
             LOGGER.info("【工具调用】：未知工具「%s」⇒ 调用不成立", tool_name)
-            return ""
+            return self._note_failed_call(
+                f"工具「{tool_name}」不存在 —— 可用的工具只有：{'、'.join(self._tools)}。请改用其中之一"
+            )
         impl, _, spec = entry
         declared = dict(spec)
         resolved: dict[str, str] = {}
@@ -471,17 +485,24 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
                 # 认不出的参数名：忽略（宽容那一侧）—— 不进 resolved，全塞给 impl 会 TypeError
         except (TypeError, ValueError):
             LOGGER.info("【工具调用】：%s ⇒ 调用不成立（参数不是「名=值」的形状）", tool_name)
-            return ""  # params 不是 [(名, 文本)] 的形状
-        if any(
-            not isinstance(resolved.get(pname), str) or not resolved[pname].strip()
+            return self._note_failed_call(
+                "参数没有按「名=值」解析出来 —— 参数写在 <tool_param> 里、每个参数各用一对标签包裹"
+            )  # params 不是 [(名, 文本)] 的形状
+        missing = [
+            pname
             for pname, _ in spec
-        ):
+            if not isinstance(resolved.get(pname), str) or not resolved[pname].strip()
+        ]
+        if missing:
             LOGGER.info(
                 "【工具调用】：%s（%s）⇒ 调用不成立（声明了的参数缺了或值为空白）",
                 tool_name,
                 _call_text(params),
             )
-            return ""
+            return self._note_failed_call(
+                f"{tool_name} 缺了参数 {'、'.join(missing)}（或值是空白）"
+                "—— 参数名与用途见【工具描述】里它的 Params，补齐后重新调用"
+            )
         command = impl(**resolved)
         LOGGER.info(
             "【工具调用】：%s（%s）⇒ %s",
@@ -490,6 +511,18 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
             "命令已出" if command else "这个工具不产出命令",
         )
         return command
+
+    def reject_shape(self) -> str:
+        """整条回复像工具调用、但严格解析连工具名都取不出（`tool_of` 为 None 而
+        `looks_like_tool` 为真）⇒ 打一行日志、把"形状没写对"的说明回灌进会话。
+        调用方是 `planner.task_channel`（那一轮落重问，这行日志与这条说明是 LLM 侧
+        唯一的线索）。返回 `""` 与 `_note_failed_call` 对齐，取值处直接 `return`。"""
+        LOGGER.info("【工具调用】：形状没写对（取不出工具名）⇒ 这一轮落重问")
+        return self._note_failed_call(
+            "没能按【工具调用格式】从这条回复里解析出工具调用（取不出工具名）"
+            "—— 工具名写在 <tool_name> 标签里，参数写在 <tool_param> 里、"
+            "每个参数各用一对标签包裹（如 <cmd>命令</cmd>）"
+        )
 
     def SOP2Prompt(self, name: str, sop: str) -> str:
         """把一条条目（`name` = 这一类问题的名字、`sop` = 做法与环境知识）沉淀进流程表，返回 `""`。

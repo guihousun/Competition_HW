@@ -294,8 +294,12 @@ class TaskChannelTest(unittest.TestCase):
 
     def test_a_python_exec_round_feeds_the_output_back_at_once(self):
         """本地计算：LLM 调 `python_exec` ⇒ 当回合执行、产出直接进
-        下一份 prompt（tool 消息 + 「请继续。」），不走 `executeCmd`（那要一整个
-        沙盒往返）。判据链落 ③′→⑥：调用成了、但不产命令。"""
+        下一份 prompt（tool 消息），不走 `executeCmd`（那要一整个沙盒往返）。
+        判据链落 ③′→⑥：调用成了、但不产命令。
+
+        prompt 停在产出上、不补「请继续。」（第 111 步）：尾巴是 tool 消息 ⇒ `Context.nudge`
+        不落（与沙盒回执那一轮的判据 ② 同形）。
+        """
         AGENT.reset()
         task_channel(self._turn(self.TASK))  # ⑥ 首问
         prompt, execute = task_channel(
@@ -308,7 +312,8 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, "", "本地计算不产命令")
         self.assertIn("【本地 python 的执行结果", prompt)
         self.assertIn("42", prompt)
-        self.assertIn("请继续。", prompt)
+        self.assertNotIn("请继续。", prompt, "产出已经在尾巴上，不用再催一句")
+        self.assertEqual(json.loads(prompt)[-1]["role"], "tool")
 
     def test_nothing_is_sent_without_a_task(self):
         """不在任务里一次都不发（`prompt` 也不行、`executeCmd` 更不行）。
@@ -382,6 +387,27 @@ class TaskChannelTest(unittest.TestCase):
                     self.assertIn(self.TASK, prompt, "落重问、不是当答案")
         misses = [r.getMessage() for r in caught.records if "形状没写对" in r.getMessage()]
         self.assertEqual(len(misses), 3)
+
+    def test_a_failed_call_is_told_why_in_the_next_prompt(self):
+        """「调用不成立」不再是黑洞（第 110 步）：缺参数 / 未知工具 / 形状没写对 ⇒
+        落重问的那份 prompt 里带一条"这次调用没有发出去 + 原因"（tool 消息，跟在
+        LLM 自己那条回复后面）。没有它，这一轮它什么新东西都看不到，会以为命令已在跑、
+        等一个不会来的回执，逐字重发同一条失败调用就原地空转。
+
+        说明本身就是"该你改了"的指令 ⇒ prompt 停在它上面、不补「请继续。」（第 111 步）。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
+        for reply in (
+            "<tool><tool_name>executeCmd</tool_name></tool>",  # 缺参数
+            "<tool><tool_name>查不到的工具</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>",
+            "<tool>ls -la</tool>",  # 旧形状：连工具名都取不出
+        ):
+            with self.subTest(reply=reply):
+                prompt, execute = task_channel(self._turn(self.TASK, reply))
+                self.assertEqual(execute, "")
+                self.assertIn("【工具调用：这次调用不成立】", prompt)
+                self.assertNotIn("请继续。", prompt)
+                self.assertEqual(json.loads(prompt)[-1]["role"], "tool")
 
     def test_a_broken_tool_tag_yields_no_command(self):
         """凑不齐的标签 ⇒ 没有命令可发。别把半截标签当命令丢进沙盒。

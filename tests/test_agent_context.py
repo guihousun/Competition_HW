@@ -103,6 +103,24 @@ class ContextTest(unittest.TestCase):
         self.ctx.nudge()
         self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
 
+    def test_a_tool_output_at_the_tail_is_never_nudged(self):
+        """尾巴上已经是 `tool` 产出 ⇒ 不补「请继续。」（第 111 步）。
+
+        本地工具轮（`python_exec` / `readSandboxFile` / "调用不成立"的说明）当回合就往表里
+        写一条 tool 消息 ⇒ 会话停在产出上、不含糊；再补一句 user 的「请继续。」既与沙盒
+        回执那一轮（判据 ② 的 `feed`）不同形，也把"该看产出"的注意力岔到一句空话上。
+        """
+        self.ctx.hear("<tool ls")
+        for label in ("【本地 python 的执行结果（原文）】", "【沙盒文件 x.md 的正文】"):
+            with self.subTest(label=label):
+                self.ctx.tool_output("产出", label)
+                self.ctx.nudge()
+                self.assertEqual(self.messages()[-1]["role"], "tool")
+        # 产出之后它又说了新话 ⇒ 尾巴换回 assistant，nudge 照旧补上
+        self.ctx.hear("<tool>ls</tool>")
+        self.ctx.nudge()
+        self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
+
     def test_every_message_survives_verbatim_and_in_order(self):
         """进表逐字：题目/回复/结果里的 `{}`、换行、标签一个都不许动，顺序就是
         进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。（渲染侧的窗口与摘要
@@ -165,10 +183,15 @@ class ContextTest(unittest.TestCase):
 
     def test_a_tail_nudge_stays_in_the_window(self):
         """尾巴上的 nudge 跟着最后一条 assistant 走 —— 窗口切的是"轮"，
-        不是"条数"，收尾那句话不会被单独掐掉。"""
+        不是"条数"，收尾那句话不会被单独掐掉。
+
+        收尾前再 `hear` 一条：尾巴上放着 `tool` 产出时 nudge 根本不落（第 111 步），
+        而这条用例要的是"落了之后还在不在窗口里"。
+        """
         for i in (1, 2, 3):
             self.ctx.hear(f"回复{i}")
             self.ctx.feed(f"结果{i}", "")
+        self.ctx.hear("回复4")
         self.ctx.nudge()
         self.assertEqual(self.messages()[-1], {"role": "user", "content": "请继续。"})
 
