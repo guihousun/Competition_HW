@@ -70,23 +70,26 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
     def test_every_round_logs_the_summary_then_the_actions(self):
-        """每回合的复盘日志：先局面（摘要）、再动作、再判题器的回执（顺序是重点）；
+        """每回合的复盘日志：先请求原文、再局面（摘要）、再动作、再判题器的回执（顺序是重点）；
         局面 = 摘要单条（顺带钉住"图例与整张地图确实不在日志里"）。
 
         `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那几条。样例自带一条假
         错误与两条假未通过（`CLAUDE.md` 已声明别当真实信号读），但记录条数是真实断言：
-        回执那两条各自"有事才吭声"，所以样例这种局面 5 条、干净回合 3 条（下条用例）。
+        回执那两条各自"有事才吭声"，所以样例这种局面 6 条、干净回合 4 条（下条用例）。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         # "没任务 + 有官方消息"会发新闻查价 prompt —— 本类测的是日志版面，样例自带的
         # worldNews 清掉，"没有新闻的回合"才是这几条的本意。
         raw["worldNews"] = {"officialNews": ""}
+        text = json.dumps(raw)  # 默认 `ensure_ascii=True` —— 逐字比对的是发出去的那一串
         with self.assertLogs("coregeek.app", level="INFO") as caught:
-            self._handle(json.dumps(raw).encode("utf-8"))
-        # 五条：banner + 摘要 + 动作 + 报错 + 回执。banner 是 `handle` 打的、不归 `_log` 管
-        # —— 数记录数时最容易漏的就是它。
-        banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
+            self._handle(text.encode("utf-8"))
+        # 六条：banner + 请求 + 摘要 + 动作 + 报错 + 回执。banner 与请求是 `handle` 打的、
+        # 不归 `_log` 管 —— 数记录数时最容易漏的就是它们。
+        banner, req, head, acts, errors, failed = (r.getMessage() for r in caught.records)
         self.assertEqual(banner, f"{'#' * 35}第85回合{'#' * 35}")
+        # 请求那条打的正是判题器推来的原文（逐字）：摘要单条看不见地图与未解析的字段
+        self.assertEqual(req, f"【本回合请求】：{text}")
         lines = head.splitlines()
         # 摘要 4 块（各占一行）+ 摘要头前面留给 `logging` 前缀的那个空行
         self.assertEqual(len(lines), 1 + 4)
@@ -122,9 +125,13 @@ class HandleTest(unittest.TestCase):
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertEqual(
-            len(caught.records), 3, [r.getMessage()[:40] for r in caught.records]
+            len(caught.records), 4, [r.getMessage()[:40] for r in caught.records]
         )
         self.assertTrue(caught.records[0].getMessage().startswith("###"), "banner 该在最前")
+        self.assertTrue(
+            caught.records[1].getMessage().startswith("【本回合请求】："),
+            "请求紧随 banner（它是这一回合的输入，排在复盘之前）",
+        )
 
     def test_the_receipt_line_lists_every_entity_sorted(self):
         """回执那一行列全部实体、按 id 升序（含 `True` 的那些）。
@@ -545,10 +552,38 @@ class HandleTest(unittest.TestCase):
         self.assertIn(f"（共 {LOG_TEXT_MAX + 10} 字）", sandbox[0])
         self.assertNotIn("y" * (LOG_TEXT_MAX + 1), sandbox[0], "截掉的是尾巴，不是头")
 
+    def test_the_request_line_is_the_judge_text_verbatim(self):
+        """【本回合请求】打的是判题器推来的**原文**（逐字，不做解析后的重排）：本地调试
+        要看"这回合它到底给了什么"，摘要单条（`Turn.summary`）看不见地图与未解析的字段
+        （`worldNews` / `zones` / 名册原文），这正是加这一行的理由。
+
+        上界 `LOG_TEXT_MAX` 兜底（与沙盒行、SOP 那条同一条规则）：超长截断且留痕 ——
+        不留痕的静默截断会让"这回合的 payload 到底多长"无从查起。
+        """
+        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
+        raw["roundNo"] = 1
+        raw["worldNews"] = {"officialNews": "铁矿产区塌方，明日停工"}
+        text = json.dumps(raw, ensure_ascii=False)
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(text.encode("utf-8"))
+        (line,) = [r.getMessage() for r in caught.records if r.getMessage().startswith("【本回合请求】：")]
+        self.assertEqual(line, f"【本回合请求】：{text}")
+        self.assertIn("铁矿产区塌方", line, "未解析字段也要在（摘要里没有它）")
+        # 超大 payload ⇒ 截断 + 留痕，绝不静默
+        raw["officialNews"] = ""
+        huge = json.dumps({**raw, "worldNews": {"officialNews": "字" * 50000}}, ensure_ascii=False)
+        with self.assertLogs("coregeek.app", level="INFO") as caught:
+            self._handle(huge.encode("utf-8"))
+        (line,) = [r.getMessage() for r in caught.records if r.getMessage().startswith("【本回合请求】：")]
+        self.assertIn("…（共", line, "截断必须留痕")
+
     def test_a_clean_round_stays_small(self):
         """硬约束 5 的结构性守卫：大字段基本不截之后，守得住的只有结构部分 —— 没有大字段
         的回合必须仍然小（摘要有自己的上界 `SUMMARY_MAX_ITEMS`、动作行最多几个角色、
         banner 一行）。它抓的是"又加进来一个每回合都打的大块"—— 那类膨胀几百字节起步。
+
+        【本回合请求】那一行**单算**（第 111 步）：它的体量由判题器推来的 payload 决定、
+        不是我们能收的（`LOG_TEXT_MAX` 兜底），所以守卫量的是"扣掉它之后"的那部分。
 
         `assertLogs` 必须收 root：SOP 那条走 `coregeek.agent.tools.sop`、任务行与沙盒行
         走 `coregeek.game.planner`，只盯 `coregeek.app` 它们就绕开本守卫。
@@ -559,8 +594,11 @@ class HandleTest(unittest.TestCase):
         raw["lastRoundRoleActionResults"] = {}
         with self.assertLogs(level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        total = sum(len(r.getMessage().encode("utf-8")) for r in caught.records)
-        self.assertLess(total, 1500, f"干净回合 {total} 字节 —— 结构部分不该这么大")
+        sizes = {r.getMessage()[:20]: len(r.getMessage().encode("utf-8")) for r in caught.records}
+        request = sum(n for h, n in sizes.items() if h.startswith("【本回合请求】"))
+        total = sum(sizes.values()) - request
+        self.assertGreater(request, 0, "请求那行必须真的打出来，否则本守卫在守一个空集合")
+        self.assertLess(total, 1500, f"干净回合除请求外 {total} 字节 —— 结构部分不该这么大")
 
 
 if __name__ == "__main__":

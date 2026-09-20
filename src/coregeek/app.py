@@ -13,7 +13,7 @@ from typing import Any
 from .game import planner
 from .game.world import Turn
 from .protocol import actions, model
-from .utils import _clip
+from .utils import LOG_TEXT_MAX, _clip
 from .web import server
 
 LOGGER = logging.getLogger(__name__)
@@ -34,11 +34,17 @@ def run(port: int) -> None:
 def handle(raw: bytes) -> bytes:
     """处理一个回合。不抛异常，返回的字节永远是合法响应。"""
     try:
-        payload = json.loads(raw.decode("utf-8")) if raw else {}
+        text = raw.decode("utf-8") if raw else ""
+        payload = json.loads(text) if text else {}
         turn = model.load(payload)
         if turn is None:
             raise ValueError("payload 不是 JSON 对象")
         LOGGER.info(f"###################################第{turn.round_no}回合###################################")
+        # 判题器推来的原文逐字进日志：摘要单条看不见地图与未解析的字段（`worldNews` /
+        # `zones` / 名册原文），本地调试只有这一行能回答"这回合判题器到底给了什么"。
+        # 原文里的换行**原样保留**（不像 SOP 那条转义成 `\n`）：要的就是"从日志里整段
+        # 拷出来能直接 `json.loads`"。判题器发来的若是带缩进的那份，一条记录就跨多行。
+        LOGGER.info("【本回合请求】：%s", _clip(text, LOG_TEXT_MAX))
         # 处理任务逻辑
         prompt, execute = planner.task_channel(turn)
         # 处理动作逻辑
@@ -60,23 +66,28 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     """本回合的复盘日志：局面 → 动作 → 判题器回执 → 提问，顺序固定。
 
     任务行与沙盒行不在本函数里（由 `planner.task_channel` 自己打，那两样字段只在它的作用域
-    里）⇒ 实际排列是 banner → 任务 → 沙盒 → 局面 → 动作 → 回执 → 提问。记录数不固定，每条
-    "有事才吭声"：局面与动作每回合各一条，报错 / 回执 / 提问只在有内容时出现（干净的白天回合
-    本函数打 2 条；`handle` 那条 banner 不受本函数管辖，数总记录数时单独 +1）。摘要那条以
-    `\\n` 开头 —— 那个空行是留给 `logging` 时间戳前缀的。局面 = 摘要单条，整张地图不在日志里
-    （`render()` / `LEGEND` 只剩用例在用）。写在 `try` 里：日志代码也是代码，逃到 `do_POST`
-    就没人接异常、连接直接断掉，判题器那边正是"响应超时"（红线第一条）。
+    里）⇒ 实际排列是 banner → **请求** → 任务 → 沙盒 → 局面 → 动作 → 回执 → 提问。记录数
+    不固定，每条"有事才吭声"：局面与动作每回合各一条，报错 / 回执 / 提问只在有内容时出现
+    （干净的白天回合本函数打 2 条；`handle` 那两条 banner 与【本回合请求】不受本函数管辖，
+    数总记录数时单独 +2）。摘要那条以 `\\n` 开头 —— 那个空行是留给 `logging` 时间戳前缀的。
+    局面 = 摘要单条，整张地图不在日志里（`render()` / `LEGEND` 只剩用例在用）。写在 `try` 里：
+    日志代码也是代码，逃到 `do_POST` 就没人接异常、连接直接断掉，判题器那边正是"响应超时"
+    （红线第一条）。
 
     两个上限 `LOG_TEXT_MAX`=40000、`LOG_PROMPT_MAX`=100000 ⇒ 基本不截。当前体量（**这里是
-    权威副本**，别凭记忆写；只有带 prompt 的那两行会变）：
+    权威副本**，别凭记忆写；只有带 prompt 的那两行会变，四格都是 `logs/measure_bytes.py`
+    实测的"第 111 步前 → 后"）：
 
     | 局面 | 行 | 字节 |
     |---|---|---|
-    | 干净回合（没回执、没任务） | 7 | 590 |
-    | 有回执（判题器报错 + 回执名单） | 9 | 733 |
-    | 提问那一轮（题目 400 字） | 9 | 8914 |
-    | 顶格：题目/回复/沙盒各 40000 字（`LOG_TEXT_MAX`） | 10 | ≈606562 |
+    | 干净回合（没回执、没任务） | 8 → 9 | 1051 → 6266 |
+    | 有回执（判题器报错 + 回执名单） | 10 → 11 | 1199 → 6493 |
+    | 提问那一轮（题目 400 字） | 10 → 11 | 20912 → 27339 |
+    | 顶格：题目/回复/沙盒各 40000 字（`LOG_TEXT_MAX`） | 11 → 12 | 379126 → 492050 |
 
+    增量就是 `handle` 那条【本回合请求】：干净回合约 **+5215 字节**（样例紧凑重序列化后
+    5164 字节 —— `request.txt` 那份 12032 字节是带缩进的，判题器发来的形状未知，缩进越多
+    这一行越大），顶格那格 **+112924**（payload 被 `LOG_TEXT_MAX` 截到 40000 字 ⇒ 有上界）。
     命令轮另有一条 prompt 行（压缩请求）：随原始历史线性变大、`LOG_PROMPT_MAX` 兜底截断留痕，
     上表四格没有这一行（"提问那轮"量的是任务首问）。前两格的 ±几字节随 `request.txt` 漂移，
     只有量级有意义。
