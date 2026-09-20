@@ -1,0 +1,24 @@
+{
+  "source": "company_issue_comment",
+  "issue": 36,
+  "reported_at": "2026-09-20",
+  "package_sha256": "388582d9649c1253c0484414502562aae57b725f9b3c40b7e9822a2474fdac55",
+  "source_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+  "manifest_source_digest": "28fbbd4945c12e06f5bbbb45a63a95a5d78cdfd3fa7981de18be3fb6527371c1",
+  "files_scanned": 5319,
+  "matches": 2665,
+  "categories_by_log_file": {
+    "EXPECTED_VERIFIED_SOURCE": 2036,
+    "OTHER_REPORTED_SOURCE": 617,
+    "UNKNOWN_NO_IDENTITY": 2613,
+    "UNKNOWN_INCOMPLETE": 53
+  },
+  "our_team_id": 4474,
+  "our_team_verified_half_matches": 2036,
+  "first_match": {"battle": "pk-615658", "time": "2026-09-17T03:11:18", "side": "teamB"},
+  "last_match": {"battle": "pk-666405", "time": "2026-09-20T09:59:35", "side": "teamB"},
+  "deployment_confirmed_from": "company_report",
+  "raw_logs_available_locally": false,
+  "official_pass_inferred": false,
+  "strategy_quality_inferred": false
+}
