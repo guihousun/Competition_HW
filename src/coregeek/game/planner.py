@@ -269,6 +269,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 上回合若是探查命令，回执归探查收走：任务线当它没发生（见 `agent.cmd_explore`）。
     # 必须压在早返回之前 —— 任务在回执回来前就结束了的话，不认领它就粘住 `_waiting`。
     result = cmd_explore.observe(turn.cmd_result)
+    # 认任务边界：任务文本变了（含"任务结束"那个空轮）⇒ 这趟沙箱存档重开（同一个位置纪律）
+    cmd_explore.new_task(turn.phase_task)
     # 打印CMD执行结果日志（探查自己那份不在这儿再抄一遍：正文已在 `_files` 里、
     # 取回时那几条 `【沙盒探查】` 已留痕，这里再抄一次是把同一段字符串写第二遍 stdout）
     if result:

@@ -41,14 +41,15 @@ class CmdExploreStateTest(unittest.TestCase):
         """空槽的第一件事：一条 python 命令，自己走目录、自己按预算取、自己打标记。
 
         命令里**带** task 过滤（口径进了脚本，见 `_NEEDLE`）：清单与正文同一趟拿到，比
-        "先列清单、再按批取"少一个回合。末尾那个参数是跳过几份（第一趟 = 0）。"""
+        "先列清单、再按批取"少一个回合。第一趟的排除表是空的（什么都没读过）。"""
         cmd = cmd_explore.next_command()
-        self.assertEqual(cmd, cmd_explore._command(0))
+        self.assertEqual(cmd, cmd_explore._command())
         self.assertTrue(cmd.startswith("python3 -c '"), cmd)
-        self.assertTrue(cmd.endswith("' 0"), cmd)
+        self.assertTrue(cmd.endswith("'"), cmd)
         self.assertIn("task", cmd)
         self.assertIn(str(cmd_explore.FETCH_MAX), cmd)
         self.assertIn("@@@MORE", cmd)
+        self.assertIn("known=set([])", cmd, "还没读过任何一份 ⇒ 排除表空着")
 
     def test_it_never_sends_a_second_command_before_the_result(self):
         """发一条就等一条：回执没回来之前不再发 —— 再发一条会把它挤掉。"""
@@ -85,61 +86,103 @@ class CmdExploreStateTest(unittest.TestCase):
         cmd_explore.observe(receipt((ONE, body), more=0))
         self.assertEqual(cmd_explore._files[ONE], body)
 
-    def test_a_second_trip_skips_what_is_already_fetched(self):
-        """还有剩的 ⇒ 下一回合接着取，命令里的跳过数 = 本趟取回几份。"""
+    def test_the_next_trip_carries_what_is_already_read(self):
+        """还有剩的 ⇒ 下一回合接着取，**已读的那几份进排除表**（用户口径"排除掉之前读取过的"）。
+
+        `_files` 就是游标：不传"跳过几份"，而是把读过的整份列给脚本，由它自己剔掉 ——
+        那要求两次沙盒的文件表同序，而"有哪些文件"本来就可能不同。
+        """
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), more=1))
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(1))
+        cmd = cmd_explore.next_command()
+        self.assertEqual(cmd, cmd_explore._command())
+        self.assertIn(f'"{ONE}"', cmd, "读过的那份进了排除表")
+        self.assertNotIn(TWO, cmd, "没读过的当然不在排除表里")
         cmd_explore.observe(receipt((TWO, "二"), more=0))
         self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
 
     def test_a_truncated_receipt_keeps_going(self):
-        """尾标记被截断吃掉 ⇒ 本趟有正文就保守接着取（下一趟从取回的那几份之后开始）。"""
+        """尾标记被截断吃掉 ⇒ 本趟有正文就保守接着取（残文留着，下一趟被排除表挡掉）。"""
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一[TRUNCATED]"), more=None))
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(1))
+        cmd = cmd_explore.next_command()
+        self.assertEqual(cmd, cmd_explore._command())
+        self.assertIn(f'"{ONE}"', cmd)
 
     def test_a_receipt_without_a_single_mark_tries_the_next_round(self):
-        """一个标记都切不出来（沙盒没跑起来 / 超时 / 真的没有含 task 的 md）⇒ 下一回合从头再来。
+        """命令没跑出结果（超时 / `python3` 不在）⇒ 下一回合接着试。
 
-        不空转的保证换了个形态：`_skip` 归零 + 一次只发一条，代价是一回合一条沙盒命令
-        （任务期间不限量、不计异常），换来的是"沙盒换了文件能被发现"。"""
+        ⚠️ 这一支**不置 `_done`**：它兜着"探查线整个没工作"（一次都没实测过），重试的代价只是
+        那个本来就空着的槽。判据 = **没拿到末尾那个剩余数**（拿到且为 0 才叫收工）。
+        """
         cmd_explore.next_command()
         cmd_explore.observe("[TIMEOUT]")
         self.assertEqual(cmd_explore.known_paths(), [])
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command())
 
-    def test_every_round_walks_the_sandbox_again(self):
-        """走完一遍不停：剩余数为 0 ⇒ `_skip` 归零、下一回合从头上再走一趟。
+    def test_a_finished_walk_stops_until_the_next_task(self):
+        """走完一遍就停：剩余数为 0 ⇒ `_done` 置位，空槽一条都不再发；下道题才重开一趟。
 
-        判题器的沙盒**每道任务独立**（用户口径）：同一个路径上的文件一致，但新沙盒里有哪些
-        文件可能不同 ⇒ 只有每回合重走才能现取到新的那几份。"""
+        一趟存档 = 一道题（第 113 步）：这道题的沙盒已经摸过一遍，再走是白跑（同一个沙盒的
+        内容不会变）。沙盒**每道任务独立**这件事由"换任务重开"接住 —— 见下条。"""
+        cmd_explore.new_task("甲题")
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), (TWO, "二"), more=0))
         self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
-        cmd_explore.observe(receipt((ONE, "一"), (TWO, "二"), more=0))
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0), "还能接着走")
+        self.assertEqual(cmd_explore.next_command(), "", "这道题摸完了 ⇒ 空槽不再占")
+        self.assertEqual(cmd_explore.next_command(), "")
+        cmd_explore.new_task("乙题")  # 换题 ⇒ 重开一趟
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command())
 
-    def test_a_second_walk_keeps_what_it_found_and_stays_quiet_in_the_log(self):
-        """重走一趟：正文原样留着（只累积不清），没变的那几份**不再进日志**。
+    def test_the_same_task_never_restarts_the_walk(self):
+        """同一道题每回合都调 `new_task` ⇒ 一次都不重开：这趟照走，排除表照旧。
 
-        日志那条不是省字节的洁癖：每回合都重走，逐趟重抄 N 份正文会把 stdout 管道顶掉
-        （见 `app._log` 那条账）。变化的那一份照旧进日志。"""
+        `task_channel` 每回合都调它，所以"没换题"必须是**幂等**的 —— 不然每回合都重开一趟。
+        """
+        cmd_explore.new_task("甲题")
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt((ONE, "一"), more=5))  # 还剩 5 份 ⇒ 这趟没走完
+        for _ in range(3):  # 真实调用方每回合都调一次
+            cmd_explore.new_task("甲题")
+        cmd = cmd_explore.next_command()
+        self.assertEqual(cmd, cmd_explore._command(), "没换题 ⇒ 接着取")
+        self.assertIn(f'"{ONE}"', cmd, "读过的那份照旧被排除")
+
+    def test_an_empty_round_makes_the_same_text_a_new_task(self):
+        """任务结束那一轮（空文本）也记 ⇒ 同一道题冷却后同文再现算**新任务**、重开一趟。
+
+        沙盒每道任务独立：文本相同不代表是同一只沙盒。漏掉那个空轮就分不出来（`_done` 会一直
+        粘着，新沙盒的文件永远发现不了）。
+        """
+        cmd_explore.new_task("甲题")
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt((ONE, "一"), more=0))
+        self.assertEqual(cmd_explore.next_command(), "", "先确认这趟真的收工了")
+        cmd_explore.new_task("")  # 任务结束那一轮
+        cmd_explore.new_task("甲题")  # 冷却后同文再现
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command())
+
+    def test_a_new_task_walk_never_carries_what_is_already_read_again(self):
+        """换任务重开的那一趟把已读的整份列进排除表 —— 这是"省回合"的要害。
+
+        不是"少打几行日志"：60KB 预算不再被读过的那几份占掉，新沙盒里没读过的一趟就能取回来。
+        正文照旧留着（只累积不清）。真跑一遍脚本的对账见 `test_the_generated_script_really_runs`。
+        """
+        cmd_explore.new_task("甲题")
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), (TWO, "二")))
-        with self.assertLogs("coregeek.agent.cmd_explore", level="INFO") as logs:
-            cmd_explore.next_command()
-            cmd_explore.observe(receipt((ONE, "一"), (TWO, "改过")))
-        self.assertEqual(cmd_explore._files[ONE], "一")
-        self.assertEqual(cmd_explore._files[TWO], "改过")
-        self.assertFalse(any(ONE in line for line in logs.output), logs.output)
-        self.assertTrue(any(TWO in line and "改过" in line for line in logs.output), logs.output)
+        cmd_explore.new_task("乙题")
+        cmd = cmd_explore.next_command()
+        self.assertIn(f'"{ONE}"', cmd)
+        self.assertIn(f'"{TWO}"', cmd)
+        self.assertEqual(cmd_explore._files, {ONE: "一", TWO: "二"}, "换题重开不清正文")
 
     def test_a_file_that_only_the_new_sandbox_has_joins_the_inventory(self):
-        """新沙盒里多出来的那几份下一趟就进清单，旧的照旧留着（跨任务的并集）。"""
+        """新沙盒里多出来的那份，换任务重走时就进清单，旧的照旧留着（跨任务的并集）。"""
+        cmd_explore.new_task("甲题")
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一")))
+        cmd_explore.new_task("乙题")
         cmd_explore.next_command()
         cmd_explore.observe(receipt((TWO, "二")))
         self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
@@ -149,7 +192,7 @@ class CmdExploreStateTest(unittest.TestCase):
         cmd_explore.mute()
         self.assertEqual(cmd_explore.next_command(), "")
         cmd_explore.reset()
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command())
 
     def test_a_bare_file_name_reaches_the_same_body(self):
         """取值表的第二种写法：只写文件名（最后一段）与整条全路径落到同一份正文。
@@ -180,15 +223,18 @@ class CmdExploreStateTest(unittest.TestCase):
         self.assertEqual(cmd_explore.body_of("/home/task/a.md"), "乙")
 
     def test_a_reset_forgets_the_paths_too(self):
-        """`reset` 回到"一次都没探查过"：正文、跳过数、静音一起清。
+        """`reset` 回到"一次都没探查过"：正文、跳过数、任务身份、收工标志、静音一起清。
 
-        它现在**只为用例隔离存在**（生产代码不调：探明的成果整场累积、任务换了也不清）。
+        它**只为用例隔离存在**（生产代码不调：探明的成果整场累积、任务换了也不清）。任务身份
+        也清掉是必须的 —— 用例里连着两道题文本相同时，不清就会串味成"没换题"。
         """
+        cmd_explore.new_task("甲题")
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), more=3))
         cmd_explore.reset()
         self.assertEqual(cmd_explore.known_paths(), [])
-        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
+        cmd_explore.new_task("甲题")  # 清过身份 ⇒ 同文也算新任务、从头上走
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command())
 
     def test_the_body_reaches_the_log_with_its_path(self):
         """正文进日志（带路径）：沙盒里到底有什么，只有这一行能回答。"""
@@ -216,8 +262,9 @@ class CmdExploreStateTest(unittest.TestCase):
     def test_the_generated_script_really_runs(self):
         """把生成的脚本拿去**真跑一遍**：临时目录顶上沙盒根、本机 python 顶上 `python3`。
 
-        这是这条线上唯一能本地验证的部分 —— 标记、正文、`skip`、末尾剩余数四样都在这里对账，
-        回执还回灌给 `observe` 走一遍真解析（脚本与解析器对不上就会在这里露出来）。"""
+        这是这条线上唯一能本地验证的部分 —— 标记、正文、排除表、末尾剩余数四样都在这里对账，
+        回执还回灌给 `observe` 走一遍真解析（脚本与解析器对不上就会在这里露出来）。
+        """
         root = Path(self._root.name)
         (root / "a" / "task").mkdir(parents=True)
         (root / "b").mkdir()
@@ -227,7 +274,7 @@ class CmdExploreStateTest(unittest.TestCase):
         # 沙盒根是 `/`（没有反斜杠）；本地这棵树得自己说一声，否则 Windows 路径会踩到脚本里的转义
         self._set_root(str(root).replace("\\", "/"))
 
-        first = self._run_script(0)
+        first = self._run_script()
         self.assertIn("@@@MORE 0@@@", first)
         self.assertIn("# 标题\n正文一\n", first)
         self.assertIn("正文二\n", first)
@@ -239,19 +286,26 @@ class CmdExploreStateTest(unittest.TestCase):
         self.assertEqual(len(cmd_explore.known_paths()), 2)
         self.assertTrue(all(p.endswith(("one.md", "two.md")) for p in cmd_explore.known_paths()))
 
-        second = self._run_script(1)  # 跳过第一份：只剩第二份，且已经取完了
-        self.assertIn("正文二\n", second)
-        self.assertNotIn("正文一", second)
-        self.assertIn("@@@MORE 0@@@", second)
+        # 排除表的要害：库里的两份都被剔掉 ⇒ 这一趟一份正文都不搬（`MORE 0` 只说明没剩的了）
+        again = self._run_script()
+        self.assertNotIn("@@@FILE", again)
+        self.assertIn("@@@MORE 0@@@", again)
+
+        # 新沙盒多一份 ⇒ 排除表只让它一个人出得来，读过的那两份一个字都不再传
+        (root / "a" / "task" / "three.md").write_text("正文三\n", encoding="utf-8")
+        fresh = self._run_script()
+        self.assertIn("正文三\n", fresh)
+        self.assertNotIn("正文一", fresh)
+        self.assertNotIn("正文二", fresh)
 
     def _set_root(self, root: str) -> None:
         old = cmd_explore._ROOT
         cmd_explore._ROOT = root
         self.addCleanup(setattr, cmd_explore, "_ROOT", old)
 
-    def _run_script(self, skip: int) -> str:
+    def _run_script(self) -> str:
         return subprocess.run(
-            [sys.executable, "-c", cmd_explore._script(), str(skip)],
+            [sys.executable, "-c", cmd_explore._script()],
             capture_output=True, text=True, check=True,
         ).stdout
 

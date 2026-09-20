@@ -562,7 +562,7 @@ class TaskChannelTest(unittest.TestCase):
         cmd_explore.reset()
         prompt, execute = task_channel(self._turn(self.TASK))
         self.assertIn(self.TASK, prompt)
-        self.assertEqual(execute, cmd_explore._command(0))
+        self.assertEqual(execute, cmd_explore._command())
 
     def test_an_unusable_call_keeps_the_slot_from_the_probe(self):
         """LLM 点名调了 `executeCmd` 却发不出命令（参数没给全 / 值是空白）⇒ 槽空着也不给探查占。
@@ -589,7 +589,7 @@ class TaskChannelTest(unittest.TestCase):
                 "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>",
             )
         )
-        self.assertEqual(execute, cmd_explore._command(0), "形状没写对 ⇒ 取不到名字，探查照发")
+        self.assertEqual(execute, cmd_explore._command(), "形状没写对 ⇒ 取不到名字，探查照发")
 
     def test_the_probed_paths_reach_the_next_prompt(self):
         """探查的**产出**从下一轮起现挂在 `readSandboxFile` 的描述里 —— 命令槽那条边只出命令，
@@ -610,22 +610,23 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn("文件名 rescue.md", prompt, "两种写法都给到 —— 题目里给的往往就是文件名")
 
     def test_the_inventory_stays_and_the_new_task_walks_the_sandbox_again(self):
-        """两半都在（第 106 步，用户口径）：**每回合都重走一趟**（沙盒每道任务独立、里面有哪些
-        文件可能不同），**探明的成果只累积不清**。
+        """一趟存档 = 一道题（第 113 步，用户口径"k 个任务启动 k 次"）：**走完就停**，
+        换任务（含"任务结束"那个空轮）**重开一趟**；**探明的成果只累积不清**。
 
-        所以换任务后同时成立：上一道题探到的路径照旧挂在工具描述里（同一个路径上的文件一致），
-        命令槽也照旧发出重走沙盒那条命令 —— 少任何一半都会漏：只留清单 = 新沙盒的文件永远发现
-        不了；只重走不留 = 每道题都得从零再摸一遍。
+        三件事缺一不可：只留清单不重走 = 新沙盒的文件永远发现不了；只重走不留 = 每道题都得从零
+        再摸一遍；不停 = 同一个沙盒被反复摸（白跑，虽然槽本来是空的）。
         """
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))
         prompt, _ = task_channel(self._turn(self.TASK, cmd_result=PROBE_RESULT))
         self.assertIn("- /opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
+        _, execute = task_channel(self._turn(self.TASK))
+        self.assertEqual(execute, "", "这道题的沙盒摸完了 ⇒ 空槽不再占（`MORE 0` ⇒ `_done`）")
         task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
         self.assertEqual(cmd_explore.known_paths(), ["/opt/task/rescue.md"], "探明的成果留着")
         again, execute = task_channel(self._turn(self.TASK))
         self.assertIn("- /opt/task/rescue.md", again, "上个任务的路径照旧带进新任务")
-        self.assertEqual(execute, cmd_explore._command(0), "新任务从头上再走一趟沙盒")
+        self.assertEqual(execute, cmd_explore._command(), "新任务从头上再走一趟沙盒")
 
     def test_no_task_means_no_probe(self):
         """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""
