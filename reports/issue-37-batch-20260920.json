@@ -1,0 +1,19 @@
+{
+  "issue": 37,
+  "source_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+  "source": "company_issue_report",
+  "battles": 8,
+  "wins": 4,
+  "losses": 4,
+  "point_deltas": [374, -1621, 455, -742, 89, -457, 43, -101],
+  "our_error_code_2_value_mismatch_battles": ["pk-668435", "pk-668891"],
+  "our_error_code_2_events": 4,
+  "our_real_401": 0,
+  "our_real_timeout": 0,
+  "crlf": "present; exact file/command not supplied",
+  "official_error_code_2": "answer incorrect or incomplete (接口文档v1.0 §1.7)",
+  "value_mismatch_granular_mapping": "unknown",
+  "opponent_provider_outage": "unconfirmed",
+  "official_pass_inferred": false,
+  "implementation_dispatched": false
+}
