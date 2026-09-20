@@ -1,0 +1,10 @@
+{
+  "package_sha256": "388582d9649c1253c0484414502562aae57b725f9b3c40b7e9822a2474fdac55",
+  "manifest_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+  "manifest_source_digest": "28fbbd4945c12e06f5bbbb45a63a95a5d78cdfd3fa7981de18be3fb6527371c1",
+  "python": "3.11.10 (main, Oct 16 2024, 00:15:32) [MSC v.1929 64 bit (AMD64)]",
+  "old_delivery_regex_matches": false,
+  "source_sha_matches": true,
+  "scope": "Actual submitted archive startup only; not evidence of platform deployment",
+  "startup_log_sha256": "e0de5831a39502ca2c3edd8bceb2c04f4da422645b1119ce4871a642d07b3836"
+}

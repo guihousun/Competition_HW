@@ -1,0 +1,30 @@
+{
+  "schema": "competition-hw-battle-identity/1",
+  "expected_source_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+  "expected_manifest_source_digest": "28fbbd4945c12e06f5bbbb45a63a95a5d78cdfd3fa7981de18be3fb6527371c1",
+  "manifest_sha256": "e5b68a9ce49e94478aed4b934ddc7a87cdeea159f4ff285eb6b1b91afe414ec5",
+  "count_unit": "log_file",
+  "team_scope": "not_resolved",
+  "scope": "Reported source identity, not archive byte identity, platform PASS, or win/loss",
+  "files_scanned": 1,
+  "counts": {
+    "EXPECTED_VERIFIED_SOURCE": 1
+  },
+  "files": [
+    {
+      "file": ".workflow\\events\\evt-a11e92f9b98518cd\\startup.log",
+      "classification": "EXPECTED_VERIFIED_SOURCE",
+      "identities": [
+        {
+          "line": 2,
+          "source_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+          "manifest_state": "verified",
+          "manifest_source_digest": "28fbbd4945c12e06f5bbbb45a63a95a5d78cdfd3fa7981de18be3fb6527371c1",
+          "verified_expected": true
+        }
+      ],
+      "invalid_identity_lines": 0,
+      "read_error": null
+    }
+  ]
+}
