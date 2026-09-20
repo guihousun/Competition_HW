@@ -20,16 +20,25 @@ from coregeek.agent.tools import sop  # noqa: E402
 #: system 的段头，按 `prompt.gen_system_prompt` 那份列表的顺序 —— 段名只在这里写一次，
 #: 切段一律走 `_section`。
 #: 段头改名/换序时改这一处，用例不会退化成 IndexError。
+#: 末段（COT 触发语）**没有段头** ⇒ 不在这张表里，切最后一段时它会跟着前一段一起出来。
 SECTIONS = (
     "# 【背景】",
     "# 【ROLE定位】",
-    "# 【每回合流程】",
+    "# 【工作原则】",
     "# 【工具描述】",
-    "# 【沉淀规则】",
     "# 【沉淀的SOP】",
     "# 【输出约定】",
     "# 【输出示例】",
 )
+
+
+def _sop_tool_block(system: str) -> str:
+    """`SOP2Prompt` 那个工具块的正文。
+
+    沉淀的全部细则（什么值得存、怎么泛化、去重与更新、以实测为准）在这里 —— 第 107 步起
+    不再单独占 system 的一段（旧【沉淀规则】段随用户重写的 prompt 删除）。
+    """
+    return _section(system, "# 【工具描述】").split("## ToolName - SOP2Prompt", 1)[1]
 
 
 def _section(system: str, header: str) -> str:
@@ -67,7 +76,7 @@ class ChatPromptTest(unittest.TestCase):
             self.assertNotIn(leftover, prompt)
 
     def test_the_sections_appear_once_each_and_in_the_declared_order(self):
-        """八段按声明的顺序出现、每段头只出现一次。
+        """带段头的七段按声明的顺序出现、每段头只出现一次（末段的 COT 触发语没有段头）。
 
         段序就是四层的落地（决策 → 工具 → 知识 → 输出）；「只一次」是"同一条规则只写
         一处"的机械保证 —— 重复的规则会稀释注意力，而这件事在实盘上测不出来。
@@ -84,45 +93,43 @@ class ChatPromptTest(unittest.TestCase):
         """整份 system 的字数有上限 —— 它**每回合都发**。
 
         守的是"措辞只增不减"的漂移：每次加一句话都看不出什么，几十次之后 prompt 就
-        被稀释得没法看了。阈值是拍的：重排后干净 system 实测 5821 字（重排前 5574），
-        上浮两成。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
-        基线数字会漂，量的时候看是**哪一档**：工具块随沙箱清单浮动（`Agent.prompt_tools`
-        —— 没探明时 `readSandboxFile` 整块不列）。**没探明那一档**：第 100 / 101 / 102 /
-        103 / 104 / 105 步分别实测 5821 / 5569 / 5808 / 6265 / 6265 / 6265；探明一条路径再多
-        349（第 104 步 275 ⇒ 第 105 步 349：清单每行多给一个文件名 + 描述教两种写法），
-        此后**每多探明一条路径 +32**。余量从 ~11% 收到 ~5.5%（6265 + 349 = 6614，阈值 7000）
-        —— 阈值是拍的，但这一档只剩 386 字：下一步再往里加东西得先删旧话。
+        被稀释得没法看了。阈值是拍的：顶格那一档实测 13052，上浮约 7%。
+        基线数字会漂，量的时候看是**哪一档**：用户重写 prompt 之后干净 system 实测
+        **7965**（第 100~105 步那一版是 5821 / 5569 / 5808 / 6265 / 6265 / 6265 —— 这次
+        的增量来自工具描述改成 [用途]/[成本]/[使用原则]/[边界] 的四段式、以及工具块恒列）；
+        沙箱清单每多探明一条路径 **+29**（第一条 +51，含清单头），满 SOP
+        （5 × `SOP_MAX`(1000)）再 +5087 ⇒ **顶格 13052**。要加内容先删同等量级的旧话，
+        或者改这个阈值并说明理由。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertLess(len(system), 7000)
+        self.assertLess(len(system), 14000)
 
     def test_every_tool_appears_in_the_prompt(self):
-        """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具都得在。
+        """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具**每轮都在**。
 
-        唯一会缺席的是 `readSandboxFile`，而且只在**沙盒里一份都没探明**的时候：它的 `path`
-        只有探明过的那几份是合法值 —— 清单空着时它一个合法参数都没有，列出来只会换来一次
-        "调用不成立"的空转。探明之后自动回来（`Agent.prompt_tools`，两向都钉）。
-        断言按**整份 prompt** 查这个名字（不只是工具块）：别处的描述里点它的名，等于给它留了
-        一条悬空指引 —— 隐藏就没意义了。
-        """
+        工具块恒在（第 107 步改的口径）：`readSandboxFile` 在清单空着时也只是**不挂清单那几行**，
+        块本身照列 —— 它自己的描述里点过别的工具的名（"已知文件用 readSandboxFile"），藏起来
+        就成了一条悬空指引；描述里也已经交代了清单为空时怎么办（改用 executeCmd 自己找）。
+        旧口径（一份都没探明就整块藏起来）随用户重写的 prompt 作废。
+        断言按**整份 prompt** 查这个名字（不只是工具块）。"""
         empty = self.agent.chat("题目")
         for name in self.agent._tools:
-            if name != "readSandboxFile":
-                self.assertIn(name, empty)
-        self.assertNotIn("readSandboxFile", empty)
+            self.assertIn(name, empty)
+        self.assertNotIn("/opt/task", empty, "还没探明 ⇒ 清单那几行不许凭空出现")
 
         cmd_explore._files["/opt/task/one.md"] = "正文"
         probed = self.agent.chat("题目")
         for name in self.agent._tools:
             self.assertIn(name, probed)
+        self.assertIn("- /opt/task/one.md", probed)
 
     def test_the_deposit_rules_cover_environment_knowledge(self):
-        """探索到的环境知识（接口描述等）也要沉淀成 SOP。
+        """探索到的环境知识（接口、参数、路径、返回值）也要沉淀成 SOP。
 
         会话窗口只留最近两轮、摘要是 best-effort ⇒ SOP 是跨回合唯一保证还在的记忆 ——
         不沉淀的发现过了窗口就丢。措辞就是产品，别改成同义词。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _section(system, "# 【沉淀规则】")
+        rules = _sop_tool_block(system)
         self.assertIn("环境知识", rules)
         self.assertIn("接口", rules)
         self.assertIn("SOP2Prompt", rules)
@@ -142,9 +149,9 @@ class ChatPromptTest(unittest.TestCase):
 
         那张清单就是这个 `path` 参数的合法取值表 —— 归到参数自己所在的那块是它唯一的家；
         与 SOP 段同一条现刷机制（`Agent.prompt_tools` 每轮跟 `self._sop` 一起进 system）：
-        探查是个异步的活儿，摸到的路径必须自己走进 prompt。还没探明 ⇒ 清单与工具块**一起**
-        缺席，不许写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"** —— 写出去就是让 LLM
-        干脆不去找那些文件。
+        探查是个异步的活儿，摸到的路径必须自己走进 prompt。还没探明 ⇒ **只不挂清单那几行**
+        （工具块照列，第 107 步），而且不许写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"**
+        —— 写出去就是让 LLM 干脆不去找那些文件。
 
         每一行两种写法都给到（第 105 步，用户口径"枚举值再把独立的文件名加上"）：题目里给的
         往往就是个裸文件名，只列全路径等于逼它自己拼目录 —— 实测的坑（第 101 步那条日志）。
@@ -211,7 +218,7 @@ class ChatPromptTest(unittest.TestCase):
         名字写死成这一次的目标，下次同类任务就撞不上它 —— SOP 等于白存，而这条错了
         本地一点异常都看不出来（存是存进去了，只是永远复用不到）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _section(system, "# 【沉淀规则】")
+        rules = _sop_tool_block(system)
         self.assertIn("一类问题", rules)
         self.assertIn("订去某地", rules)
 
@@ -220,19 +227,25 @@ class ChatPromptTest(unittest.TestCase):
 
         名字泛化只挡住一半，正文照样能把"这次的目标值、这次拿到的凭证"带进去 —— 条目是
         整场存活、跨任务复用的，下一次同类任务会照着一条过期的取值去做，**而它看不出
-        那条已经过期**（用户手改口径：接口定义/参数定义要收，本次的取值不收）。"""
+        那条已经过期**（口径：接口定义/参数定义要收，本次的取值不收）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _section(system, "# 【沉淀规则】")
-        self.assertIn("正文也必须是通用的", rules)
-        self.assertIn("不要夹带只对本次成立的东西", rules)
+        rules = _sop_tool_block(system)
+        self.assertIn("sop 正文也必须泛化", rules)
+        self.assertIn("当前任务的 token", rules)
+        self.assertIn("仅本次有效的参数值", rules)
 
     def test_the_deposit_rules_pin_the_timing(self):
-        """沉淀的时机 = 【沉淀的SOP】段里还没有这条经验 —— "值不值得"不再是门槛，
-        只要没沉淀过就存；存过的不要重复存（拖到完成任务才存，任务超时经验就丢了）。"""
+        """沉淀的时机 = 那四种情况（有新的可复用知识 / 还没沉淀过 / 需要修正旧条目 / 已确认）。
+
+        第 107 步口径**变回来了**：用户重写的 prompt 把"值不值得"这道门槛放回了
+        `SOP2Prompt` 的描述（"[什么时候使用]"+"判断标准"），旧口径「只要还没沉淀过就存、
+        值不值得不是门槛」作废 ⇒ 本用例改钉新措辞。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("还没出现在下面的【沉淀的SOP】段", system)
-        self.assertIn("已经沉淀过的不要重复存", system)
-        self.assertNotIn("当认为解题流程值得沉淀时", system, "旧措辞把判断权丢给'值不值得'")
+        rules = _sop_tool_block(system)
+        self.assertIn("该知识尚未存在于已有 SOP 中", rules)
+        self.assertIn("不重复创建", rules)
+        self.assertIn("使用相同 name 更新旧 SOP", rules)
+        # 沉淀与作答同轮的形状仍在（问答两侧各一处，两处都不许走）
         self.assertIn("当要沉淀且同回合要交答案时", system)
         self.assertNotIn("当完成任务且认为流程可沉淀时", system)
 
@@ -279,18 +292,18 @@ class ChatPromptTest(unittest.TestCase):
 
         裸文本（"答案是：3"、一段解释后跟个数字）在我们这一侧**会被当答案整段交上去**
         （`chat.answer_of` 第三级：原文即答案）⇒ 判题器按字段算通过率，多写的字直接扣分，
-        而本地一切自洽、只有在任务行里看得到交出去的那一段不对劲。措辞就是唯一的杠杆。
-        两句后果各自钉住：**没有标签** ⇒ 整段被交上去（所以标签必须有）；**写进标签里**
-        ⇒ 判题器只认标签里那一段（所以推演得留在外面）。
+        而本地一切自洽、只有在任务行里看得到交出去的那一段不对劲。措辞就是唯一的杠杆：
+        【输出约定】的"只能用 … 包起来、整条回复只写一个这个块"与【工作原则】第 5 条的
+        "其他提交方式均被禁止"是同一件事的两处落点（第 107 步，用户把原来那两句"后果"的
+        说明删了，杠杆换成禁令本身 —— 见 `code-task.md` 第 107 步）。
         `sop` 那条禁令紧挨着这条，必须写明它**只**管 `sop` 文本 —— 否则 LLM 把
         "不要出现这对标签"读成"作答也别用"，正是它不守格式的一个入口。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         output = _section(system, "# 【输出约定】")
-        self.assertIn("没带这个标签的回复会被**整段**当成答案交上去", output)
-        self.assertIn("标签里面只放任务书要的那个答案本身", output)
-        self.assertIn("判题器只认标签里那一段", output)
+        self.assertIn("提交答案时只能用 <answer>任务答案</answer> 包起来", output)
         self.assertIn("只写一个这个块", output)
+        self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
         self.assertIn("这条只管 `sop` 那段文本", output)
         # 示例里也得有一次**不沉淀、纯作答**的整条回复（第二轮那道题的 step4）——
         # 只讲规则不给形状，它照样有别的写法可选
@@ -299,18 +312,20 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("推演在外面、标签里只有答案本身", rerun)
 
     def test_the_background_frames_where_the_two_requirements_come_from(self):
-        """【背景】段只写处境，并由它推出"以实测为准"与"沉淀"两条要求的来处。
+        """【背景】段只写处境：远程沙盒、判题器下达任务并收答案、环境陌生而文档可能过时。
 
-        与【每回合流程】/【工具描述】的分工是**机制不重复**：回合怎么算、回执什么时候
-        回来、沙盒里能跑什么，各段写各的；背景段回答"我为什么在这儿、这活儿替谁干"。
+        与【工作原则】/【工具描述】的分工是**机制不重复**：回合怎么算、回执什么时候回来、
+        沙盒里能跑什么，各段写各的；背景段回答"我为什么在这儿、这活儿替谁干"。
+        第 107 步：旧版那句"两条要求就是这个处境来的"被用户删掉，"以实测为准"现在只在
+        【ROLE定位】与 `SOP2Prompt` 的描述里（用例按新落点钉）。
         它必须是整份 system 的第一段（`test_app` 的日志链路按段头断言）。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         background = _section(system, "# 【背景】")
         self.assertIn("远程沙盒", background)
         self.assertIn("判题器", background)
-        self.assertIn("以实测为准", background)
-        # 机制不在这里复述（成本模型在【每回合流程】、沙盒能力在【工具描述】）
+        self.assertIn("文档可能过时、也可能写错", background)
+        # 机制不在这里复述（成本模型与沙盒能力都在【工具描述】）
         self.assertNotIn("一个回合", background)
         self.assertNotIn("15 秒", background)
 
@@ -320,77 +335,86 @@ class ChatPromptTest(unittest.TestCase):
         推演是写给**下一回合的自己**看的：会话窗口只留最近两轮（`Context._WINDOW`），
         不写下来就只剩一个结果、没有"上一步为什么没成"。落点必须在块**前面** —— 写进
         `<answer>` 里会被当成答案的一部分交上去。
+        第 107 步起只剩两处落点：末段那句 COT 触发语，与【输出示例】里两遍示范都点破的
+        "推演写在块外面"。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        flow = _section(system, "# 【每回合流程】")
-        self.assertIn("先把自己的判断写出来", flow)
-        self.assertIn("前面", flow)
-        self.assertIn("会话只留最近两轮", flow)
+        self.assertIn("让我们一步步推理", system)
+        self.assertTrue(system.rstrip().endswith("正确无误。"), "COT 触发语收在整份 system 最后")
+        example = _section(system, "# 【输出示例】")
+        self.assertIn("推演写在块前面", example)
+        self.assertIn("推演在外面、标签里只有答案本身", example)
 
     def test_the_flow_numbered_steps_start_at_one(self):
-        """`# 【每回合流程】` 从第 1 步起编号、并附一段可以直接照抄的命令范式。
+        """【工作原则】把执行循环与任务理解都编了号，从 (1) / 1. 起。
 
-        任务信息里给的往往只是一个文件名 ⇒ 散文式提醒落到 LLM 手里就是"先 `find`、
-        下一回合再 `cat`"（两条命令 = 两回合 = 直接掉分）。范式把"找 + 读"写成一条，
-        挂在第 3 步（缺什么信息）的**成本模型**后面当例子（成本模型本身见
-        `test_the_flow_prices_a_round_and_packs_the_command`），措辞是拍的。"""
+        散文式提醒落到 LLM 手里会变成"先 `find`、下一回合再 `cat`"这类拆开的动作；编号
+        清单是它能逐条对照的东西。第 107 步起这两张清单都住在【工作原则】里（旧的
+        【每回合流程】整段删除），措辞是拍的。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        flow = _section(system, "# 【每回合流程】")
-        self.assertIn("1. 答案已经拿到了吗？", flow)
-        self.assertIn("f=$(find / -maxdepth 6 -name '*任务书*' -print -quit 2>/dev/null)", flow)
+        rules = _section(system, "# 【工作原则】")
+        self.assertIn("(1)理解任务", rules)
+        self.assertIn("(7)分析结果 / 错误", rules)
+        self.assertIn("1. 任务目标是什么", rules)
+        self.assertIn("2. 最终需要提交什么", rules)
 
     def test_the_flow_prices_a_round_and_packs_the_command(self):
         """回合是有价的、而且能被"一条胖命令"省下来 —— 措辞必须说透这件事。
 
         协议的成本是死的：一次沙盒往返之后，LLM 的下一步动作要等**两个回合**（发命令那轮
-        拿不到回执、回执要下一轮才进 prompt）。所以"一个参数一个参数地试"是最贵的做法：
-        5 个候选 = 10 个回合，而压进一条命令 = 2 个回合。判据是资源约束（"一次调用 = 一个
-        回合"），不是"遇到 A 就做 B"的流程 —— 后者才是过拟合。这条错了本地一点异常都没有，
-        只是分数低（日志上数 `executeCmd` 的条数才看得出来）。"""
+        拿不到回执、回执要下一轮才进 prompt）。所以"一个参数一个参数地试"是最贵的做法。
+        第 107 步起成本模型与"合并命令"的细则都搬进了 `executeCmd` 的工具描述（旧的
+        【每回合流程】整段删除）：一次调用 = 两个回合、能合就合、批量试、给每次尝试打标签；
+        本地纯计算那条退路（一个回合就回）在 `python_exec` 的描述里。
+        判据是资源约束，不是"遇到 A 就做 B"的流程 —— 后者才是过拟合。这条错了本地一点异常
+        都没有，只是分数低（日志上数 `executeCmd` 的条数才看得出来）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        flow = _section(system, "# 【每回合流程】")
-        self.assertIn("一次工具调用就是一个回合", flow)
-        self.assertIn("都属于同一条命令", flow)
-        self.assertIn("试完 5 个候选", flow)
-        self.assertIn("拆成 5 条就是 10 个回合", flow)
+        tools = _section(system, "# 【工具描述】")
+        cmd, local = tools.split("## ToolName - python_exec", 1)
+        self.assertIn("消耗两个回合", cmd)
+        self.assertIn("尽可能完成多个连续操作", cmd)
+        self.assertIn("优先在一次命令中批量尝试", cmd)
         # 产出是写给下一轮的自己读的：不带标签就分不清哪条结果对哪次尝试
-        self.assertIn("自己带标签", flow)
+        self.assertIn("给每次尝试输出清晰标签", cmd)
+        self.assertIn("仅需一个回合执行", local)
 
     def test_the_flow_says_a_failure_is_a_clue(self):
-        """失败的回执要**读**：报错里的字段名 / 缺什么 / 合法取值，直接指向下一次该试什么。
+        """拿到结果先分析、照着结果调整方案再继续（【工作原则】循环的第 (7) 步那一支）。
 
-        第一次尝试偏掉之后的默认行为是"换一个参数再来一遍"，一换就是两个回合 —— 而报错里
-        往往已经把答案写着了（"未知参数 x" ⇒ 参数名错；"值非法" ⇒ 值错）。不点破这一点，
-        LLM 会把每条回执当成二元的"成 / 不成"，然后一个接一个地穷举。"""
+        第一次尝试偏掉之后的默认行为是"换一个参数再来一遍"，一换就是两个回合 —— 不点破
+        "先读懂回执"，LLM 会把每条回执当成二元的"成 / 不成"，然后一个接一个地穷举。
+        第 107 步：旧措辞（"失败的回执是线索，不是噪音 / 报错里往往已经写着下一次该试什么"）
+        随【每回合流程】整段删除，新 prompt 里只剩下面这一句 —— 缺口记在 `code-task.md`
+        第 107 步的"仍生效的已知不确定性"里。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        flow = _section(system, "# 【每回合流程】")
-        self.assertIn("失败的回执是线索，不是噪音", flow)
-        self.assertIn("换下一个候选之前先把它读懂", flow)
+        rules = _section(system, "# 【工作原则】")
+        self.assertIn("(7)分析结果 / 错误", rules)
+        self.assertIn("根据结果调整方案并继续执行", rules)
 
     def test_the_flow_says_to_see_the_environment_before_guessing(self):
-        """信息不足时先看清环境：一条命令问清"有哪些文件、哪份是接口文档、有没有验证脚本"。
+        """信息不足时先看清环境：拿环境里现成的东西换掉"猜"。
 
         这是"第一次尝试就偏"的正面对策 —— 偏的成因多半是**信息不足就动手**（照着一份可能
         写错的文档猜参数）。成本账：看清环境 = 一条命令，猜错一次 = 两个回合才拿回反馈。
-        与 ROLE 段那句"信息不足就调用工具去取"是一件事的两面：那边讲该不该取，这边讲
-        **第一趟就把要用的都取齐**。"""
+        第 107 步起这段改钉它在【工作原则】（循环第 (4) 步）与 `executeCmd` 用途表里的落点
+        —— 旧【每回合流程】那句"一条命令就能把这些一次问清"已删除。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        flow = _section(system, "# 【每回合流程】")
-        self.assertIn("动手之前先看清环境", flow)
-        self.assertIn("一条命令就能把这些一次问清", flow)
+        self.assertIn("(4)检查当前环境中已有的资源", _section(system, "# 【工作原则】"))
+        self.assertIn("- 探查沙盒环境", _section(system, "# 【工具描述】"))
 
     def test_the_flow_says_to_follow_the_task_book_hints(self):
-        """任务书点到的文件 / 接口 / 脚本就是探索的路线，不许绕开自己另找路子。
+        """任务书点到的文件 / 接口 / 脚本就是探索的路线，不许绕开它自己另定一套验证标准。
 
         这是用户报的"第一次尝试会偏"的原话：偏的是**探索方向** —— 任务书写着"需求在 spec.md、
-        用 check.sh 验证"，它却绕开这两样自己猜要做什么、自己另定一套验证标准。与"看清环境"
-        那条分工：那条问"手边还有什么"（任务书之外的），这条管"它点到的一律走完"。
-        代价同样是回合：绕一圈回来，那两个回合的反馈照样得付。"""
+        用 check.sh 验证"，它却绕开这两样自己猜要做什么、自己另定一套标准。第 107 步起只剩
+        两处落点：`executeCmd` 的第 8 条使用原则（指定了脚本就用那一个）与【工作原则】任务
+        理解的第 5 条（先看它给了哪些线索）。绕一圈回来，那两个回合的反馈照样得付。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        flow = _section(system, "# 【每回合流程】")
-        self.assertIn("任务书给的线索就是这一趟的路线", flow)
-        self.assertIn("一项不落地读完、跑到", flow)
-        self.assertIn("别自己另定一套标准", flow)
+        self.assertIn(
+            "优先执行指定脚本，不要自行创造另一套验证方式",
+            _section(system, "# 【工具描述】"),
+        )
+        self.assertIn("任务中明确提供了哪些线索", _section(system, "# 【工作原则】"))
 
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
@@ -408,11 +432,14 @@ class ChatPromptTest(unittest.TestCase):
 
         "文档写的是某个参数、实际要的是另一个"正是试错任务最值钱的一条 —— 而 LLM 天然只
         记成功经验、不记"文档错了"这件事。不写这一句，第一个任务白试、后面每个同类任务
-        再白试一遍（SOP 是整场跨任务的，这条结论对它才是资产）。"""
+        再白试一遍（SOP 是整场跨任务的，这条结论对它才是资产）。
+        落点两处：`SOP2Prompt` 的描述（文档与实测冲突时以实测为准）与【ROLE定位】的可信度
+        排序（第 107 步，旧【沉淀规则】段删除）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _section(system, "# 【沉淀规则】")
-        self.assertIn("以实测为准", rules)
-        self.assertIn("跑通的那一版", rules)
+        rules = _sop_tool_block(system)
+        self.assertIn("以实际执行结果为准", rules)
+        self.assertIn("文档写参数为 destination", rules)
+        self.assertIn("冲突时以实测为准", _section(system, "# 【ROLE定位】"))
 
     def test_the_deposit_rules_say_how_a_stale_entry_gets_replaced(self):
         """复用条目而实测与它不一致时，用**同名覆盖**更新那一条 —— 而不是机械重复、
@@ -421,9 +448,9 @@ class ChatPromptTest(unittest.TestCase):
         旧条目错了而没人改，它就会一直被照做；新起一条同样名字的又会把旧的挤掉或并存。
         同名覆盖是 `tools/sop.py` 已有的存储规则，这里只是把它讲给 LLM 听。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _section(system, "# 【沉淀规则】")
-        self.assertIn("同名覆盖", rules)
-        self.assertIn("失效处理", rules)
+        rules = _sop_tool_block(system)
+        self.assertIn("使用相同 name 更新旧 SOP", rules)
+        self.assertIn("同名会覆盖旧条目", rules)
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))

@@ -190,10 +190,9 @@ class HandleTest(unittest.TestCase):
         for piece in (
             "# 【背景】",
             "# 【ROLE定位】",
-            "# 【每回合流程】",
+            "# 【工作原则】",
             "# 【工具描述】",
             "## ToolName - SOP2Prompt",
-            "# 【沉淀规则】",
             "# 【沉淀的SOP】",
             "# 【输出示例】",
         ):

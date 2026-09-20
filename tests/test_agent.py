@@ -175,7 +175,7 @@ class AgentToolCallTest(unittest.TestCase):
         """参数说明由注册表生成，参数一行一个 `- 名: 用途`；无参数打
         `- Params: （无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。"""
         desc = gen_all_tool_prompt(self.agent._tools)
-        self.assertIn("- Params:\n    - cmd: 命令原文", desc)
+        self.assertIn("- Params:\n    - cmd: 需要在沙盒中执行的完整命令原文", desc)
         self.assertIn("- Params:\n    - name: ", desc)
         self.assertIn("    - sop: ", desc)  # 用途是措辞、会改；钉的是"第二个参数叫 sop"
         self.assertNotIn("- answer:", desc)
@@ -195,14 +195,14 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("接口", block)
 
     def test_the_sop_tool_teaches_reuse_and_a_generic_name(self):
-        """描述里要有两层：① 沉淀是为了下次同类任务**直接复用、不必重新探索**；
+        """描述里要有两层：① 沉淀是为了下次同类任务**少做探索**；
         ② `name` 要泛化到"一类问题"（「订去某地的机票的流程」），不能写死成本次的目标。
 
-        ROLE 段那头管"什么时候存、存成什么名"，这一头管参数怎么填 —— 两处都得说，
-        因为 LLM 读工具描述时未必回头翻 ROLE 段。"""
+        第 107 步起"什么时候存、存成什么名"整套细则都在这条描述里（旧的【沉淀规则】段
+        随用户重写的 prompt 删除），这一段就是沉淀规则的唯一出口。"""
         desc = gen_all_tool_prompt(self.agent._tools)
         block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
-        self.assertIn("不必重新探索", block)
+        self.assertIn("能够少做探索", block)
         self.assertIn("泛化", block)
         self.assertIn("订去某地", block)
 

@@ -258,9 +258,8 @@ class TaskChannelTest(unittest.TestCase):
         for header in (
             "# 【背景】",
             "# 【ROLE定位】",
-            "# 【每回合流程】",
+            "# 【工作原则】",
             "# 【工具描述】",
-            "# 【沉淀规则】",
             "# 【沉淀的SOP】",
             "# 【输出约定】",
             "# 【输出示例】",
@@ -544,7 +543,8 @@ class TaskChannelTest(unittest.TestCase):
         """
         cmd_explore.reset()
         first, _ = task_channel(self._turn(self.TASK))
-        self.assertNotIn("readSandboxFile", first, "回执还没回来，不能凭空断言沙盒里有什么")
+        self.assertIn("## ToolName - readSandboxFile", first, "工具块恒在（第 107 步）")
+        self.assertNotIn("/opt/task", first, "回执还没回来，不能凭空断言沙盒里有什么")
         prompt, _ = task_channel(
             self._turn(self.TASK, cmd_result=PROBE_RESULT)
         )

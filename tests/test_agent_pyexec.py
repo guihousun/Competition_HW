@@ -109,7 +109,9 @@ class AgentPythonExecTest(unittest.TestCase):
         （分数按回合算，本地一点异常都看不出来）。描述由注册表生成 ⇒ 这里钉的就是
         `Agent.__init__` 那张表里的一行。"""
         desc = AGENT._tools["python_exec"][1]
-        self.assertIn("别去占沙盒", desc)
+        self.assertIn("[成本优势]", desc)
+        self.assertIn("仅需一个回合执行", desc)
+        self.assertIn("不要占用昂贵的沙盒执行", desc)
 
     def test_a_call_without_code_does_nothing(self):
         """缺参数 ⇒ 调用不成立（`tool_call` 的闸门），什么都不进会话。"""
