@@ -1,5 +1,5 @@
-"""agent/cmd_explore.py 的用例：沙盒探查的状态机（发脚本 → 认领回执 → 切正文进 dict → 接着取 /
-收工）、命令的形状、`skip` 的推进、以及**把生成的脚本拿去真跑一遍**（标记与剩余数对得上）。
+"""agent/cmd_explore.py 的用例：沙盒探查的走法（发脚本 → 认领回执 → 切正文进 dict → 接着取 /
+走完重头再来）、命令的形状、`skip` 的推进、以及**把生成的脚本拿去真跑一遍**（标记与剩余数对得上）。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -99,19 +99,57 @@ class CmdExploreStateTest(unittest.TestCase):
         cmd_explore.observe(receipt((ONE, "一[TRUNCATED]"), more=None))
         self.assertEqual(cmd_explore.next_command(), cmd_explore._command(1))
 
-    def test_a_receipt_without_a_single_mark_stops_the_probe(self):
-        """一个标记都切不出来（沙盒没跑起来 / 超时 / 真的没有含 task 的 md）⇒ 收工，不空转。"""
+    def test_a_receipt_without_a_single_mark_tries_the_next_round(self):
+        """一个标记都切不出来（沙盒没跑起来 / 超时 / 真的没有含 task 的 md）⇒ 下一回合从头再来。
+
+        不空转的保证换了个形态：`_skip` 归零 + 一次只发一条，代价是一回合一条沙盒命令
+        （任务期间不限量、不计异常），换来的是"沙盒换了文件能被发现"。"""
         cmd_explore.next_command()
         cmd_explore.observe("[TIMEOUT]")
         self.assertEqual(cmd_explore.known_paths(), [])
-        self.assertEqual(cmd_explore.next_command(), "")
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
 
-    def test_the_probe_stops_once_everything_is_fetched(self):
-        """剩余数为 0 ⇒ 全部取完、收工：此后再问也一条不发（「所有命令都执行完就不用这个操作了」）。"""
+    def test_every_round_walks_the_sandbox_again(self):
+        """走完一遍不停：剩余数为 0 ⇒ `_skip` 归零、下一回合从头上再走一趟。
+
+        判题器的沙盒**每道任务独立**（用户口径）：同一个路径上的文件一致，但新沙盒里有哪些
+        文件可能不同 ⇒ 只有每回合重走才能现取到新的那几份。"""
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt((ONE, "一"), (TWO, "二"), more=0))
+        self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
+        cmd_explore.observe(receipt((ONE, "一"), (TWO, "二"), more=0))
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0), "还能接着走")
+
+    def test_a_second_walk_keeps_what_it_found_and_stays_quiet_in_the_log(self):
+        """重走一趟：正文原样留着（只累积不清），没变的那几份**不再进日志**。
+
+        日志那条不是省字节的洁癖：每回合都重走，逐趟重抄 N 份正文会把 stdout 管道顶掉
+        （见 `app._log` 那条账）。变化的那一份照旧进日志。"""
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), (TWO, "二")))
-        self.assertEqual(cmd_explore.next_command(), "")
+        with self.assertLogs("coregeek.agent.cmd_explore", level="INFO") as logs:
+            cmd_explore.next_command()
+            cmd_explore.observe(receipt((ONE, "一"), (TWO, "改过")))
+        self.assertEqual(cmd_explore._files[ONE], "一")
+        self.assertEqual(cmd_explore._files[TWO], "改过")
+        self.assertFalse(any(ONE in line for line in logs.output), logs.output)
+        self.assertTrue(any(TWO in line and "改过" in line for line in logs.output), logs.output)
+
+    def test_a_file_that_only_the_new_sandbox_has_joins_the_inventory(self):
+        """新沙盒里多出来的那几份下一趟就进清单，旧的照旧留着（跨任务的并集）。"""
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt((ONE, "一")))
+        cmd_explore.next_command()
+        cmd_explore.observe(receipt((TWO, "二")))
         self.assertEqual(cmd_explore.known_paths(), [ONE, TWO])
+
+    def test_muting_is_the_test_only_switch(self):
+        """`mute` 只给用例：静音之后一条不发，`reset` 解除（生产代码不调它）。"""
+        cmd_explore.mute()
+        self.assertEqual(cmd_explore.next_command(), "")
+        cmd_explore.reset()
+        self.assertEqual(cmd_explore.next_command(), cmd_explore._command(0))
 
     def test_a_bare_file_name_reaches_the_same_body(self):
         """取值表的第二种写法：只写文件名（最后一段）与整条全路径落到同一份正文。
@@ -142,9 +180,9 @@ class CmdExploreStateTest(unittest.TestCase):
         self.assertEqual(cmd_explore.body_of("/home/task/a.md"), "乙")
 
     def test_a_reset_forgets_the_paths_too(self):
-        """`reset` 回到"一次都没探查过"：正文与跳过数一起清。
+        """`reset` 回到"一次都没探查过"：正文、跳过数、静音一起清。
 
-        它现在**只为用例隔离存在**（第 104 步起生产代码不调：探明的东西整场存活）。
+        它现在**只为用例隔离存在**（生产代码不调：探明的成果整场累积、任务换了也不清）。
         """
         cmd_explore.next_command()
         cmd_explore.observe(receipt((ONE, "一"), more=3))

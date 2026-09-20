@@ -8,21 +8,22 @@
 比"先列清单、再按批取"少一趟；一次取不完就带 `skip` 下一回合接着取。
 
 回执**不给任务线看**：`observe` 把它收走、返回 `""` ⇒ 判据 ② 走"没有回执"那一支 —— LLM 看不到
-它没要过的输出、它自己的工具命令也不会被挤掉（两本账一轮一条交替跑）。收工之后一条都不发，
-任务线那边什么都察觉不到。
+它没要过的输出、它自己的工具命令也不会被挤掉（两本账一轮一条交替跑）。任务线那边什么都察觉不到。
 
 正文进 `_files`（全局路径 → 正文，**不落盘**）；认出来的**路径**现挂在 LLM 那个
 `readSandboxFile` 工具的描述尾部（`Agent.prompt_tools` 取 `known_paths`）—— 那张表就是那个
 `path` 参数的合法取值表，正文由 `body_of` 按需交给它。取值表有两种写法：**整条全路径**与
 **它的文件名**（`file_name`），`matches` 是这套对法的唯一一处；两种写法都落在同一条路径上才算
 命中，**文件名撞了（不同目录下的同名文件）一律不成立** —— 替它挑一份就是把错的那份正文交出去。
-⚠️ **探明的东西整场存活**（第 104 步，用户口径"一次找到、整个进程生命周期保存"）：任务换了
-也不复位，清单与正文一直用到进程结束。代价是**清单可能过期** —— 若沙箱按任务换了文件，我们
-既不重新走一遍、`readSandboxFile` 还可能把上一道题的正文当这一道题的正文交出去；首场看日志里
-`@@@FILE` 的路径是否跨任务重现即知。
 
-跨回合状态（住在本模块）：`_phase` / `_files` / `_skip` / `_waiting`。退化路径：沙盒没跑起来
-（回执里一个标记都切不出来）⇒ 直接收工，只丢这一次探查。
+⚠️ **沙盒每道任务是独立的**（用户口径，第 106 步）：同一个路径上的文件跨沙盒一致，但每道沙盒
+里**有哪些**文件可能不同 ⇒ 两半：**每回合都重走一趟**（走完不停，`_skip` 归零从头再来，新沙盒
+的文件下一回合就现取）、**探明的成果一直留着**（`_files` 只累积不清）。代价 = 每回合一条沙盒
+命令（任务期间不限量、不计异常），以及清单是**跨任务的并集**（某一份在当前沙盒里可能并不存在
+—— 同一个路径上的内容一致，所以照旧可用）。
+
+跨回合状态（住在本模块）：`_files` / `_skip` / `_waiting`（另有只给用例的 `_muted`）。退化路径：
+沙盒没跑起来（回执里一个标记都切不出来）⇒ 只丢这一趟，下一回合从头再来。
 """
 
 import logging
@@ -69,22 +70,20 @@ _INTERPRETER = "python3"
 _RE_FILE = re.compile(r"@@@FILE (.+?)@@@")
 _RE_MORE = re.compile(r"@@@MORE (\d+)@@@")
 
-#: 还没发过 / 正在一趟趟取 / 收工
-_IDLE, _FETCH, _DONE = "idle", "fetch", "done"
-
-_phase = _IDLE
-#: 探明的沙箱路径 → 正文（`known_paths` 取键挂进 `readSandboxFile` 的描述，整场存活）
+#: 探明的沙箱路径 → 正文（`known_paths` 取键挂进 `readSandboxFile` 的描述，整场累积）
 _files: dict[str, str] = {}
-#: 下一条命令从第几份开始取（脚本按路径排序，取回来的都是队首那几份）
+#: 下一条命令从第几份开始取（脚本按路径排序，取回来的都是队首那几份；走完一趟归零）
 _skip = 0
 #: 上回合发的是探查命令 ⇒ 这回合的回执归我们
 _waiting = False
+#: 用例静音（`mute`）。生产代码没有"收工"这回事：探查每回合都跑
+_muted = False
 
 
 def known_paths() -> list[str]:
     """探明的沙箱 md 路径（正文取回来的那些）。还没探查过 ⇒ 空表。
 
-    **整场有效**：不随任务复位（第 104 步），只在进程重开时清空。
+    **只累积不清**：任务换了照旧留着（第 106 步，用户口径"持续保留"），进程重开才空。
     """
     return list(_files)
 
@@ -131,33 +130,37 @@ def observe(result: str) -> str:
 
 
 def next_command() -> str:
-    """这回合要发的探查命令；还没轮到我 / 取完了 ⇒ `""`。
+    """这回合要发的探查命令；上一趟的回执还没回来、或用例静音了 ⇒ `""`。
 
-    调用方只在命令槽空着时调它 —— 槽被 LLM 的工具命令占着就顺延，两本账不抢。
+    调用方只在命令槽空着时调它 —— 槽被 LLM 的工具命令占着就顺延，两本账不抢。**走完一趟不停**：
+    沙盒每道任务独立，下一回合从头上再走一遍（`_skip` 已在 `_take` 里归零）。
     """
-    global _phase, _waiting
-    if _phase == _DONE or _waiting:
+    global _waiting
+    if _waiting or _muted:
         return ""
-    _phase = _FETCH
     _waiting = True
     return _command(_skip)
 
 
-def stop() -> None:
-    """收工：此后的空槽一条都不发（取完了走这条路，用例也用它让探查闭嘴）。"""
-    global _phase, _waiting
-    _phase = _DONE
+def mute() -> None:
+    """此后的空槽一条都不发。
+
+    ⚠️ **只为用例**（要断言"这一轮不该发命令"的那些先静音）：生产代码不调它 —— 探查每回合都跑，
+    没有"收工"这回事。
+    """
+    global _muted, _waiting
+    _muted = True
     _waiting = False
 
 
 def reset() -> None:
     """回到"一次都没探查过"。
 
-    ⚠️ **生产代码不调它**（第 104 步起探明的东西整场存活，任务结束不复位）：状态在模块里、
-    同一个测试进程里会跨用例串味，这条只为用例隔离而留 —— 与 `Agent.reset` 同类。
+    ⚠️ **生产代码不调它**（探明的成果整场累积，任务结束不复位）：状态在模块里、同一个测试进程
+    里会跨用例串味，这条只为用例隔离而留 —— 与 `Agent.reset` 同类。顺带解除 `mute`。
     """
-    global _phase, _skip, _waiting
-    _phase, _skip, _waiting = _IDLE, 0, False
+    global _skip, _waiting, _muted
+    _skip, _waiting, _muted = 0, False, False
     _files.clear()
 
 
@@ -173,16 +176,16 @@ def _script() -> str:
 
 
 def _take(result: str) -> None:
-    """一趟的回执 ⇒ 正文进 `_files`，再按脚本末尾那个剩余数决定收不收工。
+    """一趟的回执 ⇒ 正文进 `_files`，再按脚本末尾那个剩余数决定下一趟从第几份开始。
 
     标记按**顺序**定位，每段正文取到下一个标记之前、末段取到回执末尾（回执被截断时那正是被
     切掉的那条的残余）；正文里的换行与任何内容都不影响切分。
-    - `@@@MORE 0@@@` ⇒ 全部取完，收工。
+    - `@@@MORE 0@@@` ⇒ 这一趟走完了，`_skip` 归零：下一回合从头上再走一趟（沙盒可能换了文件）。
     - `@@@MORE n@@@`（n>0）⇒ `_skip` 前进，下一回合接着取。
-    - **没拿到剩余数**（判题器 64KB 截断把它吃掉了）⇒ 本趟取到正文就保守继续，一份都没有才
-      收工 —— 后者同时兜住"命令没跑起来"与"沙盒里真没有含 task 的 md"，靠日志里回执前 200 字
+    - **没拿到剩余数**（判题器 64KB 截断把它吃掉了）⇒ 本趟取到正文就保守继续；一份都没有也归零
+      —— 后者同时兜住"命令没跑起来 / 超时"与"沙盒里真没有含 task 的 md"，靠日志里回执前 200 字
       分辨。截断的残文照旧留下、**不重试**（重试又要两个回合）。
-    `_skip` 单调递增 ⇒ 最坏取完全部即终止，不会空转。
+    日志只记**新增 / 变化的**正文：每回合都重走一趟，逐趟重抄会把 stdout 管道顶掉。
     """
     global _skip
     if "[TRUNCATED]" in result:
@@ -192,26 +195,38 @@ def _take(result: str) -> None:
     more = found[-1] if found else None
     text = result[: more.start()] if more else result
     marks = list(_RE_FILE.finditer(text))
+    fresh = 0
     for index, mark in enumerate(marks):
         end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
         body = text[mark.end():end]
         # 脚本在标记后与正文尾巴上各补了一个换行（起手下一段标记），两头各去掉一个
         body = body[1:] if body.startswith("\n") else body
         body = body[:-1] if body.endswith("\n") else body
+        if _files.get(mark.group(1)) != body:
+            fresh += 1
+            LOGGER.info("【沙盒探查】：%s 取回 %d 字：%s", mark.group(1), len(body), _clip(body, BODY_LOG_MAX))
         _files[mark.group(1)] = body
-        LOGGER.info("【沙盒探查】：%s 取回 %d 字：%s", mark.group(1), len(body), _clip(body, BODY_LOG_MAX))
     if not marks:
-        LOGGER.info("【沙盒探查】：一份都没取到（「%s」）⇒ 收工", result[:200])
-        stop()
+        LOGGER.info("【沙盒探查】：一份都没取到（「%s」）⇒ 下一回合从头再来", result[:200])
+        _skip = 0
         return
     if more is None:
-        LOGGER.info("【沙盒探查】：本趟取回 %d 份，没拿到剩余数（被截断？）⇒ 接着取", len(marks))
+        LOGGER.info(
+            "【沙盒探查】：本趟取回 %d 份（新增 %d），没拿到剩余数（被截断？）⇒ 接着取",
+            len(marks), fresh,
+        )
     elif more.group(1) == "0":
-        LOGGER.info("【沙盒探查】：本趟取回 %d 份，全部取完 ⇒ 收工", len(marks))
-        stop()
+        LOGGER.info(
+            "【沙盒探查】：本趟取回 %d 份（新增 %d），沙盒走完一遍 ⇒ 下一回合从头再来",
+            len(marks), fresh,
+        )
+        _skip = 0
         return
     else:
-        LOGGER.info("【沙盒探查】：本趟取回 %d 份，还剩 %s 份", len(marks), more.group(1))
+        LOGGER.info(
+            "【沙盒探查】：本趟取回 %d 份（新增 %d），还剩 %s 份",
+            len(marks), fresh, more.group(1),
+        )
     _skip += len(marks)
 
 

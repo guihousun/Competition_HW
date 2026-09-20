@@ -287,8 +287,9 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 
     # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）
     if not turn.phase_task:
-        # 沙箱探查的成果**不在这里复位**（第 104 步：探明一次就整场用，取回来的清单与正文
-        # 一直留到进程结束）。回执认领在上面（`observe` 压在函数最上头）⇒ 在途那条照旧收下。
+        # 沙箱探查的成果**不在这里复位**（探明的清单与正文整场累积，第 106 步）；它也**不在这
+        # 里发命令** —— 探查明面上每回合都跑，但这条早返回在链尾那道闸门之前（沙盒仅任务期间
+        # 可用）。回执认领在上面（`observe` 压在函数最上头）⇒ 在途那条照旧收下。
         return AGENT.news_question(turn.news), ""
 
     # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
@@ -311,7 +312,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     elif rejected:
         retry = f"【判题器反馈】：{why}" if why else "（判题器未说明错在哪一项）"
 
-    if result:  # ② 回灌结果、这轮绝不发命令（必须压在 ③ 前）
+    if result:  # ② 回灌结果、这轮不发 LLM 的命令（空槽照旧归链尾的探查闸门；必须压在 ③ 前）
         # 有回执 ⇒ 回灌结果
         prompt, cmd = AGENT.chat(turn.phase_task, result=result, retry=retry), ""
     elif command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽留给链尾的压缩闸门
@@ -330,7 +331,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 链尾压缩闸门：答案轮不压缩（压缩与 `<answer>` 互斥），只剩命令轮会填上
     if not answer and prompt == "":
         prompt = AGENT.compression_request()
-    # 链尾探查闸门：命令槽还空着 ⇒ 拿去摸沙箱环境（回执归探查自己收，不回灌）
+    # 链尾探查闸门：命令槽还空着 ⇒ 拿去摸沙箱环境（回执归探查自己收，不回灌）。
+    # 每回合都发得出 —— 沙盒每道任务独立，探完一遍下一回合从头上再走一遍
     if cmd == "":
         cmd = cmd_explore.next_command()
     return prompt, cmd

@@ -43,10 +43,10 @@ class HandleTest(unittest.TestCase):
         # SOP 是单实例上的跨回合状态，不清就会跨用例串味（上一条用例存的 SOP 会
         # 出现在下一条的 prompt 里）。
         AGENT.reset()
-        # 沙盒探查同理（状态在模块里），而且它会把空着的命令槽全部吃掉 ⇒ 先隔离、再让它闭嘴。
-        # 没有用例要看它：`executeCmd` 的断言全是"这一轮不该发命令"。
+        # 沙盒探查同理（状态在模块里），而且它每回合都会把空着的命令槽吃掉 ⇒ 先隔离、再静音。
+        # 这个文件里没有用例要看它：`executeCmd` 的断言全是"这一轮不该发命令"。
         cmd_explore.reset()
-        cmd_explore.stop()
+        cmd_explore.mute()
 
     def _handle(self, raw: bytes) -> dict:
         return json.loads(handle(raw).decode("utf-8"))

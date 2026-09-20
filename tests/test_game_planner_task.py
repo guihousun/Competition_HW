@@ -208,10 +208,10 @@ class TaskChannelTest(unittest.TestCase):
     def setUp(self) -> None:
         # SOP 是单实例上的跨回合状态，不清就会跨用例串味。
         AGENT.reset()
-        # 沙盒探查同理（状态在模块里），而且它会把空着的命令槽全部吃掉 ⇒ 先隔离、再让它闭嘴；
+        # 沙盒探查同理（状态在模块里），而且它每回合都会把空着的命令槽吃掉 ⇒ 先隔离、再静音；
         # 要看它的用例自己 `reset()` 打开。落盘目录不动：这些用例一条文件都不取。
         cmd_explore.reset()
-        cmd_explore.stop()
+        cmd_explore.mute()
 
     DAY = 1
     TASK = "请查询北京天气"
@@ -552,22 +552,23 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn("- /opt/task/rescue.md", prompt)
         self.assertIn("文件名 rescue.md", prompt, "两种写法都给到 —— 题目里给的往往就是文件名")
 
-    def test_the_probe_survives_the_task_that_probed_it(self):
-        """探明的东西**整场存活**（第 104 步，用户口径"一次找到、整个进程生命周期保存"）：
-        任务结束不复位，下道题直接沿用那份清单、也不再重列一遍沙箱。
+    def test_the_inventory_stays_and_the_new_task_walks_the_sandbox_again(self):
+        """两半都在（第 106 步，用户口径）：**每回合都重走一趟**（沙盒每道任务独立、里面有哪些
+        文件可能不同），**探明的成果只累积不清**。
 
-        ⚠️ 反面风险随这条一起生效：清单没准已经过期（沙箱换了文件我们既不会重新走一遍、
-        还可能把上一道题的正文当这一道题的正文交出去）。见 `code-task.md` 第 104 步。
+        所以换任务后同时成立：上一道题探到的路径照旧挂在工具描述里（同一个路径上的文件一致），
+        命令槽也照旧发出重走沙盒那条命令 —— 少任何一半都会漏：只留清单 = 新沙盒的文件永远发现
+        不了；只重走不留 = 每道题都得从零再摸一遍。
         """
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))
         prompt, _ = task_channel(self._turn(self.TASK, cmd_result=PROBE_RESULT))
         self.assertIn("- /opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
         task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
-        self.assertEqual(cmd_explore.known_paths(), ["/opt/task/rescue.md"], "不许随任务复位")
+        self.assertEqual(cmd_explore.known_paths(), ["/opt/task/rescue.md"], "探明的成果留着")
         again, execute = task_channel(self._turn(self.TASK))
         self.assertIn("- /opt/task/rescue.md", again, "上个任务的路径照旧带进新任务")
-        self.assertEqual(execute, "", "探查已收工 ⇒ 命令槽不再跑探查")
+        self.assertEqual(execute, cmd_explore._command(0), "新任务从头上再走一趟沙盒")
 
     def test_no_task_means_no_probe(self):
         """没任务 ⇒ 一条都不发：`executeCmd` 文档说它"仅在执行任务期间才能使用"。"""
@@ -922,9 +923,8 @@ class TaskChannelTest(unittest.TestCase):
         ]
         for i, turn in enumerate(turns):
             with self.subTest(i=i):
-                # 这道题问的是"命令与提问不同轮"，探查不在这条契约里（它就是在空槽里发命令的）。
-                # 每轮先让它闭嘴：任务结束那一轮（i=0）会把探查复位，`setUp` 里一次 `stop` 不够。
-                cmd_explore.stop()
+                # 这道题问的是"命令与提问不同轮"，探查不在这条契约里（它就是在空槽里发命令的）
+                # ⇒ `setUp` 里已经静音。
                 prompt, execute = task_channel(turn)
                 if execute:
                     self.assertTrue(
