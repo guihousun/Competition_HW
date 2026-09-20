@@ -368,16 +368,20 @@ class TaskChannelTest(unittest.TestCase):
 
         丢的是一回合（任务期间 prompt 不限量、不碰红线），换来的是解析只有一种形状。若哪一条
         被判成"取不出命令 = 这是答案"，提问与提交就会同时哑火（`_answer_task` 跳过工具回复）。
+        每条都留一行「形状没写对」（它是"这一轮又白丢了"的唯一线索）。
         """
-        for reply in (
-            "<tool>ls -la</tool>",
-            '<tool><tool_name>executeCmd</tool_name><tool_param name="cmd">ls</tool_param></tool>',
-            "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>",
-        ):
-            with self.subTest(reply=reply):
-                prompt, execute = task_channel(self._turn(self.TASK, reply))
-                self.assertEqual(execute, "")
-                self.assertIn(self.TASK, prompt, "落重问、不是当答案")
+        with self.assertLogs(level="INFO") as caught:
+            for reply in (
+                "<tool>ls -la</tool>",
+                '<tool><tool_name>executeCmd</tool_name><tool_param name="cmd">ls</tool_param></tool>',
+                "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>",
+            ):
+                with self.subTest(reply=reply):
+                    prompt, execute = task_channel(self._turn(self.TASK, reply))
+                    self.assertEqual(execute, "")
+                    self.assertIn(self.TASK, prompt, "落重问、不是当答案")
+        misses = [r.getMessage() for r in caught.records if "形状没写对" in r.getMessage()]
+        self.assertEqual(len(misses), 3)
 
     def test_a_broken_tool_tag_yields_no_command(self):
         """凑不齐的标签 ⇒ 没有命令可发。别把半截标签当命令丢进沙盒。
@@ -534,6 +538,33 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn(self.TASK, prompt)
         self.assertEqual(execute, cmd_explore._command(0))
 
+    def test_an_unusable_call_keeps_the_slot_from_the_probe(self):
+        """LLM 点名调了 `executeCmd` 却发不出命令（参数没给全 / 值是空白）⇒ 槽空着也不给探查占。
+
+        用户口径：这个字段的第一优先级是 LLM 那条调用。两种情形都让位 —— `tool_of` 认得名字，
+        `tool_call` 因"声明参数一个不少且非空"拒收。代价只是少探一趟（探查每回合都重走）。
+        形状整条没写对（`tool_of` 为 None）时名字取不到，那就让不了这个位：放宽解析去猜参数名
+        是另一码事（`test_the_old_shapes_fall_back_to_reasking` 钉着"落重问"）。
+        """
+        for reply in (
+            "<tool><tool_name>executeCmd</tool_name></tool>",  # 缺参数
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>  </cmd></tool_param></tool>",
+        ):
+            with self.subTest(reply=reply):
+                cmd_explore.reset()
+                task_channel(self._turn(self.TASK))  # ⑥ 首问（会话从这道题开始）
+                _, execute = task_channel(self._turn(self.TASK, reply))
+                self.assertEqual(execute, "", "这个槽归它，探查让位")
+
+        cmd_explore.reset()
+        prompt, execute = task_channel(
+            self._turn(
+                self.TASK,
+                "<tool><tool_name>executeCmd</tool_name><tool_param>ls</tool_param></tool>",
+            )
+        )
+        self.assertEqual(execute, cmd_explore._command(0), "形状没写对 ⇒ 取不到名字，探查照发")
+
     def test_the_probed_paths_reach_the_next_prompt(self):
         """探查的**产出**从下一轮起现挂在 `readSandboxFile` 的描述里 —— 命令槽那条边只出命令，
         清单走的是 `Agent.chat` 每轮现刷 system 这条路（与 SOP 段同源，第 104 步从独立一段
@@ -686,23 +717,42 @@ class TaskChannelTest(unittest.TestCase):
         self.assertIn("请继续。", prompt)
         self.assertIn("【总目标】交 token", prompt, "摘要已进【历史摘要】")
 
-    def test_a_result_already_in_hand_blocks_the_next_command(self):
-        """沙盒刚交作业这一轮，绝不能再发命令 —— 判据 2 必须压在判据 3 前面。
+    def test_a_fresh_call_owns_the_slot_even_when_a_result_arrives(self):
+        """回执与命令同轮到达 ⇒ 两个字段各归各的：结果进 prompt、命令照发。
 
-        动机是 `llmResp` 可能粘住：文档给 `lastCmdResult` 写了"未发命令时为空字符串"（L33）、
-        对 `llmResp` 一个字没写（L31）。它还停在上轮那条 `<tool>…</tool>` 上的话，判据 3 先命中
-        就会把同一条命令反复丢进沙盒。
+        用户口径：LLM 调了 `executeCmd` ⇒ 这个字段归它，它才是第一优先级。旧口径在这一轮把
+        命令整个丢掉（判据 2 压在 3 前），症状是 LLM 要的命令永远跑不了、下一轮也没有回执。
         """
-        prompt, execute = task_channel(
-            self._turn(
-                self.TASK,
-                llm_resp="<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>",
-                cmd_result="[exitCode:0]\nok",
-            )
+        call = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
-        self.assertEqual(execute, "", "沙盒刚交作业，这轮不许再发命令")
-        messages = json.loads(prompt)
-        self.assertIn("[exitCode:0]\nok", messages[-1]["content"])
+        task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
+        prompt, execute = task_channel(
+            self._turn(self.TASK, call, cmd_result="[exitCode:0]\nok")
+        )
+        self.assertEqual(execute, "ls", "命令归 `executeCmd` 字段")
+        self.assertIn(self.RESULT_MARK, prompt, "结果照样回灌（渲染里带着回执原文）")
+        self.assertIn("[exitCode:0]\nok", json.loads(prompt)[-1]["content"])
+
+    def test_a_sticky_reply_never_runs_the_same_command_twice(self):
+        """粘住的 `llmResp` ⇒ 同一条命令不再发第二遍（旧口径"判据 2 压在 3 前"防的就是这个）。
+
+        `lastCmdResult` 文档写了"未发命令时为空字符串"（L33），`llmResp` 一个字没写（L31）⇒
+        它还停在上轮那条 `<tool>…</tool>` 上、而沙盒正跑着它 ⇒ 再发一遍就是同一条命令跑两次。
+        判据是"这条回复我们上一轮已经行动过了"（`Agent.hear` 只看最后一条消息：中间隔了回执
+        或重问 ⇒ 算又说了，照发 —— 命令因此不会被永久压住）。
+        """
+        call = (
+            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
+        )
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 命令轮：跑起来了
+        self.assertEqual(execute, "ls")
+        prompt, execute = task_channel(
+            self._turn(self.TASK, call, cmd_result="[exitCode:0]\nok")
+        )
+        self.assertEqual(execute, "", "同一条命令已经在沙盒里跑了")
+        self.assertIn("[exitCode:0]\nok", json.loads(prompt)[-1]["content"], "结果照样回灌")
 
     def test_a_result_and_a_rejection_come_back_together(self):
         """沙盒结果与"答错了"是同一个分支的两面，不能互相吞掉。
@@ -895,11 +945,11 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertEqual(execute, "")
 
     def test_a_command_never_rides_with_a_task_question(self):
-        """任务提问不与命令同轮。
+        """命令轮的 prompt 只能是空、压缩请求、或**本轮回执的回灌** —— 不许是凭空的提问。
 
-        命令轮的 prompt 若是任务提问，LLM 会拿着过期结果作答 ⇒ 又要一遍同一条命令 ⇒ 活锁。
-        命令轮允许携带压缩请求（它的回复路由进摘要、永不当任务材料，活锁的成因对它不成立）
-        ⇒ 契约钉成：`executeCmd` 非空 ⇒ `prompt` 为空或是压缩请求（带指令标记）。
+        提问若单独与命令同轮（没有本轮新到的回执），LLM 会拿着过期结果作答 ⇒ 又要一遍同一条
+        命令 ⇒ 活锁。回灌那一路不算：它带着本回合刚到的回执原文，是"该它答的那一轮"，不是
+        无中生有地又问一遍；同轮的命令也归 `executeCmd` 字段（用户口径：它才是第一优先级）。
         """
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
@@ -928,13 +978,11 @@ class TaskChannelTest(unittest.TestCase):
                 prompt, execute = task_channel(turn)
                 if execute:
                     self.assertTrue(
-                        prompt == "" or "【上下文压缩】" in prompt,
-                        f"命令轮的 prompt 只能是空或压缩请求：{prompt[:80]}",
+                        prompt == ""
+                        or "【上下文压缩】" in prompt
+                        or "[exitCode:0]" in prompt,  # 本轮回执的回灌（i=7）
+                        f"命令轮的 prompt 只能是空、压缩请求或本轮回执：{prompt[:80]}",
                     )
-                self.assertTrue(
-                    prompt == "" or execute == "" or "【上下文压缩】" in prompt,
-                    (prompt[:60], execute[:60]),
-                )
 
     def test_the_answer_is_submitted_verbatim(self):
         """裸文本答案原文进、原文出（逐字对 `docs/response.txt` L54）：

@@ -2,7 +2,7 @@
 `prompt` 这一段字符串）。这里只管存储与渲染，建会话、每轮放什么由 `Agent` 编排。
 
 存储全量、渲染有窗：消息表逐字全量，`render()` 只输出题目 + 摘要 + 最近 `_WINDOW` 轮 ——
-prompt 是 O(窗口)，长任务的 64KB 沙盒回执堆不出来。摘要替被窗口掐掉的旧往来记账。
+prompt 是 O(窗口)，长任务的 64KB 沙盒回执堆不出来。摘要替被窗口掐掉的旧往来记账（`tool`）
 `system` 不在消息表里，`Agent` 每次发送前刷新（SOP 是活的，任务中沉淀的下一轮就得看得见
 —— 那是 `SOP2Prompt` "调用成功"的唯一回执）。只依赖标准库；措辞在这里、状态在 `Agent`。
 """
@@ -72,30 +72,35 @@ class Context:
         与沙盒回执同一条纪律，`label` 标明来源 —— LLM 才分得清"本地算的"与"沙盒文件的正文"。"""
         self._messages.append(Message(_TOOL, f"{label}\n{text}"))
 
-    def hear(self, reply: str) -> None:
-        """记一条 LLM 的原始回复（原文 —— assistant 消息收它真说过的话）。
+    def hear(self, reply: str) -> bool:
+        """记一条 LLM 的原始回复（原文 —— assistant 消息收它真说过的话）。返回"这条是不是新的"
+        （False = 空回复、或与最后一条 assistant 同文 = 粘住）—— 调用方按它分"真说了"与
+        "重复报了一遍"。
 
         粘住去重：`llmResp` 按可能粘住设计 ⇒ 与最后一条消息（且得是 assistant）相同就不进表。
         中间隔了别的消息再来同文 ⇒ 记：那不是粘住，是真的又说了。
         """
         if not reply:
-            return
+            return False
         if self._messages and self._messages[-1] == Message(_ASSISTANT, reply):
-            return
+            return False
         self._messages.append(Message(_ASSISTANT, reply))
+        return True
 
     def render(self) -> str:
         """整份 prompt：system + 题目 + 摘要 + 最近 `_WINDOW` 轮。
 
         题目永远完整（"要交什么"的权威来源，掐什么也不能掐它）；摘要在题目后面、原始往来
         前面。`json.dumps`（`ensure_ascii=False`、紧凑分隔符）—— 正文里的 `{}`、换行逐字保留。
+        摘要是 `tool` 角色：它替被窗口掐掉的旧往来记账，与沙盒回执同类（工具产出），不是
+        人类下达的指令。
         """
         messages = [
             {"role": "system", "content": self.system},
             {"role": _USER, "content": self.task},
         ]
         if self.summary:
-            messages.append({"role": _USER, "content": f"【历史摘要】\n{self.summary}"})
+            messages.append({"role": _TOOL, "content": f"【历史摘要】\n{self.summary}"})
         messages += [{"role": m.role, "content": m.text} for m in self._window()]
         return json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
 

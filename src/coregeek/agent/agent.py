@@ -20,6 +20,24 @@ from .tools.sop import store
 
 LOGGER = logging.getLogger(__name__)
 
+#: 【工具调用】那行里每个参数值截到多少字（拍）。原文在任务行的「上一轮模型回复」里，这一行是
+#: 索引 ⇒ 值再长也不影响可读性，只是给日志一个上界（`SOP2Prompt` 的 `sop` 上限正好 1000）。
+ARGS_LOG_MAX = 1000
+
+
+def _call_text(params: list[tuple[str, str]]) -> str:
+    """`[(参数名, 原文), …]` 打成一行的 `名=值`，没有参数打「无参数」。
+
+    超 `ARGS_LOG_MAX` 截断留痕（与 `utils._clip` 同形；agent 是叶子包，规则各存一份）。
+    """
+    parts = []
+    for name, value in params:
+        value = str(value)
+        if len(value) > ARGS_LOG_MAX:
+            value = value[:ARGS_LOG_MAX] + f"…（共 {len(value)} 字）"
+        parts.append(f"{name}={value}")
+    return "，".join(parts) or "无参数"
+
 
 def _probed_note(path: str) -> str:
     """未命中时回给 LLM 的说明：`path` 是枚举值，可选的只有探明过的那几份。
@@ -328,15 +346,19 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
         )
         return tools
 
-    def hear(self, reply: str) -> None:
+    def hear(self, reply: str) -> bool:
         """记下判题器 LLM 这回合的回复（`planner.task_channel` 每回合都调 —— 发命令/交答案
         那两轮没有 prompt，回复照样得进会话，否则回灌时它自己的命令凭空消失）。
 
-        还没开过会话（这道题一次都没问过）⇒ 忽略。粘住的重复由 `Context.hear` 去重。任务
-        回复里零星的 `<summary>` 一律当普通文字记 —— 摘要的唯一来源是 `adopt_summary`。
+        返回"这条算不算新的"—— `task_channel` 按它区分"这轮真说了个新命令"与"粘住的
+        `llmResp` 把上一条命令又报了一遍"（后者不再发一遍：那条命令已经在沙盒里跑了）。
+        还没开过会话（这道题一次都没问过）⇒ 什么都不记、算新的（无从说它粘住）。粘住的
+        重复由 `Context.hear` 去重（只比最后一条消息 —— 中间隔了回执/重问就再记一次）。
+        任务回复里零星的 `<summary>` 一律当普通文字记 —— 摘要的唯一来源是 `adopt_summary`。
         """
-        if self._context is not None:
-            self._context.hear(reply)
+        if self._context is None:
+            return True
+        return self._context.hear(reply)
 
     def adopt_summary(self, text: str) -> None:
         """把压缩轮的摘要记进会话上下文。还没开过会话 ⇒ 忽略。
@@ -431,9 +453,13 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
         工具、形状不对、缺参数、空白值），下游不需要区分，全落到重问。绝不抛异常（它跑在
         `app.handle` 的 `try` 里，抛出去会把整回合所有角色的指令一起带走）。边界校验只在
         这一处：这是唯一一个由外部字符串驱动的入口。
+
+        四条出口各打一条 `【工具调用】`（含"调用不成立"那三条 —— 那是 LLM 白等一回合的唯一
+        线索，回复原文在任务行里但看不出它没发出去）。
         """
         entry = self._tools.get(tool_name)
         if entry is None:
+            LOGGER.info("【工具调用】：未知工具「%s」⇒ 调用不成立", tool_name)
             return ""
         impl, _, spec = entry
         declared = dict(spec)
@@ -444,13 +470,26 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
                     resolved[name] = value
                 # 认不出的参数名：忽略（宽容那一侧）—— 不进 resolved，全塞给 impl 会 TypeError
         except (TypeError, ValueError):
+            LOGGER.info("【工具调用】：%s ⇒ 调用不成立（参数不是「名=值」的形状）", tool_name)
             return ""  # params 不是 [(名, 文本)] 的形状
         if any(
             not isinstance(resolved.get(pname), str) or not resolved[pname].strip()
             for pname, _ in spec
         ):
+            LOGGER.info(
+                "【工具调用】：%s（%s）⇒ 调用不成立（声明了的参数缺了或值为空白）",
+                tool_name,
+                _call_text(params),
+            )
             return ""
-        return impl(**resolved)
+        command = impl(**resolved)
+        LOGGER.info(
+            "【工具调用】：%s（%s）⇒ %s",
+            tool_name,
+            _call_text(params),
+            "命令已出" if command else "这个工具不产出命令",
+        )
+        return command
 
     def SOP2Prompt(self, name: str, sop: str) -> str:
         """把一条条目（`name` = 这一类问题的名字、`sop` = 做法与环境知识）沉淀进流程表，返回 `""`。

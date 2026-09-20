@@ -29,7 +29,13 @@ from collections.abc import Iterator, Mapping
 from typing import Any
 
 from ..agent import AGENT, cmd_explore  # 与 LLM 说什么不在策略层
-from ..agent.chat import answer_of, is_prices_reply, is_summary_reply, tool_of
+from ..agent.chat import (
+    answer_of,
+    is_prices_reply,
+    is_summary_reply,
+    looks_like_tool,
+    tool_of,
+)
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .grid import STEPS, Pos, base_cells, box_cells, wall_cells, weapon_sites
@@ -263,8 +269,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 上回合若是探查命令，回执归探查收走：任务线当它没发生（见 `agent.cmd_explore`）。
     # 必须压在早返回之前 —— 任务在回执回来前就结束了的话，不认领它就粘住 `_waiting`。
     result = cmd_explore.observe(turn.cmd_result)
-    # 打印CMD执行结果日志（探查自己那份不在这儿再抄一遍：原文已落盘 tmp/，而它的
-    # 回执是整份文件、抄进日志只是把磁盘上的东西再写一次 stdout）
+    # 打印CMD执行结果日志（探查自己那份不在这儿再抄一遍：正文已在 `_files` 里、
+    # 取回时那几条 `【沙盒探查】` 已留痕，这里再抄一次是把同一段字符串写第二遍 stdout）
     if result:
         LOGGER.info("【CMD命令执行结果】：「%s」", _clip(result))
 
@@ -273,6 +279,7 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     summary = is_summary_reply(llmReply)
     # 价格影响信息
     prices = is_prices_reply(llmReply)
+    sticky = False
     if summary is not None:
         # 摘要进 AGENT（不进会话表）
         AGENT.adopt_summary(summary)
@@ -282,8 +289,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         AGENT.adopt_price_hints(prices)
         llmReply = ""
     else:
-        # 其余回复记进会话
-        AGENT.hear(llmReply)  
+        # 其余回复记进会话；`hear` 返回 False = 与上一条 assistant 同文（粘住，不是新话）
+        sticky = not AGENT.hear(llmReply)
 
     # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）
     if not turn.phase_task:
@@ -299,6 +306,9 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     answer = answer_of(llmReply) 
     # 解析工具调用
     call = tool_of(llmReply)
+    if call is None and looks_like_tool(llmReply):
+        # 想调工具但形状没写对（严格解析取不出名字）⇒ 这轮落重问。它是「请继续。」的唯一线索
+        LOGGER.info("【工具调用】：形状没写对（取不出工具名）⇒ 这一轮落重问")
     command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
     # 判题器本轮报的"答案不对"（`code 2`）—— 判据 ④ 的触发条件
     rejected = any(e.code == 2 for e in turn.errors)
@@ -312,12 +322,14 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     elif rejected:
         retry = f"【判题器反馈】：{why}" if why else "（判题器未说明错在哪一项）"
 
-    if result:  # ② 回灌结果、这轮不发 LLM 的命令（空槽照旧归链尾的探查闸门；必须压在 ③ 前）
+    if command and not sticky:  # ③ LLM 要了命令 ⇒ 这个字段归它（回执同轮到达也照发：它是第一
+        # 优先级）；粘住的重发不算（同一条命令已经在沙盒里跑）。prompt 槽留给链尾的压缩闸门，
+        # 但同轮有回执 ⇒ 先把结果回灌进 prompt（两个字段各装各的，谁也不挤掉谁）
+        prompt = AGENT.chat(turn.phase_task, result=result, retry=retry) if result else ""
+        cmd = command
+    elif result:  # ② 只有回执（或粘住的重发）⇒ 回灌结果、这轮不发 LLM 的命令
         # 有回执 ⇒ 回灌结果
         prompt, cmd = AGENT.chat(turn.phase_task, result=result, retry=retry), ""
-    elif command:  # ③ 工具给了命令 ⇒ 交给沙盒；prompt 槽留给链尾的压缩闸门
-        # 有命令 ⇒ 交给沙盒
-        prompt, cmd = "", command
     elif retry:
         # 答错了 ⇒ 带纠错重问
         prompt, cmd = AGENT.chat(turn.phase_task, retry=retry), ""
@@ -332,8 +344,10 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     if not answer and prompt == "":
         prompt = AGENT.compression_request()
     # 链尾探查闸门：命令槽还空着 ⇒ 拿去摸沙箱环境（回执归探查自己收，不回灌）。
-    # 每回合都发得出 —— 沙盒每道任务独立，探完一遍下一回合从头上再走一遍
-    if cmd == "":
+    # 每回合都发得出 —— 沙盒每道任务独立，探完一遍下一回合从头上再走一遍。
+    # 例外：这轮 LLM 点名调了 `executeCmd`（工具名与注册表同键）却发不出命令（参数没给全 /
+    # 值是空白）⇒ 这个槽归它，空着也不给探查占（用户口径：它才是这个字段的第一优先级）
+    if cmd == "" and not (call and call[0] == "executeCmd"):
         cmd = cmd_explore.next_command()
     return prompt, cmd
 

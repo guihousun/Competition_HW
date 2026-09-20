@@ -123,15 +123,16 @@ class ContextTest(unittest.TestCase):
 
 
     def test_the_summary_rides_right_after_the_task(self):
-        """`summary` 渲染成题目后面的一条 user 消息（`【历史摘要】` 头 ——
-        标题当内容标签的既有模式）。没有摘要时这条不出现（首问 = `[system, user]`，
+        """`summary` 渲染成题目后面的一条 `tool` 消息（`【历史摘要】` 头 ——
+        标题当内容标签的既有模式）：它替旧往来记账，与沙盒回执同类，不是用户说的话。
+        没有摘要时这条不出现（首问 = `[system, user]`，
         由 `test_a_fresh_context_opens_with_the_task` 钉着）。"""
         self.ctx.summary = "【总目标】交 token"
         roles = [m["role"] for m in self.messages()]
-        self.assertEqual(roles[:3], ["system", "user", "user"])
+        self.assertEqual(roles[:3], ["system", "user", "tool"])
         self.assertEqual(
             self.messages()[2],
-            {"role": "user", "content": "【历史摘要】\n【总目标】交 token"},
+            {"role": "tool", "content": "【历史摘要】\n【总目标】交 token"},
         )
 
     def test_the_window_keeps_the_last_two_rounds(self):
@@ -144,7 +145,7 @@ class ContextTest(unittest.TestCase):
         self.ctx.summary = "旧账都在这里"
         self.assertEqual(
             [m["role"] for m in self.messages()],
-            ["system", "user", "user", "assistant", "tool", "assistant", "tool"],
+            ["system", "user", "tool", "assistant", "tool", "assistant", "tool"],
         )
         contents = [m["content"] for m in self.messages()]
         self.assertIn("回复2", contents)

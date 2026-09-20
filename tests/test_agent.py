@@ -223,6 +223,51 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertNotIn("测试用工具", gen_all_tool_prompt(Agent()._tools))
 
 
+class ToolCallLogTest(unittest.TestCase):
+    """`Agent.tool_call` 的四条出口各打一条 `【工具调用】`。
+
+    实盘上"这一轮 LLM 到底调没调工具、为什么没调成"只有这几行能回答 —— 回复原文在任务行里，
+    但原文看不出它有没有变成命令（`llmResp` 与 `executeCmd` 是两个字段）。
+    """
+
+    def setUp(self) -> None:
+        self.agent = Agent()
+
+    def test_the_log_names_the_tool_the_params_and_the_outcome(self):
+        """派出去的调用记全文（工具名 + `名=值`）与出口：出命令 / 不产命令 / 无参数。"""
+        self.agent._tools["查询状态"] = (lambda: "状态正常", "测试用：查个状态", ())
+        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
+            self.agent.tool_call("executeCmd", [("cmd", "ls -la")])
+            self.agent.tool_call("SOP2Prompt", [("name", "读题"), ("sop", "先 ls")])
+            self.agent.tool_call("查询状态", [])
+        self.assertEqual(
+            [r.getMessage() for r in caught.records],
+            [
+                "【工具调用】：executeCmd（cmd=ls -la）⇒ 命令已出",
+                "【工具调用】：SOP2Prompt（name=读题，sop=先 ls）⇒ 这个工具不产出命令",
+                "【工具调用】：查询状态（无参数）⇒ 命令已出",
+            ],
+        )
+
+    def test_a_call_that_never_reached_a_tool_says_why(self):
+        """三条"调用不成立"各有各的话：那是 LLM 白等一回合的唯一线索。"""
+        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
+            self.agent.tool_call("查不到的工具", [("cmd", "ls")])
+            self.agent.tool_call("executeCmd", "ls")
+            self.agent.tool_call("executeCmd", [("命令", "ls")])
+        lines = "\n".join(r.getMessage() for r in caught.records)
+        self.assertIn("未知工具「查不到的工具」⇒ 调用不成立", lines)
+        self.assertIn("参数不是「名=值」的形状", lines)
+        self.assertIn("executeCmd（命令=ls）⇒ 调用不成立（声明了的参数缺了或值为空白）", lines)
+
+    def test_a_long_value_is_clipped_but_the_command_goes_out_whole(self):
+        """日志里的值截到 `ARGS_LOG_MAX`（原文在任务行里）—— 发出去的命令一个字不动。"""
+        cmd = "echo " + "x" * 1200
+        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
+            self.assertEqual(self.agent.tool_call("executeCmd", [("cmd", cmd)]), cmd)
+        self.assertIn(f"…（共 {len(cmd)} 字）", caught.records[0].getMessage())
+
+
 class ReadSandboxFileTest(unittest.TestCase):
     """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（现挂在工具描述里的
     那份清单）允许调用，写整条全路径、或只写它的文件名都行（文件名对上不止一份 ⇒ 不成立，
