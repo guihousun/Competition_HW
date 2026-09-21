@@ -2067,6 +2067,7 @@ def _night_prepare(turn, commands, state, planner_state):
                                purchase_deadline=deadline, night_prepare=True)
     _TRIP_FRAME.set(frame)
     claimed = set()
+    metal_claimed: set[Pos] = set()
     report = {'phase': 'idle', 'reason': 'no_affordable_upgrade'}
     if frame.purchase:
         proposal, report = upgrade_itinerary.plan(turn, state, commands,
@@ -2109,7 +2110,8 @@ def _night_prepare(turn, commands, state, planner_state):
             continue
         if _try_trade(turn, role, commands, state):
             continue
-        if _mine_metal(turn, role, claimed, commands, state, routes=routes):
+        if _mine_metal(turn, role, claimed, commands, state, routes=routes,
+                       mine_claimed=metal_claimed):
             continue
         # Daytime walls still need material, but building is never proposed here.
         if (_missing_wall_sites(turn) and role.backpack.count('stone') < STONE_BATCH
