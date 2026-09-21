@@ -195,14 +195,15 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("接口", block)
 
     def test_the_sop_tool_teaches_reuse_and_a_generic_name(self):
-        """描述里要有两层：① 沉淀是为了下次同类任务**少做探索**；
+        """描述里要有两层：① 沉淀是为了下次同类任务**复用**；
         ② `name` 要泛化到"一类问题"（「订去某地的机票的流程」），不能写死成本次的目标。
 
         第 107 步起"什么时候存、存成什么名"整套细则都在这条描述里（旧的【沉淀规则】段
-        随用户重写的 prompt 删除），这一段就是沉淀规则的唯一出口。"""
+        随用户重写的 prompt 删除），这一段就是沉淀规则的唯一出口。第 133 步压缩后
+        ① 的措辞从"能够少做探索"变成"具有复用价值"，判据改钉后者。"""
         desc = gen_all_tool_prompt(self.agent._tools)
         block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
-        self.assertIn("能够少做探索", block)
+        self.assertIn("具有复用价值", block)
         self.assertIn("泛化", block)
         self.assertIn("订去某地", block)
 

@@ -22,7 +22,6 @@ from coregeek.agent.tools import sop  # noqa: E402
 #: 段头改名/换序时改这一处，用例不会退化成 IndexError。
 #: 末段（COT 触发语）**没有段头** ⇒ 不在这张表里，切最后一段时它会跟着前一段一起出来。
 SECTIONS = (
-    "# 【背景】",
     "# 【ROLE定位】",
     "# 【工作原则】",
     "# 【工具描述】",
@@ -80,7 +79,7 @@ class ChatPromptTest(unittest.TestCase):
 
         段序就是四层的落地（决策 → 工具 → 知识 → 输出）；「只一次」是"同一条规则只写
         一处"的机械保证 —— 重复的规则会稀释注意力，而这件事在实盘上测不出来。
-        【背景】段还必须是整份 system 的第一个字节（`test_app` 的日志链路按它断言，
+        首段还必须是整份 system 的第一个字节（`test_app` 的日志链路按段头断言，
         它前面不许有空白 —— 段与段之间靠 `gen_system_prompt` 的 join 排版）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertTrue(system.startswith(SECTIONS[0]))
@@ -175,17 +174,19 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("- /opt/task/a.md，a.md", tools)
         self.assertIn("- /opt/task/b.md，b.md", tools)
         # 两种写法这条**规则**在描述本身里（清单不再复述）⇒ 改版面别把它一起删掉
-        self.assertIn("传入[路径清单]中的完整路径", tools)
-        self.assertIn("传入[路径清单]中的文件名", tools)
+        self.assertIn("全路径或它的文件名", tools)
 
     def test_the_deposit_rules_pin_the_name_to_a_class_of_tasks(self):
         """`name` 要凝练到"一类问题"上（「订去某地的机票的流程」，不是「订去上海的机票」）。
 
         名字写死成这一次的目标，下次同类任务就撞不上它 —— SOP 等于白存，而这条错了
-        本地一点异常都看不出来（存是存进去了，只是永远复用不到）。"""
+        本地一点异常都看不出来（存是存进去了，只是永远复用不到）。
+
+        第 133 步描述压缩成一句之后，"一类问题"这层意思由参数表那句
+        "泛化后的问题类型名称"承担。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
-        self.assertIn("一类问题", rules)
+        self.assertIn("泛化后的问题类型名称", rules)
         self.assertIn("订去某地", rules)
 
     def test_the_deposit_rules_pin_the_body_to_a_generic_flow(self):
@@ -193,24 +194,28 @@ class ChatPromptTest(unittest.TestCase):
 
         名字泛化只挡住一半，正文照样能把"这次的目标值、这次拿到的凭证"带进去 —— 条目是
         整场存活、跨任务复用的，下一次同类任务会照着一条过期的取值去做，**而它看不出
-        那条已经过期**（口径：接口定义/参数定义要收，本次的取值不收）。"""
+        那条已经过期**（口径：接口定义/参数定义要收，本次的取值不收）。
+
+        第 133 步那串黑名单清单（token / 仅本次有效的参数值 / 一次性中间状态）压缩成
+        一句"不要记录一次性答案、临时状态、临时文件/路径"，泛化要求由参数表那句
+        "该类问题的通用解决流程"承担。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
-        self.assertIn("sop 正文也必须泛化", rules)
-        self.assertIn("当前任务的 token", rules)
-        self.assertIn("仅本次有效的参数值", rules)
+        self.assertIn("该类问题的通用解决流程", rules)
+        self.assertIn("不要记录一次性答案、临时状态", rules)
 
     def test_the_deposit_rules_pin_the_timing(self):
-        """沉淀的时机 = 那四种情况（有新的可复用知识 / 还没沉淀过 / 需要修正旧条目 / 已确认）。
+        """沉淀的时机：**已实际验证**且**对未来同类任务有复用价值**这两道门。
 
-        第 107 步口径**变回来了**：用户重写的 prompt 把"值不值得"这道门槛放回了
-        `SOP2Prompt` 的描述（"[什么时候使用]"+"判断标准"），旧口径「只要还没沉淀过就存、
-        值不值得不是门槛」作废 ⇒ 本用例改钉新措辞。"""
+        第 133 步口径又变一次：第 107 步那版把"[什么时候使用]"四条清单加"判断标准"
+        整段放在描述里，用户压缩后门槛只剩"已实际验证、且具有复用价值"这一句 ——
+        门还在（不是"只要没存过就存"），清单没了。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
-        self.assertIn("该知识尚未存在于已有 SOP 中", rules)
-        self.assertIn("不重复创建", rules)
-        self.assertIn("使用相同 name 更新旧 SOP", rules)
+        self.assertIn("已实际验证", rules)
+        self.assertIn("具有复用价值", rules)
+        self.assertIn("已有相同 SOP 时应更新", rules)
+        self.assertIn("而不是重复创建", rules)
         # 沉淀与作答同轮的形状仍在（问答两侧各一处，两处都不许走）
         self.assertIn("当要沉淀且同回合要交答案时", system)
         self.assertNotIn("当完成任务且认为流程可沉淀时", system)
@@ -273,24 +278,12 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("只写一个这个块", output)
         self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
         self.assertIn("这条只管 `sop` 那段文本", output)
-
-    def test_the_background_frames_where_the_two_requirements_come_from(self):
-        """【背景】段只写处境：远程沙盒、判题器下达任务并收答案、环境陌生而文档可能过时。
-
-        与【工作原则】/【工具描述】的分工是**机制不重复**：回合怎么算、回执什么时候回来、
-        沙盒里能跑什么，各段写各的；背景段回答"我为什么在这儿、这活儿替谁干"。
-        第 107 步：旧版那句"两条要求就是这个处境来的"被用户删掉，"以实测为准"现在只在
-        【ROLE定位】与 `SOP2Prompt` 的描述里（用例按新落点钉）。
-        它必须是整份 system 的第一段（`test_app` 的日志链路按段头断言）。
-        """
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        background = _section(system, "# 【背景】")
-        self.assertIn("远程沙盒", background)
-        self.assertIn("判题器", background)
-        self.assertIn("文档可能过时、也可能写错", background)
-        # 机制不在这里复述（成本模型与沙盒能力都在【工具描述】）
-        self.assertNotIn("一个回合", background)
-        self.assertNotIn("15 秒", background)
+        # 【注意事项】第 1 条指的是同一个标签。第 133 步它一度写成 [工具调用格式] ——
+        # 那是把答案指向 `<tool>` 块，与上面那条正面冲突（本地测不出来：`answer_of` 有
+        # "原文即答案"兜底），所以在这里钉住"两处指同一个标签"。
+        self.assertIn(
+            "[任务答案提交格式]或[特殊混合模式]", _section(system, "# 【注意事项】")
+        )
 
     def test_the_flow_asks_for_the_reasoning_before_the_blocks(self):
         """先写推演、再给工具块或答案块（用户口径：COT 引导）。
@@ -299,11 +292,15 @@ class ChatPromptTest(unittest.TestCase):
         不写下来就只剩一个结果、没有"上一步为什么没成"。落点必须在块**前面** —— 写进
         `<answer>` 里会被当成答案的一部分交上去。
         第 116 步删掉【输出示例】后只剩两处落点：末段那句 COT 触发语，与【输出约定】里
-        "开头那段推演不算，它是写给你自己看的"。
+        "开头那段推演不算，它是写给你自己看的"。第 133 步用户把触发语从"让我们一步步推理"
+        换成"先判断信息缺口与行动价值"—— 落点与次序不变，仍钉"它收在整份 system 最后"。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("让我们一步步推理", system)
-        self.assertTrue(system.rstrip().endswith("正确无误。"), "COT 触发语收在整份 system 最后")
+        self.assertIn("每次行动前判断信息缺口和行动价值", system)
+        self.assertTrue(
+            system.rstrip().endswith("只执行能推进任务的最小必要动作。"),
+            "COT 触发语收在整份 system 最后",
+        )
         self.assertIn("开头那段推演不算，它是写给你自己看的", _section(system, "# 【输出约定】"))
 
     def test_the_flow_numbered_steps_start_at_one(self):
@@ -328,16 +325,18 @@ class ChatPromptTest(unittest.TestCase):
         【每回合流程】整段删除）：一次调用 = 两个回合、能合就合、批量试、给每次尝试打标签；
         本地纯计算那条退路（一个回合就回）在 `python_exec` 的描述里。
         判据是资源约束，不是"遇到 A 就做 B"的流程 —— 后者才是过拟合。这条错了本地一点异常
-        都没有，只是分数低（日志上数 `executeCmd` 的条数才看得出来）。"""
+        都没有，只是分数低（日志上数 `executeCmd` 的条数才看得出来）。
+
+        第 133 步用户把两段描述压成散文：条目符号与标题没了，四条性质逐条改钉新措辞。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         tools = _section(system, "# 【工具描述】")
         cmd, local = tools.split("## ToolName - python_exec", 1)
-        self.assertIn("消耗两个回合", cmd)
-        self.assertIn("尽可能完成多个连续操作", cmd)
-        self.assertIn("优先在一次命令中批量尝试", cmd)
+        self.assertIn("一次调用消耗 2 个回合", cmd)
+        self.assertIn("连续操作应尽量合并", cmd)
+        self.assertIn("批量尝试", cmd)
         # 产出是写给下一轮的自己读的：不带标签就分不清哪条结果对哪次尝试
         self.assertIn("给每次尝试输出清晰标签", cmd)
-        self.assertIn("仅需一个回合执行", local)
+        self.assertIn("比 executeCmd 省一个回合", local)
 
     def test_the_flow_says_a_failure_is_a_clue(self):
         """拿到结果先分析、照着结果调整方案再继续（【工作原则】循环的第 (7) 步那一支）。
@@ -358,10 +357,11 @@ class ChatPromptTest(unittest.TestCase):
         这是"第一次尝试就偏"的正面对策 —— 偏的成因多半是**信息不足就动手**（照着一份可能
         写错的文档猜参数）。成本账：看清环境 = 一条命令，猜错一次 = 两个回合才拿回反馈。
         第 107 步起这段改钉它在【工作原则】（循环第 (4) 步）与 `executeCmd` 用途表里的落点
-        —— 旧【每回合流程】那句"一条命令就能把这些一次问清"已删除。"""
+        —— 旧【每回合流程】那句"一条命令就能把这些一次问清"已删除。第 133 步用途表压成
+        一句"用于探索环境" ⇒ 工具描述那一侧的断言改钉它。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn("(4)检查当前环境中已有的资源", _section(system, "# 【工作原则】"))
-        self.assertIn("- 探查沙盒环境", _section(system, "# 【工具描述】"))
+        self.assertIn("用于探索环境", _section(system, "# 【工具描述】"))
 
     def test_the_flow_says_to_follow_the_task_book_hints(self):
         """任务书点到的文件 / 接口 / 脚本就是探索的路线，不许绕开它自己另定一套验证标准。
@@ -369,10 +369,12 @@ class ChatPromptTest(unittest.TestCase):
         这是用户报的"第一次尝试会偏"的原话：偏的是**探索方向** —— 任务书写着"需求在 spec.md、
         用 check.sh 验证"，它却绕开这两样自己猜要做什么、自己另定一套标准。第 107 步起只剩
         两处落点：`executeCmd` 的第 8 条使用原则（指定了脚本就用那一个）与【工作原则】任务
-        理解的第 5 条（先看它给了哪些线索）。绕一圈回来，那两个回合的反馈照样得付。"""
+        理解的第 5 条（先看它给了哪些线索）。绕一圈回来，那两个回合的反馈照样得付。
+        第 133 步压缩时这一条**整句被删过一次**，已按守门员的原意补回：判据仍是
+        "不要自行创造另一套验证方式"这半句，别在下次改版面时再删掉。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn(
-            "优先执行指定脚本，不要自行创造另一套验证方式",
+            "指定了脚本或验证方式时优先执行它，不要自行创造另一套验证方式",
             _section(system, "# 【工具描述】"),
         )
         self.assertIn("任务中明确提供了哪些线索", _section(system, "# 【工作原则】"))
@@ -395,11 +397,13 @@ class ChatPromptTest(unittest.TestCase):
         记成功经验、不记"文档错了"这件事。不写这一句，第一个任务白试、后面每个同类任务
         再白试一遍（SOP 是整场跨任务的，这条结论对它才是资产）。
         落点两处：`SOP2Prompt` 的描述（文档与实测冲突时以实测为准）与【ROLE定位】的可信度
-        排序（第 107 步，旧【沉淀规则】段删除）。"""
+        排序（第 107 步，旧【沉淀规则】段删除）。第 133 步压缩时描述那一处**整句被删过一次**，
+        已补回"文档与实测冲突时以实际执行结果为准"；旧长文里那个 destination/target 例子
+        没有回来（例子是解释用的，判据是那句规则本身）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
         self.assertIn("以实际执行结果为准", rules)
-        self.assertIn("文档写参数为 destination", rules)
+        self.assertIn("存跑通的那一版", rules)
         self.assertIn("冲突时以实测为准", _section(system, "# 【ROLE定位】"))
 
     def test_the_deposit_rules_say_how_a_stale_entry_gets_replaced(self):
@@ -407,11 +411,13 @@ class ChatPromptTest(unittest.TestCase):
         也不是以旧条目为准。
 
         旧条目错了而没人改，它就会一直被照做；新起一条同样名字的又会把旧的挤掉或并存。
-        同名覆盖是 `tools/sop.py` 已有的存储规则，这里只是把它讲给 LLM 听。"""
+        同名覆盖是 `tools/sop.py` 已有的存储规则，这里只是把它讲给 LLM 听。
+        第 133 步压缩后"同名会覆盖旧条目"这句机制说明没了，只剩"已有相同 SOP 时应更新，
+        而不是重复创建" —— 判据落在"应更新"这半句上。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
-        self.assertIn("使用相同 name 更新旧 SOP", rules)
-        self.assertIn("同名会覆盖旧条目", rules)
+        self.assertIn("已有相同 SOP 时应更新", rules)
+        self.assertIn("而不是重复创建", rules)
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))

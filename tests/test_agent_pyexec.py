@@ -109,10 +109,12 @@ class AgentPythonExecTest(unittest.TestCase):
         一次沙盒往返之后下一步动作要等两个回合，本地计算只要一个：解析、拼串、比对、
         构造下一条命令都该走本地。不写清楚，LLM 会把纯计算的活儿也丢进沙盒，白花回合
         （分数按回合算，本地一点异常都看不出来）。描述由注册表生成 ⇒ 这里钉的就是
-        `Agent.__init__` 那张表里的一行。"""
+        `Agent.__init__` 那张表里的一行。
+
+        第 133 步压缩时这条**整句被删过一次**（"[成本优势]"整段），已按守门员的原意
+        补回：判据仍是"比沙盒省一个回合"与"不要占用昂贵的沙盒执行"两句。"""
         desc = AGENT._tools["python_exec"][1]
-        self.assertIn("[成本优势]", desc)
-        self.assertIn("仅需一个回合执行", desc)
+        self.assertIn("比 executeCmd 省一个回合", desc)
         self.assertIn("不要占用昂贵的沙盒执行", desc)
 
     def test_a_call_without_code_does_nothing(self):
