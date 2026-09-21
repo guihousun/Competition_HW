@@ -346,6 +346,12 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if safety['command'] is not None:
             commands[pioneer_role.unit_id] = safety['command']
             job = None  # Leaving task range must not also submit a new task action.
+    from . import rocket_post
+    protected_posts = {pioneer_role.unit_id} if job and job.get('claimed') and pioneer_role else set()
+    staged_maintenance = _PHASE_MAINTENANCE.get()
+    if staged_maintenance is not None:
+        protected_posts.update(staged_maintenance[1]['owned_roles'])
+    post_reservations = rocket_post.reserve(turn, commands, protected=protected_posts)
     commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
     trip_frame = _TRIP_FRAME.get()
     if trip_frame is not None:
@@ -415,6 +421,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             _DECISION_REPORT.get()['shared_rocket_control'] = deepcopy(context[1])
         _DECISION_REPORT.get()['pioneer_safety'] = {k:v for k,v in safety.items() if k != 'command'} if safety else None
         _DECISION_REPORT.get()['strategy_config'] = strategy_config.identity()
+        _DECISION_REPORT.get()['rocket_post_reservations'] = post_reservations
         if maintenance is not None:
             _DECISION_REPORT.get()['maintenance'] = deepcopy(maintenance[1]['report'])
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
@@ -2199,15 +2206,15 @@ def _coordinate_rockets(turn, commands, claimed):
             if not common:
                 result.update(phase='common_stand_blocked',
                               desired_stands=[p.dump() for p in shared])
+            else:
+                stand, step, length = min(common, key=lambda row: (
+                    row[2], row[0].x, row[0].y))
+                result.update(stand=stand.dump(), approach_steps=length,
+                              phase='moving_to_common_stand')
+                if step is not None:
+                    commands[worker.unit_id] = move_command(step)
+                    claimed.add(step)
                 return result
-            stand, step, length = min(common, key=lambda row: (
-                row[2], row[0].x, row[0].y))
-            result.update(stand=stand.dump(), approach_steps=length,
-                          phase='moving_to_common_stand')
-            if step is not None:
-                commands[worker.unit_id] = move_command(step)
-                claimed.add(step)
-            return result
         ready = []
         if not turn.is_day:
             for gun in guns:
@@ -2229,7 +2236,11 @@ def _coordinate_rockets(turn, commands, claimed):
             claimed.add(worker.pos)
             result.update(active=True, stand=worker.pos.dump(), phase='firing',
                           firing=gun.unit_id)
+            if shared and not common:
+                result['fallback'] = 'same_operator_adjacent_fire_common_blocked'
             return result
+        if shared and not common:
+            return result  # no safe shot: retain the explicit common-post failure
         choices = common
         if not choices:
             ready_positions = [row[3].pos for row in ready]

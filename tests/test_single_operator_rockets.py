@@ -184,6 +184,26 @@ class SingleOperatorTests(unittest.TestCase):
         self.assertEqual(result['phase'],'common_stand_blocked')
         self.assertEqual(cmd,{})
 
+    def test_blocked_common_keeps_same_worker_adjacent_safe_fire(self):
+        p=fixture()
+        for role,pos in zip(p['teamOur']['roles'][4:],[(8,21),(8,23),(9,23)]):
+            role['pos']=dict(zip(('x','y'),pos))
+        p['teamOur']['roles'][1]['pos']=dict(x=8,y=20)
+        p['teamOur']['roles'][2]['pos']=dict(x=10,y=23)
+        p['teamOur']['roles'][3]['pos']=dict(x=8,y=22)
+        p['teamOur']['roles'][3]['backpack']=['WallFixer']
+        cmd={4:dict(action='use',name='WallFixer',targetPos=[dict(x=7,y=22)])}
+        turn=Turn.load(p)
+        result=brain._coordinate_rockets(turn,cmd,set())
+        brain._fill_ready_weapons(turn,cmd,set())
+        self.assertFalse(result['common_stand_feasible'])
+        self.assertEqual(result['reason'],'common_stand_unreachable')
+        self.assertEqual(result['fallback'],'same_operator_adjacent_fire_common_blocked')
+        self.assertEqual(cmd[10]['controllerId'],'2')
+        self.assertNotIn(2,cmd)
+        self.assertEqual(cmd[4]['action'],'use')
+        self.assertEqual(len([c for c in cmd.values() if c['action']=='attack']),1)
+
     def test_common_station_staging_uses_rear_opening_only_in_day(self):
         p = fixture()
         p['roundNo'] = 55
