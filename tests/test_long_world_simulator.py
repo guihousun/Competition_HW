@@ -29,7 +29,8 @@ class LongWorldSimulatorTests(unittest.TestCase):
                     # size: keep the small legacy waves so the pioneer is not
                     # overwhelmed. The observed wave table has its own tests.
                     state = local_world_news.install(
-                        scenarios.scenario(90317, side, 1, profile='local-pressure'),
+                        scenarios.scenario(90317, side, 1, profile='local-pressure',
+                                           task_world_profile='legacy-local-v1'),
                         long_context=True)
                     daily, inspected, bought, moved, opened = {}, False, False, False, False
                     for _ in range(300):

@@ -71,15 +71,15 @@ class TaskFeedbackTests(unittest.TestCase):
                     self.assertEqual(state['errors'][0]['errorCode'], 2)
                     self.assertEqual(state['teamOur']['goldNum'], 75)
                     self.assertEqual(state['teamOur']['totalScore'], 0)
-                    self.assertEqual(book['tasks_left'], 30)
+                    self.assertEqual(book['tasks_left'], taskworld.TASKS_PER_POINT)
                     self.assertEqual(state['phaseTask'], 'Return a=4;b=8')
                 state['roundNo'] = 12
                 report = self.judge(state, world, 'a=4;b=8')
                 self.assertEqual(report['ended'], 'completed')
-                # floor(50 + 5*25/(12-5)) = 67 in the existing local score model.
+                # This hand-built active task keeps its legacy fixture terms.
                 self.assertEqual(state['teamOur']['totalScore'], 67)
                 self.assertEqual(state['teamOur']['goldNum'], 105)
-                self.assertEqual(book['tasks_left'], 29)
+                self.assertEqual(book['tasks_left'], taskworld.TASKS_PER_POINT - 1)
                 self.assertEqual(book['cooldown'], 30)
                 self.assertIsNone(book['active'])
                 self.assertEqual(state['phaseTask'], '')
@@ -119,7 +119,7 @@ class TaskFeedbackTests(unittest.TestCase):
             state['roundNo'] = 12
             self.judge(state, world)
             self.assertEqual(state['teamOur']['totalScore'], 25)
-            self.assertEqual(book['tasks_left'], 29)
+            self.assertEqual(book['tasks_left'], taskworld.TASKS_PER_POINT - 1)
 
     def test_zero_credit_timeout_has_no_reward(self):
         state, world, book, _ = self.fixture()
@@ -194,7 +194,7 @@ class TaskFeedbackTests(unittest.TestCase):
                                        'taskAnswer': '{"city":"北京","temperature":23}'}})['state']
             state = step(state, {})['state']
             self.assertEqual(state['_demo']['task_report']['ended'], 'completed')
-            self.assertEqual(state['teamOur']['goldNum'], 105)
+            self.assertEqual(state['teamOur']['goldNum'], 155)
 
 
 if __name__ == '__main__':

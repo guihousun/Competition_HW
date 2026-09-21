@@ -63,7 +63,7 @@ def observation(state):
 
 def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
              profile=DEFAULT_PROFILE, market_layout=DEFAULT_MARKET_LAYOUT,
-             map_layout=layouts.SEEDED):
+             map_layout=layouts.SEEDED, task_world_profile=None):
     seed, pressure = int(seed), int(pressure)
     if side not in ('challenger', 'defender') or not 1 <= pressure <= 3:
         raise ValueError('side must be challenger/defender; pressure must be 1..3')
@@ -108,6 +108,7 @@ def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
                                                     + [(item, TASK_ITEM_PRICE)
                                                        for item in TASK_ITEMS]],
              '_demo': {'seed': seed, 'pressure': pressure, 'profile': profile,
+                       **({'task_world_profile': task_world_profile} if task_world_profile else {}),
                        'mines': {}, 'dead': {},
                        'kills': 0, 'finished': False, 'waves': 0, 'elapsed': 0,
                        'errands': {}}}

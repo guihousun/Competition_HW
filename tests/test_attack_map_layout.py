@@ -74,8 +74,9 @@ class AttackMapLayoutTests(unittest.TestCase):
         expected = {'challenger':'de56b0869140e06ad4bb84c26ee728702d50b72e15eae93a2f55d659fdd7a1ca',
                     'defender':'b16716fcd04b93a76957950326b2c7b7fb86aabd653f41e7a460f1b5f90564da'}
         for side, digest in expected.items():
-            state = scenario(7, side)
-            self.assertEqual(state, scenario(7, side, map_layout=map_layout.SEEDED))
+            state = scenario(7, side, task_world_profile='legacy-local-v1')
+            self.assertEqual(state, scenario(7, side, map_layout=map_layout.SEEDED,
+                                             task_world_profile='legacy-local-v1'))
             data = {k:state[k] for k in ('mapInfo','teamOur','teamEnemy')}
             self.assertEqual(digest, hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest())
 

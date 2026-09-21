@@ -97,7 +97,7 @@ RULE_ROWS: list[dict[str, str]] = [
      "status": "local", "note": "默认 observed-seven-days 用 Issue19 附件前7天实测（空白按0解释）；第8–10天未观测，"
                                "本地假设每夜多5只小型（非官方）；local-pressure 为旧 day*pressure+1 实验"},
     {"id": "R05", "item": "基础波次公式、机器人选敌与移动顺序",
-     "status": "local", "note": "S06 用户确认主要攻基地、只打附近角色；本地以3格为交战半径，准确寻敌规则/移动顺序待核验；压力档非官方难度"},
+     "status": "local", "note": "用户确认寻敌/偏航边界为3格；具体并列选敌和移动顺序仍属本地假设，压力档非官方难度"},
     {"id": "R06", "item": "小贩卖出 / 商店购买（价格读观测）",
      "status": "official", "note": "需周围一格；金币或背包不足则失败；价格随新闻变动，本地不写死"},
     {"id": "R02/R06/S05", "item": "中央小贩与右上武器商店",

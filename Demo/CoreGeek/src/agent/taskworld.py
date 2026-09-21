@@ -16,7 +16,10 @@ It is deliberately labelled a fixture:
 
 Official structure that *is* modelled exactly: 2 points per team, point 2 spans
 two cells, 30-round refresh after an ending, acceptance only by a pioneer inside
-the ring, and a timeout scoring the best pass rate submitted so far.
+the ring, and a timeout scoring the best pass rate submitted so far. The local
+new-game budget is two points with three opportunities each. The timeout and
+reward defaults below are observed public metadata from Issues 21/23/24, not
+universal official constants; explicit case metadata remains authoritative.
 """
 from __future__ import annotations
 
@@ -28,12 +31,25 @@ from typing import Any
 from .protocol import Pos, distance, TWO_CELL_TASK_TYPES
 from .tasks import REFRESH_ROUNDS, HOLD_RANGE, TaskPipeline
 
-# Local task generation parameters (fixtures, not official numbers). The point
-# budget is set high enough that tasks stay available across a 1300-round match:
-# with only a handful per point the demo ran out of tasks half way through and
-# the task loop had nothing left to exercise.
-TASKS_PER_POINT = 30
-DEFAULT_TIMEOUT = 25
+# Local task generation parameters (fixtures, not universal official numbers).
+# The current observed profile has three finite opportunities at each of the
+# two self-evolution points.  A point's cooldown only delays its next available
+# opportunity; it never restores an opportunity that has already ended.
+TASKS_PER_POINT = 3
+DEFAULT_TIMEOUT = 15
+DEFAULT_SCORE = 80
+DEFAULT_GOLD = 80
+
+# Explicit legacy worlds/replays are kept readable.  They are selected only by
+# an old world with no rules metadata or by an explicit opt-in at construction;
+# a new world never falls back to these values.
+LEGACY_PROFILE = "legacy-local-v1"
+LEGACY_TASKS_PER_POINT = 30
+LEGACY_TIMEOUT = 25
+LEGACY_SCORE = 50
+LEGACY_GOLD = 30
+TASK_WORLD_SCHEMA = "local-task-world/2"
+OBSERVED_PROFILE = "observed-local-v2"
 POINT_KINDS = ("自进化类1", "自进化类2")
 
 _TEMPLATES = (
@@ -64,16 +80,40 @@ def new_world(state: dict[str, Any]) -> dict[str, Any]:
     """Deterministic local task world for one generated scenario."""
     seed = int(((state.get("_demo") or {}).get("seed")) or 1)
     rng = random.Random(seed * 7919 + 13)
+    # The legacy profile is an explicit compatibility choice for local fixtures
+    # that need to reproduce a pre-v2 world.  It is never inferred for a new
+    # scenario from the absence of public task metadata.
+    requested_profile = ((state.get("_demo") or {}).get("task_world_profile"))
+    if requested_profile == LEGACY_PROFILE:
+        profile = LEGACY_PROFILE
+        tasks_per_point, timeout, score, gold = (
+            LEGACY_TASKS_PER_POINT, LEGACY_TIMEOUT, LEGACY_SCORE, LEGACY_GOLD)
+    else:
+        profile = OBSERVED_PROFILE
+        tasks_per_point, timeout, score, gold = (
+            TASKS_PER_POINT, DEFAULT_TIMEOUT, DEFAULT_SCORE, DEFAULT_GOLD)
     points: dict[str, dict[str, Any]] = {}
     for team in ("challenger", "defender"):
         for index in (1, 2):
             key = f"{team}TaskPoint{index}"
             points[key] = {
-                "tasks_left": TASKS_PER_POINT,
+                "tasks_left": tasks_per_point,
                 "cooldown": 0,
                 "active": None,
             }
-    return {"seed": seed, "rng_state": rng.getstate(), "points": points}
+    return {
+        "seed": seed,
+        "rng_state": rng.getstate(),
+        "points": points,
+        "rules": {
+            "schema": TASK_WORLD_SCHEMA,
+            "profile": profile,
+            "tasks_per_point": tasks_per_point,
+            "timeout_rounds": timeout,
+            "score_reward": score,
+            "gold_reward": gold,
+        },
+    }
 
 
 def _point_key(zone_kind: str) -> str:
@@ -111,9 +151,25 @@ def _find_pioneer(state: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _case_terms(case):
-    """Explicit fixture metadata, never a global official reward/timeout change."""
-    result = {'timeout': DEFAULT_TIMEOUT, 'score': 50, 'gold': 30}
+def _case_terms(case, world=None):
+    """Resolve local terms, with explicit case metadata taking precedence.
+
+    Worlds created before the rules metadata was added are legacy fixtures. We
+    read them with their historical defaults without mutating the replay.
+    """
+    rules = (world or {}).get('rules') if isinstance(world, dict) else None
+    if world is None:
+        result = {'timeout': DEFAULT_TIMEOUT, 'score': DEFAULT_SCORE,
+                  'gold': DEFAULT_GOLD}
+    elif isinstance(rules, dict) and rules.get('schema') == TASK_WORLD_SCHEMA:
+        result = {
+            'timeout': int(rules.get('timeout_rounds') or DEFAULT_TIMEOUT),
+            'score': int(rules.get('score_reward') or DEFAULT_SCORE),
+            'gold': int(rules.get('gold_reward') or DEFAULT_GOLD),
+        }
+    else:
+        result = {'timeout': LEGACY_TIMEOUT, 'score': LEGACY_SCORE,
+                  'gold': LEGACY_GOLD}
     for target, source in (('timeout', 'timeout_rounds'), ('score', 'score_reward'), ('gold', 'gold_reward')):
         value = (case or {}).get(source)
         if type(value) is int and 1 <= value <= 10000:
@@ -128,7 +184,7 @@ def player_tasks(state: dict[str, Any], world: dict[str, Any],
     tasks: list[dict[str, Any]] = []
     suite = world.get('agent_cases') or []
     upcoming = suite[int(world.get('generated') or 0) % len(suite)] if suite else None
-    terms = _case_terms(upcoming)
+    terms = _case_terms(upcoming, world)
     for index in (1, 2):
         kind = f"{team}TaskPoint{index}"
         pos = zones.get(kind)
@@ -344,7 +400,7 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
         case = deepcopy(suite[ordinal % len(suite)]) if suite else None
         if case:
             description, answer = case['description'], case['answer']
-        terms = _case_terms(case)
+        terms = _case_terms(case, world)
         if world.pop('llm_demo_once', False):
             description = '【本地LLM演示】计算十七加二十五。返回一个键值对，字段名 result，值为阿拉伯整数，不要解释。'
             answer = 'result=42'
@@ -378,6 +434,11 @@ def _advance_once(state: dict[str, Any], world: dict[str, Any],
 def attach(state: dict[str, Any]) -> None:
     """Create the local task world for a freshly generated scenario."""
     meta = state.setdefault("_demo", {})
+    # Imported snapshots and recordings already carry the task world that was
+    # observed/generated at that time. Never replace it with today's defaults;
+    # doing so would silently change remaining opportunities and rewards.
+    if isinstance(meta.get("task_world"), dict):
+        return
     meta["task_world"] = new_world(state)
     state["teamOur"]["playerTasks"] = player_tasks(state, meta["task_world"],
                                                    state["teamOur"]["type"])
@@ -408,4 +469,5 @@ def snapshot(state: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = ["new_world", "advance", "attach", "snapshot", "player_tasks",
-           "point_cells", "TASKS_PER_POINT", "DEFAULT_TIMEOUT"]
+           "point_cells", "TASKS_PER_POINT", "DEFAULT_TIMEOUT", "DEFAULT_SCORE",
+           "DEFAULT_GOLD", "LEGACY_PROFILE"]

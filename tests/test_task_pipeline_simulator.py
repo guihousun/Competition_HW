@@ -29,5 +29,5 @@ class PipelineSimulatorTests(unittest.TestCase):
         self.assertEqual([(r['scoreReward'],r['goldReward'],r['timeoutRounds']) for r in rows],[(80,80,15)]*2)
         old=scenarios.scenario(6173,'defender')
         rows=taskworld.player_tasks(old,old['_demo']['task_world'],'defender')
-        self.assertEqual(rows[0]['scoreReward'],50)
+        self.assertEqual(rows[0]['scoreReward'],80)
         self.assertEqual(rows[0]['timeoutRounds'],taskworld.DEFAULT_TIMEOUT)

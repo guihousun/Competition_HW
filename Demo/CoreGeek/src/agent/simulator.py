@@ -66,11 +66,10 @@ def frame_view(state):
 
 # Damage sources that a viewer must not confuse with official ballistics.
 SIMPLIFIED_SOURCES = ('rocket', 'gatling', 'railgun', 'robot')
-# User real-match supplement (2026-09-21): robots keep their base-directed
-# route while our units are beyond four cells. At four or fewer cells the local
-# simulator may select a nearby role, while the official tie-break remains
-# unconfirmed. This is a targeting-radius assumption, not weapon attack range.
-ROBOT_DEVIATION_RADIUS = 4
+# User high-confidence real-match clarification (2026-09-22): a robot keeps
+# its base-directed route when every friendly role is more than three cells
+# away. This pursuit/deviation radius is separate from combat attack range.
+ROBOT_DEVIATION_RADIUS = 3
 
 
 def _clear_building(state: dict[str, Any], record: dict[str, Any]) -> None:
@@ -328,9 +327,9 @@ def _plan_robot_actions(state):
                 victim = min(units, key=lambda u: min(distance(p, c) for c in cells(u)))
                 goal = min(cells(victim), key=lambda c: distance(p, c))
             else:
-                # S06 user observation: advance on the base, engage nearby roles.
-                # Deviation radius 4 is a local assumption from the user's
-                # real-match supplement; it is separate from attack range 3.
+                # User-confirmed behaviour: advance on the base and only
+                # deviate for a nearby role within three cells. The exact
+                # tie-break among several nearby roles remains local.
                 base = turn.station()
                 goal = (min(turn.footprint(base), key=lambda c: (distance(p, c), abs(p.x-c.x)+abs(p.y-c.y), c.x, c.y))
                         if base is not None else _nearest_building_cell(turn, p))
