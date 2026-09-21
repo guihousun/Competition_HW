@@ -173,15 +173,15 @@ class AgentToolCallTest(unittest.TestCase):
 
     def test_the_tool_section_documents_the_param_table(self):
         """参数说明由注册表生成，参数一行一个 `- 名: 用途`；无参数打
-        `- Params: （无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。"""
+        `### Params: （无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。"""
         desc = gen_all_tool_prompt(self.agent._tools)
-        self.assertIn("- Params:\n    - cmd: 需要在沙盒中执行的完整命令原文", desc)
-        self.assertIn("- Params:\n    - name: ", desc)
+        self.assertIn("### Params:\n    - cmd: 需要在沙盒中执行的完整命令原文", desc)
+        self.assertIn("### Params:\n    - name: ", desc)
         self.assertIn("    - sop: ", desc)  # 用途是措辞、会改；钉的是"第二个参数叫 sop"
         self.assertNotIn("- answer:", desc)
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
         self.assertIn(
-            "## ToolName - 查询状态\n- Description: 测试用\n- Params: （无参数）",
+            "## ToolName - 查询状态\n### Description: 测试用\n### Params: （无参数）",
             gen_all_tool_prompt(self.agent._tools),
         )
 

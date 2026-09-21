@@ -226,12 +226,12 @@ def gen_tool_prompt(tool) -> str:
     剥掉（描述段用不上可调用对象）。无参数打 `- Params: （无参数）`。
     """
     name, desc, params = tool
-    lines = [f"## ToolName - {name}", f"- Description: {desc}"]
+    lines = [f"## ToolName - {name}", f"### Description: {desc}"]
     if params:
-        lines.append("- Params:")
+        lines.append("### Params:")
         lines += [f"    - {pname}: {pdesc}" for pname, pdesc in params]
     else:
-        lines.append("- Params: （无参数）")
+        lines.append("### Params: （无参数）")
     return "\n".join(lines)
 
 
