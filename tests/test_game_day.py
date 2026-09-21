@@ -1539,6 +1539,42 @@ class VoucherLineTest(unittest.TestCase):
         cmd = plan(turn)["10010"]
         self.assertIn(cmd["action"], ("move", "use"), f"该为围墙券忙起来：{cmd}")
 
+    def test_it_never_buys_more_than_the_board_can_use(self):
+        """**只买用得上的张数**（用户口径）：场上只有一座升得动的炮 ⇒ 最多买一张，钱再多也一样。"""
+        worker = Worker(10010, Pos(21, 17))  # 贴着商店 (22,18)
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22), 3))
+        turn = self._turn((worker,), weapons, gold=900)
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "buy", cmd)
+        self.assertEqual(cmd["num"], 1, f"只有一座升得动 ⇒ 只买一张：{cmd}")
+
+    def test_two_buyers_never_buy_the_same_voucher_twice(self):
+        """同一回合两条线都去买 ⇒ **只有一个人真买**（`ctx.bought` 那本预扣张数账管着）。
+
+        场上只有一座升得动的炮、钱管够 —— 没有这道防护时两个角色各按 `len(spots)=1` 买一张，
+        同一座炮收回两张券（多出来的那张永远用不掉，纯浪费金币）。
+        """
+        pioneer = Pioneer(10011, Pos(21, 17))  # 贴着商店
+        worker = Worker(10010, Pos(21, 19))  # 也贴着商店
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22), 3))
+        cmds = plan(self._turn((pioneer, worker), weapons, gold=900))
+        buys = [cid for cid, cmd in cmds.items() if cmd["action"] == "buy"]
+        self.assertEqual(len(buys), 1, f"只该有一个人买：{cmds}")
+        self.assertEqual(cmds[buys[0]]["num"], 1, "场上只有一座升得动 ⇒ 只买一张")
+
+    def test_a_voucher_held_by_a_colleague_counts_against_the_purchase(self):
+        """队友手里已经有这张券 ⇒ 我也不买（那张就够升那一座了）。
+
+        券没有转移指令，但"能不能用"看的是全场还剩几个目标 ⇒ 买之前按**全队**手里的张数算。
+        """
+        holder = Worker(10012, Pos(20, 20), {"WeaponUpgradeVoucher1": 1})
+        worker = Worker(10010, Pos(21, 17))  # 贴着商店
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22), 3))
+        cmds = plan(self._turn((holder, worker), weapons, gold=900))
+        self.assertNotIn(
+            "buy", {cmd["action"] for cmd in cmds.values()}, f"那张券够了，别再买：{cmds}"
+        )
+
     def test_a_voucher_in_hand_is_used_right_away(self):
         """手里已经持券 ⇒ 立刻走到目标用掉（买完就用，不囤）。"""
         worker = Worker(10010, Pos(12, 23), {"WeaponUpgradeVoucher1": 1})  # 贴着火箭 (12,24)

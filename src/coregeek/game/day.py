@@ -340,12 +340,16 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
     if worth and _at_vendor(role, turn):
         return _sell_cargo(role, ctx)  # 顺路绕到了 ⇒ 先出手
     # 按需要多少张就买多少张（用户口径）：需要几张看"还升得动的目标有几个"，买得起几张看金币；
-    # 取小的那个一次买够 —— 200 金、两张 100 金的券、两座待升的武器 ⇒ 一条 `buy num=2`
-    count = min(len(spots), ctx.budget // price) if price > 0 else 0
-    if count:
+    # 取小的那个一次买够 —— 200 金、两张 100 金的券、两座待升的武器 ⇒ 一条 `buy num=2`。
+    # ⚠️ **买之前先减掉"用不上的那些张数"**（用户口径"不能浪费金币买不能用的升级券"）：
+    #   还升得动的目标数 − 全队手里已有的张数 − 这一回合已经预扣的张数
+    # 只按金币限量是不够的：钱多的时候两条线会各买满一轮，同一座炮买回两张券。
+    free = len(spots) - _team_holds(turn, voucher) - ctx.bought.get(voucher, 0)
+    count = min(free, ctx.budget // price) if price > 0 else 0
+    if count > 0 and _walk_to_shop(role, ctx, voucher, count):
         ctx.budget -= price * count  # 预扣：这一回合的另一条线不会再买
-        if _walk_to_shop(role, ctx, voucher, count):
-            return True
+        ctx.bought[voucher] = ctx.bought.get(voucher, 0) + count
+        return True
     if worth and worth + ctx.budget >= price:
         return _sell_cargo(role, ctx)  # 攒够了 ⇒ 背去卖（卖完下一回合买得上）
     return _mine_for_voucher(role, ctx)
@@ -547,6 +551,15 @@ def _can_fund(turn: Turn) -> bool:
         return False
     prices = turn.vendor_prices
     return any(prices.get(kind, 0) > 0 for kind in turn.map.ores.values())
+
+
+def _team_holds(turn: Turn, voucher: str) -> int:
+    """全队手里这张券一共几张 —— 买之前要减掉它们：一张券对应一座待升的建筑。
+
+    券没有转移指令（谁买谁用），但**能不能用**要看全场还剩几个目标 ⇒ 买之前按全队算，
+    否则两个角色会各买一轮、同一座炮收回两张券。
+    """
+    return sum(r.bag.get(voucher, 0) for r in turn.roles)
 
 
 def _weapon_vouchers(role: BaseRole) -> int:

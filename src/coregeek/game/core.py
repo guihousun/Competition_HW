@@ -149,6 +149,7 @@ class _Ctx:
         self.taken: set[Pos] = set()  # 收工门认领的岗位（夜里那本账在 `planner._night_intents` 里）
         self.demolish_taken: set[Pos] = set()  # 认领了要拆的 L1 弱墙格
         self.budget = turn.gold  # 金币预留：认领一座武器 / 一张券就扣一份，宁可少买不可超支
+        self.bought: dict[str, int] = {}  # 这一回合各券已预扣的张数（两条买券线共用一本账）
         self.target: Pos | None = None  # 分给本工人的环缺口头一格
         self.remaining = 0  # 那一段还剩几格
 
