@@ -37,7 +37,7 @@ class StrategyConfigTests(unittest.TestCase):
 
     def test_known_single_operator_loadout(self):
         value = sc.validate(sc.DEFAULTS)
-        self.assertEqual(value["defense"]["tower_loadout"], ["rocket"] * 3)
+        self.assertEqual(value["defense"]["tower_loadout"], ["rocket", "railgun", "rocket"])
         self.assertEqual(value["defense"]["full_defense_from_day"], 4)
 
     def test_unknown_and_missing_fields_are_errors(self):
@@ -67,15 +67,14 @@ class StrategyConfigTests(unittest.TestCase):
             with self.subTest(fraction=fraction), self.assertRaises(ValueError):
                 sc.validate(value)
 
-    def test_target_downgrade_and_nonrocket_shared_rejected(self):
+    def test_target_downgrade_and_mixed_shared_allowed(self):
         value = sc.validate(sc.DEFAULTS)
         value["upgrades"]["late_weapon_target"] = [1, 1, 1]
         with self.assertRaises(ValueError):
             sc.validate(value)
         value = sc.validate(sc.DEFAULTS)
         value["defense"]["tower_loadout"][1] = "railgun"
-        with self.assertRaises(ValueError):
-            sc.validate(value)
+        self.assertEqual(sc.validate(value), value)
         value["defense"]["single_operator_three_rockets"] = False
         self.assertEqual(sc.validate(value), value)
 

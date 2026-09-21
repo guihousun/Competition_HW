@@ -13,8 +13,11 @@ DEFAULTS = {
     "name": "user_phase_v1",
     "enabled": True,
     "defense": {"full_defense_from_day": 4,
+                # Historical field name kept for config compatibility.  The
+                # strategy now means one controller for the configured three
+                # weapons; it is not restricted to three rockets.
                 "single_operator_three_rockets": True,
-                "tower_loadout": ["rocket", "rocket", "rocket"]},
+                "tower_loadout": ["rocket", "railgun", "rocket"]},
     "upgrades": {"day_targets": [[3, 3, 3], [3, 3, 3], [3, 3, 3]],
                  "late_weapon_target": [3, 3, 3]},
     "maintenance": {"from_day": 4, "stock_target": 2,
@@ -64,8 +67,8 @@ def validate(config):
     if not isinstance(loadout, list) or len(loadout) != 3 or any(
             not isinstance(v, str) or v not in ("rocket", "railgun", "gatling") for v in loadout):
         raise ValueError("defense.tower_loadout: expected three rocket/railgun/gatling entries")
-    if defense["single_operator_three_rockets"] and loadout != ["rocket"] * 3:
-        raise ValueError("single_operator_three_rockets requires three rocket entries")
+    if defense["single_operator_three_rockets"] and len(loadout) != 3:
+        raise ValueError("single_operator_three_rockets requires exactly three weapons")
     upgrades = config["upgrades"]
     targets = upgrades["day_targets"]
     if not isinstance(targets, list) or len(targets) != 3:

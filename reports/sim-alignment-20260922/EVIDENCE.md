@@ -4,7 +4,7 @@
 仓库：`guihousun/Competition_HW`
 输入：`docs/任务书.md`、`docs/接口文档.md`、`docs/DEVELOPMENT_RULES.md`、`docs/RULE_SUPPLEMENTS.md`、`docs/ROBOT_ROUTING_SUPPLEMENT_20260921.md`、`docs/ATTACK_MAP_ALIGNMENT.md`，以及 `.workflow/issue-poller/snapshot.json` 中 Issue #5–#47 的正文和评论元数据。
 
-这是一份证据登记和实现差异报告。Issue 中的公司端日志、用户转述和本地回放是行为证据或待核对线索；只有任务书/接口文档对应的规则条目才作为官方规则基线。报告没有把本地模拟结果、对手策略或 Issue 中的假设升级为官方规则，也没有新增代码或新增实验结论。
+这是一份证据登记和实现差异报告。Issue 中的公司端日志、用户转述和本地回放是行为证据或待核对线索；只有任务书/接口文档对应的规则条目才作为官方规则基线。报告没有把本地模拟结果、对手策略或 Issue 中的假设升级为官方规则；本轮八路中等难度手动实验只用于筛选策略和回归负例，详情见 `LUNA_EXPERIMENTS.md`。
 
 ## 结论摘要
 
@@ -149,14 +149,14 @@ Issue #45 正文的 365 回合日志没有 `identity/manifest` 行，只记录�
 
 | 编号 | 差异 | 级别 | 后续核对方式 |
 |---|---|---|---|
-| D-R3 | 工作树机器人偏航范围已改为 3，但 `tests/test_joint_movement.py` 仍断言距离 4 可追踪 | 实现/测试不一致 | 增加距离 3/4 边界测试，并更新旧断言 |
+| D-R3 | 机器人偏航范围已改为 3，距离 3/4 已有独立回归 | 已对齐用户补充，官方完整寻敌 tie-break 仍未知 | 继续用公开 start 回放核对并保留两侧测试 |
 | D-WALL | 机器人当前沿目标方向只攻击下一格挡路建筑；墙后角色不会被穿墙攻击 | 本地模型 | 用距离 1/2/3、斜线墙、多墙和多机器人回放核对压力；官方未给完整建筑选敌时序 |
 | D-CONG | 机器人移动为局部贪心协调，不是全局寻路；拥挤、并列目标和静态建筑可能造成停滞 | 本地模型 | 输出每轮候选目标、拒绝原因、等待轮数和 wall/base pressure；使用公开 start 做留出回归 |
 | D-MAP | observed attack_map fixture 已存在，但 `scenario()` 默认参数仍是 `layouts.SEEDED` | 实现入口风险 | 检查 `/debug/scenario`、`/debug/series`、网页新局和测试默认路径是否显式选 observed |
 | D-SPAWN | 固定列阵方向和列容量已实现；精确格、红方镜像、占格处理仍是假设 | 本地假设 | 需要官方首夜 start/机器人落点；未取得前保持 metadata `official_certified=false` |
-| D-TASK-COUNT | 默认每点 30 次，实机/验证证据为每点 3 次且不恢复 | 明确缺口 | 修改本地官方对齐 profile；保留旧 synthetic fixture 作为单独 profile，不能混用 |
-| D-TASK-TIME | 默认超时 25，实机 Issue #21/#23/#24/#42–#45 常见为 15 | 明确缺口 | 对齐 profile 设置 15，并覆盖超时/离开任务点/死亡三种结束方式 |
-| D-TASK-REWARD | 默认 taskworld 为 50 分/30 金，显式 pipeline case 才是 80/80 | 明确缺口 | 以当前官方/实机版本字段为输入；回归 80/80 及部分通过率结算 |
+| D-TASK-COUNT | 新建 observed-local-v2 已按每点 3 次且不恢复；旧无元数据世界保留 legacy profile | 已实现并隔离历史夹具 | 真实平台版本若变化，按请求字段覆盖并登记来源 |
+| D-TASK-TIME | 新建 observed-local-v2 已按 15 回合；旧无元数据世界保留 legacy profile | 已实现并隔离历史夹具 | 用内网回执核对实际超时 |
+| D-TASK-REWARD | 新建 observed-local-v2 默认 80 分/80 金；显式夹具可覆盖 | 已实现并隔离历史夹具 | 用官方结算字段核对奖励和部分通过率 |
 | D-TASK-STATUS | `submitted`、官方确认、错误码 1/2、任务消失、超时需独立 | 观测/日志缺口 | 状态机和日志按事件类型分开，不把 unknown 统计为失败 |
 | D-CRLF | 沙盒 `check` 的 CRLF 是任务环境问题；sed 预处理只在某包中有效 | 外部环境/策略 | 日志保留原始 exit 126；预处理成功也记录实际执行路径 |
 | D-ROLE | Issue #46 只确认 challenger 全部初始角色和 defender 一个工人，其余 defender 角色为本地补位 | 地图证据不足 | 获取完整官方 start 事件后再更新，不用补位位置优化策略 |
