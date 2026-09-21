@@ -93,8 +93,6 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     common = (rocket_post.common_cells(turn)[0] if config['enabled']
               and config['defense']['single_operator_three_rockets'] else set())
     gunner = turn.workers()[0].unit_id
-    if common and owner.unit_id != gunner:
-        blocked.update(common - {owner.pos})
     for uid, pos in (actor_positions or {}).items():
         actor = next((u for u in turn.controllable() if u.unit_id == uid), None)
         if actor is None or actor.unit_id == owner.unit_id:
@@ -104,6 +102,9 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     for uid, command in (commands or {}).items():
         if uid != owner.unit_id and uid not in (actor_positions or {}) and command.get('action') in ('move', 'build'):
             blocked.update(Pos.load(p) for p in command.get('targetPos', ()))
+    # A hypothetical actor moving away changes occupancy, not post ownership.
+    if common and owner.unit_id != gunner:
+        blocked.update(common - {owner.pos})
 
     def bfs(start):
         distances, first, queue = {start: 0}, {start: None}, deque([start])
@@ -391,8 +392,7 @@ class TripFrame:
                 continue
             row['last_round'] = turn.round_no
             if kind=='purchase' and row['phase']=='return':
-                worker=live[row['owner']]
-                if inside(turn,worker.pos) and any(distance(worker.pos,g.pos)==1 for g in turn.weapons()):
+                if evaluate_trip(turn,payload,row).actions == 0:
                     self.cancel(kind,'returned_observed')
             if kind == 'construction':
                 if threat(turn):

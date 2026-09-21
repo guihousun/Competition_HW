@@ -99,5 +99,19 @@ class RocketPostTests(unittest.TestCase):
             p['teamOur']['roles'][1]['pos']=deepcopy(cost.command['targetPos'][0])
         self.assertEqual(p['teamOur']['roles'][1]['pos'],common.dump())
 
+    def test_trip_frame_retains_gunner_until_actual_common_arrival(self):
+        p,common=setup();p['teamOur']['roles'][2]['health']=0
+        row=dict(owner=2,target=1,item=WALL_FIXER,operation='stock',quantity=1,
+                 phase='return',deadline=460,level=1,count=0,last_action='move',
+                 issued_round=440,last_round=449)
+        frame=team_trip.TripFrame(Turn.load(p),p,{'purchase':row})
+        self.assertIsNotNone(frame.purchase,'an arbitrary adjacent gun is not the reserved home')
+        cost=team_trip.evaluate_trip(Turn.load(p),p,frame.purchase)
+        self.assertGreater(cost.actions,0)
+        p['roundNo']=451;p['teamOur']['roles'][1]['pos']=common.dump()
+        arrived=team_trip.TripFrame(Turn.load(p),p,frame.memory)
+        self.assertIsNone(arrived.purchase)
+        self.assertEqual(arrived.events[-1]['reason'],'returned_observed')
+
 
 if __name__=='__main__':unittest.main()
