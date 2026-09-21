@@ -1,4 +1,4 @@
-"""game/planner.py 经济线的用例：采矿（可行矿筛选、顺路卖）/ 卖矿 / 升级券线。
+"""game/states.py 经济线的用例：采矿（可行矿筛选、顺路卖）/ 卖矿 / 升级券线。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """

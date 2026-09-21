@@ -1,4 +1,4 @@
-"""game/planner.py 建造线的用例：建武器 / 砌墙（沿环走一圈的顺序）/ 防关人闸门 /
+"""game/day.py 建造线的用例：建武器 / 砌墙（沿环走一圈的顺序）/ 防关人闸门 /
 拆墙放人 / 修墙 / 收工闸门。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件 `py tests/<本文件>`）。
@@ -20,7 +20,8 @@ from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, wa
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.path import step_outside, step_toward, steps_between  # noqa: E402
 from coregeek.game import planner, states  # noqa: E402
-from coregeek.game.planner import WEAPONS_BY_SITE, plan  # noqa: E402
+from coregeek.game.day import WEAPONS_BY_SITE  # noqa: E402
+from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.states import POST_MARGIN, STONE_RESERVE, WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402

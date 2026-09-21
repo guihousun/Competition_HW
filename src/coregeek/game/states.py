@@ -1,11 +1,12 @@
-"""白天工人链：状态类 + 驱动链，以及它们依赖的下层（走路账、指令出口、黑板、经济线与岗位几何）。
+"""共用底座：白天与夜里都要用的那几本账、那几条线。
 
-图见 `docs/pic/白天工人状态机.png`，图上每个盒子一个类，链上顺序即策略（`DAY_CHAIN`）。本模块
-是 `planner` 的下层（单向 import），两边都要问的通用判定在更下一层 `game/utils.py`。`run` 的
-契约两条写在 `State` 的 docstring 里。
+四样东西：常量（一张共用旋钮表）、走路账与指令出口（`_Move` / `_Queue` / `_emit`）、
+回合内黑板 `_Ctx`，以及经济线与岗位几何。**上层是 `day` / `night` / `planner`**（单向
+import）—— 本模块绝不 import 它们（那就是循环导入）。
 
-只有一个调用者的控制流直接装进那个类的 `run`（`BuildWalls` / `RepairWalls` / `BackToPost`）；
-仍留模块级的助手各有第二个调用者：`_sell_ore`、`_mine_spare_ore`、`_upgrade_line`。
+"两个模块都要问"就是进这里的门槛：只有一个消费者的判据留在各自的模块里（砌墙/修墙在
+`day`，操炮与弹道在 `night`）。经济线是唯一两个时段都跑的（`_economy` 驱动器：白天链尾与
+夜里清场后同一份实现），岗位几何同理（白天收工闸门与夜里操炮共用 `_post_spots`）。
 
 两个距离口径别混：回合预算一律用 BFS 真实步数（`steps_between`，-1 = 走不到）；选点/贴着
 用切比雪夫 `Pos.dist`（`dist <= 1` 是"站在建造位/采集位/炮位旁"的判据，不是步数）。
@@ -17,11 +18,11 @@ from typing import Any, NamedTuple
 
 from ..agent import AGENT  # 价格期望表：闲矿排序要读它（跨回合状态，退化 = 偏好偏一天）
 from ..protocol import actions  # 指令只能经 Action 产出
-from .grid import STEPS, Pos, box_cells
+from .grid import STEPS, Pos
 from .map import COPPER, IRON, STONE
 from .path import steps_between
 from .roles import BaseRole, Pioneer, Worker
-from .utils import _passable, _pioneer_mans_guns, _ring, _sealed_back, _weapon_groups
+from .utils import _passable
 from .world import Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ ROUNDS_PER_STONE = 3
 
 
 #: 砌完墙后手里多留几块石头：墙夜里被打掉一格，第二天手里有货就能立刻补上。
-#: 只抬高 `_stones_to_mine` 的上限；卖矿时同样按它留底（`_best_load`），两块口径同源。
+#: 只抬高 `day._stones_to_mine` 的上限；卖矿时同样按它留底（`_best_load`），两块口径同源。
 STONE_RESERVE = 3
 
 
@@ -58,7 +59,7 @@ POST_MARGIN = 3
 
 
 #: 能卖给小贩的矿：三种（含多余的石头），挑哪种由 `Turn.vendor_prices` 现算。
-#: 石头只在"墙砌完了"那一支里才卖得出去 —— 调用点 `BuildWalls` 已保证。
+#: 石头只在"墙砌完了"那一支里才卖得出去 —— 调用点 `day.BuildWalls` 已保证。
 SELLABLE = (STONE, IRON, COPPER)
 
 
@@ -117,7 +118,7 @@ class _Move(NamedTuple):
 
 class _Queue:
     """第一段的输出收集器：能直接干的 act 当场落 `cmds`，走路只记成意图（`moves`）。
-    `claimed` 只记 `remove` 的落点（`_rescue` 的"本回合已拆过墙"判据靠它）。"""
+    `claimed` 只记 `remove` 的落点（`day.rescue` 的"本回合已拆过墙"判据靠它）。"""
 
     def __init__(self, turn: Turn) -> None:
         self.turn = turn
@@ -148,14 +149,6 @@ class _Queue:
     def beside(self, role: BaseRole, provider: Callable[[set[Pos]], Pos | None]) -> None:
         """记一条没有目标的走法（迈出盒子 / 挪开自己）—— 第二段拿落子账现算。"""
         self.moves.append(_Move(role, None, provider=provider))
-
-
-def _can_fund(turn: Turn) -> bool:
-    """筹资可行：地图上有小贩、且有收购价 > 0 的矿 —— 矿挖了卖得掉，才谈得上凑钱。"""
-    if not turn.map.vendors:
-        return False
-    prices = turn.vendor_prices
-    return any(prices.get(kind, 0) > 0 for kind in turn.map.ores.values())
 
 
 class _Ctx:
@@ -190,160 +183,19 @@ class _Ctx:
 
 
 class State:
-    """白天工人链上的一个状态：`run` 返回 True = 这一回合归它了（驱动方就此停在这一个）。
+    """白天工人链（`day.DAY_CHAIN`）与经济链（`ECONOMY_CHAIN`）上的一个状态：`run` 返回 True = 这一回合归它了（驱动方就此停在这一个）。
 
     契约两条：一是 `False` 必须意味着"我什么都没排、什么都没发"—— 谁发了指令还返回 False，
     这个角色会落两条动作，后解的把前一条的 `cmds[角色]` 盖掉。二是无状态：只读 `ctx` 与
     `turn`，不往自己身上记东西（跨回合的标志位一旦卡住会静默关掉整条线）。
 
-    链上顺序就是策略，见 `DAY_CHAIN`。"""
+    链上顺序就是策略。"""
 
     def run(self, role: Worker, ctx: _Ctx) -> bool:
         raise NotImplementedError
 
 
-class BuildWeapons(State):
-    """建立武器：份额有缺且钱够 ⇒ 就地建或走向落点。
-
-    `_emit` 被拒 / `q.step` 走不到 ⇒ 返回 False，这一回合落到筹资（不是"建不了就待命"）。
-    名额在钱的判据之前就吃掉：`budget` 一回合内只降不升，两种写法今天等价，别顺手调换。"""
-
-    def run(self, role: Worker, ctx: _Ctx) -> bool:
-        slot = next(ctx.slots, None)
-        if slot is None or ctx.budget < WEAPON_COST:
-            return False
-        kind, cell = slot
-        ctx.budget -= WEAPON_COST  # 认领即预留：宁可这回合少建，不可超支
-        ctx.sites.add(cell)
-        if role.pos.dist(cell) <= 1:
-            if _emit(ctx.q.cmds, role, actions.Build, kind, cell):
-                return True
-        elif ctx.q.step(role, cell, avoid=frozenset(ctx.sites), with_paths=True):
-            return True
-        return False
-
-
-class RaiseForWeapons(State):
-    """采矿筹资（为武器）：有缺但钱不够、筹资又可行 ⇒ 整条墙线让位（含修墙），先卖背包
-    里的货、再采最值钱的矿凑钱。
-
-    与链上别的状态不同：条件成立就无条件认领这一回合 —— 火力缺口比墙急。石头只留
-    `STONE_KEEP_RAISING` 块。"""
-
-    def run(self, role: Worker, ctx: _Ctx) -> bool:
-        if not (ctx.weapon_gap and ctx.budget < WEAPON_COST and _can_fund(ctx.turn)):
-            return False
-        if not _sell_ore(
-            role, ctx.turn, ctx.q, ctx.sites, with_paths=True, keep=STONE_KEEP_RAISING
-        ):
-            _mine_spare_ore(role, ctx.turn, ctx.q, ctx.sites, ctx.ore_taken)
-        return True
-
-
-class BuildWalls(State):
-    """建墙（含采矿）：把墙砌到黑板分给本工人的那一格上 —— 缺石头先去采、手上有石头就砌，
-    一回合只干其中一件；两件都干不成 ⇒ False，让驱动方走经济线。
-
-    `ctx.target` 是 None（环砌满）⇒ False，让给修墙；有人会被砌满的墙关住（`ctx.leaving`）
-    ⇒ True 而一条指令都不发：待命，别跑远，下回合缺口还在。每回合独立判定、不存跨回合状态。"""
-
-    def run(self, role: Worker, ctx: _Ctx) -> bool:
-        if ctx.target is None:
-            return False  # 没分到墙格 ⇒ 驱动方走经济线
-        if ctx.leaving:
-            return True
-        # 只认石矿（墙只吃石头）；排除本回合别人认领的矿格
-        mine = _pick_ore(
-            role.pos,
-            {p: k for p, k in ctx.turn.map.ores.items() if p not in ctx.ore_taken},
-            ctx.turn.vendor_prices,
-            want_stone=True,
-        )
-        want = _stones_to_mine(role, ctx.turn, ctx.target, mine, ctx.remaining)
-
-        if want > 0 and mine is not None:
-            ctx.ore_taken.add(mine)  # 挑中即登记（本回合真要采它）
-            if role.pos.dist(mine) <= 1:
-                if _emit(ctx.q.cmds, role, actions.Collect, mine):
-                    return True
-            # 还没走到矿边：动身成功后整条路记进预留账（先预留再走会绕开自己刚记下的路）
-            elif ctx.q.step(role, mine, avoid=frozenset(ctx.sites), with_paths=True, reserve=True):
-                return True
-
-        if role.stone >= WALL_COST:
-            # 认领要发生在动身之前：等砌完再登记，另一个工人会在同一回合也奔着它去
-            ctx.sites.add(ctx.target)
-            # 环上只剩最后一格 ⇒ 从盒子外面砌（站在环里砌完自己就被封在里面）；盒外一个
-            # 能站的邻格都没有 ⇒ 照旧就近砌；有格子却走不到 ⇒ 这回合不砌（交给别的差事）
-            outside = _outside_spots(ctx.turn, role, ctx.target) if len(_ring(ctx.turn)) == 1 else ()
-            if outside:
-                # 走到盒旁再砌。不避让 `ctx.target`：环上那个缺口正是出盒子的近路，避让它
-                # 就得从后方通道绕整整一圈
-                if role.pos in outside:
-                    if _emit(ctx.q.cmds, role, actions.Build, WALL, ctx.target):
-                        return True
-                for spot in outside:
-                    if ctx.q.step(
-                        role,
-                        spot,
-                        avoid=frozenset(ctx.sites - {ctx.target}),
-                        onto=True,
-                        with_paths=True,
-                        reserve=True,
-                    ):
-                        return True
-            elif role.pos == ctx.target:
-                # 站在目标格上就先挪开一格、这一回合不砌：人站在墙上时那格在网格里只剩
-                # "worker"（单位铺在最后，墙被盖掉）⇒ 看不出砌过没有，`_ring` 的"自己人算
-                # 路过"又把它复活成候选 ⇒ 每回合对同一格 build，石头白花
-                ctx.q.beside(
-                    role,
-                    lambda claimed, r=role, av=frozenset(ctx.sites): _aside_cell(r, ctx.turn, claimed, av),
-                )
-                return True
-            elif role.pos.dist(ctx.target) <= 1:
-                # 与建武器同一条契约：`step_toward` 停在贴着目标的一格，那正是 `build` 的站位
-                if _emit(ctx.q.cmds, role, actions.Build, WALL, ctx.target):
-                    return True
-            elif ctx.q.step(role, ctx.target, avoid=frozenset(ctx.sites), with_paths=True, reserve=True):
-                return True
-        return False  # 没石头、采不到 ⇒ 调用方走其他差事
-
-
-class RepairWalls(State):
-    """围墙修复：弱墙（见 `_weak_walls`）升级当修 —— 用哪件东西看墙的等级（`_wall_item`）。
-    取等级最低的一面（最便宜），同等级取近的（认领在动身之前，两个修墙工人不挤同一面）。
-
-    持券 ⇒ 走到那面墙、贴着就 `use`；没券 ⇒ 商店可达、价目里有它、金币够就走去商店 `Buy`。
-    环砌满了才轮得到它（排在 `BuildWalls` 后面）。"""
-
-    def run(self, role: Worker, ctx: _Ctx) -> bool:
-        budget = ctx.turn.day_rounds_left - TIME_MARGIN
-        walk, size = _passable(ctx.turn), ctx.turn.map.size
-        weak = [w for w in _weak_walls(ctx.turn) if w.pos not in ctx.repair_taken]
-        if not weak:
-            return False
-        target = min(weak, key=lambda w: (w.level, role.pos.dist(w.pos), w.pos))
-        item = _wall_item(target.level)
-
-        if item not in role.bag:
-            price = ctx.turn.shop_prices.get(item, 0)
-            hops = [(steps_between(role.pos, s, walk, size), s) for s in ctx.turn.map.shops]
-            hops = [(d, s) for d, s in hops if d >= 0]
-            to_shop, shop = min(hops) if hops else (-1, None)
-            if shop is None or price <= 0 or ctx.turn.gold < price or to_shop + 1 > budget:
-                return False  # 这一面这一轮修不了 ⇒ 待命（明天再说），不换另一面
-            if to_shop == 0:
-                return _emit(ctx.q.cmds, role, actions.Buy, item, 1)
-            return ctx.q.step(role, shop, avoid=frozenset(ctx.sites))
-
-        ctx.repair_taken.add(target.pos)
-        if role.pos.dist(target.pos) <= 1:
-            return _emit(ctx.q.cmds, role, actions.Use, item, target.pos)
-        to_wall = steps_between(role.pos, target.pos, walk, size)
-        if to_wall < 0 or to_wall + 1 > budget:
-            return False  # 来不及 ⇒ 待命，明天接着走
-        return ctx.q.step(role, target.pos, avoid=frozenset(ctx.sites))
+# ── 经济线：白天链尾与夜里清场后共用同一份实现 ──────────────────────
 
 
 class SellCargo(State):
@@ -370,94 +222,9 @@ class MineSpareOre(State):
         return True
 
 
-class BackToPost:
-    """回防守位：环砌完了、离夜里的第一波只剩回程步数 ⇒ 回那一组的岗位；`True` = 这一回合
-    到此为止。
-
-    白天就得动身：回炮位常要绕整面围墙、从后方通道进来，直线三四步、BFS 十几步。目标与夜里
-    `_defend` 的岗位同一个（`_post_spots`），天黑时人已在岗、第一回合就能开火。与 `_defend`
-    的唯一区别是它不调 `_fire`：`attack` 仅黑夜，白天发就是非法指令。
-
-    先看时间、再看位置：判据是"到最近那个岗位的 BFS 步数 ≥ 白天还剩的回合 − `POST_MARGIN`"
-    （拍的）；已在岗时步数 0，只有白天最后那几回合才轮得到"在岗待命"。
-
-    不放进 `DAY_CHAIN`：它在链之前（补墙优先于收工），且开拓者也走它，而链上只跑工人。
-    开拓者是补位炮手（`_pioneer_mans_guns`）：工人够操满所有组时它不占岗位 —— 与 `_defend`
-    同一个判据，两处必须同源，只拦一处会让白天把它送进岗位、夜里又不认领，整组没人操。"""
-
-    def run(self, role: BaseRole, ctx: _Ctx) -> bool:
-        if _ring(ctx.turn):
-            return False  # 环上还有缺口 ⇒ 这一支不生效（补墙优先于收工）
-        if isinstance(role, Pioneer) and not _pioneer_mans_guns(ctx.turn):
-            return False
-        walk, size = _passable(ctx.turn), ctx.turn.map.size
-        # 最近、还没人认领、而且真走得到的岗位 —— 一趟判定就够：最近的都赶不上，更远的更赶不上。
-        # BFS -1（不可达）剔掉，切比雪夫给不出这个值；已经在岗位上 ⇒ 步数 0，与"还差 3 步"同一刻度。
-        hops: list[tuple[int, Pos, tuple[Weapon, ...], bool]] = []
-        for group in _weapon_groups(ctx.turn):
-            if any(w.pos in ctx.taken for w in group):
-                continue
-            spots = _post_spots(group, ctx.turn, role)
-            if not spots:
-                continue
-            onto = len(group) > 1  # 多座组的岗位是空地、要站上去（与 `_defend` 同一个口径）
-            for spot in spots:
-                steps = _steps_to_post(role.pos, spot, onto, walk, size)
-                if steps >= 0:
-                    hops.append((steps, spot, group, onto))
-        if not hops:
-            return False
-        steps, spot, group, onto = min(hops, key=lambda h: (h[0], h[1]))
-        if steps < ctx.turn.day_rounds_left - POST_MARGIN:
-            return False  # 还剩富裕回合 ⇒ 照常干活
-        for w in group:
-            ctx.taken.add(w.pos)  # 定下这组了：认领，免得另一个角色也奔这里（一人只能操一座）
-        if steps == 0:
-            return True  # 已经在岗 ⇒ 这一回合待命（什么都不发 = 合法空指令）
-        ctx.q.step(role, spot, onto=onto)  # 只发 move，绝不调 `_fire`（白天发 attack = 非法指令）
-        return True
-
-
 #: 经济兜底三级：卖货 →（武器有缺则跳过升级）→ 采闲矿。白天链尾与夜里清场后走同一条
 #: （`_economy` 就是这条链的驱动器）—— 一份实现，两个时段不会漂成两套。
 ECONOMY_CHAIN: tuple[State, ...] = (SellCargo(), UpgradeWeapons(), MineSpareOre())
-
-
-#: 白天工人链：从上往下第一个"认领了这一回合"的状态说了算。顺序即策略。
-DAY_CHAIN: tuple[State, ...] = (
-    BuildWeapons(),  # 建立武器：名额有缺、钱够 ⇒ 建 / 走向落点
-    RaiseForWeapons(),  # 采矿收集（为武器）：有缺但钱不够、筹资可行 ⇒ 整条墙线让位
-    BuildWalls(),  # 建墙（含采矿）：补缺口 / 采石 / 待命
-    RepairWalls(),  # 围墙修复：弱墙"升级当修"，环砌满才轮得到
-) + ECONOMY_CHAIN
-
-
-#: 收工闸门（白天工人链之前的一道，见 `BackToPost`）
-BACK_TO_POST = BackToPost()
-
-
-# ── 白天：采石 → 砌墙 ────────────────────────────────────────────────
-
-
-def _outside_spots(turn: Turn, role: Worker, target: Pos) -> tuple[Pos, ...]:
-    """`target` 的邻格里"在防御盒子外、又站得上去"的那些 —— 最后一格墙的落脚点（按坐标排）。
-
-    要站上去（`onto`）：这些格子是盒外的空地，`step_toward` 到不了。盒外邻格全被占 / 出图
-    ⇒ 空集，调用方这一回合不砌。"""
-    station = turn.map.station
-    if station is None:
-        return ()
-    box = box_cells(station)
-    # `blocked` 里混着队友和自己（`model._entries`）⇒ 只把自己的那格摘出来
-    taken = turn.map.blocked - {role.pos}
-    width, height = turn.map.size
-    return tuple(
-        sorted(
-            p
-            for p in (Pos(target.x + d.x, target.y + d.y) for d in STEPS)
-            if 0 <= p.x < width and 0 <= p.y < height and p not in box and p not in taken
-        )
-    )
 
 
 def _weak_walls(turn: Turn) -> tuple[Wall, ...]:
@@ -473,29 +240,6 @@ def _weak_walls(turn: Turn) -> tuple[Wall, ...]:
 def _wall_item(level: int) -> str:
     """修这面墙该用哪件东西：升级当修 —— L1/L2 用对应等级的围墙升级券，L3 到顶只剩修复包。"""
     return WALL_VOUCHER.get(level + 1, WALLFIXER)
-
-
-def _stones_to_mine(role: Worker, turn: Turn, target: Pos, mine: Pos | None, free: int) -> int:
-    """这一趟还该采几块石头 —— 按回合预算每回合现算。
-
-    记 `s` = 手里的石头、`k` = 还要采的块数：
-
-        走到矿 + 采 k 块 + 从矿走回工地 + 砌 s+k 座的"挪一格 + 建造"
-        = d_mine + d_wall + 2s − 1 + 3k        # 到达工地那一步已贴着首格
-                                            # ⇒ 每多采一块净花 3 回合
-
-    令它 ≤ `白天还剩的回合 − TIME_MARGIN` 解出 k，再与"还差几格墙 + `STONE_RESERVE`"取小
-    （存货：没有转移物品的指令，多采的石头只能自己拿着，墙被打掉时立刻补得上）。距离一律
-    BFS 真实步数（回工地常要绕整面围墙，切比雪夫会把 10+ 步说成 3 步）。-1 ⇒ 一块都别采。"""
-    if mine is None:
-        return 0
-    walk, size = _passable(turn), turn.map.size
-    to_mine = steps_between(role.pos, mine, walk, size)
-    to_wall = steps_between(mine, target, walk, size)
-    if to_mine < 0 or to_wall < 0:
-        return 0
-    budget = turn.day_rounds_left - TIME_MARGIN - to_mine - to_wall - 2 * role.stone + 1
-    return max(0, min(budget // ROUNDS_PER_STONE, free + STONE_RESERVE - role.stone))
 
 
 def _sell_ore(
@@ -809,6 +553,9 @@ def _pick_ore(
     return best[2] if best is not None and best[0] < 0 else None
 
 
+# ── 岗位几何：白天收工闸门与夜里操炮同一个口径 ──────────────────────
+
+
 def _operator_spots(
     group: tuple[Weapon, ...], blocked: set[Pos], size: tuple[int, int]
 ) -> list[Pos]:
@@ -864,23 +611,6 @@ def _steps_to_post(pos: Pos, spot: Pos, onto: bool, blocked: Set[Pos], size: tup
 
 
 # ── 发指令 ──────────────────────────────────────────────────────────
-
-
-def _aside_cell(
-    role: BaseRole, turn: Turn, claimed: set[Pos], avoid: Set[Pos] = frozenset()
-) -> Pos | None:
-    """挪开自己：从脚下这一格挑一个可走的邻格；八面都走不了 ⇒ None。
-
-    没有"目标"的走法（唯一用途见 `BuildWalls.run` 站在待砌墙格上的那一支），所以不走
-    `step_toward`——它的契约是"贴着 goal 即到"，对任意邻格都返回 None。挪到建造格上等于
-    换个格子接着站，所以 `avoid`（建造格）照避；`claimed`（别人已落的脚格）由第二段传进来。"""
-    walk = turn.map.blocked | claimed | avoid
-    width, height = turn.map.size
-    for d in STEPS:
-        cell = Pos(role.pos.x + d.x, role.pos.y + d.y)
-        if cell not in walk and 0 <= cell.x < width and 0 <= cell.y < height:
-            return cell
-    return None
 
 
 def _emit(

@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from coregeek.agent import Agent  # noqa: E402
 from coregeek.agent.chat import answer_of, looks_like_tool, summary_of, tool_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
-from coregeek.game.planner import task_channel  # noqa: E402
+from coregeek.game.task import task_channel  # noqa: E402
 
 
 class ToolReplyParseTest(unittest.TestCase):

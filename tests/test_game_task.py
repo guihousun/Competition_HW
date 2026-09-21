@@ -1,4 +1,4 @@
-"""game/planner.py 任务线的用例：接取 / 被钉住 / `task_channel` 判据链
+"""game/task.py 任务线的用例：接取 / 被钉住 / `task_channel` 判据链
 （两条通道互斥是唯一不变量）。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
@@ -20,7 +20,8 @@ from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.path import step_toward  # noqa: E402
-from coregeek.game.planner import plan, task_channel  # noqa: E402
+from coregeek.game.planner import plan  # noqa: E402
+from coregeek.game.task import task_channel  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402

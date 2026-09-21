@@ -130,7 +130,7 @@ def looks_like_tool(reply: str) -> bool:
 
 
 def answer_of(reply: str) -> str:
-    """该提交什么 —— `planner` 的 `_answer_task` 与 `task_channel` 判据共用同一个谓词
+    """该提交什么 —— `task` 的 `answer_task` 与 `task_channel` 判据共用同一个谓词
     （"该提交什么"与"该骂什么"必须是同一份，分家会把带标签的原文喂回去纠错）。
 
     三级判据：① 挖掉全部结构块（`<tool>` 与 `<summary>`）再扫 —— 有 `<answer` 标记 ⇒

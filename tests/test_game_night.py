@@ -1,4 +1,4 @@
-"""game/planner.py 夜间线的用例：回炮位、认领与最大伤害落点开火。
+"""game/night.py 夜间线的用例：回炮位、认领与最大伤害落点开火。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _terrain  # noqa: E402
-from coregeek.game import planner  # noqa: E402
+from coregeek.game import night  # noqa: E402
 from coregeek.game.grid import Pos, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
@@ -38,7 +38,7 @@ class NightWeaponTest(unittest.TestCase):
     def setUp(self) -> None:
         #: `_fired` 是 planner 的跨回合开火账（模块级），不清会跨用例串味
         #: （上一条用例打出去的那发，会把这一条的同一座炮判成冷却中）。
-        planner._fired.clear()
+        night._fired.clear()
 
     def _turn(
         self,
@@ -323,7 +323,7 @@ class NightWeaponTest(unittest.TestCase):
             "L1：一簇残血比一台满血值钱",
         )
         # 火箭打出去的那发会记进本地开火账（`_fired`）⇒ 不擦干净，下面那次就是"冷却中"、一炮不发
-        planner._fired.clear()
+        night._fired.clear()
         self.assertEqual(
             self._only_cmd(self._manned(*cluster, lone, kind="rocket", level=2))["targetPos"],
             [{"x": 9, "y": 22}, {"x": 9, "y": 22}],
@@ -420,7 +420,7 @@ class NightPostTest(unittest.TestCase):
     ROBOT = Pos(15, 24)  # 射程 10 内的一台机器人
 
     def setUp(self) -> None:
-        planner._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
+        night._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
 
     def _turn(
         self,

@@ -3,14 +3,14 @@
 判题器只认三类异常（连接/响应超时、响应格式错、指令非法），累计 5 次出局。`handle()` 的
 `except` 就是红线本身：任何失败都退化成合法空指令（合法且不计异常），宁可丢一个回合，
 不赌整队资格。三个顶层字段永远都在：`roleCommandMap` 是动作，`prompt` 与 `executeCmd`
-是任务线对外通道（`planner.task_channel` 产出）。
+是任务线对外通道（`task.task_channel` 产出）。
 """
 
 import json
 import logging
 from typing import Any
 
-from .game import planner
+from .game import planner, task
 from .game.world import Turn
 from .protocol import actions, model
 from .utils import LOG_TEXT_MAX, _clip
@@ -43,7 +43,7 @@ def handle(raw: bytes) -> bytes:
         # 要的就是"整段拷出来能直接 json.loads"—— 带缩进的 payload 会让一条记录跨多行。
         LOGGER.info("【本回合请求】：%s", _clip(text, LOG_TEXT_MAX))
         # 处理任务逻辑
-        prompt, execute = planner.task_channel(turn)
+        prompt, execute = task.task_channel(turn)
         # 处理动作逻辑
         cmds = planner.plan(turn)
         _log(turn, cmds, prompt)
@@ -85,7 +85,7 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
 
     量法（`logs/measure_bytes.py`）：① 量真 stdout 的形状（带 asctime 前缀的 handler、取
     utf-8 字节数，别只加 `getMessage()` 的长度）；② 每格先 `AGENT.reset()`；③ 顶格那行的
-    llmResp 必须是工具形状（答案形状会被 `_answer_task` 抄进 taskAnswer，动作行凭空多
+    llmResp 必须是工具形状（答案形状会被 `task.answer_task` 抄进 taskAnswer，动作行凭空多
     120KB）；④ 跨步骤只比同一次测量的增量。⇒ 若判题器不读 stdout，顶格回合一回合写满
     64KB 管道（已知并接受）；结构性守卫 = 干净回合仍小（test_a_clean_round_stays_small）。
     """

@@ -93,7 +93,7 @@ def door_cells(base: Pos, width: int, *, sealed: bool = False) -> tuple[Pos, ...
     """后方通道：背面列里不砌的那些格（14 格时 6 个，16 格时 4 个），盒子唯一的进出口。
 
     通道里没有任何建筑 ⇒ 能堵门的只有单位 —— "自己人站在待砌格上算不算障碍"只在这里有意义
-    （`planner._walled` 的判据来源）。
+    （`utils._walled` 的判据来源）。
     """
     d, _far, near = _front_back(base, width)
     back_x = near - 2 * d

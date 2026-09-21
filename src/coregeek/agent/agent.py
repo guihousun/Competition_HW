@@ -2,7 +2,7 @@
 
 `_sop`（流程表，整场）、`_news_digest` / `_price_hints`（新闻指纹与价格期望）、`_context`
 （任务内会话，题目变了即换新）。状态丢了只影响 prompt 内容、不碰红线；判题器逐回合同步
-请求 ⇒ 不加锁。`planner.task_channel` 每次都用包根那个 `AGENT`。
+请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
 """
 
 import logging
@@ -453,7 +453,7 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
 
     def reject_shape(self) -> str:
         """整条回复像工具调用、但严格解析连工具名都取不出 ⇒ 记日志 + 把说明回灌进会话。
-        调用方是 `planner.task_channel`（那一轮落重问）。"""
+        调用方是 `task.task_channel`（那一轮落重问）。"""
         LOGGER.info("【工具调用】：形状没写对（取不出工具名）⇒ 这一轮落重问")
         return self._note_failed_call(
             "没能按【工具调用格式】从这条回复里解析出工具调用（取不出工具名）"

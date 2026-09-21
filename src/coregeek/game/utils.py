@@ -120,8 +120,8 @@ def _pioneer_mans_guns(turn: Turn) -> bool:
     """开拓者这一轮该不该上炮位：只有工人不够覆盖全部武器组时才补位。
 
     工人夜里除了操炮没别的活，而开拓者是任务线的主力 —— 工人阵亡（只可能在夜里）后人手
-    不够了它才补位。昼夜同一个判据：白天用它决定收工回不回到炮位（`BackToPost`），夜里用它
-    决定认不认领武器（`_defend`）—— 两处必须同源，只改一处会让白天把人送进岗位、夜里又不
+    不够了它才补位。昼夜同一个判据：白天用它决定收工回不回到炮位（`day.BackToPost`），夜里用它
+    决定认不认领武器（`night.defend`）—— 两处必须同源，只改一处会让白天把人送进岗位、夜里又不
     认领，那格被占着、整组没人操。`_short_handed` 取用它。"""
     workers = sum(1 for r in turn.roles if isinstance(r, Worker))
     return workers < len(_weapon_groups(turn))

@@ -15,7 +15,7 @@ from .roles import BaseRole
 ROUNDS_PER_DAY = 130
 DAY_ROUNDS = 70
 
-#: 三种武器工事的 `roleType`。与 `planner.WEAPONS_BY_SITE` 不是一回事：那个是"三座炮建在哪、
+#: 三种武器工事的 `roleType`。与 `day.WEAPONS_BY_SITE` 不是一回事：那个是"三座炮建在哪、
 #: 各自是什么"（策略），这个是"哪些 roleType 算武器"（协议）。
 WEAPON_KINDS = frozenset({"gatling", "railgun", "rocket"})
 
