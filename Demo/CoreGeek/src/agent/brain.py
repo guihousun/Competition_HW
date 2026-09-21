@@ -330,7 +330,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     pioneer_role = turn.pioneer()
     issued = (commands.get(pioneer_role.unit_id) if pioneer_role is not None else None) or {}
     already_acting = issued.get("action") in ("buy", "summonTreasure")
-    if not directive.reserve_pioneer and night_staging is None and not (job and job.get("claimed")) and not already_acting:
+    treasure_night = bool(pioneer_role is not None and _treasure_night_allowed(
+        turn, payload, pioneer_role))
+    if ((not directive.reserve_pioneer or treasure_night)
+            and (night_staging is None or treasure_night)
+            and not (job and job.get("claimed")) and not already_acting):
         pioneer = turn.pioneer()
         if pioneer is not None:
             altar = _treasure_step(turn, payload, pioneer)
@@ -349,7 +353,10 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         and commands.get(pioneer_role.unit_id)
         and (commands[pioneer_role.unit_id].get("action") in ("buy", "summonTreasure")
              or payload.get("_treasureRound") == turn.round_no))
-    if not directive.reserve_pioneer and night_staging is None and not (job and job.get("claimed")) and not already_acting and not treasure_claimed:
+    if ((not directive.reserve_pioneer or treasure_night)
+            and (night_staging is None or treasure_night)
+            and not (job and job.get("claimed")) and not already_acting
+            and not treasure_claimed):
         pioneer = turn.pioneer()
         if pioneer is not None:
             has_work, task_move = _task_walk(turn, pioneer, payload)
@@ -370,7 +377,14 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         _fill_ready_weapons(turn, commands, excluded)
     from . import pioneer_safety
     safety = pioneer_safety.override(turn, commands)
-    if safety is not None and pioneer_role is not None:
+    # A legal treasure summon is the terminal action of an already purchased,
+    # time-bounded route.  Do not replace it with the generic night safety move;
+    # the action itself is resolved at the altar and cannot be postponed to the
+    # next daylight window.
+    treasure_summon = bool(pioneer_role is not None
+                           and (commands.get(pioneer_role.unit_id) or {}).get('action')
+                           == 'summonTreasure')
+    if safety is not None and pioneer_role is not None and not treasure_summon:
         for uid, command in list(commands.items()):
             if uid == pioneer_role.unit_id or (command.get('action') == 'attack'
                     and str(command.get('controllerId')) == str(pioneer_role.unit_id)):
@@ -1154,10 +1168,26 @@ def _treasure_route(turn, state, pioneer, notes, commands=None):
 
 def _treasure_claims_pioneer(turn: Turn, state: dict[str, Any], pioneer: Unit) -> bool:
     """Only an open, feasible trip may displace an unstarted task walk."""
-    if pioneer is None or (not turn.is_day and not _productive_night(turn)):
+    if pioneer is None or (not turn.is_day and not _productive_night(turn)
+                           and not _treasure_night_allowed(turn, state, pioneer)):
         return False
     notes = _treasure_notes(state, turn)
     return bool(notes.get("open") and _treasure_route(turn, state, pioneer, notes))
+
+
+def _treasure_night_allowed(turn: Turn, state: dict[str, Any], pioneer: Unit) -> bool:
+    """Keep an already-open day-1..3 treasure itinerary moving at night.
+
+    This is an existing committed errand, not a new night expedition.  From the
+    fourth day onward full defence wins; before then the original simulator lets
+    a purchased, time-bounded route finish so that the pioneer is not stranded
+    at the altar when dusk begins.
+    """
+    if turn.is_day or home_defense.full_night(turn):
+        return False
+    notes = _treasure_notes(state, turn)
+    return bool(notes.get("open") and not notes.get("taken")
+                and _treasure_route(turn, state, pioneer, notes))
 
 
 def _treasure_step(turn: Turn, payload: dict[str, Any], pioneer: Unit) -> dict[str, Any] | None:

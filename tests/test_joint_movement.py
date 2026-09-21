@@ -169,7 +169,11 @@ class RealRobotStepTests(unittest.TestCase):
             if reverse:
                 state['robot']['roles'].reverse()
             result = advance(state)
-            self.assertEqual(positions(result['state']), {901:(7,5),902:(7,4)})
+            # The user-supplied four-cell deviation supplement makes the worker
+            # a legal route target at exactly distance four.  Robot 902 is
+            # stationary because it attacks; its cell blocks the direct step,
+            # so the deterministic detour is (5,4).
+            self.assertEqual(positions(result['state']), {901:(5,4),902:(7,4)})
             self.assertEqual([a['robot'] for a in result['frame']['robotAttacks']], [902])
             worker = next(r for r in result['state']['teamOur']['roles'] if r['id']==601)
             self.assertEqual(worker['health'], 215)
