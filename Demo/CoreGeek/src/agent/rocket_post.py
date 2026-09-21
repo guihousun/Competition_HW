@@ -78,4 +78,66 @@ def reserve(turn, commands, *, protected=()):
             notes.append({'role': role.unit_id, 'reason': 'common_post_route_blocked'})
         else:
             notes.append({'role': role.unit_id, 'reason': 'common_post_cannot_vacate_safely'})
+    if turn.is_day and (turn.round_no-1) % 130 >= config['economy']['return_day_index']:
+        notes.extend(_yield_idle_corridor(turn, commands, owner, common, inner, set(protected)))
     return notes
+
+
+def _path(turn, start, goals, blocked, forbidden=()):
+    """A bounded public eight-neighbour path, including its starting cell."""
+    parents = {start: None}
+    queue = deque([start])
+    while queue:
+        pos = queue.popleft()
+        if pos in goals:
+            path = []
+            while pos is not None:
+                path.append(pos); pos = parents[pos]
+            return list(reversed(path))
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                if not (dx or dy): continue
+                nxt = Pos(pos.x+dx, pos.y+dy)
+                if (nxt in parents or nxt in blocked or nxt in forbidden
+                        or not turn.land(nxt)):
+                    continue
+                parents[nxt] = pos; queue.append(nxt)
+    return None
+
+
+def _yield_idle_corridor(turn, commands, owner, common, inner, protected):
+    """Move one idle blocker off a needed dusk route; never order the gunner
+    through an occupied cell. A blocker may need two ordinary moves to get out
+    of a one-cell corridor, and each subsequent snapshot is checked afresh.
+    """
+    gunner = next(r for r in turn.workers() if r.unit_id == owner)
+    if gunner.pos in common:
+        return []
+    idle = {r.pos: r for r in turn.controllable()
+            if r.unit_id != owner and r.unit_id not in protected and r.unit_id not in commands}
+    if not idle:
+        return []
+    claimed = {Pos.load(p) for uid, cmd in commands.items() if uid != owner
+               and cmd.get('action') in ('move', 'build') for p in cmd.get('targetPos', ())}
+    blocked = turn.blocked(gunner) | claimed
+    if _path(turn, gunner.pos, common, blocked):
+        return []  # An actual free route already exists; nobody needs to yield.
+    # This relaxed path identifies the blocker only. It never becomes a gunner
+    # move command, so hypothetical removal cannot bypass simultaneous occupancy.
+    route = _path(turn, gunner.pos, common, (blocked-set(idle)) | claimed)
+    if not route:
+        return []
+    role = next((idle[p] for p in route if p in idle), None)
+    if role is None:
+        return []
+    occupied = turn.blocked(role) | claimed
+    gunner_cmd = commands.get(owner, {})
+    if gunner_cmd.get('action') == 'move':
+        occupied.update(Pos.load(p) for p in gunner_cmd.get('targetPos', ()))
+    goals = inner - common - set(route) - occupied
+    escape = _path(turn, role.pos, goals, occupied, common)
+    if not escape or len(escape) < 2:
+        return [{'role': role.unit_id, 'reason': 'common_corridor_cannot_vacate_safely'}]
+    commands[role.unit_id] = move_command(escape[1])
+    return [{'role': role.unit_id, 'reason': 'yield_common_rocket_corridor',
+             'blocked_at': role.pos.dump(), 'target': escape[-1].dump()}]

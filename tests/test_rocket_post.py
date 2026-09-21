@@ -3,9 +3,9 @@ from copy import deepcopy
 import unittest
 from unittest.mock import patch
 
-from test_defense_layout import board, unit, REPORTED, MIRROR
+from test_defense_layout import board, unit, REPORTED, MIRROR, ring_points
 from agent import rocket_post, strategy_config, home_defense, planner, brain, team_trip
-from agent.protocol import Turn, Pos, WALL_FIXER
+from agent.protocol import Turn, Pos, WALL_FIXER, distance
 
 
 def setup(base=REPORTED, round_no=450):
@@ -17,6 +17,18 @@ def setup(base=REPORTED, round_no=450):
         unit(2,'worker',8 if blue else 32,20,220),unit(4,'pioneer',*common,200)]
     p['teamOur']['roles'] += [unit(10+i,'rocket',*g) for i,g in enumerate(guns)]
     return p, Pos(*common)
+
+
+def corridor_case(round_no=706):
+    """Literal r706 building/idle corridor geometry from a62 seed1 blue trace."""
+    p=board(base=(7,26),round_no=round_no)
+    p['teamOur']['roles']=[unit(1,'station',7,26,1500),
+        unit(2,'worker',9,24,220),unit(3,'worker',8,27,120),
+        unit(4,'pioneer',7,24,200),unit(10,'rocket',6,25),
+        unit(11,'rocket',6,27),unit(12,'rocket',7,27)]
+    p['teamOur']['roles'] += [unit(100+i,'wall',x,y) for i,(x,y) in
+        enumerate(sorted(ring_points((7,26))-{(5,25),(5,26)}))]
+    return p
 
 
 class RocketPostTests(unittest.TestCase):
@@ -112,6 +124,53 @@ class RocketPostTests(unittest.TestCase):
         arrived=team_trip.TripFrame(Turn.load(p),p,frame.memory)
         self.assertIsNone(arrived.purchase)
         self.assertEqual(arrived.events[-1]['reason'],'returned_observed')
+
+    def test_idle_corridor_blocker_moves_to_off_route_inner_cell_in_two_steps(self):
+        p=corridor_case();commands={}
+        report=rocket_post.reserve(Turn.load(p),commands)
+        self.assertEqual(report[-1]['reason'],'yield_common_rocket_corridor')
+        self.assertEqual(commands,{4:dict(action='move',targetPos=[dict(x=8,y=24)])})
+        self.assertNotIn(2,commands,'a relaxed path must not send gunner through occupancy')
+        p['roundNo']+=1;p['teamOur']['roles'][3]['pos']=dict(x=8,y=24);commands={}
+        rocket_post.reserve(Turn.load(p),commands)
+        self.assertEqual(commands[4]['targetPos'],[dict(x=9,y=25)])
+
+    def test_corridor_yield_preserves_protected_busy_and_night_roles(self):
+        for round_no,protected,commands in [
+                (706,{4},{}),(721,set(),{}),(690,set(),{}),
+                (706,set(),{4:dict(action='use',name='WallFixer',targetPos=[dict(x=7,y=23)])}),
+                (706,set(),{4:dict(action='move',targetPos=[dict(x=8,y=24)])})]:
+            p=corridor_case(round_no);before=deepcopy(commands)
+            rocket_post.reserve(Turn.load(p),commands,protected=protected)
+            self.assertEqual(commands,before)
+
+    def test_actual_brain_idle_corridor_yields_and_gunner_reaches_common_before_night(self):
+        p=corridor_case();state=planner.PlannerState();visited=[]
+        with patch.object(brain,'_STRATEGY',self.config):
+            for round_no in range(706,721):
+                p['roundNo']=round_no;turn=Turn.load(p)
+                response=brain.plan_for_state(p,state,judge_tasks=False)
+                by_id={u['id']:u for u in p['teamOur']['roles']}
+                landings=[]
+                for uid,cmd in response.commands.items():
+                    if cmd.get('action')!='move':continue
+                    role=next(r for r in turn.controllable() if r.unit_id==int(uid))
+                    target=Pos.load(cmd['targetPos'][0])
+                    self.assertNotIn(target,turn.blocked(role))
+                    self.assertEqual(distance(role.pos,target),1)
+                    landings.append(target)
+                    by_id[int(uid)]['pos']=target.dump()
+                    if int(uid)==2:visited.append(target)
+                self.assertEqual(len(landings),len(set(landings)))
+            self.assertEqual(p['teamOur']['roles'][1]['pos'],dict(x=6,y=26))
+            self.assertIn(Pos(5,25),visited)
+            p['roundNo']=721
+            p['robot']={'roles':[dict(id=90,roleType='largeRobot',health=500,pos=dict(x=13,y=25))]}
+            response=brain.plan_for_state(p,state,judge_tasks=False)
+            self.assertNotIn('2',response.commands)
+            attacks=[c for c in response.commands.values() if c.get('action')=='attack']
+            self.assertEqual(len(attacks),1)
+            self.assertEqual(attacks[0]['controllerId'],'2')
 
 
 if __name__=='__main__':unittest.main()

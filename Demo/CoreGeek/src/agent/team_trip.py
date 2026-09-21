@@ -486,7 +486,7 @@ class TripFrame:
                 'reason':'new_trip_conflicts_final_actions','route':cost.report()})
             self._new_deferred=True
 
-    def protect_final(self,commands):
+    def protect_final(self,commands, *, priority_return_moves=()):
         """A late task move/reservation may change the earlier route proof.
 
         Drop only the unsafe non-courier worker action. Existing reconcile
@@ -514,6 +514,13 @@ class TripFrame:
             guard = RouteGuard(self.turn,self.payload,self.purchase,
                 {uid:c for uid,c in result.items() if uid!=worker.unit_id},final=True)
             if not guard.allows_command(worker,command):
+                if worker.unit_id in priority_return_moves and command.get('action')=='move':
+                    # Collision legality was already reconciled. At dusk the
+                    # designated gunner must return even if a courier is late;
+                    # keep that courier's return contract for the next round.
+                    self.events.append({'kind':'return','event':'priority_preserved',
+                                        'reason':'gunner_dusk_staging','owner':worker.unit_id})
+                    continue
                 result.pop(worker.unit_id,None)
                 self.events.append({'kind':'construction','event':'defer',
                                     'reason':'final_team_route_budget','owner':worker.unit_id})

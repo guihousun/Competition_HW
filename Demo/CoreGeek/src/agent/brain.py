@@ -22,6 +22,7 @@ from .market import (
 from .protocol import (
     BOMB,
     DAY_ROUNDS,
+    ROUNDS_PER_DAY,
     MEDICINE,
     PIONEER,
     Pos,
@@ -355,7 +356,12 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
     trip_frame = _TRIP_FRAME.get()
     if trip_frame is not None:
-        commands = trip_frame.protect_final(commands)
+        shared_context = _SHARED_CONTROL.get()
+        shared = shared_context[1] if shared_context and shared_context[0] is turn else {}
+        staging_owner = ({shared['owner']} if turn.is_day and shared.get('single_operator')
+                         and shared.get('phase') == 'moving_to_common_stand'
+                         and (turn.round_no-1) % ROUNDS_PER_DAY >= RETURN_BEFORE_NIGHT else set())
+        commands = trip_frame.protect_final(commands, priority_return_moves=staging_owner)
         next_trips = trip_frame.finalize(commands)
         if commit:
             planner_state.team_trips = next_trips
