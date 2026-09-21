@@ -8,6 +8,7 @@ from .protocol import Pos, WALL, STATION, TOWER_TYPES, MEDICINE, WALL_FIXER, dis
 from .market import VOUCHER_TARGETS, can_upgrade, shop_prices
 from .coordination import available_gold
 from .defense_layout import wall_priority
+from . import strategy_config
 
 
 def routes(turn, role, start):
@@ -34,12 +35,26 @@ def stands(turn, role, pos):
 
 def priority(building):
     # Tactical priorities, never modified official prices/health/levels.
-    if building.kind==STATION and building.health < (1500,3000,4500)[min(3,max(1,building.level))-1]*.6:
+    config=strategy_config.get()
+    threshold=config['maintenance']['base_emergency_fraction'] if config['enabled'] else .6
+    if building.kind==STATION and building.health < (1500,3000,4500)[min(3,max(1,building.level))-1]*threshold:
         group=0
     elif building.kind in TOWER_TYPES:group=1 if building.level==1 else 2
     elif building.kind==STATION:group=3 if building.level==1 else 4
     else:group=5
     return group,building.level,0 if building.kind == "rocket" else 1,building.health,building.unit_id
+
+
+def target_level(turn, gun):
+    config = strategy_config.get()
+    if not config['enabled']:
+        return 3
+    day = (turn.round_no-1)//130 + 1
+    schedule = config['upgrades']['day_targets']
+    levels = schedule[day-1] if day <= len(schedule) else config['upgrades']['late_weapon_target']
+    guns = sorted(turn.weapons(), key=lambda g:(g.pos.y,g.pos.x,g.unit_id))
+    index = next((i for i,g in enumerate(guns) if g.unit_id==gun.unit_id),0)
+    return levels[min(index,2)]
 
 
 def weapon_reserve(turn, payload):
@@ -48,6 +63,8 @@ def weapon_reserve(turn, payload):
         return None
     prices = shop_prices(payload)
     for gun in sorted(turn.weapons(), key=priority):
+        if gun.level >= target_level(turn, gun):
+            continue
         for item, price in sorted(prices.items()):
             if price >= 0 and can_upgrade(item, gun.kind, gun.level):
                 return {'building':gun.unit_id, 'voucher':item, 'gold':price, 'level':gun.level}
@@ -55,6 +72,16 @@ def weapon_reserve(turn, payload):
 
 
 def purchase_allowed(turn, payload, item, commands):
+    config = strategy_config.get()
+    if config['enabled']:
+        # Cap only new weapon investment; already held vouchers remain usable.
+        if any(can_upgrade(item, kind, level) for kind in TOWER_TYPES for level in (1,2)):
+            return any(can_upgrade(item,g.kind,g.level) and g.level < target_level(turn,g) for g in turn.weapons())
+        base = turn.station()
+        late = (turn.round_no-1)//130+1 >= config['maintenance']['from_day']
+        pressure = any(0 < w.health <= config['maintenance']['entry_fraction']*(1000,1500,2000)[w.level-1] for w in turn.walls())
+        if late and pressure and any(can_upgrade(item,WALL,w.level) for w in turn.walls()):
+            return True
     reserve = weapon_reserve(turn, payload)
     if reserve is None or item == reserve['voucher']:
         return True
@@ -84,6 +111,8 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
                       building=commitment['target'],voucher=commitment['item'],
                       committed=True,route=cost.report())
         returning=commitment.get('phase')=='return'
+        if commitment.get('operation')=='stock':
+            report.update(operation='stock',quantity=commitment['quantity'])
         if worker is None or worker.unit_id in commands or cost.command is None or (not cost.feasible and not returning):
             if returning:report['phase']='return_wait'
             return None,report
@@ -102,10 +131,16 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     base = turn.station()
     def building_priority(b):
         rank = wall_priority(b.pos, base.pos, turn.width, turn.height)[0] if base and b.kind == WALL else 0
-        return priority(b)[:1] + (rank,) + priority(b)[1:]
+        config = strategy_config.get()
+        urgent = (config['enabled'] and (turn.round_no-1)//130+1 >= config['maintenance']['from_day']
+                  and b.kind==WALL and rank<=1
+                  and b.health <= config['maintenance']['entry_fraction']*(1000,1500,2000)[b.level-1])
+        return ((0 if urgent else priority(b)[0]),rank)+priority(b)[1:]
     buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3 and b.kind in (STATION,WALL)+TOWER_TYPES),key=building_priority)
     # Bound planning cost on crowded wall maps; retain all base/tower targets.
-    buildings=[b for b in buildings if b.kind!=WALL]+[b for b in buildings if b.kind==WALL][:4]
+    wall_ids={b.unit_id for b in buildings if b.kind==WALL}
+    allowed_walls=[b.unit_id for b in buildings if b.kind==WALL][:4]
+    buildings=[b for b in buildings if b.unit_id not in wall_ids or b.unit_id in allowed_walls]
     def action(worker,building,item,phase,cmd,price=None):
         report.update(phase=phase,reason=phase,worker=worker.unit_id,building=building.unit_id,
                       voucher=item,target=building.pos.dump(),price=price)
@@ -139,7 +174,7 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     held.update(cmd.get('name') for cmd in commands.values() if cmd.get('action')=='buy')
     if held & set(VOUCHER_TARGETS):return stop('voucher_already_in_team')
     candidates=[(b,item,prices[item]) for b in buildings for item in sorted(prices)
-                if can_upgrade(item,b.kind,b.level) and 0<=prices[item]<=gold
+                if can_upgrade(item,b.kind,b.level) and (b.kind not in TOWER_TYPES or b.level < target_level(turn,b)) and 0<=prices[item]<=gold
                 and purchase_allowed(turn,payload,item,commands)]
     if not candidates:return stop('saving_for_weapon_upgrade' if report['weapon_reserve'] and gold < report['weapon_reserve']['gold'] else 'no_affordable_upgrade')
     for building,item,price in candidates:

@@ -2,13 +2,14 @@
 from copy import deepcopy
 import json
 import unittest
+from legacy_strategy import LegacyStrategyCase
 
 from test_tasks import observation
 from agent import brain, planner, tasks, task_lifecycle, policy_supervisor
 from agent.protocol import Turn
 
 
-class AcceptanceTests(unittest.TestCase):
+class AcceptanceTests(LegacyStrategyCase):
     def setUp(self):
         planner.reset()
 
@@ -89,7 +90,7 @@ def defence_state(round_no=71,robots=True):
     return state,memory
 
 
-class ArbitrationTests(unittest.TestCase):
+class ArbitrationTests(LegacyStrategyCase):
     def test_threatened_night_reclaims_pioneer_from_task_hold(self):
         state,memory=defence_state()
         next(r for r in state['teamOur']['roles'] if r['roleType']=='station')['health']=1000
@@ -122,7 +123,7 @@ class ArbitrationTests(unittest.TestCase):
         self.assertEqual(memory.dump(),before)
 
 
-class PressureTests(unittest.TestCase):
+class PressureTests(LegacyStrategyCase):
     def directive(self, state, committed=False):
         turn=Turn.load(state);pairs=brain._tower_pairs(turn)
         tower=next(t for r,t in pairs if r.kind=='pioneer')
@@ -163,7 +164,7 @@ class PressureTests(unittest.TestCase):
         self.assertTrue(memory.tasks['supervisor']['recommended_reserve'])
 
 
-class IsolationTests(unittest.TestCase):
+class IsolationTests(LegacyStrategyCase):
     def test_preview_backoff_does_not_mutate_live_nested_notes(self):
         state=observation(round_no=10,timeout_rounds=0)
         memory=planner.PlannerState()
@@ -185,7 +186,7 @@ class IsolationTests(unittest.TestCase):
         self.assertEqual(cycle.timeout_rounds,25)
 
 
-class ControllerBudgetTests(unittest.TestCase):
+class ControllerBudgetTests(LegacyStrategyCase):
     def test_explicit_role_action_releases_attack_claim(self):
         from agent.coordination import reconcile
         state,_=defence_state()
@@ -200,7 +201,7 @@ class ControllerBudgetTests(unittest.TestCase):
         self.assertEqual(list(reconcile(Turn.load(state),state,{10040:shot,10041:dict(shot)})),[10040])
 
 
-class PublishedOfferTests(unittest.TestCase):
+class PublishedOfferTests(LegacyStrategyCase):
     def test_explicit_empty_task_list_does_not_invent_map_offers(self):
         planner.reset()
         state=observation();state['teamOur']['playerTasks']=[]
@@ -208,7 +209,7 @@ class PublishedOfferTests(unittest.TestCase):
         self.assertFalse(any(c['action']=='acceptTask' for c in response['roleCommandMap'].values()))
 
 
-class RolloutTests(unittest.TestCase):
+class RolloutTests(LegacyStrategyCase):
     def test_unvalidated_healthy_base_risk_is_advice_only(self):
         state,memory=defence_state()
         brain.plan_for_state(state,memory,judge_tasks=False)

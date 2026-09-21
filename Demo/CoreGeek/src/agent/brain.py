@@ -7,7 +7,8 @@ import os
 
 from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
-from . import home_defense
+from . import home_defense, strategy_config, phase_maintenance
+_STRATEGY = strategy_config.get()
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
 from .market import (
@@ -42,14 +43,14 @@ from .protocol import (
     station_footprint,
 )
 
-TOWER_LOADOUT = ("rocket", "railgun", "rocket")
+TOWER_LOADOUT = tuple(_STRATEGY["defense"]["tower_loadout"]) if _STRATEGY["enabled"] else ("rocket", "railgun", "rocket")
 # Stone carried per wall run. Above the surplus threshold, so that a worker that
 # has filled up while the wall ring is unfinished still visits the vendor with
 # the excess instead of hoarding it.
-STONE_BATCH = 10
+STONE_BATCH = _STRATEGY["economy"]["stone_batch"] if _STRATEGY["enabled"] else 10
 # How close we want the shop/vendor work to happen before dusk (R02: 70+60).
-RETURN_BEFORE_NIGHT = 55
-UPGRADE_RETURN_MARGIN = 3  # strategy buffer; the observed trip must fit before night
+RETURN_BEFORE_NIGHT = _STRATEGY["economy"]["return_day_index"] if _STRATEGY["enabled"] else 55
+UPGRADE_RETURN_MARGIN = _STRATEGY["economy"]["upgrade_return_margin"] if _STRATEGY["enabled"] else 3  # strategy buffer; the observed trip must fit before night
 # Economy window: after the first towers are up, a worker may walk to the
 # vendor/shop. The trip can span days, because the neutral points are randomly
 # placed and may sit far from the base; an errand is abandoned in the evening so
@@ -65,11 +66,11 @@ WALL_RESERVE = 2
 # a few gold costs more wall-building rounds than it earns. It is measured from
 # the role, not from the base, so it bounds only the *first* step of a run; the
 # return budget below is what keeps a trip affordable in rounds.
-ORE_MAX_DISTANCE = 8
+ORE_MAX_DISTANCE = _STRATEGY["economy"]["ore_max_distance"] if _STRATEGY["enabled"] else 8
 # Metal carried per mining run. The same order of magnitude as STONE_BATCH: big
 # enough that one trip to the vendor repays the walk, small enough that a worker
 # never parks on a mine with a full bag (R03: worker backpack is 100 cells).
-METAL_BATCH = 10
+METAL_BATCH = _STRATEGY["economy"]["metal_batch"] if _STRATEGY["enabled"] else 10
 # Evening return: enough rounds left to walk home before robots arrive.
 RETURN_SAFE_INDEX = 50
 # Stand by a cooling task point instead of walking home when the refresh is
@@ -82,6 +83,7 @@ _DECISION_REPORT = ContextVar('competition_decision_report',default=None)
 _SHARED_CONTROL = ContextVar('competition_shared_control', default=None)
 _UPGRADE_REPORT = ContextVar('competition_upgrade_report',default=None)
 _TRIP_FRAME = ContextVar('competition_team_trip_frame',default=None)
+_PHASE_MAINTENANCE = ContextVar("phase_maintenance",default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
@@ -197,6 +199,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     """
     turn = Turn.load(payload)
     _TRIP_FRAME.set(None)
+    _PHASE_MAINTENANCE.set(None)
     last_round = getattr(planner_state, "last_round", 0)
     if last_round and turn.round_no < last_round and turn.round_no != 1:
         return sandbox.ResponseBuilder()
@@ -359,6 +362,14 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                 report.update(phase='deferred',reason=deferred['reason'],final_route=deepcopy(deferred['route']))
     elif commit and hasattr(planner_state,'team_trips'):
         planner_state.team_trips.clear()
+    maintenance = _PHASE_MAINTENANCE.get()
+    if maintenance is not None:
+        memory,result=maintenance
+        phase_maintenance.finalize(memory,result,commands)
+        if commit:
+            planner_state.maintenance_state=memory
+    elif commit and turn.is_day:
+        planner_state.maintenance_state={}
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
     plan = job.get("plan") if job else None
@@ -403,6 +414,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         if context and context[0] is turn:
             _DECISION_REPORT.get()['shared_rocket_control'] = deepcopy(context[1])
         _DECISION_REPORT.get()['pioneer_safety'] = {k:v for k,v in safety.items() if k != 'command'} if safety else None
+        _DECISION_REPORT.get()['strategy_config'] = strategy_config.identity()
+        if maintenance is not None:
+            _DECISION_REPORT.get()['maintenance'] = deepcopy(maintenance[1]['report'])
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
         _DECISION_REPORT.get()['worker_shelter'] = home_defense.status(
             turn, commands, quiet=nightwork.field_clear(turn, payload))
@@ -688,6 +702,18 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
             proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
                 deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
                 reserved_workers=({construction['owner']} if construction else ()))
+        if frame.purchase is None and _STRATEGY['enabled']:
+            from . import phase_supply
+            # Existing/carried vouchers finish first. New investment competes
+            # with stock only after the phase firepower target or wall emergency.
+            held_voucher = any(can_upgrade(item,b.kind,b.level) for r in turn.workers()
+                               for item in r.backpack for b in turn.ours if b.health>0)
+            if not held_voucher:
+                stock,stock_report=phase_supply.plan(turn,state,commands,
+                    deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
+                    reserved_workers=({construction['owner']} if construction else ()))
+                if stock is not None:
+                    proposal,report=stock,stock_report
         frame.stage_purchase(report,proposal)
         return proposal,report
 
@@ -1871,6 +1897,48 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     claimed: set[Pos] = set()
     pairs = _tower_pairs(turn)
     confine = not nightwork.field_clear(turn, state)
+    if (_STRATEGY['enabled']
+            and _STRATEGY['defense']['single_operator_three_rockets']):
+        guards=turn.workers()
+        operator=min((r.unit_id for r in guards),default=None)
+        fixed=next((r for r in guards if r.unit_id==operator),None)
+        shared=_coordinate_rockets(turn,commands,claimed)
+        if shared is not None:
+            _SHARED_CONTROL.set((turn,shared))
+        # The common post may require the public rear opening during daylight.
+        # A generic nearest-interior move here would undo that route each turn.
+        if (fixed and operator not in commands
+                and not any(c.get('controllerId')==str(operator) for c in commands.values())
+                and not home_defense.inside(turn,fixed.pos)):
+            step=home_defense.step_inside(turn,fixed,claimed=claimed)
+            if step is not None:
+                commands[operator]=move_command(step);claimed.add(step)
+        # A separate worker carries day-purchased spare parts. Even when all
+        # rockets cool down, the gunner retains ownership and cannot be drafted.
+        memory=deepcopy(getattr(planner_state,'maintenance_state',{}))
+        repair=phase_maintenance.night_plan(turn,memory,commands,
+            excluded_roles=(() if operator is None else (operator,)),
+            config={**_STRATEGY['maintenance'],'enabled':True},payload=state)
+        commands.update(repair['commands']);claimed.update(repair['claimed'])
+        _PHASE_MAINTENANCE.set((memory,repair))
+        owned=set(repair['owned_roles']) | ({operator} if operator is not None else set())
+        if not confine:
+            extra=nightwork.plan(turn,state,pairs) if state is not None else {}
+            for uid,command in extra.items():
+                if uid not in owned and uid not in commands:
+                    commands[uid]=command
+                    if command.get('action')=='move':claimed.add(Pos.load(command['targetPos'][0]))
+        for role in turn.controllable():
+            if role.unit_id in owned or role.unit_id in commands:
+                continue
+            reserve_pioneer = getattr(planner_state,'tasks',{}).get('supervisor',{}).get('reserve_pioneer',False)
+            if role.kind==PIONEER and not home_defense.full_night(turn) and not reserve_pioneer:
+                continue  # existing tasks keep their original first-three-night admission rules
+            if not home_defense.inside(turn,role.pos):
+                step=home_defense.step_inside(turn,role,claimed=claimed)
+                if step is not None:
+                    commands[role.unit_id]=move_command(step);claimed.add(step)
+        return None
     cycle = getattr(planner_state, 'tasks', {}).get('cycle') if planner_state is not None else None
     committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
     committed_task = committed_task and not home_defense.full_night(turn)
@@ -2074,7 +2142,121 @@ def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
 
 
 def _coordinate_rockets(turn, commands, claimed):
-    """Use a reachable shared inner stand; retain ordinary fire on approach/failure."""
+    """Single mode stages a three-gun post; legacy mode shares two rockets."""
+    from . import strategy_config
+    config = strategy_config.get()
+    if config['enabled'] and config['defense']['single_operator_three_rockets']:
+        # R01/R04: one worker controls at most one ready rocket per round. A
+        # failed approach never licenses a second worker/pioneer to take over.
+        workers = turn.workers()
+        guns = sorted((g for g in turn.weapons() if g.kind == 'rocket'),
+                      key=lambda g: g.unit_id)
+        worker = workers[0] if workers else None
+        result = {'owner': worker.unit_id if worker else None, 'stand': None,
+                  'weapons': [g.unit_id for g in guns], 'active': False,
+                  'phase': 'unavailable', 'reason': None, 'single_operator': True}
+        if worker is None:
+            result['reason'] = 'no_living_worker'
+            return result
+        if turn.station() is None or not guns:
+            result['reason'] = 'base_missing' if turn.station() is None else 'no_rocket'
+            return result
+        if worker.unit_id in commands:
+            result.update(phase='owner_busy', reason='owner_action_preserved')
+            return result
+        permanent = {p for u in turn.ours + turn.enemies
+                     if u.health > 0 and u.kind not in ('worker', 'pioneer')
+                     for p in turn.footprint(u)}
+        inner = _controller_cells(turn, turn.station().pos, permanent)
+        shared = _shared_rocket_cells({g.pos: g.kind for g in guns}, inner)
+        from collections import deque
+        blocked = turn.blocked(worker) | set(claimed)
+        # Daytime staging may use the real rear opening between inner pockets.
+        # At night an already-inside operator must not leave the wall ring.
+        confined = not turn.is_day and home_defense.inside(turn, worker.pos)
+        queue = deque([worker.pos])
+        paths = {worker.pos: (None, 0)}
+        while queue:
+            at = queue.popleft()
+            for dx, dy in _NEIGHBOUR_STEPS:
+                nxt = Pos(at.x + dx, at.y + dy)
+                if (nxt in paths or nxt in blocked or not turn.land(nxt)
+                        or (confined and not home_defense.inside(turn, nxt))):
+                    continue
+                paths[nxt] = (nxt if at == worker.pos else paths[at][0], paths[at][1] + 1)
+                queue.append(nxt)
+        reachable = [(stand, *paths[stand]) for stand in inner
+                     if stand in paths and stand not in claimed]
+        common = [row for row in reachable if row[0] in shared]
+        result['blocked_control_cells'] = [r.pos.dump() for r in turn.controllable()
+            if r.unit_id != worker.unit_id and r.pos in inner
+            and any(distance(r.pos, gun.pos) == 1 for gun in guns)]
+        result['common_stand_feasible'] = bool(common)
+        if not common:
+            result['reason'] = ('common_stand_unreachable' if shared else
+                                'no_common_inner_stand')
+        if shared and worker.pos not in shared:
+            if not common:
+                result.update(phase='common_stand_blocked',
+                              desired_stands=[p.dump() for p in shared])
+                return result
+            stand, step, length = min(common, key=lambda row: (
+                row[2], row[0].x, row[0].y))
+            result.update(stand=stand.dump(), approach_steps=length,
+                          phase='moving_to_common_stand')
+            if step is not None:
+                commands[worker.unit_id] = move_command(step)
+                claimed.add(step)
+            return result
+        ready = []
+        if not turn.is_day:
+            for gun in guns:
+                aim = _aim_points(turn, gun) if gun.cooldown == 0 else []
+                if not aim:
+                    continue
+                # Expected immediate useful splash damage from public robots.
+                # Cooldown naturally rotates otherwise equal guns; ID breaks ties.
+                damage = sum(min(robot.health, sum(
+                    20 if target == robot.pos else
+                    10 if distance(target, robot.pos) == 1 else 0
+                    for target in aim)) for robot in turn.robots if robot.health > 0)
+                ready.append((-damage, -gun.level, gun.unit_id, gun, aim))
+        adjacent = [row for row in ready if home_defense.inside(turn, worker.pos)
+                    and distance(worker.pos, row[3].pos) == 1]
+        if adjacent:
+            _, _, _, gun, aim = min(adjacent, key=lambda row: row[:3])
+            commands[gun.unit_id] = attack_command_multi(worker.unit_id, aim)
+            claimed.add(worker.pos)
+            result.update(active=True, stand=worker.pos.dump(), phase='firing',
+                          firing=gun.unit_id)
+            return result
+        choices = common
+        if not choices:
+            ready_positions = [row[3].pos for row in ready]
+            useful = ready_positions or [g.pos for g in guns]
+            choices = [(p, s, length) for p, s, length in reachable
+                       if any(distance(p, gun) == 1 for gun in useful)]
+        # Hold a legal inner post throughout a full cooldown window; do not
+        # manufacture movement or give the free roles a second firing action.
+        if not ready and home_defense.inside(turn, worker.pos):
+            claimed.add(worker.pos)
+            result.update(active=True, stand=worker.pos.dump(),
+                          phase='holding_cooldown_or_no_target')
+            return result
+        if choices:
+            stand, step, length = min(choices, key=lambda row: (
+                row[2], row[0].x, row[0].y))
+            result.update(stand=stand.dump(), active=step is None,
+                          approach_steps=length,
+                          phase='moving' if step else 'holding_cooldown_or_no_target')
+            if step is not None:
+                commands[worker.unit_id] = move_command(step)
+                claimed.add(step)
+            else:
+                claimed.add(stand)
+        else:
+            result.update(phase='return_blocked', reason='no_reachable_inner_control_cell')
+        return result
     base = turn.station()
     if base is None or len(turn.weapons()) != 3:
         return None
@@ -2117,7 +2299,10 @@ def _fill_ready_weapons(turn, commands, excluded):
     A cooling weapon's nominal owner may fire another weapon. One official
     action per role still applies; never replace a use/buy/task action.
     """
-    if turn.is_day:return
+    from . import strategy_config
+    config = strategy_config.get()
+    if turn.is_day or (config['enabled'] and config['defense']['single_operator_three_rockets']):
+        return
     context = _SHARED_CONTROL.get()
     shared = context[1] if context and context[0] is turn else None
     excluded = set(excluded)
@@ -2420,12 +2605,16 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
       a ring that is otherwise open. So a combination is only accepted when every
       inner cell still reaches the outside through the exit.
 
-    Prefer feasible triples, preserve existing types, keep all inner stands
-    connected and give both rockets an empty shared stand. Then prefer the
-    rockets on the approach side before spacing and laser placement; the laser
-    may be offset so it does not occupy the shared stand. The pool is at most
-    twelve cells; no future wave or hidden map data enters the ranking.
+    Single-operator mode prioritizes a shared three-rocket post: separate inner
+    components are allowed only when every cell still reaches a rear opening.
+    Where no such common post exists, prefer the shortest inner control circuit.
+    Legacy mode prefers mutually connected inner stands and a shared two-rocket
+    post. The approach side is secondary to feasible control; no future wave or
+    hidden map data enters the ranking. The pool is at most twelve cells.
     """
+    from . import strategy_config
+    config = strategy_config.get()
+    single = config['enabled'] and config['defense']['single_operator_three_rockets']
     station = turn.station()
     if station is None:
         return ()
@@ -2438,7 +2627,7 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
                  for p in turn.footprint(u)}
     fixed = tuple(u.pos for u in turn.weapons())
     sites_key = (geo_key, frozenset(permanent),
-                 tuple((u.pos, u.kind) for u in turn.weapons()), TOWER_LOADOUT)
+                 tuple((u.pos, u.kind) for u in turn.weapons()), TOWER_LOADOUT, single)
     hit = _TOWER_SITES_CACHE.get(sites_key)
     if hit is not None:
         return hit
@@ -2452,12 +2641,42 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
     stands = _controller_cells(turn, station.pos, permanent)
     best_key: tuple | None = None
     best_sites: list[Pos] = list(fixed)
+    def control_cycle_length(sites):
+        # Shortest closed inner walk whose visited cells cover all three guns.
+        # A common stand costs 0; two adjacent stands cost 2. At most 12 cells
+        # and eight coverage masks; no map-specific coordinate enters this rank.
+        from collections import deque
+        free = set(graph.cells) - set(sites) - standing - permanent
+        masks = {p: sum(1 << i for i, gun in enumerate(sites) if distance(p, gun) == 1)
+                 for p in free}
+        goal = (1 << len(sites)) - 1
+        best = 999
+        for start in free:
+            queue = deque([(start, masks[start], 0)])
+            seen = {(start, masks[start])}
+            while queue:
+                pos, mask, length = queue.popleft()
+                if pos == start and mask == goal:
+                    best = min(best, length)
+                    break
+                if length >= best:
+                    continue
+                for nxt in graph.neighbours.get(pos, ()):
+                    if nxt not in free:
+                        continue
+                    state = (nxt, mask | masks[nxt])
+                    if state not in seen:
+                        seen.add(state)
+                        queue.append((nxt, state[1], length + 1))
+        return best
     for size in range(need, -1, -1):
         for combo in combinations(ring, size):
             sites = list(fixed) + list(combo)
             if len(set(sites)) != len(sites):
                 continue
-            matched = _matched_controller_cells(sites, stands)
+            matched = (sum(any(distance(p, tower) == 1 for p in stands - set(sites))
+                           for tower in sites) if single else
+                       _matched_controller_cells(sites, stands))
             connected, trapped = defense_layout.interior_reachability(
                 graph, obstacles=set(sites) | standing)
             ranks: list[int] = []
@@ -2479,8 +2698,9 @@ def _tower_sites(turn: Turn) -> tuple[Pos, ...]:
                    trapped,
                    -matched,
                    mismatch,
-                   0 if _inner_connected(graph, set(sites) | standing) else 1,
+                   0 if single or _inner_connected(graph, set(sites) | standing) else 1,
                    0 if _shared_rocket_cells(intended, stands - set(sites)) else 1,
+                   control_cycle_length(sites) if single and feasible else 0,
                    sum(defense_layout.side_rank(p, station.pos, plan.side_order)[0]
                        for p, kind in intended.items() if kind == 'rocket'),
                    sum(distance(a, b) < 2 for a, b in combinations(sites, 2)),
@@ -2521,8 +2741,11 @@ def _inner_connected(graph, blocked):
 
 
 def _shared_rocket_cells(intended, stands):
+    from . import strategy_config
     rockets = [p for p, kind in intended.items() if kind == 'rocket']
-    if len(rockets) != 2:
+    config = strategy_config.get()
+    count = 3 if config['enabled'] and config['defense']['single_operator_three_rockets'] else 2
+    if len(rockets) != count:
         return ()
     return tuple(sorted((p for p in stands if all(distance(p, gun) == 1 for gun in rockets)),
                         key=lambda p: (p.x, p.y)))

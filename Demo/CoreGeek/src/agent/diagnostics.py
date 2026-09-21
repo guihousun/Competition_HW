@@ -304,6 +304,7 @@ def startup_identity(entry: str | None = None, root: Path | None = None,
         "entry": os.path.basename(entry) if entry else os.path.basename(sys.argv[0] or "unknown"),
         "python": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         "policy": default_policy_identity(),
+        "strategy_config": __import__(__package__ + ".strategy_config", fromlist=["identity"]).identity(),
     }
 
 

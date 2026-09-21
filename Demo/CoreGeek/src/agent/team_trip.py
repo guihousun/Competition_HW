@@ -14,7 +14,7 @@ from .coordination import available_gold
 from .home_defense import inside
 from .market import can_upgrade, shop_prices
 from .protocol import (Pos, CONTROLLABLE_TYPES, TOWER_TYPES, DAY_ROUNDS, ROUNDS_PER_DAY, distance,
-                       move_command, buy_command, use_command)
+                       move_command, buy_command, use_command, WALL_FIXER)
 
 MAX_ROUTE_OVERLAYS = 64  # compute bound; exhaustion defers construction
 
@@ -67,7 +67,9 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     budget = commitment['deadline'] - turn.round_no
     def reject(reason, actions=None):
         return TripCost(False, actions, budget, reason)
-    returning = commitment.get('phase') == 'return'
+    stock = commitment.get('operation') == 'stock'
+    desired = commitment.get('quantity',1) if stock else 1
+    returning = commitment.get('phase') == 'return' or (stock and any(w.unit_id==commitment['owner'] and w.backpack.count(WALL_FIXER)>=desired for w in turn.workers()))
     if not turn.is_day or (budget <= 0 and not returning):
         return reject('deadline')
     owner = next((w for w in turn.workers() if w.unit_id == commitment['owner']), None)
@@ -75,12 +77,15 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     item = commitment['item']
     if owner is None or (target is None and not returning):
         return reject('owner_or_target_missing')
-    if not returning and not can_upgrade(item, target.kind, target.level):
+    if stock and (item != WALL_FIXER or type(desired) is not int or not 1 <= desired <= 10):
+        return reject('invalid_stock_contract')
+    if not returning and not stock and not can_upgrade(item, target.kind, target.level):
         return reject('target_no_longer_eligible')
-    held = item in owner.backpack
+    held = owner.backpack.count(item) >= desired
+    amount = max(0,desired-owner.backpack.count(item)) if stock else 1
     price = shop_prices(payload).get(item)
-    if not returning and not held and (price is None or price < 0 or price > available_gold(
-            turn, payload, commands or {}, replacing=owner.unit_id) or owner.backpack_full):
+    if not returning and not held and (price is None or price < 0 or price * amount > available_gold(
+            turn, payload, commands or {}, replacing=owner.unit_id) or owner.backpack_full or (stock and len(owner.backpack)+amount > (owner.capacity or 100))):
         return reject('purchase_unavailable')
     blocked = set(turn.blocked(owner)) | task_cells(turn) | set(added_walls)
     for uid, pos in (actor_positions or {}).items():
@@ -130,6 +135,25 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
         command = move_command(home_step[owner.pos]) if actions else None
         return TripCost(actions<=budget,actions,budget,
                         'returned' if actions==0 else 'return' if actions<=budget else 'late_return',command)
+
+    if stock:
+        outward, first = bfs(owner.pos)
+        options = []
+        for shop,kind in turn.zones.items():
+            if kind != 'weaponShop':
+                continue
+            for stand in neighbours(shop):
+                if stand not in outward or stand not in return_cost:
+                    continue
+                actions=outward[stand]+1+return_cost[stand]
+                command=buy_command(item,amount) if outward[stand]==0 else move_command(first[stand])
+                options.append((actions,outward[stand],stand.x,stand.y,command))
+        if not options:
+            return reject('stock_return_unreachable')
+        actions,_,_,_,command=min(options,key=lambda x:x[:4])
+        if actions>budget:
+            return reject('stock_route_exceeds_budget',actions)
+        return TripCost(True,actions,budget,'stock_procurement',command)
 
     stands = [p for p in neighbours(target.pos) if turn.land(p) and p not in blocked and p in return_cost]
     if not stands:
@@ -186,7 +210,7 @@ def evaluate_after_action(turn, payload, commitment, command, commands, *, actor
     if command and command.get('action')=='move':
         owner=replace(owner,pos=Pos.load(command['targetPos'][0]))
     elif command and command.get('action')=='buy':
-        owner=replace(owner,backpack=owner.backpack+(commitment['item'],))
+        owner=replace(owner,backpack=owner.backpack+(commitment['item'],)*int(command.get('num',1)))
     elif command and command.get('action')=='use':
         after_record['phase']='return'
     positions={uid:Pos.load(c['targetPos'][0]) for uid,c in commands.items()
@@ -284,6 +308,12 @@ def clean_memory(value):
                 continue
             common.update({k:row[k] for k in ('target','level','count','item')})
             common.update(phase=row.get('phase','acquire'),last_action=row.get('last_action',''))
+            if row.get('operation') == 'stock':
+                if row['item']!=WALL_FIXER or type(row.get('quantity')) is not int or not 1<=row['quantity']<=10:
+                    continue
+                common.update(operation='stock',quantity=row['quantity'])
+            elif row.get('operation') not in (None,'upgrade'):
+                continue
         else:
             cells = row.get('walls')
             if (row.get('phase') not in ('work','return') or not isinstance(cells,list)
@@ -322,7 +352,12 @@ class TripFrame:
                 if row['phase']=='acquire':
                     target = next((u for u in turn.ours if u.unit_id==row['target'] and u.health>0),None)
                     count = live[row['owner']].backpack.count(row['item'])
-                    if target is None or target.level != row['level']:
+                    if row.get('operation')=='stock':
+                        if count>=row['quantity']:
+                            self.begin_return(row,'stock_observed')
+                        elif target is None:
+                            self.begin_return(row,'target_missing')
+                    elif target is None or target.level != row['level']:
                         confirmed = (target is not None and target.level>row['level']
                                      and count<row['count'] and row['last_action']=='use')
                         self.begin_return(row,'upgrade_confirmed_observed' if confirmed else 'target_changed_observed')
@@ -398,6 +433,10 @@ class TripFrame:
                       count=worker.backpack.count(report['voucher']),issued_round=(prior or {}).get('issued_round',self.turn.round_no),
                       last_round=self.turn.round_no,deadline=(prior or {}).get('deadline',self.purchase_deadline),
                       phase='acquire',last_action=command['action'])
+        if report.get('operation')=='stock' and not (prior and prior['phase']=='return'):
+            record.update(operation='stock',quantity=report['quantity'])
+        elif prior and prior.get('operation')=='stock':
+            record.update(operation='stock',quantity=prior['quantity'])
         self.pending['purchase'] = record,deepcopy(command)
 
     def stage_construction(self, owner, command, report):

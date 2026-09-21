@@ -1,6 +1,7 @@
 """Task lifecycle evidence must survive the official request/JSON boundary."""
 import json
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from unittest.mock import patch
 from test_treasure_night_staging import board, NOTES
 from agent import brain, planner
@@ -8,7 +9,7 @@ from agent.protocol import Turn
 from agent.tasks import TaskCycle
 
 
-class TaskCycleMemoryTests(unittest.TestCase):
+class TaskCycleMemoryTests(LegacyStrategyCase):
     def test_reward_answer_provenance_and_terminal_time_survive_json(self):
         state = planner.PlannerState()
         state.note_round(100)

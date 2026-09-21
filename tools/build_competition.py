@@ -42,6 +42,8 @@ def build(repo, ref, output):
     sources = [p for p in paths if p.startswith('Demo/CoreGeek/src/agent/') and p.endswith(('.py', '.json'))]
     extras = ['submission/server.py','run.sh','tools/trace_tool.py','docs/TRACE_LOGGING.md',
               'docs/request.txt','docs/response.txt']
+    if 'strategy.json' in paths:
+        extras.append('strategy.json')
     b.check_modes(repo, commit, sources+extras)
     for name in sources:
         if name == 'Demo/CoreGeek/src/agent/server.py':

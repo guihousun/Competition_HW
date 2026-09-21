@@ -97,6 +97,8 @@ def serve(port):
     # ablation/rollback; WorldAgent inherits the task switch unless overridden.
     os.environ.setdefault('COMPETITION_HW_TASK_AGENT', 'on')
     # Bind before optional logging work. No local viewer or simulator is imported.
+    from . import strategy_config
+    strategy_config.get()
     http = ThreadingHTTPServer(('0.0.0.0', port), Handler)
     trace = None
     try:

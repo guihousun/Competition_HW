@@ -1,5 +1,6 @@
 """Hand-set geometry and official actions; no simulator oracle for expectations."""
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from types import SimpleNamespace
 from unittest.mock import patch
 from itertools import combinations
@@ -20,7 +21,7 @@ def battle():
     return p
 
 
-class FrontWallTests(unittest.TestCase):
+class FrontWallTests(LegacyStrategyCase):
     def test_both_forward_halves_before_rear_halves_mirrored(self):
         for base in (REPORTED, MIRROR):
             turn = Turn.load(board(base=base))

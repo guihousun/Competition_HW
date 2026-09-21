@@ -1,11 +1,12 @@
 """Hand-priced spending boundaries; priority must survive affordability filtering."""
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from test_issue27_economy import board, unit, WV, AV, SV
 from agent import brain, upgrade_itinerary as upgrade, nightwork
 from agent.protocol import Turn
 
 
-class WeaponBudgetTests(unittest.TestCase):
+class WeaponBudgetTests(LegacyStrategyCase):
     def wall_board(self, gold=99):
         p=board();p['teamOur']['goldNum']=gold
         p['teamOur']['roles'].append(unit(30,'wall',3,6))

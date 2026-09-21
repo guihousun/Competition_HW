@@ -1,6 +1,7 @@
 """Independent expectations for real-field budgeting and distant shop delivery."""
 import json
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from copy import deepcopy
 from test_economy import state_with
 from agent import brain, upgrade_itinerary as upgrade, turnactions, task_progress, task_tools
@@ -29,7 +30,7 @@ def board(side='challenger'):
     return state
 
 
-class UpgradeTests(unittest.TestCase):
+class UpgradeTests(LegacyStrategyCase):
     def test_far_shop_real_buy_return_use_both_sides(self):
         for side in ('challenger','defender'):
             state=board(side);before=deepcopy(state);buys=uses=0;phases=[]
@@ -101,7 +102,7 @@ class UpgradeTests(unittest.TestCase):
         self.assertEqual(brain._UPGRADE_REPORT.get()['reason'],'weapon_shop_not_observed')
 
 
-class ReadinessTests(unittest.TestCase):
+class ReadinessTests(LegacyStrategyCase):
     def test_mixed_default_and_idle_worker_fills_ready_adjacent_weapon(self):
         self.assertEqual(brain.TOWER_LOADOUT,('rocket','railgun','rocket'))
         state=board();state['roundNo']=71
@@ -121,7 +122,7 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(next(r for r in report if r['weapon']==2)['reason'],'cooldown')
 
 
-class Issue27Tests(unittest.TestCase):
+class Issue27Tests(LegacyStrategyCase):
     def test_goldNum_is_authoritative_and_missing_is_not_zero(self):
         self.assertEqual(task_progress.stats({'goldNum':145,'gold':999,'totalScore':3}),{'gold':145,'totalScore':3})
         self.assertIsNone(task_progress.stats({'gold':999})['gold'])

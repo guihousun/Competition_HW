@@ -38,6 +38,7 @@ class PlannerState:
     judge: JudgeState = field(default_factory=JudgeState)
     tasks: dict[str, Any] = field(default_factory=dict)
     team_trips: dict[str, Any] = field(default_factory=dict)
+    maintenance_state: dict[str, Any] = field(default_factory=dict)
     # Shared cognitive-channel scheduler and bounded task context (P0b).
     llm_router: "LLMRouter | None" = None
     task_context: "ContextStore | None" = None
@@ -123,6 +124,7 @@ class PlannerState:
         cycle = self.tasks.get("cycle")
         return {
             **({'teamTrips': deepcopy(self.team_trips)} if self.team_trips else {}),
+            **({'maintenanceState': deepcopy(self.maintenance_state)} if self.maintenance_state else {}),
             "schema": PLANNER_SCHEMA,
             "degraded": self.degraded,
             "lastRound": int(self.last_round),
@@ -219,6 +221,8 @@ class PlannerState:
         state.commands_sent = int(dump.get("commandsSent") or 0)
         from .team_trip import clean_memory
         state.team_trips = clean_memory(dump.get('teamTrips'))
+        from .phase_maintenance import sanitize_memory
+        state.maintenance_state = sanitize_memory(dump.get('maintenanceState'))
         tasks = dump.get("tasks") if isinstance(dump.get("tasks"), dict) else {}
         raw_cycle = tasks.get("cycle")
         cycle = None

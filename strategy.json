@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "name": "user_phase_v1",
+  "enabled": true,
+  "defense": {
+    "full_defense_from_day": 4,
+    "single_operator_three_rockets": true,
+    "tower_loadout": [
+      "rocket",
+      "rocket",
+      "rocket"
+    ]
+  },
+  "upgrades": {
+    "day_targets": [
+      [
+        1,
+        1,
+        1
+      ],
+      [
+        1,
+        2,
+        2
+      ],
+      [
+        2,
+        2,
+        2
+      ]
+    ],
+    "late_weapon_target": [
+      2,
+      2,
+      2
+    ]
+  },
+  "maintenance": {
+    "from_day": 4,
+    "stock_target": 2,
+    "entry_fraction": 0.55,
+    "exit_fraction": 0.85,
+    "emergency_fraction": 0.25,
+    "base_emergency_fraction": 0.4
+  },
+  "economy": {
+    "return_day_index": 55,
+    "upgrade_return_margin": 3,
+    "stone_batch": 10,
+    "metal_batch": 10,
+    "ore_max_distance": 8
+  },
+  "nightwork": {
+    "allow_after_clear": true
+  }
+}

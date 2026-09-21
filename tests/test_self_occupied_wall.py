@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from unittest.mock import patch
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'Demo/CoreGeek/src'))
@@ -42,7 +43,7 @@ def purchase(owner=20010,phase='acquire'):
                 issued_round=1041,last_round=1041,deadline=1074,phase=phase,last_action='move')
 
 
-class SelfOccupiedWallTests(unittest.TestCase):
+class SelfOccupiedWallTests(LegacyStrategyCase):
     def plan(self,p,m,commit=True):
         return brain.plan_for_state(deepcopy(p),m,commit=commit,judge_tasks=False).commands
 

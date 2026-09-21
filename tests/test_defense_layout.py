@@ -13,6 +13,7 @@ assumption, not knowledge of the next wave (see docs/ISSUE_12_DEFENCE.md).
 """
 import sys
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from collections import deque
 from pathlib import Path
 
@@ -157,7 +158,7 @@ def footprint_neighbours(base_pos):
             if Pos(x, y) not in station_footprint(base_pos)]
 
 
-class ApproachPriorTests(unittest.TestCase):
+class ApproachPriorTests(LegacyStrategyCase):
     def test_reported_left_base_expects_the_east(self):
         self.assertEqual(defense_layout.primary_approach(Pos(*REPORTED), WIDTH, HEIGHT), "E")
 
@@ -197,7 +198,7 @@ class ApproachPriorTests(unittest.TestCase):
         self.assertEqual(south.side_order, ("S", "E", "W", "N"))
 
 
-class WallRingTests(unittest.TestCase):
+class WallRingTests(LegacyStrategyCase):
     """Perimeter coverage: full ring minus exactly the two-cell exit."""
 
     def assert_complete_ring(self, state, base, expected_exit):
@@ -268,7 +269,7 @@ def base_x(base):
     return base[0]
 
 
-class ExitTests(unittest.TestCase):
+class ExitTests(LegacyStrategyCase):
     def test_exit_is_away_from_the_approach_on_all_four_sides(self):
         for base, approach in ((REPORTED, "E"), (MIRROR, "W"),
                                (VERTICAL_SOUTH, "S"), (VERTICAL_NORTH, "N")):
@@ -366,7 +367,7 @@ def _on_side(cell, base, side):
     return y <= ymin - 2
 
 
-class TowerSiteTests(unittest.TestCase):
+class TowerSiteTests(LegacyStrategyCase):
     # Shared rockets now straddle an empty front-inner stand and face
     # the approach. The laser is offset to preserve the common stand.
     def test_spaced_towers_keep_middle_on_the_east(self):
@@ -436,7 +437,7 @@ class TowerSiteTests(unittest.TestCase):
         self.assertEqual(plain, built, "the layout must be stable once walls appear")
 
 
-class IntegrationTests(unittest.TestCase):
+class IntegrationTests(LegacyStrategyCase):
     def test_pioneer_can_leave_a_completed_ring(self):
         state = board()
         ring = walls_of(state)
@@ -503,7 +504,7 @@ def stress_cluster(approach, base):
     return cluster
 
 
-class DirectionalStressTests(unittest.TestCase):
+class DirectionalStressTests(LegacyStrategyCase):
     """The prior must orient the defence without the wave influencing it."""
 
     def test_cluster_on_the_approach_side_does_not_change_the_plan(self):

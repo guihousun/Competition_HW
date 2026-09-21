@@ -2,6 +2,7 @@
 from copy import deepcopy
 import os
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from unittest.mock import patch
 from test_coordination import unit
 from agent import brain, planner
@@ -24,7 +25,7 @@ NOTES = {'preparable': True, 'taken': False, 'site': {'x': 15, 'y': 5},
          'items': ['AcientTablet'], 'opensAt': None, 'closesAt': None}
 
 
-class TreasureNightStagingTests(unittest.TestCase):
+class TreasureNightStagingTests(LegacyStrategyCase):
     def test_whole_planner_preserves_staging_against_later_task_hold(self):
         with patch.dict(os.environ, {brain.WORLD_AGENT_ENV: 'off', brain.TASK_AGENT_ENV: 'off'}), \
              patch.object(brain, '_treasure_notes', return_value=NOTES), \

@@ -5,7 +5,9 @@ from .defense_layout import footprint_bounds
 from .protocol import Pos
 
 # User-selected strategy threshold; official day/night duration is unchanged.
-FULL_DEFENCE_FROM_DAY = 4
+from . import strategy_config
+_CONFIG = strategy_config.get()
+FULL_DEFENCE_FROM_DAY = _CONFIG["defense"]["full_defense_from_day"] if _CONFIG["enabled"] else 4
 
 
 def full_night(turn):

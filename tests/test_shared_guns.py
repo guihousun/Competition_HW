@@ -1,5 +1,6 @@
 """Independent hand-set expectations for R01/R04 and user S06 local model."""
 import unittest
+from legacy_strategy import LegacyStrategyCase
 from test_defense_layout import board, unit, REPORTED, MIRROR
 from test_robot_wall_screen import advance, with_worker
 from test_robots import board as robot_board
@@ -16,7 +17,7 @@ def guns():
     return p
 
 
-class SharedGunTests(unittest.TestCase):
+class SharedGunTests(LegacyStrategyCase):
     def test_new_layout_has_empty_common_inner_stand_both_sides(self):
         for base in (REPORTED,MIRROR):
             turn=Turn.load(board(base=base)); sites=brain._tower_sites(turn)
@@ -56,7 +57,7 @@ class SharedGunTests(unittest.TestCase):
         self.assertEqual(cmd[2],command)
 
 
-class TargetAndSafetyTests(unittest.TestCase):
+class TargetAndSafetyTests(LegacyStrategyCase):
     def test_far_role_does_not_lure_monster_away_from_base(self):
         for side in ('challenger','defender'):
             p=with_worker(robot_board(robot_pos=(6,5),wall_pos=None),pos=(1,5),side=side)

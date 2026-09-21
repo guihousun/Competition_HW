@@ -4,6 +4,9 @@
 不用去 Release 找附件，也不要上传 `Demo/CoreGeek.tar.gz`（官方原始示例）。
 根目录的 `CoreGeek.tar.gz.sha256` 用于校验，`CoreGeek.manifest.json` 记录包内源码版本。
 
+当前策略：一名工人轮流操控三座火炮，优先共同站位；第四天起全员夜防，白天正常发展。
+可编辑参数在 [strategy.json](strategy.json)，含义、微调与重新打包步骤见 [策略配置说明](docs/STRATEGY_TUNING.md)。
+
 本轮反馈迭代：[策略架构](docs/POLICY_ARCHITECTURE.md) · [精简日志](docs/CONSOLE_LOGGING.md) · [验证报告](reports/issue-14-17-architecture/REVIEW.md)。
 
 LLM能力建设：[测试候选与回退开关](docs/AGENT_CANDIDATE.md) · [本地Agent演示](docs/LOCAL_LLM.md) · [交付验证](reports/llm-tasks-delivery/README.md) · [总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md)。
