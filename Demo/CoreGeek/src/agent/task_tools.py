@@ -56,7 +56,9 @@ print(json.dumps(out,ensure_ascii=False,separators=(",",":")))
 CHECK_SOURCE = r'''
 import sys,json,os,stat,subprocess,signal,tempfile
 sys.stdout.reconfigure(encoding="utf-8")
-p=json.loads(sys.argv[1])["path"]; a=os.path.abspath(p)
+p=json.loads(sys.argv[1])["path"]; origin="sandbox_cwd" if p=="./check" else "absolute_path"
+if p=="./check": p=os.path.join(os.getcwd(),"check")
+a=os.path.abspath(p)
 while a!=os.path.dirname(a):
  if os.path.islink(a): raise ValueError("linked check path")
  a=os.path.dirname(a)
@@ -76,7 +78,7 @@ try:
 except subprocess.TimeoutExpired:
  os.killpg(proc.pid,signal.SIGKILL); proc.communicate(timeout=1); code=124
 of.seek(0); ef.seek(0); out=of.read(10001); err=ef.read(2001); of.close(); ef.close()
-print(json.dumps({"tool":"task-check/1","path":p,"crlf_normalized":b"\r\n" in raw,"exit_code":code,"stdout":out[:10000].decode("utf-8","replace"),"stderr":err[:2000].decode("utf-8","replace"),"truncated":len(out)>10000 or len(err)>2000},ensure_ascii=False))
+print(json.dumps({"tool":"task-check/1","path":p,"path_source":origin,"crlf_normalized":b"\r\n" in raw,"exit_code":code,"stdout":out[:10000].decode("utf-8","replace"),"stderr":err[:2000].decode("utf-8","replace"),"truncated":len(out)>10000 or len(err)>2000},ensure_ascii=False))
 sys.exit(code if 0<=code<=255 else 1)
 '''.strip()
 
@@ -108,8 +110,9 @@ def command(kind, params):
                     raise ValueError('http fields must be bounded strings without newlines')
         source=HTTP_SOURCE
     elif kind=='check':
-        if set(params)!={'path'} or not isinstance(params['path'],str) or not params['path'].startswith('/'):
-            raise ValueError('check requires an absolute script path')
+        if (set(params)!={'path'} or not isinstance(params['path'],str)
+                or not (params['path'].startswith('/') or params['path']=='./check')):
+            raise ValueError('check requires an absolute script path or exact ./check in sandbox cwd')
         if len(params['path'])>500 or any(c in params['path'] for c in '\r\n\0'):
             raise ValueError('invalid check path')
         config=params;source=CHECK_SOURCE
@@ -136,12 +139,14 @@ def http_request(command_text):
 
 
 def standalone_check(command_text):
-    """Resolve only a simple check invocation with a known absolute cwd/path.
+    """Resolve absolute check calls or exact ./check in its execution sandbox.
 
     No mutation chains, shell expansions, redirects, arguments or relative cwd.
     Unknown/complex commands remain byte-for-byte unchanged.
     """
     import posixpath
+    if command_text=='./check':
+        return command('check',{'path':'./check'})
     try:words=shlex.split(command_text)
     except ValueError:return None
     path=None
@@ -175,8 +180,15 @@ def failed_check_recovery(command_text, result):
     """
     import posixpath
     if not re.match(r'\[exitCode:126\]\n', result) or not re.search(
-            r'\./check: /bin/(?:sh|bash)\^M: bad interpreter', result):
+            r'\./check: /bin/(?:sh|bash)\^M: bad interpreter'
+            r'|\./check: (?:line 1: )?#!/usr/bin/env bash\^M: bad interpreter'
+            r'|(?:/usr/bin/)?env:[^\n]*(?:bash\^M|bash\r)[^\n]*(?:No such file|not found)', result):
         return None
+    # A standalone retry needs no mutation-prefix parsing and does not retain
+    # a cwd on the HTTP host or from a previous task generation.
+    simple=standalone_check(command_text)
+    if simple:
+        return simple
     if any(c in command_text for c in '$`\r\n\0'):
         return None
     try:

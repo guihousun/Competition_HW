@@ -342,7 +342,10 @@ class TeamAgent:
                 "httpProfiles": deepcopy(self.http_profiles)}
 
     def summary(self):
+        rejected = next(({'round': e['round'], 'reason': e['text']}
+                         for e in reversed(self.task.history) if e['kind']=='invalid_plan'), None)
         return {"stage": self.task.stage, "generation": self.task.generation,
+                "lastPlanRejection": rejected,
                 "prompts": self.task.prompts, "commands": self.task.commands,
                 "answers": self.task.answers, "evidenceCount": len(self.evidence),
                 "methodCount": len(self.skills.entries), "stopReason": self.task.stop_reason,

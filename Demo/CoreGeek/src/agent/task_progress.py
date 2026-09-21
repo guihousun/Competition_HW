@@ -198,6 +198,9 @@ def summary(progress, round_no, team, replaced):
               'answer_error_observed': '提交后观察到答案错误',
               'submission_action_illegal': '提交动作回执为不合法'}
     return {'status': status, 'meaning': labels[status], 'official_success_confirmed': False,
+            'success_confirmation_capability': 'no_explicit_official_positive_result_field',
+            'unconfirmed_is_failure': False,
+            'success_rate_eligible': False,
             'start_round': progress['start_round'], 'end_round': round_no,
             'end_reason': 'task_text_replaced' if replaced else 'task_text_ended',
             'observation_gap': progress['gap'],

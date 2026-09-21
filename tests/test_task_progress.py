@@ -19,6 +19,17 @@ def req(round_no, text='任务', side='challenger', gold=10, score=20, **fields)
 
 
 class ProgressTests(unittest.TestCase):
+    def test_unknown_positive_result_is_explicitly_excluded_from_success_rate(self):
+        progress=task_progress.start(1,{'goldNum':0,'totalScore':0})
+        progress['submissions']=1
+        result=task_progress.summary(progress,3,{'goldNum':80,'totalScore':88},False)
+        self.assertEqual(result['status'],'submitted_unconfirmed')
+        self.assertFalse(result['official_success_confirmed'])
+        self.assertFalse(result['unconfirmed_is_failure'])
+        self.assertFalse(result['success_rate_eligible'])
+        self.assertEqual(result['success_confirmation_capability'],
+                         'no_explicit_official_positive_result_field')
+
     def test_check_submit_and_increased_score_do_not_invent_success(self):
         for side in ('challenger','defender'):
             with self.subTest(side=side):

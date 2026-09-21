@@ -101,6 +101,22 @@ class TaskAgentTests(unittest.TestCase):
             self.assertEqual(agent.commands, 0)
             self.assertEqual(agent.stage, 'ready')
 
+    def test_rejected_plan_diagnostic_is_specific_bounded_and_reaches_journal(self):
+        from agent.team_agent import TeamAgent
+        from agent.task_journal import TaskJournal
+        from test_task_journal import request
+        agent=self.agent(); ask=self.request(agent,1)
+        agent.receive(ask['token'],'prompt',self.reply(ask,'run',command='ls',
+                      evidence_ids=['secret-not-in-logs']),round_no=2,verified=True)
+        self.assertEqual(agent.history[-1]['text'],'unverified evidence reference')
+        team=TeamAgent('team-42'); team.task=agent
+        summary=team.summary()
+        self.assertEqual(summary['lastPlanRejection'],{'round':2,'reason':'unverified evidence reference'})
+        rows=TaskJournal().observe(request(2,phaseTask='题目'),{},decision={'agent':summary})
+        states=[json.loads(r['content']['text']) for r in rows if r['kind']=='agent_state']
+        self.assertEqual(states[0]['lastPlanRejection'],summary['lastPlanRejection'])
+        self.assertNotIn('secret-not-in-logs',str(states))
+
     def test_repair_calls_are_bounded_and_task_end_drops_work(self):
         agent = self.agent()
         for i in range(MAX_PROMPTS):

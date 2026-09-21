@@ -190,7 +190,7 @@ class TaskJournal:
         if isinstance(agent, dict):
             summary = {key: agent.get(key) for key in ('generation', 'stage', 'stopReason',
                        'prompts', 'commands', 'answers', 'memoryReads', 'methodCount',
-                       'httpMethodCount', 'memorySources', 'degraded')}
+                       'httpMethodCount', 'memorySources', 'degraded', 'lastPlanRejection')}
             signature = excerpt(summary)['sha256']
             if signature != previous['fields'].get('agent'):
                 add('agent_state', summary)

@@ -144,9 +144,9 @@ class Issue27Tests(LegacyStrategyCase):
         self.assertIsNone(derive('## API响应示例\n```json\n{"value":3}\n```','task'))
 
     def test_standalone_check_conversion_is_narrow(self):
-        for cmd in ('/tmp/ws/check','cd /tmp/ws && ./check',"cd '/tmp/task work' && ./check"):
+        for cmd in ('./check','/tmp/ws/check','cd /tmp/ws && ./check',"cd '/tmp/task work' && ./check"):
             self.assertTrue(task_tools.standalone_check(cmd).startswith('# task-check/1\n'))
-        for cmd in ('./check','cat /tmp/check','cd relative && ./check','cd /tmp/ws && sed -i x check && ./check','/tmp/ws/check > /tmp/out','/tmp/$(id)/check'):
+        for cmd in ('cat /tmp/check','cd relative && ./check','cd /tmp/ws && sed -i x check && ./check','/tmp/ws/check > /tmp/out','/tmp/$(id)/check'):
             self.assertIsNone(task_tools.standalone_check(cmd),cmd)
 
 

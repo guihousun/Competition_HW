@@ -310,8 +310,17 @@ class TaskAgent:
                     return False
                 self._propose('submit', value, reason)
             return True
-        except (ValueError, TypeError, RecursionError):
-            self._event('invalid_plan', '模型计划格式、关联或证据不合法，需要重新规划', round_no)
+        except (ValueError, TypeError, RecursionError) as error:
+            # Only our static validation messages may enter compact logs;
+            # never echo arbitrary model text, credentials or parser payloads.
+            allowed = {'invalid response envelope', 'wrong model correlation',
+                       'unsupported model fields', 'unsupported plan kind',
+                       'unverified evidence reference', 'invalid plan reason',
+                       'conflicting structured tool fields', 'tool_args on a non-tool plan',
+                       'invalid memory operation', 'memory fields on a non-memory operation',
+                       'invalid or conflicting payload', 'duplicate JSON key', 'nonfinite JSON constant'}
+            reason = str(error) if str(error) in allowed else type(error).__name__
+            self._event('invalid_plan', reason, round_no)
             return False
 
     def feedback(self, errors, *, round_no: int):
