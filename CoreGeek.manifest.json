@@ -1,5 +1,5 @@
 {
-  "commit": "ae9ec93fc88715c401bfe36c6b49b40bba063eba",
+  "commit": "9f3c253960227335ac9fd27d48e0a50abd7b974d",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 158446,
+      "bytes": 157863,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "cc9cc1666a7631ccef03ab9f69799e19af3434d4b72752f50b53f040d00cacfa",
+      "sha256": "c9cd0529654a6163132730863de3d6601d4f22431f81dfc79ab6fc262d4b3009",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -236,9 +236,9 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 7937,
+      "bytes": 7975,
       "path": "CoreGeek/src/agent/night_gunner.py",
-      "sha256": "743f83110672c3d772a147879a36cb5781ee27216cda2df687df8a3dd6dbf83a",
+      "sha256": "94079ca135aa79b3595e4c472fdf41b979a51eb53e1a96a32f74f7103575de91",
       "source": "Demo/CoreGeek/src/agent/night_gunner.py"
     },
     {
@@ -302,9 +302,9 @@
       "source": "Demo/CoreGeek/src/agent/robot_occupancy.py"
     },
     {
-      "bytes": 8294,
+      "bytes": 7824,
       "path": "CoreGeek/src/agent/rocket_post.py",
-      "sha256": "8cfe61021dbbddf1bec3feb41f6de6a1895ebfa31a58ab130aef60377ddcaea7",
+      "sha256": "c87634229a18d72609f56548e0217ff57d6e7535d3af1c0589ad7ee950c60f67",
       "source": "Demo/CoreGeek/src/agent/rocket_post.py"
     },
     {
@@ -332,15 +332,15 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 8328,
+      "bytes": 10911,
       "path": "CoreGeek/src/agent/strategy_config.py",
-      "sha256": "9f35caef1fb1233661ae005cc2fa9073d3e7b4c2dd4b3fecf0e291b2e27639f4",
+      "sha256": "bb758e17a8a1a7651aabe6498d6cb460989ec3524604f2e770b02f860d8e136c",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
-      "bytes": 29869,
+      "bytes": 29998,
       "path": "CoreGeek/src/agent/task_agent.py",
-      "sha256": "6bb30ee0b88726d537c46d41bff8b4d236dd1cb45bd3cc708d553aa8dc55334e",
+      "sha256": "3becacbb27be9e4ccb006876917f6cd0f7de1c27fba6fdee81ebb9399c662d90",
       "source": "Demo/CoreGeek/src/agent/task_agent.py"
     },
     {
@@ -404,9 +404,9 @@
       "source": "Demo/CoreGeek/src/agent/task_workspace.py"
     },
     {
-      "bytes": 34821,
+      "bytes": 34820,
       "path": "CoreGeek/src/agent/tasks.py",
-      "sha256": "9805cea015074985ea58f9a452a0e78ed57f1fc8e10e9624403228aef13d3b1d",
+      "sha256": "83594be38b9af4d1d9292176fd7bbacfad83838bce4c6fc24e4fa27ccce9802d",
       "source": "Demo/CoreGeek/src/agent/tasks.py"
     },
     {
@@ -494,9 +494,9 @@
       "source": "Demo/CoreGeek/src/agent/world_memory.py"
     },
     {
-      "bytes": 1154,
+      "bytes": 1428,
       "path": "CoreGeek/strategy.json",
-      "sha256": "2da124eca97b4d68eb21100fc331a8e62716d5827a181f393691be4ed4edbf9e",
+      "sha256": "db6a4d7caba3265c4bfbd236c45e5659e834f09039f481813a3bfaca88197c0f",
       "source": "strategy.json"
     },
     {
@@ -519,5 +519,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "c05f4f373adedaeaf693ebddc4b7981376a8d67ac0497bde79ebb42ef309d871"
+  "source_digest": "563431b89f65724a0827b5de32ed705fcfe072638d320f105a1efefe27ce46e8"
 }
