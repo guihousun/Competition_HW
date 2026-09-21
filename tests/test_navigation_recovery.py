@@ -12,10 +12,11 @@ from agent.protocol import Pos, Turn, distance
 FIXTURES=Path(__file__).parent/'fixtures/navigation'
 
 
-def stalled_memory(p):
+def stalled_memory(p,target=None):
     role=p['teamOur']['roles'][1]
     return {'last_round':p['roundNo']-1,'history':[
-        {'round':n,'roles':{str(role['id']):{'pos':deepcopy(role['pos']),'action':'move'}}}
+        {'round':n,'roles':{str(role['id']):{'pos':deepcopy(role['pos']),'action':'move',
+            'goal':(target or Pos(9,8)).dump()}}}
         for n in range(p['roundNo']-3,p['roundNo'])]}
 
 
@@ -78,7 +79,7 @@ class NavigationRecoveryTests(unittest.TestCase):
     def test_front_wall_is_never_demolished_even_when_only_exit(self):
         p,target,wall=corridor(protected=True);turn=Turn.load(p)
         self.assertIn(wall,frontline.protected_walls(turn))
-        frame=traffic.Frame(turn,stalled_memory(p));frame.goal(turn.workers()[0],target)
+        frame=traffic.Frame(turn,stalled_memory(p,target));frame.goal(turn.workers()[0],target)
         commands={};frame.recover(commands)
         self.assertFalse(commands)
         self.assertFalse(coordination.reconcile(turn,p,{2:{'action':'remove','targetPos':[wall.dump()]}}))
@@ -130,6 +131,18 @@ class NavigationRecoveryTests(unittest.TestCase):
         self.assertIsNone(brain._step_toward(turn,turn.workers()[0],Pos(7,22),set(),inside_only=True))
         p['roundNo']=60;turn=Turn.load(p)
         self.assertIsNotNone(brain._step_toward(turn,turn.workers()[0],Pos(7,22),set(),inside_only=True))
+
+    def test_idle_or_previous_night_is_not_evidence_of_a_failed_trip(self):
+        for mode in ('idle','different_goal','last_night'):
+            p,target,wall=corridor(round_no=131 if mode=='last_night' else 13)
+            memory=stalled_memory(p,target)
+            for row in memory['history']:
+                entry=row['roles']['2']
+                if mode=='idle':entry.update(action=None,goal=None)
+                if mode=='different_goal':entry['goal']={'x':4,'y':5}
+            frame=traffic.Frame(Turn.load(p),memory);frame.goal(frame.turn.workers()[0],target)
+            commands={};frame.recover(commands)
+            self.assertFalse(commands)
 
 
 if __name__=='__main__':unittest.main()

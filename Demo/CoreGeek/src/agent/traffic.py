@@ -41,7 +41,8 @@ def clean_memory(value):
         roles={}
         for uid,data in list(row.get('roles',{}).items())[:3] if isinstance(row.get('roles'),dict) else []:
             if str(uid).isdigit() and isinstance(data,dict) and pos(data.get('pos')):
-                roles[str(uid)]={'pos':data['pos'],'action':data.get('action') if data.get('action') in ('move','build','collect','buy','sell','use','remove') else None}
+                roles[str(uid)]={'pos':data['pos'], 'goal':data['goal'] if pos(data.get('goal')) else None,
+                                'action':data.get('action') if data.get('action') in ('move','build','collect','buy','sell','use','remove') else None}
         out['history'].append({'round':row['round'],'roles':roles})
     for uid,row in list(value.get('walls',{}).items())[:2] if isinstance(value.get('walls'),dict) else []:
         if str(uid).isdigit() and isinstance(row,dict) and pos(row.get('pos')) and number(row.get('round')):
@@ -107,6 +108,9 @@ class Frame:
         if [r['round'] for r in rows[-need:]]!=list(range(self.turn.round_no-need,self.turn.round_no)):return False
         recent=[r['roles'].get(uid) for r in rows[-need:]]
         if len(recent)<need or any(r is None for r in recent):return False
+        goal=self.goals.get(role.unit_id)
+        if goal is None or any(r.get('goal')!=goal[0].dump() for r in recent):return False
+        if any((r['round']-1)//130!=(self.turn.round_no-1)//130 or (r['round']-1)%130>=70 for r in rows[-need:]):return False
         if any(r['action'] not in (None,'move') for r in recent):return False
         positions=[Pos.load(r['pos']) for r in recent]+[role.pos]
         return len(set(positions))==1 or (len(positions)>=4 and len(set(positions))==2 and positions[-1]==positions[-3])
@@ -187,6 +191,8 @@ class Frame:
             if commands.get(uid)==cmd and at not in self.openings():
                 self.memory['pending_open']={'pos':at.dump(),'round':n}
         rows=[r for r in self.memory['history'] if r['round']<n]
-        rows.append({'round':n,'roles':{str(w.unit_id):{'pos':w.pos.dump(),'action':commands.get(w.unit_id,{}).get('action')} for w in self.turn.workers()}})
+        rows.append({'round':n,'roles':{str(w.unit_id):{'pos':w.pos.dump(),
+            'goal':self.goals[w.unit_id][0].dump() if w.unit_id in self.goals else None,
+            'action':commands.get(w.unit_id,{}).get('action')} for w in self.turn.workers()}})
         self.memory['history']=rows[-8:];self.memory['last_round']=n
         return clean_memory(self.memory)
