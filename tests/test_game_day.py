@@ -1347,6 +1347,82 @@ class SellCargoTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "move", f"凑不够券钱就接着挖：{cmd}")
 
 
+class DetourSellTest(unittest.TestCase):
+    """去矿的路上**顺路卖矿**（`day._detour_sell`）—— 用户口径：这一条必须留着。
+
+    绕去小贩比直走多花 ≤ `DETOUR_MAX`(2) 格 ⇒ 先朝小贩迈一步；贴上小贩的那一回合由
+    `voucher_errand` 的"贴着就卖"接手（所以 `via == 0` 时要返回 False —— 绕一步 = 原地不动 =
+    这一回合空指令）。背包里没有卖得掉的货 ⇒ 不绕。
+
+    局面：环砌满、三座炮（第 1/2 级都做完了），只有一张买不起的券 ⇒ 落到第 3 级的挖矿那一支
+    （买券的钱离得远，所以不会先去卖 —— 那是另一条支路，`SellCargoTest` 钉着）。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    MINE = Pos(16, 30)      # 铜矿，在工人南边
+    NEAR_VENDOR = Pos(18, 27)  # 绕 ≤ 2 格的小贩
+    FAR_VENDOR = Pos(30, 18)   # 绕远的小贩
+    SHOP_PRICES = {"WeaponUpgradeVoucher1": 100}
+
+    def _turn(self, *, at: Pos, bag: dict[str, int], vendor: Pos) -> Turn:
+        ring = {c: WALL for c in wall_cells(self.BASE, 41)}
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station"},
+            ring,
+            {self.MINE: "copper"},
+            {vendor: "vendor"},
+        )
+        grid[at] = "worker"
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(Worker(10010, at, dict(bag)),),
+            gold=0,  # 买不起券 ⇒ 落到挖矿那一支
+            weapons=self.WEAPONS,
+            vendor_prices={"stone": 1, "copper": 5},
+            shop_prices=self.SHOP_PRICES,
+        )
+
+    def test_it_detours_when_the_vendor_is_on_the_way(self):
+        """小贩几乎顺路（绕 ≤ 2 格）⇒ 先朝小贩迈一步，而不是直奔矿。
+
+        判据取"有货 / 空手两步必须不同"：这一步本身就朝小贩（离小贩 3 → 2，离矿 6 → 5，
+        两个目标都变近）⇒ 只比"离小贩更近"是分不出绕没绕的。
+        """
+        at = Pos(16, 24)
+        laden = plan(self._turn(at=at, bag={"copper": 1}, vendor=self.NEAR_VENDOR))["10010"]
+        empty = plan(self._turn(at=at, bag={}, vendor=self.NEAR_VENDOR))["10010"]
+        self.assertEqual(laden["action"], "move", laden)
+        self.assertNotEqual(
+            laden["targetPos"], empty["targetPos"], "有货才绕：这一步该与空手不同"
+        )
+        step = Pos(laden["targetPos"][0]["x"], laden["targetPos"][0]["y"])
+        self.assertLess(
+            step.dist(self.NEAR_VENDOR), at.dist(self.NEAR_VENDOR), "这一步朝小贩走"
+        )
+
+    def test_it_walks_straight_to_the_mine_when_the_vendor_is_far_off(self):
+        """小贩绕得太远（> `DETOUR_MAX`）⇒ 不绕，直奔矿。"""
+        at = Pos(16, 24)
+        cmd = plan(self._turn(at=at, bag={"copper": 1}, vendor=self.FAR_VENDOR))["10010"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.MINE), at.dist(self.MINE), "这一步朝矿走")
+
+    def test_an_empty_bag_never_detours(self):
+        """背包里没有卖得掉的货 ⇒ 不绕：小贩摆在顺路的位置上，走出来的那一步也必须与
+        "小贩离得远远的"那一次**完全一样**（绕过去也没东西可卖，白走）。"""
+        at = Pos(16, 24)
+        near = plan(self._turn(at=at, bag={}, vendor=self.NEAR_VENDOR))["10010"]
+        far = plan(self._turn(at=at, bag={}, vendor=self.FAR_VENDOR))["10010"]
+        self.assertEqual(near["action"], "move", near)
+        self.assertEqual(
+            near["targetPos"], far["targetPos"], "空手 ⇒ 小贩近不近都走同一步"
+        )
+
+
 class VoucherLineTest(unittest.TestCase):
     """第 3 级：挖矿攒钱 → 卖 → 买 → **买到手就立刻用掉**。
 

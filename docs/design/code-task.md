@@ -2261,6 +2261,9 @@
   还差两张二级武器券、手里 200 金 ⇒ 直接买两张升两座），并从 `ctx.budget` 预扣 `券价 × count`。
 - 手里的券**一张一张用**（每回合挑"还升得动的第一格"），`_vouchers_in_hand` 数的是**张数** ——
   一次买 N 张，收工门就提前 N 个回合（"回岗第一件事是用掉它们"）。
+- **顺路卖那一支补了守门用例**（`DetourSellTest`，用户追问"顺路卖还在吗"时发现它随旧 `SpareOreTest`
+  一起失守了）：小贩顺路 ⇒ 朝小贩迈一步（判据取"有货 / 空手两步必须不同" —— 那一步同时朝矿与小贩，
+  只比"离小贩更近"分不出绕没绕）、小贩绕太远 ⇒ 直奔矿、空手 ⇒ 小贩近不近都走同一步。
 - 用例：`VoucherLineTest.test_it_buys_as_many_as_the_board_needs`（`buy num=2`）、
   `test_it_buys_only_what_the_purse_allows`（钱只够一张就买一张）、
   `test_each_held_voucher_gets_used_on_its_own_target`、`DayEndGateTest` 的券数那条扩成
