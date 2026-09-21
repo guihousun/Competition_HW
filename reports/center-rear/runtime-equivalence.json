@@ -1,0 +1,21 @@
+{
+  "runtime_source": "28c99224a7bd8649cd697f3604b460b805e90fec",
+  "final_test_source": "3105fe9f98aa18d2518362db4e24e8981b7a013a",
+  "changed_files": [
+    "tests/test_news_economy_integration.py",
+    "tests/test_self_occupied_wall.py"
+  ],
+  "runtime_paths_checked": [
+    "Demo/CoreGeek/src/agent",
+    "submission",
+    "run.sh",
+    "strategy.json",
+    "docs/request.txt",
+    "docs/response.txt",
+    "docs/TRACE_LOGGING.md",
+    "tools/trace_tool.py",
+    "Demo/CoreGeek.tar.gz"
+  ],
+  "runtime_git_diff_empty": true,
+  "scope": "Only regression tests changed after production freeze; package and game runs remain explicitly attributed to28c9922, full tests to3105fe9"
+}

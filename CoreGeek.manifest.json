@@ -1,5 +1,5 @@
 {
-  "commit": "9f0e6984f1ad9961ff3fddd4095ea81fd18ceab4",
+  "commit": "28c99224a7bd8649cd697f3604b460b805e90fec",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 140024,
+      "bytes": 142235,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "e9e54b9f5bee176719e24611293c099d4f57644d2bd740b5ef1b26bae6d816df",
+      "sha256": "7277ce9dbbf673684020578b6b1bdabe443aeda46eac01e28ffecd0236b479f9",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -86,15 +86,15 @@
       "source": "Demo/CoreGeek/src/agent/console_digest.py"
     },
     {
-      "bytes": 11123,
+      "bytes": 11276,
       "path": "CoreGeek/src/agent/construction_trip.py",
-      "sha256": "e19481a19315abda7e9f56b468dc9665d22427d26718901f27106a0034a26c16",
+      "sha256": "3be07c487d832ad2bfe00fab7c4bb6f3617134a84df470920c4dd4c8d67648c0",
       "source": "Demo/CoreGeek/src/agent/construction_trip.py"
     },
     {
-      "bytes": 9561,
+      "bytes": 12860,
       "path": "CoreGeek/src/agent/coordination.py",
-      "sha256": "f55abda588b7f124a876c64d71b4a44891c80498b4d34a6a8a2ba8869853417e",
+      "sha256": "b7dd50e7df431f9d58115549f34eda96414ac582942f449aa50c809b41be4518",
       "source": "Demo/CoreGeek/src/agent/coordination.py"
     },
     {
@@ -128,9 +128,9 @@
       "source": "Demo/CoreGeek/src/agent/evidence_memory.py"
     },
     {
-      "bytes": 1761,
+      "bytes": 3299,
       "path": "CoreGeek/src/agent/frontline.py",
-      "sha256": "4a05107a4ce1b9d26f9bc3ba960267ce420609dc4d95a6ddf77e39974dad2b99",
+      "sha256": "088043eb6bbb5e545d100d725874c76b40d7b8b9df6e3106dd3895c7ecf36c84",
       "source": "Demo/CoreGeek/src/agent/frontline.py"
     },
     {
@@ -218,9 +218,9 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 7717,
+      "bytes": 8722,
       "path": "CoreGeek/src/agent/nightwork.py",
-      "sha256": "e8c73b59cff7f943da061f5ece6993f66ea5682f674224ad56537f509355ebeb",
+      "sha256": "3db5be03a3427bf178d7fe9b8b6592d12c44776064a920139939668c322ec9bc",
       "source": "Demo/CoreGeek/src/agent/nightwork.py"
     },
     {
@@ -230,15 +230,15 @@
       "source": "Demo/CoreGeek/src/agent/ordered_diagnostics.py"
     },
     {
-      "bytes": 10719,
+      "bytes": 12150,
       "path": "CoreGeek/src/agent/phase_maintenance.py",
-      "sha256": "b3e5a809439da8eaf7aeb3a29d5bfb351fdb3f23355c3d29270b17da8cf0a5d6",
+      "sha256": "26d27a47595512b45d3b92c28f2f14b5fd0529d711a6577c78cfe543b47ff30c",
       "source": "Demo/CoreGeek/src/agent/phase_maintenance.py"
     },
     {
-      "bytes": 3092,
+      "bytes": 3166,
       "path": "CoreGeek/src/agent/phase_supply.py",
-      "sha256": "1c2c36321318ebd150646abe3ebe696dbc0ffa43b893ee82d77dcc0085643495",
+      "sha256": "7206b91630e8a7204c828283770a09c4dbb319acb803b7a14e42645f3cfcc0dd",
       "source": "Demo/CoreGeek/src/agent/phase_supply.py"
     },
     {
@@ -398,9 +398,9 @@
       "source": "Demo/CoreGeek/src/agent/team_agent.py"
     },
     {
-      "bytes": 27290,
+      "bytes": 28043,
       "path": "CoreGeek/src/agent/team_trip.py",
-      "sha256": "a4ae480a88b15fbd5864f1201a76f13b4c97362d926ea3f4c1709b2bac433c3a",
+      "sha256": "5f97da2353f61d67cbe7ec0605a079e1e25fc9d2d3ff76663845b202c4a19f7a",
       "source": "Demo/CoreGeek/src/agent/team_trip.py"
     },
     {
@@ -434,9 +434,9 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 11226,
+      "bytes": 11433,
       "path": "CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "3fb224524709b74ccffbea1dcf5e334a047707f1356eee2bf8f2e540111088c7",
+      "sha256": "ed7a4c5d52849437397ed4f3e2380f2930c023769ab4fbce88e21d697cf651c2",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -495,5 +495,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "697651953ca64c5a1805ae3a50aab2f258e497a52fafa964adb3a7bf1664be93"
+  "source_digest": "1b43bfe77d4a34365d6ec39f1b9be030709bfbcecd92a42443f134354ed602c5"
 }

@@ -4,9 +4,9 @@
 不用去 Release 找附件，也不要上传 `Demo/CoreGeek.tar.gz`（官方原始示例）。
 根目录的 `CoreGeek.tar.gz.sha256` 用于校验，`CoreGeek.manifest.json` 记录包内源码版本。
 
-当前策略：一名工人轮流操控三座火炮，优先共同站位；从第一天争取升级到333，前四墙及两前角优先，受限拆后墙解堵。第四天起全员夜防，白天正常发展。
+当前策略：一名工人轮流操控三座火炮，优先共同站位；从第一天争取升级到333，中央两墙最优先、前六保护，首日起后排整排不建。第四天起全员夜防，白天正常发展。
 可编辑参数在 [strategy.json](strategy.json)，含义、微调与重新打包步骤见 [策略配置说明](docs/STRATEGY_TUNING.md)。
-验证范围、完整对局失败样本和当前限制见 [本版交付报告](reports/frontline-routes/README.md)。
+验证范围、完整对局失败样本和当前限制见 [本版交付报告](reports/center-rear/README.md)。
 
 任务切换旧结果隔离：[Issue #45交付](reports/issue45-transitions/README.md)（旧回执污染修复、角色空列表诊断）。
 

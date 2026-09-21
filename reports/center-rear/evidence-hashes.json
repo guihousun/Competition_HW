@@ -1,0 +1,102 @@
+[
+  {
+    "path": ".gitattributes",
+    "sha256": "2cacd8c5b88d28a6324a5b106d17970ce30df8e32f9b76c87d00d4ca430747a8"
+  },
+  {
+    "path": "holdout/config.json",
+    "sha256": "6d8428903b319b5e7d82d67da9646b47fb794e278627a8285e022dd588d3cb3c"
+  },
+  {
+    "path": "holdout/local-trace-hashes.json",
+    "sha256": "36a8f04b4d6f032d5fb945917bebc1a38f1afeeaa1f98d71cdce8a606e98ca1e"
+  },
+  {
+    "path": "holdout/receipt.json",
+    "sha256": "fdc02e7bb6dac99a334835d716b108f85a3610b615b6acc2b9a87adb2ea0dfa6"
+  },
+  {
+    "path": "holdout/summary.json",
+    "sha256": "0019c38f2f2b87cddaffdd17e1e96a3df23fa7cdc59e66a4fee15587b11cb05e"
+  },
+  {
+    "path": "http-report.json",
+    "sha256": "264020915175cef4c423781c15d5efcbf9ba87f7d8a2361fe4cf46cc78d68aa5"
+  },
+  {
+    "path": "package-build.json",
+    "sha256": "b46f19fc38b1916ce3159663e7dd3d828205140ae59f1a9c857868c16b80775d"
+  },
+  {
+    "path": "PREREGISTRATION.md",
+    "sha256": "e0da868a6373b2af6cb15726783044b5e0b0d48c21e6d50a29a8fea9e900a0f5"
+  },
+  {
+    "path": "process-exits.json",
+    "sha256": "741637d831c56829c21e852c5465b942ed325026b9addf1196174de310854b02"
+  },
+  {
+    "path": "README.md",
+    "sha256": "64209a49b721c88c2636cc3550f90d4b39ce0638cf8a916da95441b16559c6c5"
+  },
+  {
+    "path": "runner/bench_support.py",
+    "sha256": "6487839b3c60637518c0b894718d1ce9e311dc07838f028487cc7d868dae3b9a"
+  },
+  {
+    "path": "runner/evaluate_1237_frozen.py",
+    "sha256": "e58e417cf03bc29835eff2e7ce75d6ec2144f719dfc61ad646b649d7041e7de5"
+  },
+  {
+    "path": "runner/evaluate_issue32.py",
+    "sha256": "657f9c511df4b95d136e8e842569bbb15b86114098a2e43a8c37fc45ce88e7ae"
+  },
+  {
+    "path": "runner/evaluate_training_frozen.py",
+    "sha256": "1cc28931a05ec73e314aeb5db9c7169ba9f9d4529a4fb1ec415953718aa35ba0"
+  },
+  {
+    "path": "runner/failure_profile.py",
+    "sha256": "344a5ebd643323df9225eca6988f3f39b7169ed8acd140cc35e8b58fba528415"
+  },
+  {
+    "path": "runner/frontline_metrics.py",
+    "sha256": "dac49144e5bc8d2a8f932dda0c37d772d4db722302e0d62272eeb1684a932e23"
+  },
+  {
+    "path": "runner/phase_metrics.py",
+    "sha256": "53346b560fe4d7d8ead9a353aafaf734cc9a1f18076f37a398a135f3536a13ea"
+  },
+  {
+    "path": "runner/reward_profile.py",
+    "sha256": "0de1a5208eef6a1d6deed4820257c699e1f59331580f8adecab9cdcb466df5c2"
+  },
+  {
+    "path": "runtime-equivalence.json",
+    "sha256": "226b5c3976df222116ec1275709d1ec1f48ac4da5737bfcb58ef2233850ad0c6"
+  },
+  {
+    "path": "tests-receipt.json",
+    "sha256": "3bd81c6706b35fa1bd34813688a50695521fef41000d407ba2b776ae2b425e94"
+  },
+  {
+    "path": "tests.log",
+    "sha256": "e8b0149b0118d6822c108dafd2f3a1e6d952a5fbee22660b9627ab16a5cce032"
+  },
+  {
+    "path": "training/config.json",
+    "sha256": "a1d80008f7263045bd43ea504117e541a11951903f66377bd1f38ecaa7a6dcc3"
+  },
+  {
+    "path": "training/local-trace-hashes.json",
+    "sha256": "43214485ef09a24af93232b78b671fd663da04dbb6b2d8d6c6b12aa09dd301a6"
+  },
+  {
+    "path": "training/receipt.json",
+    "sha256": "43dfeb2548ed7e26f5226e21768d60411b3d4557af8bd395bef07c946c73cc0c"
+  },
+  {
+    "path": "training/summary.json",
+    "sha256": "8787cb2d19a53551fe771814b3e1e76561a131f6bc9a83f59992bf93b936e95e"
+  }
+]
