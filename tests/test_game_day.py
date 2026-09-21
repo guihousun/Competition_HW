@@ -472,8 +472,8 @@ class DayEndGateTest(unittest.TestCase):
     #: 与 `weapon_sites` 同序的两火箭 + 一加特林（这里只要"有三座炮"就够）
     WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
     SIZE = (41, 32)
-    #: 收工窗口的宽度 = `day.RETURN_MARGIN`
-    WINDOW = 5
+    #: 收工门的容错余量 = `day.POST_MARGIN`
+    MARGIN = 3
 
     def setUp(self) -> None:
         _reset_ledgers()
@@ -543,41 +543,52 @@ class DayEndGateTest(unittest.TestCase):
         role = next(r for r in turn.roles if isinstance(r, Worker))
         return day.BACK_TO_POST.run(role, core._Ctx(turn, core._Queue(turn)))
 
-    def test_the_gate_counts_the_rounds_left_not_the_walk_home(self):
-        """门只看"还剩几回合"：还剩 6 回合 ⇒ 站在十几步开外的人**也不动身**。
+    def test_the_gate_counts_the_walk_home_plus_the_margin(self):
+        """门 = **实时的回岗步数 + `POST_MARGIN`(3) + 武器券数**（第 123 步用户口径）。
 
-        旧判据是 `回程步数 ≥ 白天剩余 − POST_MARGIN`（离得远就早点走）；新口径是固定的
-        `剩余 ≤ WINDOW + 券数`，同一局面下不占这一支（环砌满、没矿没价 ⇒ 空指令）。
+        第 121 步那版是"固定 5 回合、不看距离"—— 站在十几步开外的人根本赶不回来（用户报
+        "没有容错，问题很大"）。现在步数当场算：`剩余 == 步数 + 3` 正好动身，多剩一回合不动。
         """
         at = Pos(20, 24)
-        self.assertGreater(self._steps_home(at), 6, "这个站位本来就要走十几步")
-        self.assertFalse(self._gate(round_no=DAY_ROUNDS - self.WINDOW, at=at), "还剩 6 回合 ⇒ 不急")
-        self.assertTrue(self._gate(round_no=DAY_ROUNDS - self.WINDOW + 1, at=at), "还剩 5 回合 ⇒ 回岗位")
+        steps = self._steps_home(at)
+        self.assertGreater(steps, 3, "这个站位本来就要走好几步")
+        gate = DAY_ROUNDS - steps - self.MARGIN + 1  # 这一回合的 `day_rounds_left` 正好是 steps + 3
+        self.assertTrue(self._gate(round_no=gate, at=at), "正好到点 ⇒ 回岗位")
+        self.assertFalse(self._gate(round_no=gate - 1, at=at), "还富余一回合 ⇒ 照常干活")
+    def test_a_weapon_voucher_opens_the_gate_a_round_earlier(self):
+        """手里的**武器**券每多一张就早走一个回合（到岗第一件事是用掉它们）。
 
-    def test_every_voucher_in_hand_opens_the_gate_a_round_earlier(self):
-        """手里每多一张券就早走一个回合 —— 回岗第一件事是把它们一张张用掉（用户口径）。
-
-        数的是**张数**：一次买够 N 张（"尽可能多买"那条）就得留出 N 个回合。
+        ⚠️ **围墙券不算**（用户口径"武器券数"）：它们的目标是墙、不在炮位上。
         """
         at = Pos(20, 24)
-        for held, expect in ((0, False), (1, True), (2, True)):
-            bag = {"WeaponUpgradeVoucher1": held} if held else None
-            with self.subTest(held=held):
-                # 还剩 6 回合：空手不动身，手里有券（哪怕一张）就该动身
-                self.assertIs(
-                    self._gate(round_no=DAY_ROUNDS - self.WINDOW, at=at, bag=bag),
-                    expect,
-                )
-        # 两张券 ⇒ 窗口再宽一格：还剩 7 回合就该动身
+        steps = self._steps_home(at)
+        early = DAY_ROUNDS - steps - self.MARGIN  # 比到点早一回合
+        self.assertFalse(self._gate(round_no=early, at=at), "空手 ⇒ 这一回合还不动身")
         self.assertTrue(
-            self._gate(
-                round_no=DAY_ROUNDS - self.WINDOW - 1,
-                at=at,
-                bag={"WeaponUpgradeVoucher1": 2},
-            ),
-            "两张券 ⇒ 还剩 7 回合就动身",
+            self._gate(round_no=early, at=at, bag={"WeaponUpgradeVoucher1": 1}),
+            "一张武器券 ⇒ 同一个回合就该动身",
+        )
+        self.assertTrue(
+            self._gate(round_no=early, at=at, bag={"WeaponUpgradeVoucher1": 2}),
+            "两张 ⇒ 再早一回合也照样动身",
+        )
+        self.assertFalse(
+            self._gate(round_no=early, at=at, bag={"WallUpgradeVoucher1": 1}),
+            "围墙券不占收工门（到岗也用不上它）",
         )
 
+    def test_a_held_weapon_voucher_is_used_once_at_the_post(self):
+        """到岗之后**先用券**（用户口径"到了位置先用券"）：站在岗位上、目标贴着就 `use`。
+
+        不满足（手里没券 / 要升的那座离得远）⇒ 什么都不发（待命），这一支照旧只发 `move`/`use`。
+        """
+        at = Pos(11, 25)  # 火箭对共用的操作位（岗位本身）
+        late = DAY_ROUNDS - self.MARGIN  # 已经在岗 ⇒ 门怎么算都命中
+        cmds = plan(self._turn(round_no=late, at=at, bag={"WeaponUpgradeVoucher1": 1}))
+        self.assertEqual(cmds["1"]["action"], "use", f"到岗先用券：{cmds}")
+        self.assertEqual(cmds["1"]["name"], "WeaponUpgradeVoucher1")
+        # 手里没券 ⇒ 在岗待命（空指令合法）
+        self.assertEqual(plan(self._turn(round_no=late, at=at)), {})
     def test_the_gate_aims_at_the_shared_operator_spot(self):
         """收工的落点是那一组的**岗位**，不是"最近那座炮"：火箭对站到共用的操作位上去。
 

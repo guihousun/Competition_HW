@@ -38,9 +38,9 @@ from .world import Turn, Wall, Weapon
 WEAPONS_BY_SITE = ("rocket", "rocket", "gatling")
 
 
-#: 收工窗口：白天还剩这么多个回合（**再加上手里的升级券数**）就回岗位。5 是拍的。
-#: 只看回合数、**不看距离**（用户口径）—— 回岗第一件事是用掉手里的券，券多就得早点走。
-RETURN_MARGIN = 5
+#: 收工门的容错余量（回合）：`回岗步数 + POST_MARGIN + 手里的武器券数 ≥ 白天剩余` 就动身。
+#: 3 是拍的（第 121 步那个"固定 5 回合、不看距离"的口径没有容错，用户报"问题很大"）。
+POST_MARGIN = 3
 
 
 #: "顺路卖矿"的绕路上限（格）：去矿的路上，绕去小贩比直走多花不超过这么多步就顺路卖掉。
@@ -126,10 +126,12 @@ def _tour_rounds(role: Worker, sites: list[tuple[str, Pos]], turn: Turn) -> int:
 
 
 class BackToPost:
-    """第 0 级：白天还剩 `RETURN_MARGIN + 手里的券数` 个回合 ⇒ 回那一组的岗位；`True` = 这一回合到此为止。
+    """第 0 级：`回岗步数 + POST_MARGIN(3) + 手里的武器券数 ≥ 白天剩余` ⇒ 回那一组的岗位；
+    `True` = 这一回合到此为止。
 
-    判据**只看回合数、不看距离**（用户口径）：到点就停下手里的活。回岗第一件事是用掉手里的
-    升级券，所以每持一张券就早走一个回合。目标与夜里 `night.defend` 的岗位同一个（`core._post_spots`）：
+    判据是**实时算出来的回岗步数**（BFS，与挑岗位同一个口径）：回岗要走多久就得多早动身，
+    再加上 `POST_MARGIN` 的容错余量、以及"到岗后一张一张用掉"的券数。到岗后第一件事是用券
+    （`_use_voucher_here`：贴着就能升的那张先用），用不上就待命。目标与夜里 `night.defend` 的岗位同一个（`core._post_spots`）：
     多座组共用一个操作位（要站上去），单座组就是那座炮 —— 天黑时人已经在岗上，夜里第一回合
     就能交替开火。**只发 `move`**：复用 `night.defend` 会发 `attack`，而白天发是非法指令（红线）。
 
@@ -137,8 +139,6 @@ class BackToPost:
     开拓者是补位炮手（`_pioneer_mans_guns`）：工人够操满所有组时它不占岗位。"""
 
     def run(self, role: BaseRole, ctx: _Ctx) -> bool:
-        if ctx.turn.day_rounds_left > RETURN_MARGIN + _vouchers_in_hand(role):
-            return False
         if isinstance(role, Pioneer) and not _pioneer_mans_guns(ctx.turn):
             return False
         walk, size = _passable(ctx.turn), ctx.turn.map.size
@@ -157,10 +157,15 @@ class BackToPost:
         if not hops:
             return False
         steps, spot, group, onto = min(hops, key=lambda h: (h[0], h[1]))
+        # 门：`回岗步数 + POST_MARGIN + 手里的武器券数 ≥ 白天剩余`。步数实时算（回岗要走多久
+        # 就得多早动身），券按张数留出"到了岗一张一张用掉"的回合。
+        if ctx.turn.day_rounds_left > steps + POST_MARGIN + _weapon_vouchers(role):
+            return False
         for w in group:
             ctx.taken.add(w.pos)  # 定下这组了：认领，免得另一个角色也奔这里（一人只能操一组）
         if steps == 0:
-            return True  # 已经在岗 ⇒ 这一回合待命（用券是后面几级的事）
+            _use_voucher_here(role, ctx)  # 已经在岗 ⇒ 先用券（贴着就能升的那张）
+            return True
         ctx.q.step(role, spot, onto=onto)  # 只发 move，绝不调 `night._fire`
         return True
 
@@ -544,11 +549,28 @@ def _can_fund(turn: Turn) -> bool:
     return any(prices.get(kind, 0) > 0 for kind in turn.map.ores.values())
 
 
-def _vouchers_in_hand(role: BaseRole) -> int:
-    """手里还没用掉的升级券**张数**（收工门要按它多留几个回合 —— 一张券用掉一回合）。
+def _weapon_vouchers(role: BaseRole) -> int:
+    """手里的**武器**升级券张数 —— 收工门按它多留几个回合（到岗第一件事就是用掉它们）。
 
-    数的是张数不是"有几种"：一次买够 N 张（用户口径"尽可能多买"）就得留出 N 个回合给它们。"""
-    return sum(role.bag.get(name, 0) for name in VOUCHER_CHAIN)
+    数张数不数"有几种"：一次买够 N 张（"尽可能多买"那条）就得留出 N 个回合。
+    **围墙券不算**（用户口径"武器券数"）：它们的目标是墙、不在炮位上。
+
+    ⚠️ 同理，买券要在收工门**之前**（第 3 级是链尾，`weapon_gap` 为真时整条不跑）——
+    券在手上就一定用得上。"""
+    return sum(role.bag.get(name, 0) for name in VOUCHER.values())
+
+
+def _use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
+    """站在岗位上、手里有武器券、且目标就贴着 ⇒ 先用掉它（用户口径"到了位置先用券"）。
+
+    不满足就什么都不发（待命）—— 目标不在手边（那座炮离得远）不为了它走开，下一回合再看。"""
+    held = next((v for v in VOUCHER.values() if role.bag.get(v, 0) > 0), None)
+    if held is None:
+        return False
+    spots = _voucher_targets(held, ctx.turn)
+    if not spots or role.pos.dist(spots[0]) > 1:
+        return False
+    return _emit(ctx.q.cmds, role, actions.Use, held, spots[0])
 
 
 def _is_weak(wall: Wall) -> bool:

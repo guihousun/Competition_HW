@@ -129,7 +129,7 @@ app.handle(payload)
 | 级 | 状态 | 闸门（命中条件） | 命中之后 | 什么时候不占这一级 |
 |---|---|---|---|---|
 | ① | **钉死** `TASK` | 开拓者 **且** `phase_task` 非空 **且人手够**（白天恒够；夜里看 `_pioneer_mans_guns`） | `task.answer_task`：原样交手上的答案（**不移动**） | 非开拓者；`phase_task` 空；**夜里人手不够**（工人阵亡 ⇒ 弃任务回炮位，落 ④） |
-| ② | **收工门** `GO_HOME`（`day.BACK_TO_POST`，第 0 级） | 白天 **且** `白天剩余 ≤ 5 + 手里的券数` | **只发 `move`** 往**那一组的岗位**挪（`core._post_spots`：多座组 = 共用操作位、单座组 = 炮旁）；已在岗 ⇒ 空指令待命 | 还没到窗口；**开拓者而工人够操满所有组**（补位炮手） |
+| ② | **收工门** `GO_HOME`（`day.BACK_TO_POST`，第 0 级） | 白天 **且** `回岗步数 + 3 + 武器券数 ≥ 白天剩余`（步数实时算） | **只发 `move`** 往**那一组的岗位**挪（`core._post_spots`：多座组 = 共用操作位、单座组 = 炮旁）；已在岗 ⇒ 空指令待命 | 还没到窗口；**开拓者而工人够操满所有组**（补位炮手） |
 | ③ | **开拓者的白天** `DAY_PIONEER` | `isinstance(role, Pioneer)` | 有任务点 ⇒ `task.take_task`；全空 ⇒ `day.voucher_errand`（§3） | 非开拓者 |
 | ④ | **夜里** `NIGHT` | `not is_day` | 见 §1.3 —— 三支各自 `continue`，夜里**必然**停在这一级 | 白天 |
 | ⑤ | **工人的白天** `DAY_WORKER` | 其余（工人） | 走 `day.DAY_CHAIN` 那四级（§1.4） | —— 这级**必然**给出结论（最差是空指令待命） |
@@ -137,8 +137,9 @@ app.handle(payload)
 **为什么是这个顺序**：
 
 - **① 与昼夜无关**，排在最前：离开任务点周围一格任务立即作废 ⇒ 它连夜里都不回炮位。
-- **② 在最前**（第 121 步）：到点就停下手里的活 —— 判据**只看还剩多少回合、不看距离**，
-  也**不问环砌完没有**（旧口径的"补墙优先于收工"作废）。🔴 **它绝不能复用 `night.defend`**：
+- **② 在最前**（第 121 步）：到点就停下手里的活 —— 判据是**实时的回岗步数**（BFS）加一个
+  `POST_MARGIN`(3) 的容错余量、再加手里的**武器券**张数（到岗第一件事是一张张用掉它们），
+  也**不问环砌完没有**（旧口径的"补墙优先于收工"作废）。已经在岗 ⇒ 先用券，用不上就待命。🔴 **它绝不能复用 `night.defend`**：
   到岗会调 `_fire` 发 `attack`，而 `attack` 仅黑夜 ⇒ 白天发就是**非法指令**（红线）；
   守门员是 `DayEndGateTest.test_a_day_round_never_fires`。
   目标是**那一组的岗位**（与 N3 同一个 `core._post_spots`，不是"最近的空闲炮位"）⇒ 天黑时人已经
@@ -519,7 +520,7 @@ assistant 消息记原文（**发命令/交答案那轮没有 prompt，回复照
 
 | 常量 | 值 | 管什么 |
 |---|---|---|
-| `RETURN_MARGIN` | 5 | 收工门：`白天剩余 ≤ 5 + 手里的券数` 就回岗位（拍的） |
+| `POST_MARGIN` | 3 | 收工门的容错余量：`回岗步数 + 3 + 武器券数 ≥ 白天剩余`（拍的） |
 | `DETOUR_MAX` | 2 | 顺路卖矿的绕路上限 |
 | `WEAPON_COST` / `WALL_COST` | 25 / 1 | 建一座武器 / 砌一格墙 |
 | `VOUCHER_CHAIN` | 4 张券 | 买券优先级：武器二级 > 武器三级 > 围墙二级 > 围墙三级 |
@@ -528,8 +529,8 @@ assistant 消息记原文（**发命令/交答案那轮没有 prompt，回复照
 | `ROCKET_COOLDOWN` | 3 | 火箭发射后的冷却回合数（`night._fired` 本地账） |
 | `WEAPONS_BY_SITE` | `("rocket", "rocket", "gatling")` | 落点配种类（与 `weapon_sites` 下标一一对应） |
 
-⚠️ **第 121 步把一串旋钮删了**（`TIME_MARGIN` / `POST_MARGIN` / `STONE_RESERVE` /
-`STONE_KEEP_RAISING` / `HOLE_MIN_LEFT` / `NIGHT_WANDER`）—— 白天只剩"收工门"这一道时间判据，
+⚠️ **第 121 步把一串旋钮删了**（`TIME_MARGIN` / `STONE_RESERVE` / `STONE_KEEP_RAISING` /
+`HOLE_MIN_LEFT` / `NIGHT_WANDER`；`POST_MARGIN` 第 123 步又回来了）—— 白天只剩"收工门"这一道时间判据，
 夜里连时间预算都不算。`AGENT.price_hint`（新闻修正）也暂时空着（两条挖矿线都只读 `vendor_prices`）。
 
 ## 8. 这套策略的薄弱处（按嫌疑排序）

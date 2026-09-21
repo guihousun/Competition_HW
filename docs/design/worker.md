@@ -19,7 +19,7 @@
 ```
 对每个角色（按 payload 顺序）：
 ① 开拓者 且 phaseTask 非空 ⇒ 钉死在任务点上（昼夜无关，永远最先；夜里人手不够例外，见 §3.1）
-② 第 0 级 收工门 `day.BACK_TO_POST`：白天还剩 `5 + 手里的券数` 个回合 ⇒ 回岗位（只看回合数）
+② 第 0 级 收工门 `day.BACK_TO_POST`：`回岗步数 + 3 + 武器券张数 ≥ 白天剩余` ⇒ 回岗位（步数实时算）
 ③ 白天·开拓者：有任务点就去接（`task.take_task`）；全空 ⇒ 跑"买券 → 立刻用"的差事
 ④ 白天·工人：走 `day.DAY_CHAIN` 那四级 —— 建武器（1）→ 建墙（2）→ 挖矿买券（3）
 ⑤ 夜里 ⇒ 基地残血升级 → 怪清完工人出门采矿 → 其余角色认领一组武器、站上岗位开火（`night.defend`；
@@ -62,10 +62,12 @@
 
 **0、收工门 `day.BACK_TO_POST`（第 0 级，链之前）**
 
-- 0.1、`白天剩余 ≤ RETURN_MARGIN(5) + 手里的升级券数` ⇒ **回岗位**（判据只看回合数、**不看距离**，
-  也不问环砌完没有 —— 用户口径"到点就停下手里的活"）。目标与夜里 `night.defend` 的岗位同一个
+- 0.1、`回岗步数 + POST_MARGIN(3) + 手里的**武器**券张数 ≥ 白天剩余` ⇒ **回岗位**。步数是**实时
+  BFS**（`_steps_to_post`，与挑岗位同一个口径 —— 回岗要走多久就得多早动身），也不问环砌完没有。
+  券**只数武器券**（围墙券的目标是墙、不在炮位上）。目标与夜里 `night.defend` 的岗位同一个
   （`_post_spots`：多座组 = 共用的操作位、要站上去；单座组 = 炮旁）。
-- 0.2、已经在岗（步数 0）⇒ **待命**（什么都不发 = 合法空指令）；用券归第 3 级（见下）。
+- 0.2、已经在岗（步数 0）⇒ **先用券**（`_use_voucher_here`：手里的武器券、目标贴着就 `use`），
+  用不上就待命（什么都不发 = 合法空指令）。
 - ⚠️ **这一支只发 `move`**，绝不可复用 `night.defend` —— 那会发 `attack`，而 `attack` 仅黑夜
   ⇒ 白天发就是**非法指令**（红线）。守门：`DayEndGateTest.test_a_day_round_never_fires`。
 - ⚠️ **开拓者不走这一支**（`_pioneer_mans_guns` 为假 ⇒ 直接 `False`）：工人够操满所有组时炮位
@@ -249,19 +251,19 @@
 
 ## 5. 常量与旋钮
 
-⚠️ 大多在 `game/core.py` 顶部（第 121 步起；`RETURN_MARGIN` / `DETOUR_MAX` / `WEAPONS_BY_SITE` /
+⚠️ 大多在 `game/core.py` 顶部（第 121 步起；`POST_MARGIN` / `DETOUR_MAX` / `WEAPONS_BY_SITE` /
 `SELLABLE` 在 `game/day.py` 顶部，`ROCKET_COOLDOWN` 在 `game/night.py` 顶部）。
 
 | 常量 | 值 | 管什么 |
 |---|---|---|
-| `RETURN_MARGIN` | 5 | 收工门：`白天剩余 ≤ 5 + 券数` 就回岗位（拍的） |
+| `POST_MARGIN` | 3 | 收工门的容错余量：`回岗步数 + 3 + 武器券数 ≥ 白天剩余` 就回岗位（拍的） |
 | `DETOUR_MAX` | 2 | 顺路卖矿的绕路上限 |
 | `WEAPON_COST` / `WALL_COST` | 25 / 1 | 建一座武器 / 砌一格墙 |
 | `VOUCHER_CHAIN` | 4 张券 | 买券优先级：武器二级 > 武器三级 > 围墙二级 > 围墙三级 |
 | `WALL_MAX_HP` / `STATION_MAX_HP` | 1000/1500/2000、1500/3000/4500 | L1 弱墙判据（血 < 1/4）/ 基地残血判据 |
 | `ROCKET_COOLDOWN` | 3 | 火箭发射后的冷却回合数（`night._fired` 本地账用） |
 | `WEAPONS_BY_SITE` | `("rocket", "rocket", "gatling")` | 落点配种类（与 `weapon_sites` 下标一一对应） |
-| `RETURN_MARGIN` 之外**没有时间预算** | —— | 旧的 `TIME_MARGIN` / `POST_MARGIN` / `STONE_RESERVE` / `STONE_KEEP_RAISING` / `HOLE_MIN_LEFT` 全删了 |
+| 除收工门**没有时间预算** | —— | 旧的 `TIME_MARGIN` / `STONE_RESERVE` / `STONE_KEEP_RAISING` / `HOLE_MIN_LEFT` 全删了 |
 
 
 ## 6. 实测锚点与已知薄弱处
