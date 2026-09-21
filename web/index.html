@@ -84,19 +84,12 @@
       <button id="newmatch" class="primary" type="button">开始新对局</button>
     </div>
 
-    <div class="ribbon" role="note">
-      <span class="pill warn">本地模拟 · 非官方判题器</span>
-      <span id="ribbon-text">怪物从固定列阵出现；围墙可挡住怪物对角色的攻击。具体位置等未核验细节仍按本地假设模拟。</span>
-      <span id="profile-note" class="pill local">波次来源：尚未开始</span>
-      <span id="map-layout-note">地图来源：尚未创建。已观测布局只校准基地、商贩和任务点；地形资源等仍待补证。</span>
-      <button id="ribbon-toggle" class="ghost tiny" type="button">规则与限制</button>
-    </div>
-
     <section class="console-block" aria-label="关键状态">
       <div class="hud" id="hud">
         <div class="hud-cell"><span class="k">回合</span><b id="hud-round">—</b><small id="hud-round-sub">未开始</small></div>
         <div class="hud-cell"><span class="k">天数 / 昼夜</span><b id="hud-phase">—</b><small id="hud-phase-sub">—</small></div>
         <div class="hud-cell"><span class="k">金币</span><b id="hud-gold">—</b><small id="hud-gold-sub">初始 75</small></div>
+        <div class="hud-cell"><span class="k">道具</span><b id="hud-items">—</b><small id="hud-items-sub">背包合计</small></div>
         <div class="hud-cell wide"><span class="k">基地状态</span>
           <b id="hud-base">—</b>
           <div class="bar"><i id="hud-base-bar" style="width:0%"></i></div>
@@ -105,6 +98,7 @@
         <div class="hud-cell"><span class="k">击杀</span><b id="hud-kills">—</b><small id="hud-kills-sub">机器人</small></div>
         <div class="hud-cell"><span class="k">我方单位</span><b id="hud-units">—</b><small id="hud-units-sub">—</small></div>
         <div class="hud-cell"><span class="k">机器人</span><b id="hud-robots">—</b><small id="hud-robots-sub">场上</small></div>
+        <div class="hud-cell wide hud-task"><span class="k">任务</span><b id="hud-task">—</b><small id="hud-task-sub">暂无进行中的任务</small></div>
         <div class="hud-cell"><span class="k">运行状态</span><b id="hud-status">待机</b><small id="hud-status-sub">—</small></div>
       </div>
       <div class="transport" role="group" aria-label="对局控制">
@@ -132,6 +126,17 @@
         <span class="mode-badge" id="mode-badge">未开始</span>
       </div>
     </section>
+
+    <details class="assumption-drawer">
+      <summary>规则与本地模拟假设</summary>
+      <div class="ribbon" role="note">
+        <span class="pill warn">本地模拟 · 非官方判题器</span>
+        <span id="ribbon-text">怪物从固定列阵出现；围墙可挡住怪物对角色的攻击。具体位置等未核验细节仍按本地假设模拟。</span>
+        <span id="profile-note" class="pill local">波次来源：尚未开始</span>
+        <span id="map-layout-note">地图来源：尚未创建。已观测布局只校准基地、商贩和任务点；地形资源等仍待补证。</span>
+        <button id="ribbon-toggle" class="ghost tiny" type="button">打开详细规则面板</button>
+      </div>
+    </details>
 
     <aside class="battle-brief" aria-label="战况概览">
       <div class="brief-section"><h3>LLM 通道</h3><p id="llm-channel-status">普通场景不调用真实 API。可在对局设置中体验 LLM 任务。</p></div>
@@ -281,7 +286,7 @@
     <footer class="foot">
       <span>本地实验环境 · 结果用于调试，不代表官方成绩</span>
       <span id="foot-stats" class="muted">空格：暂停 / 继续 · ← →：单轮回看 · F：全图</span>
-      <span id="foot-ver" title="Agent新闻与宝藏证据界面">前端 20260921-clear</span>
+      <span id="foot-ver" title="Agent新闻与宝藏证据界面">前端 20260921-hud</span>
     </footer>
   </aside>
 
@@ -373,7 +378,7 @@
 <script src="/js/sprites.js?v=20260921-clear"></script>
 <script src="/js/effects.js?v=20260921-clear"></script>
 <script src="/js/renderer.js?v=20260921-clear"></script>
-<script src="/js/panel.js?v=20260921-clear"></script>
+<script src="/js/panel.js?v=20260921-hud"></script>
 <script src="/js/experience.js?v=20260921-clear"></script>
 <script src="/js/guide.js?v=20260921-clear"></script>
 <script src="/js/app.js?v=20260921-clear"></script>

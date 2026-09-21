@@ -114,6 +114,11 @@ code { font-family: var(--pixel); color: var(--accent-2); }
 }
 .pill.warn { color: #ffd9a0; border-color: #5c4520; background: #241c0f; }
 #profile-note { display: inline-block; max-width: 100%; box-sizing: border-box; white-space: normal; border-radius: 8px; line-height: 1.5; }
+.assumption-drawer { border-bottom: 1px solid var(--line-soft); background: #0b1722; }
+.assumption-drawer summary { padding: 7px 12px; color: var(--muted); font-size: 11px; cursor: pointer; }
+.assumption-drawer[open] summary { color: var(--accent-2); border-bottom: 1px solid var(--line-soft); }
+.assumption-drawer .ribbon { border-bottom: 0; padding: 8px 12px 10px; align-items: flex-start; flex-wrap: wrap; }
+.assumption-drawer .ribbon #ribbon-toggle { margin-left: auto; }
 
 /* ----------------------------------------------------------------- stage */
 .stage-head {
@@ -203,6 +208,7 @@ code { font-family: var(--pixel); color: var(--accent-2); }
 .hud-cell b { display: block; font-size: 16px; font-family: var(--pixel); margin-top: 1px; }
 .hud-cell small { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-cell.wide { grid-column: span 2; }
+.hud-task b { color: var(--accent-2); }
 .bar { height: 6px; margin-top: 5px; border-radius: 999px; background: #0a121c; overflow: hidden; border: 1px solid #1b2a3b; }
 .bar i { display: block; height: 100%; background: linear-gradient(90deg, #6ef2a4, #35c98a); transition: width .25s; }
 .bar i.warn { background: linear-gradient(90deg, #ffd166, #f0a93a); }

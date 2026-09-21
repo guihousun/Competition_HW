@@ -82,6 +82,18 @@
       setText($('hud-phase-sub'), `${phase.phaseLabel} ${phase.inPhase}/${phase.total}`);
       setText($('hud-gold'), String(world.gold));
       setText($('hud-gold-sub'), `武器 ${HW.OFFICIAL.weaponCost} 金币 / 上限 ${HW.OFFICIAL.towerLimit} 座`);
+      const carriers = (world.actors || []).filter((actor) => actor.owner === 'own'
+        && (actor.kind === 'worker' || actor.kind === 'pioneer'));
+      const itemCounts = new Map();
+      carriers.forEach((actor) => (actor.backpack || []).forEach((item) => {
+        const key = String(item);
+        itemCounts.set(key, (itemCounts.get(key) || 0) + 1);
+      }));
+      const itemTotal = Array.from(itemCounts.values()).reduce((sum, count) => sum + count, 0);
+      const itemPreview = Array.from(itemCounts.entries()).slice(0, 3)
+        .map(([item, count]) => `${U.itemName(item)}×${count}`).join(' · ');
+      setText($('hud-items'), String(itemTotal));
+      setText($('hud-items-sub'), itemPreview || '当前没有携带道具');
       const ratio = U.clamp(station.total / (station.max || 1), 0, 1);
       setText($('hud-base'), station.dead ? '已摧毁' : `${station.total} / ${station.max}`);
       const bar = $('hud-base-bar');
@@ -95,6 +107,9 @@
       setText($('hud-units-sub'), `工人 ${counts.workers} · 开拓者 ${counts.pioneers} · 炮台 ${counts.towers} · 墙 ${counts.walls}`);
       setText($('hud-robots'), String(counts.robots));
       setText($('hud-robots-sub'), counts.robots ? '目标优先：阻挡移动者' : '当前无机器人');
+      const task = HW.viewModel && HW.viewModel.taskStatus ? HW.viewModel.taskStatus(world) : null;
+      setText($('hud-task'), task && task.title ? task.title : '暂无任务');
+      setText($('hud-task-sub'), task && task.meter ? task.meter : '等待任务信息');
       setText($('hud-status'), status.label);
       setText($('hud-status-sub'), status.detail);
       if (HW.experience) HW.experience.update(world);
