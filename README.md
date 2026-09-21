@@ -6,6 +6,7 @@
 
 当前策略：一名工人轮流操控三座火炮，优先共同站位；第四天起全员夜防，白天正常发展。
 可编辑参数在 [strategy.json](strategy.json)，含义、微调与重新打包步骤见 [策略配置说明](docs/STRATEGY_TUNING.md)。
+验证范围、完整对局失败样本和当前限制见 [本版交付报告](reports/user-phase-strategy/README.md)。
 
 本轮反馈迭代：[策略架构](docs/POLICY_ARCHITECTURE.md) · [精简日志](docs/CONSOLE_LOGGING.md) · [验证报告](reports/issue-14-17-architecture/REVIEW.md)。
 
