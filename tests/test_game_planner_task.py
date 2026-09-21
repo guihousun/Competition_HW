@@ -245,7 +245,7 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_the_question_carries_the_task_text(self):
-        """第一次提问 = 段模板（prompt.py 八段）+ 题目原文，不带任何回灌。
+        """第一次提问 = 段模板（prompt.py 七段）+ 题目原文，不带任何回灌。
 
         断言用 `assertNotIn` 而不是"等于生成函数的返回值"：后者是同义反复
         （模板与断言一起改，永远过得去），而"第一次问不该有任何回灌"才是真要求。
@@ -262,7 +262,6 @@ class TaskChannelTest(unittest.TestCase):
             "# 【工具描述】",
             "# 【沉淀的SOP】",
             "# 【输出约定】",
-            "# 【输出示例】",
         ):
             self.assertIn(header, prompt)
 
@@ -606,8 +605,7 @@ class TaskChannelTest(unittest.TestCase):
             self._turn(self.TASK, cmd_result=PROBE_RESULT)
         )
         self.assertIn("## ToolName - readSandboxFile", prompt)
-        self.assertIn("- /opt/task/rescue.md", prompt)
-        self.assertIn("文件名 rescue.md", prompt, "两种写法都给到 —— 题目里给的往往就是文件名")
+        self.assertIn("[可选path]：/opt/task/rescue.md", prompt)
 
     def test_the_inventory_stays_and_the_new_task_walks_the_sandbox_again(self):
         """一趟存档 = 一道题（第 113 步，用户口径"k 个任务启动 k 次"）：**走完就停**，
@@ -619,13 +617,13 @@ class TaskChannelTest(unittest.TestCase):
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))
         prompt, _ = task_channel(self._turn(self.TASK, cmd_result=PROBE_RESULT))
-        self.assertIn("- /opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
+        self.assertIn("/opt/task/rescue.md", prompt, "先真探出一条，否则下面全空过")
         _, execute = task_channel(self._turn(self.TASK))
         self.assertEqual(execute, "", "这道题的沙盒摸完了 ⇒ 空槽不再占（`MORE 0` ⇒ `_done`）")
         task_channel(self._turn(news="北部铁矿区塌方"))  # 任务结束这一轮
         self.assertEqual(cmd_explore.known_paths(), ["/opt/task/rescue.md"], "探明的成果留着")
         again, execute = task_channel(self._turn(self.TASK))
-        self.assertIn("- /opt/task/rescue.md", again, "上个任务的路径照旧带进新任务")
+        self.assertIn("/opt/task/rescue.md", again, "上个任务的路径照旧带进新任务")
         self.assertEqual(execute, cmd_explore._command(), "新任务从头上再走一趟沙盒")
 
     def test_no_task_means_no_probe(self):

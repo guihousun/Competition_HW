@@ -1,7 +1,7 @@
-"""构建 system prompt 的地方，八段，按四层排：决策（背景 / ROLE定位 / 工作原则）→ 工具（工具
-描述）→ 知识（沉淀的SOP）→ 输出（输出约定 / 输出示例 / 推理引导）。同一条规则只写一处，段名即
-唯一入口 —— 顺序就是 `gen_system_prompt` 里那份字面量列表，改序改那里。末段没有段头，是收尾的
-COT 触发语。
+"""构建 system prompt 的地方，七段，按四层排：决策（背景 / ROLE定位 / 工作原则）→ 工具（工具
+描述）→ 知识（沉淀的SOP）→ 输出（输出约定 / 推理引导）。同一条规则只写一处，段名即唯一入口
+—— 顺序就是 `gen_system_prompt` 里那份字面量列表，改序改那里。末段没有段头，是收尾的 COT
+触发语。
 
 **"怎么用工具、什么时候沉淀"这类操作细则不在本模块**（第 107 步，用户重写的 prompt）：成本
 模型、合并命令、泛化与去重、以实测为准 —— 全在各工具的**描述**里（`Agent.__init__` 的注册表，
@@ -175,51 +175,13 @@ OUTPUT_PROMPT = """
 这条只管 `sop` 那段文本，不管你的作答 —— 你的答卷照旧**必须**用这对标签包起来。
 """
 
-# 6. 示例：同一类任务两次 —— 第一次沉淀、第二次跳过探索直接照做。这是唯一演示
-# 「沉淀与作答同轮」的地方；范例里的命令与输出都保留原文，别改成概括。
-EXAMPLE_PROMPT = """
-# 【输出示例】
-同一类任务做第二次时，靠沉淀把探索那几趟回合省掉。
-
-第一次：任务书说"订去上海的机票，订票接口在 api.md"（这条任务一共 4 个回合）
-step1. 读任务书 —— 找和读用一条命令做完：
-    f=$(find / -maxdepth 6 -name 'task.md' -print -quit); cat "$f"
-    输出：本次需求：订一张去上海的机票。订票接口见同目录下的 api.md。
-step2. 读接口文档 —— 这一趟是试探：文档里写了什么、接口长什么样都还不知道：
-    cat api.md
-    输出：接口路径 xxxx:xxx/xxx/yyy；参数 zzzz 传目的地；成功时返回 token。
-step3. 照文档里那条路径与参数调接口，经过多次探索（探索消耗了很多轮次）发现可行参数 —— 拿到 token：tk_9f3a7c
-step4. 提交答案；同回合把这一类任务的**通用流程**沉淀下来 —— 名字泛化到"这一类"，
-    正文也只写"这类任务怎么做"：本次的目的地、本次拿到的凭证、只对这份文档成立的路径与参数
-    都不写进去（下一次同类任务的路径可能就变了，而它看不出这条已经过期）。
-    沉淀与作答写在同一条回复里，为它单独占一个回合纯属浪费（推演写在块前面、标签里只有答案）：
-    判断：接口跑通、token 已拿到，任务到此完成；这条流程值得沉淀，顺手存掉。
-    <tool>
-        <tool_name>SOP2Prompt</tool_name>
-        <tool_param>
-            <name>订去某地的机票的流程</name>
-            <sop>这一类任务的做法：环境有一个接口xxxx:xxx/xxx/yyy可以订购机票，需要的参数是zzzz，参数的含义是目的地。调用成功后返回token</sop>
-        </tool_param>
-    </tool>
-    <answer>tk_9f3a7c</answer>
-
-第二次：任务书说"订去北京的机票，订票接口在 api.md"（同一条任务只花 3 个回合）
-step1. 读任务书 —— 这次是订去北京的机票：
-    f=$(find / -maxdepth 6 -name 'task.md' -print -quit); cat "$f"
-step2. 读取任务书，发现是同样的接口xxxx:xxx/xxx/yyy
-step3. 直接照沉淀的流程调接口，参数改成北京，拿到 token：tk_7a2b1c
-step4. 作答 —— 不用沉淀、不再调工具：先写一句判断，再给出答案块（推演在外面、标签里只有答案本身）：
-    判断：照沉淀的流程一遍跑通，token 已拿到，直接交。
-    <answer>tk_7a2b1c</answer>
-"""
-
-# 7. 推理引导：收尾的 COT 触发语（**没有段头**，整份 system 的最后一段，别挪到前面去）。
+# 6. 推理引导：收尾的 COT 触发语（**没有段头**，整份 system 的最后一段，别挪到前面去）。
 COT_PROMPT = """
     让我们一步步推理，仔细分析问题，确保每个步骤都正确无误。
 """
 
 def gen_system_prompt(tools, sop) -> str:
-    """组装整份 system 消息：八段，全是固定段（没有"有内容才占位"的段）。
+    """组装整份 system 消息：七段，全是固定段（没有"有内容才占位"的段）。
 
     下面这份列表**就是段的顺序**（同一条规则只写一处：段名不在这之外再声明一遍）。
     首段必须是 `BACKGROUND_PROMPT` 一类的固定段头：日志链路（`app._log` 的
@@ -237,7 +199,6 @@ def gen_system_prompt(tools, sop) -> str:
         gen_all_tool_prompt(tools=tools),
         gen_sop_prompt(sop=sop),
         OUTPUT_PROMPT,
-        EXAMPLE_PROMPT,
         COT_PROMPT,
     ]
     return "\n\n".join(text for text in (section.strip() for section in sections) if text)

@@ -39,32 +39,25 @@ def _listed(items: tuple[Any, ...], fmt: Callable[[Any], str], sep: str = " ") -
 
 
 class Weapon(NamedTuple):
-    """我方一座武器工事 —— 开火与升级要用到的全部信息。
-
-    `level` 缺省 1（仅建筑持有、初始 1）—— 升级线靠它认"还升得动"。没有 `health`：只在解析
-    时用它筛掉已毁的炮，存下来没人读。
-    """
+    """我方一座武器工事 —— 开火与升级要用到的全部信息。"""
 
     id: int
     """线上那条指令的 key 就是它 —— 不是操控角色的 id（见 `actions.Attack`）。"""
     kind: str
     pos: Pos
     attack_range: int
-    """以切比雪夫距离计的射程，取自 payload 的 `attackRange`（以 payload 为准）。"""
+    """以切比雪夫距离计的射程（以 payload 为准）。"""
     cooldown: int
-    """冷却剩余回合数；只有火箭发射台有（发射后 3 回合空窗）。缺失 ⇒ -1 ⇒ `> 0` 为假 ⇒ 照打。"""
+    """冷却剩余回合数；只有火箭有。缺失 ⇒ -1 ⇒ 照打。"""
     level: int = 1
-    """当前等级（1..3）。默认 1：缺失按"初始等级 1"算，别当 -1（-1 会被升级线当成"还升得动"）。
-    升级线认"还升得动"，`planner._fire` 认"这份伤害有多大 / 该发几个 `targetPos`"。"""
+    """当前等级（1..3）。缺失按 1 算 —— -1 会被升级线当成"还升得动"。"""
 
 
 class Wall(NamedTuple):
     """我方一座围墙实体，修墙线的判据来源。
 
-    与武器同住 `teamOur.roles`（`roleType == "wall"`，id 40000 系）。health 是修墙判据（不到
-    满血 1/5 ⇒ 不完备，升级当修）；level 决定满血基准、也决定用哪件东西（`planner._wall_item`）。
-    已毁（health == 0）的在 `model._walls` 就丢掉 —— 那是一格缺口，归 `_ring` 管。
-    """
+    health 是修墙判据（不到满血 1/5 ⇒ 不完备，升级当修）；level 决定满血基准、也决定用
+    哪件东西。已毁（health == 0）的在 `model._walls` 就丢掉 —— 那是一格缺口，归 `_ring` 管。"""
 
     id: int
     pos: Pos
@@ -89,10 +82,8 @@ class Error(NamedTuple):
 class Robot(NamedTuple):
     """一台机器人。只留用得上的字段：打谁只看血量 + 是否打我方。
 
-    `id` / `roleType` / `abnormalState` 都不存（目标位置用坐标）。`target_team` = 该机器人打
-    哪一队（"challenger" / "defender"），用于过滤不打我们的机器人 —— 火箭射程远，打对方的
-    机器人既浪费火力、又帮对方减轻基地压力。字段缺失给空串 ⇒ 当成打我们的（安全降级）。
-    """
+    `target_team` = 该机器人打哪一队，用于过滤不打我们的机器人 —— 火箭射程远，打对方的
+    机器人既浪费火力、又帮对方减轻基地压力。字段缺失给空串 ⇒ 当成打我们的（安全降级）。"""
 
     pos: Pos
     health: int
@@ -117,26 +108,24 @@ class Turn(NamedTuple):
     #: 当前已领取任务的原文描述。非空 = 开拓者手上有任务 —— 这是"任务进行中"的唯一判据
     #: （用载荷事实，而不是自己记"谁领了任务"）。
     phase_task: str = ""
-    #: 判题器 LLM 的回复。三种可能，全靠 `agent.chat` 解析：工具调用 ⇒ 命令进 `executeCmd`；
-    #: `<answer>` 包着的答案 ⇒ `submitAnswer`；两者都不像 ⇒ 原文即答案（兜底）。文档没写"没发
-    #: prompt 时它是什么"（对比 `lastCmdResult` 专门写明的空值约定）⇒ 必须按"它可能粘住"设计。
+    #: 判题器 LLM 的回复，全靠 `agent.chat` 解析：工具调用 ⇒ 命令进 `executeCmd`；`<answer>`
+    #: 包着的 ⇒ `submitAnswer`；两者都不像 ⇒ 原文即答案（兜底）。文档没写"没发 prompt 时它
+    #: 是什么"（对比 `lastCmdResult` 写明了空值约定）⇒ 必须按"它可能粘住"设计。
     llm_resp: str = ""
-    #: 上回合 `executeCmd` 的执行结果。文档明说"未发命令时为空字符串" ⇒ 非空就等于
-    #: "我上回合发过命令、这是回执"。格式约定不解析，非空即原文回灌。
+    #: 上回合 `executeCmd` 的执行结果。文档明说"未发命令时为空字符串"。格式约定不解析，
+    #: 非空即原文回灌。
     cmd_result: str = ""
-    #: 小贩的收购价 `{矿种: 单价}`。采哪座矿、卖哪种按它排序 —— 不写死"铜 > 铁 > 石头"（那只是
-    #: 样例的价目，官方消息会让价格波动）。查不到的矿种按 0 算（不去采它）；缺失 ⇒ 空表 ⇒
-    #: 无从挑"最值钱的矿"。只读：逐回合抄来的事实。
+    #: 小贩的收购价 `{矿种: 单价}`。采哪座矿、卖哪种按它排序 —— 不写死"铜 > 铁 > 石头"
+    #: （那只是样例的价目，官方消息会让价格波动）。查不到的矿种按 0 算（不去采它）。
     vendor_prices: Mapping[str, int] = MappingProxyType({})
     #: 武器商店的价目 `{商品名: 单价}`（顶层 `weaponShopList`）—— 升级线按它算"买不买得起"。
     #: 与矿价同一条原则：不写死；查不到的商品按 0 算 ⇒ 买不起 ⇒ 不跑腿。
     shop_prices: Mapping[str, int] = MappingProxyType({})
     #: 判题器本轮报的错。空元组 = 本轮没报错。这是"任务为什么一直失败"唯一的答案来源。
     errors: tuple[Error, ...] = ()
-    #: 上回合各实体的动作合法性回执（key 是角色/武器 id、value = 是否合法）。`errors` 答的是
-    #: "为什么"，这份答的是"哪一条" —— 格式合法的指令照样可能执行失败（撞墙、打空），那类不计
-    #: 异常、`errors` 里什么都没有，只有这里会翻成 `false`。原样保留、不剪枝（含基地格）：
-    #: 少一条就是少一份证词。
+    #: 上回合各实体的动作合法性回执（key 是角色/武器 id、value = 是否合法）。`errors` 答
+    #: "为什么"，这份答"哪一条" —— 执行失败（撞墙、打空）不计异常、只有这里会翻成
+    #: `false`。原样保留、不剪枝（含基地格）：少一条就是少一份证词。
     action_results: tuple[tuple[int, bool], ...] = ()
     #: 我方围墙实体（修墙的判据：health 与 level；网格里那份只有类别串）。
     walls: tuple[Wall, ...] = ()
@@ -158,10 +147,8 @@ class Turn(NamedTuple):
 
     @property
     def is_day(self) -> bool:
-        """白天吗？`build` 仅白天可用（任务书 §4.4）；`remove` 的昼夜任务书没写，保守也仅白天。
-
-        `within <= 70` 为白天。`round_no` 缺失 ⇒ 129 ⇒ 判成夜晚 ⇒ 不建造。
-        """
+        """白天吗？`within <= 70` 为白天（`build` 仅白天；`remove` 任务书没写，保守也仅
+        白天）。`round_no` 缺失 ⇒ 判成夜晚 ⇒ 不建造。"""
         return self.within <= DAY_ROUNDS
 
     @property
@@ -171,11 +158,8 @@ class Turn(NamedTuple):
 
     @property
     def rounds_left(self) -> int:
-        """本回合起、这一段（白天或夜里）还剩几回合，含本回合。
-
-        `day_rounds_left` 是白天语义（夜里为 0，"白天还剩多少"问不出东西）；经济线要的是
-        "在下一段开始之前还有多少回合可以支配"—— 夜里清场后也跑同一套差事，用这个。
-        """
+        """本回合起、这一段（白天或夜里）还剩几回合，含本回合。经济线的预算用它 ——
+        夜里清场后也跑同一套差事，`day_rounds_left` 在夜里是 0、问不出东西。"""
         return (
             DAY_ROUNDS - self.within + 1 if self.is_day else ROUNDS_PER_DAY - self.within + 1
         )
@@ -183,12 +167,10 @@ class Turn(NamedTuple):
     def summary(self) -> str:
         """关键事实摘要 —— 图上推不出来的那些：金币 / 武器与射程 / 角色背包 / 血量 / 任务点。
 
-        四块，各占一行、块间不留空行：`【回合】` / `【我方】` / `【机器】` / `【可接任务点】`。
-        首行前面的 `\\n` 是留给 `logging` 前缀的（时间戳只加在第一条物理行上）。长度有上界
-        （每个列表 `SUMMARY_MAX_ITEMS` 项）；它跑在 `app.handle` 的 `try` 里，抛出去 ⇒ 整回合
-        退化成空指令 ⇒ 只做字段读取与拼接。格式化约定：缺失不等于 0（`-1` 打成 `?`）；射程
-        -1 ⇒ `?`、≥ `UNLIMITED_RANGE` ⇒ `∞`；冷却只在 `> 0` 时出现（-1 与 0 都算"没有冷却"）。
-        """
+        四块各占一行（`【回合】`/`【我方】`/`【机器】`/`【可接任务点】`）；首行前面的 `\\n`
+        是留给 `logging` 前缀的。长度有上界（`SUMMARY_MAX_ITEMS`）；它跑在 `app.handle` 的
+        try 里 ⇒ 只做字段读取与拼接。缺失不等于 0（`-1` 打成 `?`）；射程 ≥
+        `UNLIMITED_RANGE` ⇒ `∞`。"""
         gold = self.gold if self.gold >= 0 else "?"
         round_no = self.round_no if self.round_no >= 0 else "?"
         when = "白天" if self.is_day else "夜里"

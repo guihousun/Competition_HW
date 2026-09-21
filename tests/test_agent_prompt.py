@@ -28,7 +28,6 @@ SECTIONS = (
     "# 【工具描述】",
     "# 【沉淀的SOP】",
     "# 【输出约定】",
-    "# 【输出示例】",
 )
 
 
@@ -93,16 +92,14 @@ class ChatPromptTest(unittest.TestCase):
         """整份 system 的字数有上限 —— 它**每回合都发**。
 
         守的是"措辞只增不减"的漂移：每次加一句话都看不出什么，几十次之后 prompt 就
-        被稀释得没法看了。阈值是拍的：顶格那一档实测 13052，上浮约 7%。
-        基线数字会漂，量的时候看是**哪一档**：用户重写 prompt 之后干净 system 实测
-        **7965**（第 100~105 步那一版是 5821 / 5569 / 5808 / 6265 / 6265 / 6265 —— 这次
-        的增量来自工具描述改成 [用途]/[成本]/[使用原则]/[边界] 的四段式、以及工具块恒列）；
-        沙箱清单每多探明一条路径 **+29**（第一条 +51，含清单头），满 SOP
-        （5 × `SOP_MAX`(1000)）再 +5087 ⇒ **顶格 13052**。要加内容先删同等量级的旧话，
-        或者改这个阈值并说明理由。
+        被稀释得没法看了。阈值是拍的：顶格那一档实测 11800，上浮约 7%。
+        基线数字会漂，量的时候看是**哪一档**：第 116 步删掉【输出示例】后干净 system 实测
+        **6718**（删段前 7965）；沙箱清单每多探明一条路径 **+29**（第一条 +49，含清单头），
+        满 SOP（5 × `SOP_MAX`(1000)）再 **+5082** ⇒ **顶格 11800**。要加内容先删同等量级的
+        旧话，或者改这个阈值并说明理由。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertLess(len(system), 14000)
+        self.assertLess(len(system), 12600)
 
     def test_every_tool_appears_in_the_prompt(self):
         """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具**每轮都在**。
@@ -121,7 +118,7 @@ class ChatPromptTest(unittest.TestCase):
         probed = self.agent.chat("题目")
         for name in self.agent._tools:
             self.assertIn(name, probed)
-        self.assertIn("- /opt/task/one.md", probed)
+        self.assertIn("/opt/task/one.md", probed)
 
     def test_the_deposit_rules_cover_environment_knowledge(self):
         """探索到的环境知识（接口、参数、路径、返回值）也要沉淀成 SOP。
@@ -153,8 +150,8 @@ class ChatPromptTest(unittest.TestCase):
         （工具块照列，第 107 步），而且不许写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"**
         —— 写出去就是让 LLM 干脆不去找那些文件。
 
-        每一行两种写法都给到（第 105 步，用户口径"枚举值再把独立的文件名加上"）：题目里给的
-        往往就是个裸文件名，只列全路径等于逼它自己拼目录 —— 实测的坑（第 101 步那条日志）。
+        "两种写法"（整条全路径、或它的文件名）的规则在**工具描述**里 —— 清单只管列值，
+        不再逐行复述那两种写法；那两条路各自有派发侧的用例（`test_agent.AgentTest`）。
         """
         empty = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertNotIn("/opt/task", empty)
@@ -170,47 +167,15 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("# 【沙盒知识】", system, "清单只有工具描述这一处，不许有第二个家")
         tools = _section(system, "# 【工具描述】")
         self.assertIn("## ToolName - readSandboxFile", tools)
-        spellings = ("- /opt/task/a.md", "- /opt/task/b.md", "文件名 a.md", "文件名 b.md")
-        for spelling in spellings:
-            self.assertIn(spelling, tools, f"清单里少了这一种写法：{spelling}")
         block = tools.index("## ToolName - readSandboxFile")
-        for spelling in spellings:
-            self.assertLess(block, tools.index(spelling), "清单要落在工具块里，不是别处")
-
-    def test_the_example_shows_a_deposit_then_a_reuse(self):
-        """【输出示例】是 few-shot：同一类任务演两遍 —— 第一次「探索 → 调接口 →
-        沉淀与作答同回合」，第二次「翻 SOP → 跳过探索直接照做」。
-
-        这是**唯一**演示"沉淀与作答同轮"的地方，纯文字规则说明没有它兜底。
-        演的是**步骤形式**（step1. …）并把每遍花掉几个回合点出来：要教的是"回合怎么花"，
-        两份流程的回合差（4 → 3）本身就是那条规则。每一步还给到**具体命令与它的输出**
-        —— 摘要式的一句"读任务书"教不会它怎么写命令。**`<sop>` 正文收什么、不收什么**
-        （用户手改口径）：接口定义与参数定义（接口地址、参数名与含义、调用成功返回什么）
-        **要收** —— 那正是第二次能跳过试探的原因；**本次的取值**（这次的目的地、
-        这次拿到的凭证）不收。用例两向都钉住，免得再被谁抽象成一句"照文档做"的空话。
-        顺带钉示例自身的自洽：里面的 `<sop>` 正文不能出现 `<answer>` 对（否则 LLM 照抄，
-        入库时被 `strip_answers` 静默吃掉）。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        example = _section(system, "# 【输出示例】")
-        rerun = example.rsplit("第二次：", 1)[1]  # 第二遍（引言里也有"第二次"三个字）
-        self.assertIn("第一次", example)
-        self.assertIn("第二次", example)
-        self.assertIn("<tool_name>SOP2Prompt</tool_name>", example)
-        self.assertIn("订去某地的机票的流程", example)
-        self.assertIn("一共 4 个回合", example)
-        self.assertIn("step3.", rerun)
-        # 每一步给到具体命令与输出（不是"读任务书"这种摘要），答案用当次那个 token
-        self.assertIn("f=$(find / -maxdepth 6 -name 'task.md' -print -quit); cat \"$f\"", example)
-        self.assertIn("<answer>tk_9f3a7c</answer>", example)
-        self.assertIn("tk_7a2b1c", rerun)
-        stored = example.split("<sop>")[1].split("</sop>")[0]
-        self.assertNotIn("<answer>", stored)
-        # 要收：接口定义与参数定义（第二次照它直接调，省掉试探那一趟）
-        for kept in ("xxxx:xxx/xxx/yyy", "zzzz", "token"):
-            self.assertIn(kept, stored, f"SOP 正文该带上接口定义：{kept}")
-        # 不收：只对本次成立的取值
-        for specific in ("北京", "上海", "tk_9f3a7c", "api.md"):
-            self.assertNotIn(specific, stored, f"SOP 正文夹带了本次的取值：{specific}")
+        for path in ("/opt/task/a.md", "/opt/task/b.md"):
+            self.assertIn(path, tools, f"清单里少了这条路径：{path}")
+            self.assertLess(block, tools.index(path), "清单要落在工具块里，不是别处")
+        # 清单是枚举值 ⇒ 逐行列值、逗号连接（用户手改的版面，第 116 步）
+        self.assertIn("[可选path]：/opt/task/a.md,/opt/task/b.md", tools)
+        # 两种写法这条**规则**搬进了描述本身（清单不再逐行复述）⇒ 改版面别把它一起删掉
+        self.assertIn("传入清单中的完整路径", tools)
+        self.assertIn("传入清单中的文件名", tools)
 
     def test_the_deposit_rules_pin_the_name_to_a_class_of_tasks(self):
         """`name` 要凝练到"一类问题"上（「订去某地的机票的流程」，不是「订去上海的机票」）。
@@ -305,11 +270,6 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("只写一个这个块", output)
         self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
         self.assertIn("这条只管 `sop` 那段文本", output)
-        # 示例里也得有一次**不沉淀、纯作答**的整条回复（第二轮那道题的 step4）——
-        # 只讲规则不给形状，它照样有别的写法可选
-        rerun = _section(system, "# 【输出示例】").rsplit("第二次：", 1)[1]
-        self.assertIn("<answer>tk_7a2b1c</answer>", rerun)
-        self.assertIn("推演在外面、标签里只有答案本身", rerun)
 
     def test_the_background_frames_where_the_two_requirements_come_from(self):
         """【背景】段只写处境：远程沙盒、判题器下达任务并收答案、环境陌生而文档可能过时。
@@ -335,15 +295,13 @@ class ChatPromptTest(unittest.TestCase):
         推演是写给**下一回合的自己**看的：会话窗口只留最近两轮（`Context._WINDOW`），
         不写下来就只剩一个结果、没有"上一步为什么没成"。落点必须在块**前面** —— 写进
         `<answer>` 里会被当成答案的一部分交上去。
-        第 107 步起只剩两处落点：末段那句 COT 触发语，与【输出示例】里两遍示范都点破的
-        "推演写在块外面"。
+        第 116 步删掉【输出示例】后只剩两处落点：末段那句 COT 触发语，与【输出约定】里
+        "开头那段推演不算，它是写给你自己看的"。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn("让我们一步步推理", system)
         self.assertTrue(system.rstrip().endswith("正确无误。"), "COT 触发语收在整份 system 最后")
-        example = _section(system, "# 【输出示例】")
-        self.assertIn("推演写在块前面", example)
-        self.assertIn("推演在外面、标签里只有答案本身", example)
+        self.assertIn("开头那段推演不算，它是写给你自己看的", _section(system, "# 【输出约定】"))
 
     def test_the_flow_numbered_steps_start_at_one(self):
         """【工作原则】把执行循环与任务理解都编了号，从 (1) / 1. 起。

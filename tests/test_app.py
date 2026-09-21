@@ -201,7 +201,7 @@ class HandleTest(unittest.TestCase):
             "# 【工具描述】",
             "## ToolName - SOP2Prompt",
             "# 【沉淀的SOP】",
-            "# 【输出示例】",
+            "# 【输出约定】",
         ):
             self.assertIn(piece, messages[0]["content"])
 
