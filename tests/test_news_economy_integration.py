@@ -47,7 +47,15 @@ class NewsEconomyIntegration(LedgerHarness):
             memory.ensure_team_agent(state).world = self.news()
             with patch.dict('os.environ', {brain.WORLD_AGENT_ENV: 'on'}):
                 result = brain.plan_for_state(state, memory, judge_tasks=False).build()
-            self.assertEqual(result['roleCommandMap']['10010']['action'], 'move')
+            # Public advice does not grant an extra simulator-only vendor
+            # dispatcher. Compare the official projection, not _demo.errands.
+            public=deepcopy(state);public.pop('_demo',None)
+            public_memory=planner.PlannerState()
+            public_memory.ensure_team_agent(public).world=self.news()
+            with patch.dict('os.environ', {brain.WORLD_AGENT_ENV: 'on'}):
+                public_result=brain.plan_for_state(public,public_memory,judge_tasks=False).build()
+            self.assertEqual(result['roleCommandMap'],public_result['roleCommandMap'])
+            self.assertIn('10010',result['roleCommandMap'])
             self.assertIn('copper', brain.decision_report()['news_economy'])
             self.assertIn('copper', memory.dump()['tasks']['supervisor']['news_economy'])
             self.assertLessEqual(len(result['roleCommandMap']), 3)

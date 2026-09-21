@@ -138,7 +138,7 @@ class SelfOccupiedWallTests(LegacyStrategyCase):
         self.assertEqual(m.team_trips['purchase']['owner'],20012)
         self.assertNotIn('construction',m.team_trips)
 
-    def test_existing_errand_with_temporarily_unreachable_vendor_keeps_ownership(self):
+    def test_private_errand_cannot_reserve_a_worker_in_official_planning(self):
         p=scene();close_other_gap(p)
         unit(p,20012)['backpack']+=['copper']*3
         p['_demo']={'errands':{'20012':{'goal':'vendor'}}}
@@ -152,8 +152,14 @@ class SelfOccupiedWallTests(LegacyStrategyCase):
         self.assertFalse(brain._errand_mission(t,worker,commands,p,p['_demo']['errands']))
         self.assertEqual(commands,{})
         self.assertEqual(p['_demo']['errands'],{'20012':{'goal':'vendor'}})
-        m=planner.PlannerState();self.plan(p,m)
-        self.assertNotIn('construction',m.team_trips)
+        # The old helper can retain its supplied local ledger, but that ledger
+        # is not an official/planner contract and cannot capture the worker.
+        public=deepcopy(p);public.pop('_demo',None)
+        m=planner.PlannerState();actual=self.plan(p,m)
+        public_memory=planner.PlannerState();expected=self.plan(public,public_memory)
+        self.assertEqual(actual,expected)
+        self.assertEqual(m.team_trips,public_memory.team_trips)
+        self.assertEqual(m.team_trips['construction']['owner'],20012)
 
     def test_other_construction_owner_and_pending_owner_are_not_replaced(self):
         for established in (True,False):
