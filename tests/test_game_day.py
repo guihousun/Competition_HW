@@ -23,6 +23,7 @@ from coregeek.game.path import step_outside, step_toward, steps_between  # noqa:
 from coregeek.game import core, day, planner  # noqa: E402
 from coregeek.game.day import WEAPONS_BY_SITE  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
+from coregeek.game.task import task_channel  # noqa: E402
 from coregeek.game.core import WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
@@ -1849,16 +1850,15 @@ class PioneerErrandTest(unittest.TestCase):
     def test_a_pinned_pioneer_answers_instead_of_running_errands(self):
         """被任务钉死的开拓者只交答案（离开任务点一格任务就作废）—— 再有钱也不跑腿。"""
         pioneer = Pioneer(10011, Pos(20, 20))
-        cmd = plan(
-            self._turn(
-                pioneer,
-                gold=200,
-                phase_task="题目",
-                llm_resp="<tool><tool_name>submitAnswer</tool_name>"
-                "<tool_param><answer>42</answer></tool_param></tool>",
-            )
-        )["10011"]
-        self.assertEqual(cmd["action"], "submitAnswer")
+        turn = self._turn(
+            pioneer,
+            gold=200,
+            phase_task="题目",
+            llm_resp="<tool><tool_name>submitAnswer</tool_name>"
+            "<tool_param><answer>42</answer></tool_param></tool>",
+        )
+        task_channel(turn)  # 答卷变量在派工具那一行被写（与 `app.handle` 同序：先 task_channel）
+        self.assertEqual(plan(turn)["10011"]["action"], "submitAnswer")
 
 
 class DayOneFinishTest(unittest.TestCase):

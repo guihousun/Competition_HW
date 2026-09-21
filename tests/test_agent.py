@@ -196,10 +196,11 @@ class AgentToolCallTest(unittest.TestCase):
 
 
 class SubmitAnswerTest(unittest.TestCase):
-    """交答案走工具：`submitAnswer` 的参数闸门 + `submitted_answer` 的读取。
+    """交答案走工具 + 答卷变量：`submitAnswer` 写、`Agent.answer` 读、`take_answer` 取走。
 
-    答案不再是"把某段文本包起来"的约定 —— 没调这个工具的回复**交不出任何东西**
-    （"整段推演被当成答案交上去"这类错误从此在结构上不可能发生）。
+    答案不再从回复原文里解一遍（`tool_of` 认出什么、`submitAnswer` 就写进什么是同一个值）
+    —— 没调这个工具的回复**交不出任何东西**（"整段推演被当成答案交上去"这类错误在结构上
+    不可能发生）。
     """
 
     def setUp(self) -> None:
@@ -212,25 +213,38 @@ class SubmitAnswerTest(unittest.TestCase):
             f"<tool_param><answer>{answer}</answer></tool_param></tool>"
         )
 
+    def _dispatch(self, reply: str) -> str:
+        """派一遍这条回复里的工具调用（答卷变量就在这一行被写），返回要发的命令。"""
+        return self.agent.tool_calls(tool_of(reply) or [])
+
     def test_the_answer_is_the_param_value(self):
         """答卷 = `answer` 参数的值（过反转义、只去首尾空白），不是整条回复。"""
-        self.assertEqual(self.agent.submitted_answer(self._reply("晴 26 度")), "晴 26 度")
-        self.assertEqual(self.agent.submitted_answer(self._reply("a &lt; b")), "a < b")
+        for reply, expected in (
+            (self._reply("晴 26 度"), "晴 26 度"),
+            (self._reply("a &lt; b"), "a < b"),
+        ):
+            with self.subTest(reply=reply):
+                self._dispatch(reply)
+                self.assertEqual(self.agent.answer, expected)
 
     def test_the_tool_itself_yields_no_command(self):
         """交卷不产出命令：返回值直接进响应顶层 `executeCmd` ⇒ 非空就是往沙盒丢一条
         不存在的命令。真正发指令的是 `game.task.answer_task`（开拓者）。"""
-        self.assertEqual(self.agent.tool_call("submitAnswer", [("answer", "晴")]), "")
+        self.assertEqual(self._dispatch(self._reply("晴")), "")
+        self.assertEqual(self.agent.answer, "晴", "不产命令 ≠ 没交上来")
 
-    def test_the_registry_agrees_with_the_reader(self):
-        """注册表声明的那一个参数名 = `submitted_answer` 认的名字。两处一旦分家，
-        写对了名字的调用会被判成"缺参数"、答案永远交不出去 —— 本地全绿，只有实盘看得见。"""
+    def test_the_declared_param_lands_in_the_variable(self):
+        """注册表声明的那一个参数名 = `submitAnswer` 的形参名。两处一旦分家，写对了名字的
+        调用会在 `impl(**resolved)` 上抛 `TypeError`（那一行在 `try` 之外，而它跑在
+        `app.handle` 的 `try` 里 ⇒ **整回合退化成空指令**）：本地全绿，只有实盘看得见。"""
         self.assertEqual(
             [pname for pname, _ in self.agent._tools["submitAnswer"][2]], ["answer"]
         )
+        self._dispatch(self._reply("晴"))
+        self.assertEqual(self.agent.answer, "晴")
 
-    def test_nothing_else_submits(self):
-        """没调 `submitAnswer` 的回复一概不交：纯文本、空回复、别的工具块、旧的
+    def test_nothing_else_writes_it(self):
+        """没调 `submitAnswer` 的回复一概不写答卷变量：纯文本、空回复、别的工具块、旧的
         `<answer>` 标签全都算。"""
         for reply in (
             "晴 26 度",
@@ -240,16 +254,27 @@ class SubmitAnswerTest(unittest.TestCase):
             "<tool_param><cmd>ls</cmd></tool_param></tool>",
         ):
             with self.subTest(reply=reply):
-                self.assertEqual(self.agent.submitted_answer(reply), "")
+                self._dispatch(reply)
+                self.assertEqual(self.agent.answer, "")
 
     def test_a_parallel_call_still_submits(self):
-        """沉淀 + 交卷同回合：两块并列 ⇒ 答案照取，谁在前谁在后都一样。"""
+        """沉淀 + 交卷同回合：两块并列 ⇒ 答案照写，谁在前谁在后都一样。"""
         sop = (
             "<tool><tool_name>SOP2Prompt</tool_name>"
             "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
         )
-        self.assertEqual(self.agent.submitted_answer(sop + self._reply("晴")), "晴")
-        self.assertEqual(self.agent.submitted_answer(self._reply("晴") + sop), "晴")
+        for reply in (sop + self._reply("晴"), self._reply("晴") + sop):
+            with self.subTest(reply=reply[:40]):
+                self._dispatch(reply)
+                self.assertEqual(self.agent.answer, "晴")
+
+    def test_taking_it_clears_it(self):
+        """取走即清（`answer_task` 用它交卷）：同一份答卷只交一次，重交靠 `llmResp` 粘住时
+        把同一条工具调用再派一遍。"""
+        self._dispatch(self._reply("晴"))
+        self.assertEqual(self.agent.take_answer(), "晴")
+        self.assertEqual(self.agent.answer, "", "取走之后不再是答案")
+        self.assertEqual(self.agent.take_answer(), "", "空手再取还是空")
 
 
 class ParallelToolTest(unittest.TestCase):
@@ -302,9 +327,9 @@ class ParallelToolTest(unittest.TestCase):
         self.assertIn("并列", note)
         self.assertIn("executeCmd", note)
 
-    def test_a_voided_round_submits_nothing_either(self):
-        """作废那一轮「该提交什么」与「派了没有」同源（`_dispatchable` 一处认）——
-        分家就会出现"骂一套、交一套"。"""
+    def test_a_voided_round_writes_no_answer_either(self):
+        """作废那一轮 `submitAnswer` 根本没被派到 ⇒ 答卷变量也没被写 —— "派了没有"与"有没有
+        答案"因此是同一件事（第 136 步：判定只看那一个变量，解析侧不再有第二份判据）。"""
         reply = (
             "<tool><tool_name>executeCmd</tool_name>"
             "<tool_param><cmd>ls</cmd></tool_param></tool>"
@@ -312,7 +337,7 @@ class ParallelToolTest(unittest.TestCase):
             "<tool_param><answer>晴</answer></tool_param></tool>"
         )
         self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
-        self.assertEqual(self.agent.submitted_answer(reply), "")
+        self.assertEqual(self.agent.answer, "")
 
     def test_a_single_call_is_never_voided(self):
         """一条调用与白名单无关（白名单管的是"并列"）。"""

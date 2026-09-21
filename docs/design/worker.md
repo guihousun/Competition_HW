@@ -193,8 +193,8 @@
 
 ### 3.1 被任务钉死（最高优先，昼夜无关）
 
-`phaseTask` 非空 ⇒ 每回合只做一件事：`task.answer_task` 把 `AGENT.submitted_answer(llmResp)`
-（= LLM 那条 `submitAnswer` 工具调用的 `answer` 参数）用 `actions.SubmitAnswer` 交上去
+`phaseTask` 非空 ⇒ 每回合只做一件事：`task.answer_task` 把 `AGENT.take_answer()` 取走的那份答卷
+（= 本回合 `submitAnswer` 工具调用的 `answer` 参数，取走即清）用 `actions.SubmitAnswer` 交上去
 （**每回合都交** —— 判题器取"通过率最高"的那份，重交零成本；空答案不发）。**一步都不挪**：
 离开任务点周围一格（切比雪夫 ≤1）任务立即作废 ⇒ 它连夜里都不回炮位。
 

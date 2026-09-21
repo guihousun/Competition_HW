@@ -30,7 +30,7 @@ PROBE_RESULT = "[exitCode:0]\n@@@FILE /opt/task/rescue.md@@@\n# 任务\n正文\n
 
 
 def _submit(answer: str) -> str:
-    """交卷的工具块 —— 答案的唯一入口（`AGENT.submitted_answer` 认的就是它）。"""
+    """交卷的工具块 —— 答案的唯一入口（`submitAnswer` 把参数值写进 `AGENT` 的答卷变量）。"""
     return (
         "<tool><tool_name>submitAnswer</tool_name>"
         f"<tool_param><answer>{answer}</answer></tool_param></tool>"
@@ -102,6 +102,10 @@ class TaskHoldTest(unittest.TestCase):
     GUN = Pos(12, 25)
     REACH = 4  # 加特林 L1 的射程，取自样例 payload（任务书表格写的是 3）
     TASK = "请查询北京天气"
+
+    def setUp(self) -> None:
+        # 答卷变量是单实例上的状态：上一类用例交了一半的那份会在这里被"钉住 ⇒ 交答案"认领
+        AGENT.take_answer()
 
     def _turn(self, role: BaseRole, round_no: int, phase_task: str = "", **kw) -> Turn:
         guns = (Weapon(id=10020, kind="gatling", pos=self.GUN, attack_range=self.REACH, cooldown=0),)
@@ -178,7 +182,9 @@ class TaskHoldTest(unittest.TestCase):
         场上只剩开拓者一个人、两座炮 ⇒ 0 < 2。不放开的话这一夜一门火力都没有，而本地全绿
         —— 报文合法、"行为也正常"，只是任务照做、炮没人操。
         """
-        cmds = plan(self._two_guns(Pioneer(10011, Pos(20, 20))))
+        turn = self._two_guns(Pioneer(10011, Pos(20, 20)))
+        task_channel(turn)  # 答卷变量在 `tool_calls` 那一行被写（与 `app.handle` 同序）
+        cmds = plan(turn)
         self.assertEqual(list(cmds), ["10011"])
         self.assertEqual(cmds["10011"]["action"], "move", "弃任务 ⇒ 回炮位（这一回合先走一格）")
 
@@ -188,11 +194,11 @@ class TaskHoldTest(unittest.TestCase):
         与上一条对照：判据是"没钉住的人够不够操满炮"，不是"有没有工人死过" —— 2 < 2 不成立，
         两门炮都有人操，任务就该接着做。边界写成 `<=` 或只数工人都会在这里翻车。
         """
-        cmds = plan(
-            self._two_guns(
-                Pioneer(10011, Pos(20, 20)), Worker(1, Pos(12, 24)), Worker(2, Pos(9, 21))
-            )
+        turn = self._two_guns(
+            Pioneer(10011, Pos(20, 20)), Worker(1, Pos(12, 24)), Worker(2, Pos(9, 21))
         )
+        task_channel(turn)
+        cmds = plan(turn)
         self.assertEqual(cmds["10011"]["action"], "submitAnswer", "钉住 ⇒ 交答案、不挪窝")
 
     def test_a_pinned_pioneer_never_leaves_for_the_post_in_the_day(self):
@@ -201,7 +207,9 @@ class TaskHoldTest(unittest.TestCase):
         夜里人手不够与白天收工是两回事。收工闸门恰好在这条用例的回合号上允许回程
         （`within=69` ⇒ 白天只剩 2 回合），漏掉昼夜那一半就会把开拓者从任务上拽走。
         """
-        cmds = plan(self._two_guns(Pioneer(10011, Pos(30, 30)), round_no=69))
+        turn = self._two_guns(Pioneer(10011, Pos(30, 30)), round_no=69)
+        task_channel(turn)
+        cmds = plan(turn)
         self.assertEqual(cmds["10011"]["action"], "submitAnswer", "白天照旧钉着")
 
 
@@ -209,8 +217,10 @@ class TaskChannelTest(unittest.TestCase):
     """任务线的对外通道：`task_channel` 的判据链 + `submitAnswer` 那条独立的线。
 
     两条通道各判各的：`task_channel` 产出响应顶层的 `prompt` / `executeCmd`（对判题器的 LLM
-    与它的沙盒），`plan` 里的 `_answer_task` 产出 `submitAnswer`（对判分）。所以"这一轮在提问"
+    与它的沙盒），`plan` 里的 `answer_task` 产出 `submitAnswer`（对判分）。所以"这一轮在提问"
     与"这一轮在提交"可以同时成立，那是有利的（接口文档 L140 取"通过率最高"，重交零成本）。
+    两者的交汇点是答卷变量：`task_channel` 在派工具那一行写下它、`answer_task` 取走它 ——
+    所以"一回合"= `_round`：先 `task_channel`、后 `plan`（与 `app.handle` 同序）。
     """
 
     def setUp(self) -> None:
@@ -253,6 +263,12 @@ class TaskChannelTest(unittest.TestCase):
             task_points=(Pos(14, 14),),
             news=news,
         )
+
+    def _round(self, turn: Turn) -> dict:
+        """这一回合交上去的指令：`task_channel` 先（工具在这里派出去、答卷变量在这一行被写）、
+        `plan` 后（`answer_task` 取走那份答卷）—— 与 `app.handle` 同序。"""
+        task_channel(turn)
+        return plan(turn)
 
     def test_the_question_carries_the_task_text(self):
         """第一次提问 = 段模板（prompt.py 七段）+ 题目原文，不带任何回灌。
@@ -484,7 +500,7 @@ class TaskChannelTest(unittest.TestCase):
         任务是按回合计分的（`5 × 标准回合数 / (完成回合 − 接取回合)`），白花一回合直接掉分。
         代码侧支持"同一条回复里既沉淀又交卷"：两个工具块并列（`tool_of` 收全部块、`tool_calls`
         按白名单放行这两个都不产命令的）⇒ 走判据 ⑤（`("", "")`）而不是 ③′ → ⑥；
-        同时 `plan._answer_task` 独立用同一个谓词取答案、当回合就 `submitAnswer`。形状写在
+        同时 `answer_task` 取走那一行刚写下的答卷、当回合就 `submitAnswer`。形状写在
         prompt 的输出约定里（见 `ChatPromptTest.test_the_two_shapes_are_spelled_out_verbatim`）。
         """
         reply = (
@@ -858,7 +874,7 @@ class TaskChannelTest(unittest.TestCase):
 
         交的是参数里的 `晴 26 度`、骂的却是整个 `<tool>…</tool>` 块的话，LLM 会以为
         自己交了一堆标签、去改一个并不存在的问题。两处（`answer_task` 提交、判据 ④ 回灌）
-        共用 `AGENT.submitted_answer` 就是为了这件事，这条用例把它钉死：骂的 = 交的。
+        读的是同一个答卷变量就是为了这件事，这条用例把它钉死：骂的 = 交的。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -878,35 +894,38 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_the_two_call_sites_agree_on_what_the_answer_is(self):
-        """期望值由测试自己算 —— 两个调用点必须落在同一份上。
+        """该交的字节由测试自己写死 —— 交付（`plan` → `answer_task`）与它被骂时回灌的
+        （判据 ④）必须是同一份。
 
-        上一份答案的交出（`plan` → `answer_task`）与它被骂时回灌的（判据 ④）在判题器那侧是
-        同一件事："你上次答的 X 不对"里的 X 就是我们上次交的。两处各写一份判据的后果不是崩溃，
-        而是 LLM 去改一个并不存在的问题（交的是 `answer` 参数里那份，却被骂成整条回复原文）。
-
-        这里对每个回复独立地用 `AGENT.submitted_answer` 算期望值、再去比两个调用点的产出 ——
-        所以 `submitted_answer` 若被谁绕过、自写一套解析，提交与回灌至少有一边会与它分家，
-        这里立刻挂。
+        两处在判题器那侧是同一件事："你上次答的 X 不对"里的 X 就是我们上次交的。第 136 步起
+        这件事是**结构性**的（`submitAnswer` 写答卷变量、`task_channel` 读它、`answer_task`
+        取走它），表里右边那一列因此由测试自己填、不借生产代码算期望值。
         """
-        for reply in (
-            _submit("晴 26 度"),
-            _submit("  晴 26 度  "),  # 值两侧空白由 `tool_of` 去掉
-            "晴 26 度",  # 裸文本：不再是答案（旧通道的"原文即答案"已删）
-            "<answer>晴 26 度</answer>",  # 旧标签通道同样不再是答案
-            _submit("晴 26 度") + "\n补充一句",  # 块外的话不进答案
+        cases = [
+            (_submit("晴 26 度"), "晴 26 度"),
+            (_submit("  晴 26 度  "), "晴 26 度"),  # 值两侧空白由 `tool_of` 去掉
+            ("晴 26 度", ""),  # 裸文本：不再是答案（旧通道的"原文即答案"已删）
+            ("<answer>晴 26 度</answer>", ""),  # 旧标签通道同样不再是答案
+            (_submit("晴 26 度") + "\n补充一句", "晴 26 度"),  # 块外的话不进答案
             # 并列（白名单内）：答案只认 `submitAnswer` 那块的参数
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>答题格式</name><sop>先看目录</sop></tool_param></tool>\n"
-            + _submit("晴 26 度"),
-            # 并列（白名单外）⇒ 整轮作废：两个调用点都必须说"没有答案"
-            "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>\n"
-            + _submit("晴 26 度"),
-            "<tool>ls</tool>",
-            "",
-        ):
+            (
+                "<tool><tool_name>SOP2Prompt</tool_name>"
+                "<tool_param><name>答题格式</name><sop>先看目录</sop></tool_param></tool>\n"
+                + _submit("晴 26 度"),
+                "晴 26 度",
+            ),
+            # 并列（白名单外）⇒ 整轮作废：`submitAnswer` 根本没被派到
+            (
+                "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>\n"
+                + _submit("晴 26 度"),
+                "",
+            ),
+            ("<tool>ls</tool>", ""),
+            ("", ""),
+        ]
+        for reply, expected in cases:
             with self.subTest(reply=reply):
-                expected = AGENT.submitted_answer(reply)
-                submitted = plan(self._turn(self.TASK, reply))
+                submitted = self._round(self._turn(self.TASK, reply))
                 if expected:
                     self.assertEqual(
                         submitted,
@@ -1041,7 +1060,7 @@ class TaskChannelTest(unittest.TestCase):
     def test_the_answer_is_submitted_verbatim(self):
         """`answer` 参数的值原文进、原文出（逐字对 `docs/response.txt` L54）：
         我们不知道判题器要什么格式，加工只会引入自己的假设。"""
-        cmds = plan(self._turn(self.TASK, self.ANSWER_REPLY))
+        cmds = self._round(self._turn(self.TASK, self.ANSWER_REPLY))
         self.assertEqual(cmds, {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}})
 
     def test_the_answer_is_the_param_value_alone(self):
@@ -1057,7 +1076,7 @@ class TaskChannelTest(unittest.TestCase):
         for reply, expected in cases.items():
             with self.subTest(reply=reply):
                 self.assertEqual(
-                    plan(self._turn(self.TASK, reply)),
+                    self._round(self._turn(self.TASK, reply)),
                     {"10011": {"action": "submitAnswer", "taskAnswer": expected}},
                 )
 
@@ -1074,22 +1093,21 @@ class TaskChannelTest(unittest.TestCase):
             "<tool><tool_name>submitAnswer</tool_name><tool_param><answer>晴</tool_param></tool>",
         ):
             with self.subTest(reply=reply):
-                self.assertEqual(plan(self._turn(self.TASK, reply)), {})
+                self.assertEqual(self._round(self._turn(self.TASK, reply)), {})
 
     def test_a_blank_reply_is_not_submitted(self):
         """空白回复不是答案 —— 空答案不发，那可能被判成"字段缺失"，
         正是红线里的"指令非法"。"""
         for reply in ("", "   ", "\n"):
             with self.subTest(reply=reply):
-                self.assertEqual(plan(self._turn(self.TASK, reply)), {})
+                self.assertEqual(self._round(self._turn(self.TASK, reply)), {})
 
     def test_a_tool_call_is_never_submitted_as_an_answer(self):
         """没交卷的回复绝不能当答案交上去。
 
-        `answer_task` 与 `task_channel` 判据 ⑤ 用的是同一个谓词（`AGENT.submitted_answer`）
-        —— 一边当命令、一边当答案就是第二份真相。结构上也堵死了：答案只从 `submitAnswer` 的
-        `answer` 参数里来，工具调用怎么畸形都产不出它。交上去的话，那条命令会被判题器当成
-        一次错误答案（`errorCode 2`）。
+        `answer_task` 交的就是 `task_channel` 判据 ⑤ 读的那一个变量 —— 一边当命令、一边当答案
+        就是第二份真相。结构上也堵死了：答案只从 `submitAnswer` 的 `answer` 参数里来，工具调用
+        怎么畸形都写不进它。交上去的话，那条命令会被判题器当成一次错误答案（`errorCode 2`）。
         """
         replies = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>",
@@ -1103,21 +1121,43 @@ class TaskChannelTest(unittest.TestCase):
         )
         for reply in replies:
             with self.subTest(reply=reply):
-                self.assertEqual(plan(self._turn(self.TASK, reply)), {})
+                self.assertEqual(self._round(self._turn(self.TASK, reply)), {})
 
     def test_the_answer_is_resubmitted_every_round(self):
         """同一份 payload 连打几次都要交 —— 这不是 bug，是无状态设计的正面确认。
 
         接口文档 L140：「以之前提交过的通过率最高的答案计算积分与金币」——
         判题器专门为"反复交、取最好"设计了这个字段。别把它"优化"成"只交一次"：
-        那要记住交没交过，而卡住的状态会静默关掉整条任务线。`llmResp` 粘住时每回合从它现解
-        一遍答案（零新状态），所以"重交"是白送的。
+        那要记住交没交过，而卡住的状态会静默关掉整条任务线。答卷变量不留痕（取走即清），
+        重交靠 `llmResp` 粘住时把同一条 `submitAnswer` 再派一遍 —— 零新状态。
         """
         turn = self._turn(self.TASK, self.ANSWER_REPLY)
         for _ in range(3):
             self.assertEqual(
-                plan(turn), {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}}
+                self._round(turn), {"10011": {"action": "submitAnswer", "taskAnswer": self.ANSWER}}
             )
+
+    def test_a_stale_answer_dies_at_the_round_boundary(self):
+        """答卷变量只活一回合：上一回合没能交出去的那份，这一回合不再算数。
+
+        交不出去的只剩一种情形 —— 夜里一个工人都没有（`_short_handed`）：开拓者被派回炮位、
+        `answer_task` 不被调到，那份答卷就留在变量里。不清的话下一个回合会拿它当**这一回合
+        的**答案：判据 ⑤ 以为已经答过（于是不再提问），而开拓者一旦重新入环，它会把这句
+        上一道题的话**提交给另一道题**。
+        """
+        # 第一回合：夜里一个工人都没有 ⇒ 开拓者弃任务回炮位，答卷没人取走（留在变量里）
+        night = self._turn(self.TASK, self.ANSWER_REPLY)._replace(round_no=85)
+        self.assertEqual(
+            [c for c in self._round(night).values() if c.get("action") == "submitAnswer"],
+            [],
+            "弃任务那一回合不交卷",
+        )
+        # 第二回合（白天）：回复换了一句不产命令的话 —— 上一份答卷不许补交、也不许顶掉提问
+        day = self._turn(self.TASK, "晴 26 度")
+        prompt, _ = task_channel(day)
+        self.assertIn(self.TASK, prompt, "这一回合没有新答卷 ⇒ 判据 ⑥ 照常提问")
+        self.assertEqual(plan(day), {}, "上一回合那份答卷在这里作废，不许补给这一回合")
+
 
 
 if __name__ == "__main__":

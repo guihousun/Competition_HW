@@ -36,6 +36,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     result = cmd_explore.observe(turn.cmd_result)
     # 认任务边界：任务文本变了（含任务结束那个空轮）⇒ 这趟沙箱存档重开
     cmd_explore.new_task(turn.phase_task)
+    # 答卷只活一回合：上一回合没能交出去的那份在这里作废（本回合调过 submitAnswer 才有新的）
+    AGENT.take_answer()
     # 打印CMD执行结果日志（探查自己那份不在这儿再抄一遍：取回时【沙盒探查】已留痕）
     if result:
         LOGGER.info("【CMD命令执行结果】：「%s」", _clip(result))
@@ -65,14 +67,14 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
     if not any(isinstance(r, Pioneer) for r in turn.roles):
         return "", cmd_explore.next_command()
-    # 解析任务答案（调了 submitAnswer 才有）
-    answer = AGENT.submitted_answer(llmReply)
     # 解析工具调用
     calls = tool_of(llmReply)
     if calls is None and looks_like_tool(llmReply):
         # 想调工具但形状没写对（严格解析取不出名字）⇒ 记日志 + 说明回灌进会话，这轮落重问
         AGENT.reject_shape()
     command = AGENT.tool_calls(calls) if calls else ""  # 工具调度：副作用只发生在这一行
+    # 任务答案 = 上面那一行写的（调了 submitAnswer 才有）——**必须压在调度之后**读
+    answer = AGENT.answer
     # 判题器本轮报的"答案不对"（code 2）—— 判据 ④ 的触发条件；原话一并带回（黑盒里唯一
     # 能回答"错在哪一项"的东西）
     rejected = any(e.code == 2 for e in turn.errors)
@@ -133,12 +135,12 @@ def take_task(
     q.step(role, target)
 
 
-def answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) -> None:
+def answer_task(role: BaseRole, cmds: dict[str, dict[str, Any]]) -> None:
     """服任务中：把手上的答案原样交上去。这里从来不移动（挪出去任务即作废）。
 
-    答案 = `AGENT.submitted_answer(llmResp)`，与 `task_channel` 判据 ④ 骂的那份同源。空答案
-    不发（可能被判成"字段缺失" = 指令非法，红线）。每回合都交（`llmResp` 粘住就自然重交）：
-    判题器按"通过率最高的答案"算分。"""
-    answer = AGENT.submitted_answer(turn.llm_resp)
+    答案 = 答卷变量（`AGENT.take_answer()`，本回合 `submitAnswer` 写的那份），与
+    `task_channel` 判据 ④ 骂的那份是同一个值。空答案不发（可能被判成"字段缺失" = 指令非法，
+    红线）。每回合都交（`llmResp` 粘住就自然重交）：判题器按"通过率最高的答案"算分。"""
+    answer = AGENT.take_answer()
     if answer:
         _emit(cmds, role, actions.SubmitAnswer, answer)

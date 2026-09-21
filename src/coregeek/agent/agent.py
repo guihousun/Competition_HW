@@ -3,13 +3,15 @@
 `_sop`（流程表，整场）、`_news_digest` / `_price_hints`（新闻指纹与价格期望）、`_context`
 （任务内会话，题目变了即换新）。状态丢了只影响 prompt 内容、不碰红线；判题器逐回合同步
 请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
+
+`_answer` 是同一条链上的短命那一个：`submitAnswer` 写、`task_channel` 读、`answer_task`
+取走，**只活一回合**（每回合开头由 `task_channel` 清一次）—— 它是回合内的一次交接，不是记忆。
 """
 
 import logging
 from collections.abc import Callable
 
 from . import cmd_explore
-from .chat import is_prices_reply, is_summary_reply, tool_of
 from .context import Context
 from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
 from .tools import pyexec
@@ -28,8 +30,8 @@ _PARALLEL_TOOLS = frozenset({"SOP2Prompt", "submitAnswer"})
 def _dispatchable(calls: list[tuple[str, list[tuple[str, str]]]]) -> bool:
     """这一轮的工具调用能不能派出去 —— 白名单外的并列**整轮作废**（一条都不派）。
 
-    两个消费者（`tool_calls` 派发、`submitted_answer` 读答卷）共用这一条，省得一边认、
-    一边不认（那就会出现"骂一套、交一套"）。"""
+    作废那一轮 `submitAnswer` 根本没被调到 ⇒ 答卷变量也不会被写：**"有没有答案"只看那个
+    变量**，不需要解析侧再判一次（省得一边认、一边不认）。"""
     return len(calls) <= 1 or {name for name, _ in calls} <= _PARALLEL_TOOLS
 
 
@@ -75,6 +77,8 @@ class Agent:
         self._price_hints: dict[str, float] = {}
         #: 任务内的会话上下文。题目变了即换新；任务结束不清（死会话，下场换题自然被替）。
         self._context: Context | None = None
+        #: 本回合交上来的答卷（`submitAnswer` 的参数值）—— 只活一回合，见模块 docstring。
+        self._answer = ""
         #: 工具名 → (实现, 给 LLM 看的描述, 参数表)。描述与调度同源这一张表（描述由
         #: `prompt.gen_all_tool_prompt` 生成，不会分家）；顺序即 prompt 里的顺序。表必须由
         #: 实例构造：`SOP2Prompt` 写 `self._sop`，只能是绑定方法。
@@ -336,27 +340,30 @@ class Agent:
             command += self.tool_call(tool_name, params)
         return command
 
-    def submitted_answer(self, reply: str) -> str:
-        """这条回复要提交的答案 —— `submitAnswer` 的 `answer` 参数值；没调 / 整轮作废 ⇒ `""`。
-
-        "该提交什么"只有这一个谓词：`task.task_channel` 判据 ④/⑤ 与 `task.answer_task`
-        都走它（分家就会出现"骂一套、交一套"）。`_dispatchable` 同源 ⇒ 被作废的那一轮
-        两边都说没有答案。"""
-        calls = tool_of(reply) or []
-        if not _dispatchable(calls):
-            return ""
-        for name, params in calls:
-            if name == "submitAnswer":
-                return dict(params).get("answer", "")
-        return ""
-
     def submitAnswer(self, answer: str) -> str:
-        """注册表里的那只手 —— 答案的去处在 `submitted_answer`（它从回复原文里取）。
+        """注册表里的那只手：把 `answer` 记进 `self._answer`，`game.task.answer_task` 取走。
 
-        恒返回 `""`：交答案不产出 `executeCmd`，真正发指令的是 `game.task.answer_task`
-        （开拓者走 `actions.SubmitAnswer`）。它在这里只为"描述自动进 prompt、参数闸门
-        自动生效、`tool_call` 自动留痕"这三件事，没有任何自己的逻辑。"""
+        恒返回 `""`：交卷不产出 `executeCmd`（真正发指令的是 `game.task.answer_task`，
+        开拓者走 `actions.SubmitAnswer`）。它是答卷唯一的入口 —— "该提交什么"因此不必再
+        从回复原文里解一遍，`tool_of` 认出什么就写进什么是同一个值。"""
+        self._answer = answer
         return ""
+
+    @property
+    def answer(self) -> str:
+        """本回合交上来的答卷；没调 `submitAnswer` ⇒ `""`。只读 —— 取走用 `take_answer`。
+
+        `task.task_channel` 用它判"这一轮有没有答案"（判据 ③′/④/⑤ 与"交卷轮不压缩"）。"""
+        return self._answer
+
+    def take_answer(self) -> str:
+        """取走答卷并清零 —— 交答案的调用点（`game.task.answer_task`）用它。
+
+        取走即清是这条通道的记账方式；`task_channel` 每回合开头也调一次、把返回值丢掉：
+        答卷是**回合内的一次交接**，上一回合没能交出去的那份就此作废（不然它会被当成
+        下一回合的答案，甚至提交给另一道题）。"""
+        answer, self._answer = self._answer, ""
+        return answer
 
     def reject_shape(self) -> str:
         """整条回复像工具调用、但严格解析连工具名都取不出 ⇒ 记日志 + 把说明回灌进会话。
@@ -382,9 +389,10 @@ class Agent:
         return self._sop
 
     def reset(self) -> None:
-        """清空全部跨回合状态（流程表、新闻指纹、价格期望、会话）。只给用例用 —— 单实例
-        是模块级的，会跨用例串味。"""
+        """清空全部跨回合状态（流程表、新闻指纹、价格期望、会话、答卷）。只给用例用 ——
+        单实例是模块级的，会跨用例串味。"""
         self._sop = {}
         self._news_digest = ""
         self._price_hints = {}
         self._context = None
+        self._answer = ""

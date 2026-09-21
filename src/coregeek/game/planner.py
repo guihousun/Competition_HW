@@ -85,7 +85,7 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
     for role in turn.roles:
         # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废）
         if isinstance(role, Pioneer) and turn.phase_task:
-            task.answer_task(role, turn, cmds)
+            task.answer_task(role, cmds)
             continue
 
         # 第 0 级：到收工窗口就回岗位（判据只看还剩多少回合）
@@ -136,7 +136,7 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
         # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，夜里都不回炮位）；
         # 唯一例外是一个工人都没有（没人能顶炮位），生存第一、弃任务
         if isinstance(role, Pioneer) and turn.phase_task and not _short_handed(turn):
-            task.answer_task(role, turn, cmds)
+            task.answer_task(role, cmds)
             continue
         if night.upgrade_station(role, turn, q):
             continue

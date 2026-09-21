@@ -2640,7 +2640,7 @@
 
 - **解析侧**（`chat.py`）：`tool_of` 从"只取第一块"改成**收全部块、按出现顺序**，仍**全有或全无**（任何一块取不出 `<tool_name>`、或某块 `<tool_param>` 里一个具名元素都没有 ⇒ 整次 `None`）。删 `answer_of` / `_ANSWER_RE` / `_ANSWER_MARK_RE` / `strip_answers`。`looks_like_tool` 原样保留（`reject_shape` 靠它区分"想调但没凑对"与纯文本）。
 - **调度侧**（`agent.py`）：模块级 `_PARALLEL_TOOLS`（白名单）与 `_dispatchable(calls)`（`len <= 1` 或名字全在白名单内）。**两个入口各回答一个问题**：`tool_call(name, params)` = **一条**调用（签名一字不动，45 处用例与四条出口日志照旧）、`tool_calls(calls)` = **一回合**的调用们（白名单不成立 ⇒ 记一条 `【工具调用】…⇒ 整轮不成立` + `_note_failed_call` 回灌原因 + 返回 `""`，**一条都不派**；成立 ⇒ 逐条走 `tool_call`，**任一条不成立只丢那一条**、各条命令拼起来）。
-- **答案的读取**：`Agent.submitted_answer(reply)` —— 住在 `agent.py`（它认参数名，而 `chat.py` 的契约是"不认识任何参数名"）：`tool_of` ⇒ `_dispatchable` 不成立直接 `""` ⇒ 否则取 `name == "submitAnswer"` 那块的 `answer` 参数。**两个调用点（`task_channel` 判据 ④/⑤ 与 `answer_task`）只调它一处**，`_dispatchable` 是共同前置 ⇒ "整轮作废"那一轮两边都答"没有答案"。
+- **答案的读取**：`Agent.submitted_answer(reply)` —— 住在 `agent.py`（它认参数名，而 `chat.py` 的契约是"不认识任何参数名"）：`tool_of` ⇒ `_dispatchable` 不成立直接 `""` ⇒ 否则取 `name == "submitAnswer"` 那块的 `answer` 参数。**两个调用点（`task_channel` 判据 ④/⑤ 与 `answer_task`）只调它一处**，`_dispatchable` 是共同前置 ⇒ "整轮作废"那一轮两边都答"没有答案"。⚠️ **第 136 步把这条谓词换成了一个只活一回合的变量**（`Agent.answer` / `take_answer`）—— 那两处现在读的是同一个值，见第 136 步。
 - **注册表**：新增 `submitAnswer`（描述 + 参数 `answer`）；`Agent.submitAnswer(answer)` **恒返回 `""`**（"在注册表里存在"就是它的全部职责 —— 交答案不产 `executeCmd`，真正发指令的是 `game.task.answer_task` → `actions.SubmitAnswer`）。`SOP2Prompt` 描述里"sop 里不要出现 `<answer>` 对"整行删除，`tools/sop.py` 的 `stripped` 形参与那半句日志随之删掉。
 - **`task_channel` 链形状一字不改**，只换四个谓词 + 两处注释：`submitAnswer` 不产命令 ⇒ 判据 ③ 不触发 ⇒ 落 ⑤（`("", "")`）—— 交卷轮照旧不压缩、空着的命令槽照旧归探查；白名单外的组合 ⇒ `command` 与 `answer` 双空 ⇒ 落 ⑥ 重问（会话里已有"为什么"）。
 - **prompt 版面**（段头与段序不动）：`WORK_RULES` 第 5 条改"必须调用 `submitAnswer` 工具提交…其他方式均被禁止"；`TOOL_PROMPT` 的并列例外点名这两个工具；`OUTPUT_PROMPT` 第二节改成 `submitAnswer` 工具块、第三节 = 两个工具块并列的混合模式，末尾"sop 里不许出现 `<answer>` 对"那两行删掉；`COMPRESSION_PROMPT` 第 2 条同步。
@@ -2691,6 +2691,35 @@
 2. **撞名时 `head -n1` 挑到哪一份是随机的**（沙盒里同名文件不止一份）：猜错就是白交一份错的正文，而它自己看得出来（`@@@FILE` 那行报的路径就是判据）。没做去重/挑选 —— 不知道沙盒的目录布局，多做一步是凭空猜。
 3. **`[NOT FOUND]` 那趟白花一个往返**（发命令 → 回执 → 它再想），只在"它认错文件名 / 沙盒真没有"时付出。
 4. **兜底取回的正文不进 `_files`**（回执走判据 ②，不经探查的 `observe`）⇒ 同一份文件第二次点名还会再去沙盒找一趟，也进不了 `readSandboxFile` 的描述清单。没做：那要给探查状态册加第六样东西。判据 = 首场看同一份文件被重复点名的次数。
+
+---
+
+## 第 136 步：答卷改成一个**只活一回合的交接变量**（用户口径"现在的实现好畸形"）
+
+**目标** 用户口径：「现在的 submitAnswer 实现好畸形啊，我想的是调用的时候记录 AGENT 的一个变量为提交的答案（初始化为 `""`），然后根据这个变量是否为 `""` 判定是否有提交答案，如果有则提取答案并将变量重新置为 `""`」。第 134 步的形态是**回复里解两遍**：`submitted_answer(reply)` 在派发侧（`task_channel`）与提交侧（`answer_task`）各调一次，同一份文本被 `tool_of` + `answer_dict` 解两次，两边还可能因为"粘住 / 作废"分家。这一步把"有没有答案"从**谓词**换成**事实**：`submitAnswer` 工具被调到就是写了，没调到就是没写。
+
+**产出**
+
+- **`Agent` 上多一个属性 + 三个方法**（`agent.py`）：`self._answer = ""`；`submitAnswer(answer)` **写**它、恒返回 `""`（交卷不产 `executeCmd`）；`answer`（只读 property）给 `task_channel` 判"这一轮有没有答案"（判据 ③′/④/⑤ 与"交卷轮不压缩"）；`take_answer()` **取走即清**。`reset()` 一并清零（用例隔离）。模块 docstring 补一段：**它是回合内的一次交接，不是记忆**。
+- **删 `submitted_answer(reply)`**（连 `agent.py` 那行只为它留的 `from .chat import … tool_of` 死 import）：`_dispatchable` 不再有第二个消费者，docstring 改成"作废那一轮 `submitAnswer` 根本没被调到 ⇒ 变量也不会被写"。
+- **`task.task_channel`**：① 入口多一句 `AGENT.take_answer()`（**丢弃**返回值）—— 只活一回合的落地；② 答案改在读**调度之后**（`tool_calls` 那一行写、下一行读 `AGENT.answer`，顺序不能反）。
+- **`task.answer_task(role, cmds)`**：去掉没人用的 `turn` 形参，答案来自 `AGENT.take_answer()`；两个调用点（`planner` 白天 / 夜里）同步。**取走即清**在这一处，入口那一次是为"上一回合没交出去的那份"兜底。
+- **用例**：`test_agent` 新增 `SubmitAnswerTest` 六条（答案 = 参数值、工具本身不产命令、**注册表声明的参数名与变量同源**、别的东西写不进它、并列调用照样交、取走即清）+ `ParallelToolTest` 一条（作废轮不写变量）；`test_game_task` 加 `_round(turn)` 助手（**`task_channel` 先、`plan` 后 —— 与 `app.handle` 同序**），8 处用例改走它，新增 `test_a_stale_answer_dies_at_the_round_boundary`（夜里弃任务那一轮没人取走 ⇒ 下一轮**不许补交、也不许顶掉提问**）；`TaskHoldTest.setUp` + `AGENT.take_answer()`（单实例上的状态，跨用例会串味）；`test_game_day` / `test_app` 各一处改走真顺序。
+
+**验证**
+
+1. `PYTHONUTF8=1 py -m unittest discover -s tests` ⇒ **476 条全绿**（474 + 2）。
+2. **反向验证**（两条新逻辑各拆一次，用例必须挂）：删掉入口那句 `take_answer()` ⇒ `test_a_stale_answer_dies_at_the_round_boundary` 挂（`'请查询北京天气' not found in ''`）；把 `answer = AGENT.answer` 挪到 `tool_calls` **之前** ⇒ 5 条挂（纠错段里没有答案原文）。两条都改回、全量再绿。
+3. 真服务三发（`logs/payload_136.py` 造 payload：`docs/request.txt` + `phaseTask` + `llmResp`；起服务前确认端口无监听者、打完杀干净）：
+   - ① 白天 + `submitAnswer` 块（`answer` = `晴 26 度`）⇒ `roleCommandMap["10011"] = {"action":"submitAnswer","taskAnswer":"晴 26 度"}`、`prompt` 为空、`executeCmd` 归探查。日志三行齐：任务行、`【工具调用】：submitAnswer（answer=晴 26 度）⇒ 这个工具不产出命令`、`【动作】：… 10011 submitAnswer taskAnswer=晴 26 度 …`。
+   - ② 同一份再打一次（`llmResp` 粘住）⇒ **照旧重交**，字段逐字相同。
+   - ③ 换成一句不产命令的回复 ⇒ **没有 `10011`**、`prompt` = 判据 ⑥ 的首问（2 条消息：system + 题目原文）。
+
+**仍生效的已知不确定性**
+
+1. **交接依赖 `app.handle` 里两行的先后**（`task.task_channel` 先、`planner.plan` 后）：`test_app` 那条真链路用例间接钉着，但没有一条用例直接断言 `handle` 的调用序。谁调换那两行，症状 = **每回合都交不出答案**（静默丢分、不碰红线）。
+2. **弃任务那一回合的答卷留在变量里直到下一次入口作废** —— 有意为之（不许跨回合补交、更不许交给另一道题），代价 = 那份答案**永久作废**。判题器按"通过率最高的答案"算分、且 `llmResp` 会粘住 ⇒ 它下一轮自然重交，实测损失为 0（真服务三发里第 ② 发就是这件事）。
+3. **变量多了，`Agent.reset()` 也跟着多清一样**：单实例状态下"忘了清"的代价是用例串味（本步已踩过一次：`TaskHoldTest` 里前一条用例交了一半的那份被后一条认领）。生产代码里唯一的清零点 = `task_channel` 入口那一句。
 
 ---
 

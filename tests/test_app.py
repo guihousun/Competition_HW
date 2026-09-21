@@ -236,8 +236,8 @@ class HandleTest(unittest.TestCase):
         """`submitAnswer` 的 `taskAnswer` 是 LLM 给的自由文本，基本不截 —— `LOG_TEXT_MAX`
         已是 40000：9000 字的答案原文全量进日志，只有过了上限才截、且留痕。
 
-        这条走真链路（`tool_of` → `submitted_answer` → `describe`）：上面那条证明"`describe`
-        会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
+        这条走真链路（`tool_of` → 答卷变量 → `answer_task` → `describe`）：上面那条证明
+        "`describe` 会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
