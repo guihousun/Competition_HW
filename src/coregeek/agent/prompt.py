@@ -313,6 +313,13 @@ def gen_news_prompt(news: str) -> str:
     )
 
 if __name__ == "__main__":
-    from agent import Agent
+    # 直跑本文件时 `src/` 不在 sys.path 上、`agent.py` 里又全是相对导入
+    # ⇒ 必须按包导入，先把 `src/` 塞进去（与 tests/ 的 bootstrap 同一个套路）。
+    import sys
+    from pathlib import Path
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from coregeek.agent import Agent
+
     AGENT = Agent()
-    print(gen_system_prompt(AGENT.prompt_tools(), AGENT._sop))
+    print(gen_system_prompt(AGENT.prompt_tools(), AGENT.sop))

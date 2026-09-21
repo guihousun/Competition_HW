@@ -2575,6 +2575,27 @@
 
 ---
 
+## 第 132 步：`prompt.py` 直跑报 ImportError（用户报的症状）
+
+**目标** `py src/coregeek/agent/prompt.py` 报错，修掉。那块 `if __name__ == "__main__":`（第 130 步顺手加的、用来把整份 system prompt 打出来给人眼看的）写的是 `from agent import Agent` —— **按顶层模块导入**，而 `agent.py` 里全是相对导入（`from . import cmd_explore`）⇒ `ImportError: attempted relative import with no known parent package`。
+
+**产出**
+
+- `prompt.py` 的 `__main__` 块改成**按包导入**：先把 `src/` 塞进 `sys.path`（`Path(__file__).resolve().parents[2]`），再 `from coregeek.agent import Agent` —— 与 `tests/` 各文件头那套 bootstrap 同一个套路。顺带把 `AGENT._sop`（私有属性）换成公开的 `AGENT.sop`。
+- 一行不动的地方：`gen_system_prompt` 的签名、那段 `print` 的内容。
+
+**验证**
+
+1. `PYTHONUTF8=1 py src/coregeek/agent/prompt.py` ⇒ **exit 0**，打出 15365 字节，首段是 `# 【背景】`、末段是 COT 触发语（七段齐全）。
+2. 全量用例 **475 条全绿**（没动策略代码）。
+3. 真服务一发（`run.sh 18085`，打完杀监听者、端口确认空）：`docs/request.txt` 两个回合都是合法 JSON、三个顶层字段齐全（首轮 `prompt` = 新闻查价，次轮 `prompt`/`executeCmd` 都空 —— 指纹去重生效）。`prompt.py` 被 `agent` 导入，这条是"改了它服务还起得来"的证据。
+
+**仍生效的已知不确定性**
+
+1. **它打的是"一张白纸"版本的 system prompt**：新进程 ⇒ 流程表空着、沙盒路径一份都没探明 ⇒【沉淀的SOP】段与 `readSandboxFile` 描述尾部的路径清单都是空的，而这恰好就是**每场第一回合**真实发出的那一份。要看"攒了 SOP 之后长什么样"得在进程里先喂几条 `SOP2Prompt`（或干脆看实盘日志的【本轮提问】）—— 这个脚本**只够用来校段落与措辞**，不够用来看清单/流程槽的渲染。
+
+---
+
 ## 当前仍悬着的事
 
 跨步重复、或不归属某一步的未了结项。**已实现的下一步不在此列。**
