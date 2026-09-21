@@ -5,8 +5,9 @@
 import）—— 本模块绝不 import 它们（那就是循环导入）。
 
 "两个模块都要问"就是进这里的门槛：只有一个消费者的判据留在各自的模块里（砌墙/修墙在
-`day`，操炮与弹道在 `night`）。经济线是唯一两个时段都跑的（`_economy` 驱动器：白天链尾与
-夜里清场后同一份实现），岗位几何同理（白天收工闸门与夜里操炮共用 `_post_spots`）。
+`day`，操炮与弹道在 `night`）。岗位几何是那个样板（白天收工闸门与夜里操炮共用
+`_post_spots`）。⚠️ 经济线现在**只有白天问**（夜里清场后走 `night.mine_ore`，另一条线）——
+按门槛它该搬去 `day.py`，本步没搬（记在 `code-task.md` 第 119 步）。
 
 两个距离口径别混：回合预算一律用 BFS 真实步数（`steps_between`，-1 = 走不到）；选点/贴着
 用切比雪夫 `Pos.dist`（`dist <= 1` 是"站在建造位/采集位/炮位旁"的判据，不是步数）。
@@ -222,8 +223,8 @@ class MineSpareOre(State):
         return True
 
 
-#: 经济兜底三级：卖货 →（武器有缺则跳过升级）→ 采闲矿。白天链尾与夜里清场后走同一条
-#: （`_economy` 就是这条链的驱动器）—— 一份实现，两个时段不会漂成两套。
+#: 经济兜底三级：卖货 →（武器有缺则跳过升级）→ 采闲矿。**白天工人链的尾巴**
+#: （`day.DAY_CHAIN` 末尾接的就是这三条）。夜里清场后走的是 `night.mine_ore`，另一条线。
 ECONOMY_CHAIN: tuple[State, ...] = (SellCargo(), UpgradeWeapons(), MineSpareOre())
 
 
@@ -303,23 +304,6 @@ def _best_load(
         return "", 0
     _, num, kind = max(loads)
     return kind, num
-
-
-def _economy(
-    role: Worker,
-    turn: Turn,
-    q: _Queue,
-    sites: set[Pos],
-    ore_taken: set[Pos],
-    *,
-    weapon_gap: bool,
-) -> None:
-    """经济线兜底：卖矿 →（武器有缺则跳过升级）→ 采闲矿。白天最后一级与夜里清场后共用一套
-    （`ECONOMY_CHAIN` 那三个状态）。不返回布尔：一个都不成立时自然不落指令（合法空指令）。"""
-    ctx = _Ctx(turn, q, sites=sites, ore_taken=ore_taken, weapon_gap=weapon_gap)
-    for state in ECONOMY_CHAIN:
-        if state.run(role, ctx):
-            break
 
 
 def _mine_spare_ore(

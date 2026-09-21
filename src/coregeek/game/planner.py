@@ -19,7 +19,7 @@ from . import day, night, task
 from .grid import Pos, box_cells
 from .path import step_onto, step_outside, step_toward
 from .roles import BaseRole, Pioneer, Worker
-from .core import _Ctx, _Queue, _economy, _emit, _sell_ore, _upgrade_line
+from .core import _Ctx, _Queue, _emit, _sell_ore, _upgrade_line
 from .utils import _ring, _short_handed, _trapped
 from .world import Turn
 
@@ -80,12 +80,13 @@ def _intents(turn: Turn) -> tuple[_Queue, set[Pos]]:
 
         if not turn.is_day:
             # 夜里：① 持基地券且基地残血 ⇒ 贴基地 use；② 还有会打我方的活机器人 ⇒ 回炮位开火；
-            # ③ 没有了 ⇒ 工人跑经济兜底（build/remove 夜里非法、绝不发），开拓者待命回炮位。
-            # 判据是"没有打我方的活机器人"、不是"场上全空"：打对方那波也在表里、我们从不打它
+            # ③ 没有了 ⇒ 工人出门采最值钱的矿囤到第二天（build/remove 夜里非法、绝不发），
+            # 开拓者待命回炮位。判据是"没有打我方的活机器人"、不是"场上全空"：打对方那波
+            # 也在表里、我们从不打它
             if night.upgrade_station(role, turn, q):
                 continue
             if night.is_cleared(turn) and isinstance(role, Worker):
-                _economy(role, turn, q, ctx.sites, ctx.ore_taken, weapon_gap=weapon_gap)
+                night.mine_ore(role, turn, q, ctx.ore_taken)
                 continue
             night.defend(role, turn, q, ctx.taken, assigned)
             continue

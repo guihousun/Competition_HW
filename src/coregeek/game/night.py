@@ -16,7 +16,8 @@ from typing import Any
 
 from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, base_cells
-from .roles import BaseRole, Pioneer
+from .path import steps_between
+from .roles import BaseRole, Pioneer, Worker
 from .core import _Queue, _emit, _near_spots, _operator_spots, _post_spots
 from .utils import _passable, _pioneer_mans_guns, _weapon_groups
 from .world import Robot, Turn, Weapon
@@ -52,8 +53,42 @@ def is_cleared(turn: Turn) -> bool:
 
     不能照"场上全空"判：机器人**全图可见**（任务书 L95），对方那一波也在 `turn.robots` 里，
     而我们从不打它（`_foe_robots` 按 `targetTeam` 滤）⇒ 照全空判的话对方机器人活多久，
-    工人就在炮位上钉多久、夜里的经济线永远进不去。"""
+    工人就在炮位上钉多久、夜里这条线永远进不去。"""
     return not _alive(_foe_robots(turn))
+
+
+def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
+    """清场后的夜里，工人去采最值钱的那座矿 —— 囤到第二天由白天的经济线卖掉。
+
+    与白天的 `core._mine_spare_ore` 分成两条是有意的：那条按"走得到 **且 回得来**"筛，回程
+    参照是最近的武器位，因为白天必须在机器人进射程前站回炮前。夜里清场之后**没有回炮位的
+    义务**（`attack` 只在夜里，天亮前赶不回去也没有代价，白天还有 70 个回合走回来）—— 照那
+    条筛会把整段夜里筛成"一座矿都不可行"，工人整夜空指令。这里只问"走得到吗"。
+
+    排序只按收购价（并列取近的、再取坐标序），**不读新闻修正**：那是白天那条线的旋钮。
+    不卖、不买、不回炮位；发不出指令就只有 `collect` / `move` 两种。"""
+    walk, size = _passable(turn), turn.map.size
+    best: tuple[int, int, Pos] | None = None
+    for pos, kind in turn.map.ores.items():
+        if pos in ore_taken:
+            continue  # 本回合另一个工人已经认领了这一座
+        price = turn.vendor_prices.get(kind, 0)
+        if price <= 0:
+            continue  # 小贩不收的矿不为它多走一步
+        hops = steps_between(role.pos, pos, walk, size)
+        if hops < 0:
+            continue  # 走不到（BFS -1）
+        key = (-price, hops, pos)
+        if best is None or key < best:
+            best = key
+    if best is None:
+        return
+    mine = best[2]
+    ore_taken.add(mine)
+    if role.pos.dist(mine) <= 1:
+        _emit(q.cmds, role, actions.Collect, mine)
+        return
+    q.step(role, mine, with_paths=True, reserve=True)
 
 
 def _stands_on_a_post(role: BaseRole, turn: Turn) -> bool:
