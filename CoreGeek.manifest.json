@@ -1,5 +1,5 @@
 {
-  "commit": "043918d495313229b3d123aeca7b92a4a45d1281",
+  "commit": "9f0e6984f1ad9961ff3fddd4095ea81fd18ceab4",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -116,9 +116,9 @@
       "source": "Demo/CoreGeek/src/agent/defense_layout.py"
     },
     {
-      "bytes": 38056,
+      "bytes": 38538,
       "path": "CoreGeek/src/agent/diagnostics.py",
-      "sha256": "bbfe136295018dfe7eaf14054d8b2fc8a5779a47aa3e059bfa3bde8a1e12ef47",
+      "sha256": "9eaebe15d09bde0573ef8cc03330f017d0403f9535f45ab847530e65c7e57bbe",
       "source": "Demo/CoreGeek/src/agent/diagnostics.py"
     },
     {
@@ -152,9 +152,9 @@
       "source": "Demo/CoreGeek/src/agent/item_reference.py"
     },
     {
-      "bytes": 39309,
+      "bytes": 40535,
       "path": "CoreGeek/src/agent/llm_router.py",
-      "sha256": "190cbaf528a6e3d6f7d17a179a4d1c43f7a671fecc28c518aedf87f9870903ef",
+      "sha256": "bb81af3cb5045626cdb8c505a2210a1f74984dc9124b48ca25a1d1fc428fc76d",
       "source": "Demo/CoreGeek/src/agent/llm_router.py"
     },
     {
@@ -495,5 +495,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "cc0fbdea2ef45d16da0d4eb1ee3cdfe55e1ef8f25eafa87cfab61aeb7f723b49"
+  "source_digest": "697651953ca64c5a1805ae3a50aab2f258e497a52fafa964adb3a7bf1664be93"
 }

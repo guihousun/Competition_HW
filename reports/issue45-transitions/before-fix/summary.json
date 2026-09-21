@@ -1,0 +1,83 @@
+{
+  "scope": "Hand-authored transition probe; NOT company request replay or official PASS",
+  "test_file_sha256": "686b242921fe78f4e1ce6d0544a73b07debdb7ff24e415d540238566fab8b6d8",
+  "source_base": "129998c, runtime same as043918d",
+  "first_old_result": 3,
+  "new_task_observed": 4,
+  "new_command_issued": 5,
+  "duplicate_old_result_received": 6,
+  "old_payload_in_new_evidence": true,
+  "old_payload_in_new_prompt": true,
+  "receipts": [
+    {
+      "request_id": "r0001-3be8534098bff6b6",
+      "round_no": 2,
+      "kind": "prompt",
+      "status": "received",
+      "reason": "verified_json_token",
+      "source": "platform",
+      "text": "{\"request_id\": \"c64b656ae7364c59836e45b3\", \"plan\": {\"kind\": \"run\", \"command\": \"cat /tmp/beta/README.md\", \"reason\": \"hand-authored current-task evidence\", \"evidence_ids\": [\"task:fb4c8300d3711cc6\"]}}",
+      "text_sha256": "ab4bff9525d8dfdcac0ba93068fc489bf4138d5b17e500a20a46c5317fe9e98a",
+      "text_truncated": false
+    },
+    {
+      "request_id": "r0002-0721f795e1cdb1d2",
+      "round_no": 3,
+      "kind": "cmd",
+      "status": "quarantined",
+      "reason": "task_no_longer_confirmed",
+      "source": "platform",
+      "text": "[exitCode:0]\nBETA_OLD_RESULT_SENTINEL: {\"beta_only\":\"old-value\"}",
+      "text_sha256": "71ee3afa91a7488441b05a87a5edbbc61c123bc451e063aab49e65a775068e09",
+      "text_truncated": false
+    },
+    {
+      "request_id": null,
+      "round_no": 4,
+      "kind": "cmd",
+      "status": "quarantined",
+      "reason": "no_pending_request",
+      "source": "platform",
+      "text": "[exitCode:0]\nBETA_OLD_RESULT_SENTINEL: {\"beta_only\":\"old-value\"}",
+      "text_sha256": "71ee3afa91a7488441b05a87a5edbbc61c123bc451e063aab49e65a775068e09",
+      "text_truncated": false
+    },
+    {
+      "request_id": "r0003-7580a16565ec6956",
+      "round_no": 5,
+      "kind": "prompt",
+      "status": "received",
+      "reason": "verified_json_token",
+      "source": "platform",
+      "text": "{\"request_id\": \"f652c6eb222e504b007d11ec\", \"plan\": {\"kind\": \"run\", \"command\": \"cat /tmp/nanjing/README.md\", \"reason\": \"hand-authored current-task evidence\", \"evidence_ids\": [\"task:66c47b2b3de3ab23\"]}}",
+      "text_sha256": "80ba51d1e42a4d5360b4ac2a1ac9747155399d5ca784c470020a975b0a4d09cc",
+      "text_truncated": false
+    },
+    {
+      "request_id": "r0004-a693a14811c38c22",
+      "round_no": 6,
+      "kind": "cmd",
+      "status": "received",
+      "reason": "single_inflight",
+      "source": "platform",
+      "text": "[exitCode:0]\nBETA_OLD_RESULT_SENTINEL: {\"beta_only\":\"old-value\"}",
+      "text_sha256": "71ee3afa91a7488441b05a87a5edbbc61c123bc451e063aab49e65a775068e09",
+      "text_truncated": false
+    }
+  ],
+  "evidence": [
+    {
+      "id": "r0004-a693a14811c38c22",
+      "generation": "66c47b2b3de3ab23",
+      "command": "cat /tmp/nanjing/README.md",
+      "round": 6,
+      "verified": true,
+      "status": "exit",
+      "exit_code": 0,
+      "text": "BETA_OLD_RESULT_SENTINEL: {\"beta_only\":\"old-value\"}",
+      "sha256": "b2d09288054ffcb8fce0b42b3282116ab79d80a59971e2d67689866a42cff79f",
+      "truncated": false,
+      "path": "/tmp/nanjing/README.md"
+    }
+  ]
+}
