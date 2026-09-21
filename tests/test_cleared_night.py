@@ -70,6 +70,40 @@ class ClearanceTests(unittest.TestCase):
         brain.plan_for_state(deepcopy(p), state, judge_tasks=False)
         self.assertEqual(state.cleared_night_state, once)
 
+    def test_last_kill_with_wall_damage_still_starts_three_intervals_at_clearance(self):
+        p = board(112)
+        p['teamOur']['roles'].append(unit(99, 'wall', 12, 22, 1000))
+        p['robot']['roles'] = [dict(id=90, health=40, pos=dict(x=15, y=22), targetTeam='challenger')]
+        memory, _ = observe(p, {})
+        p.update(roundNo=113, robot={'roles': []})
+        p['teamOur']['roles'][-1]['health'] = 995
+        memory, report = observe(p, memory)
+        self.assertEqual((report['safe_rounds'], report['phase']), (0, 'defend'))
+        self.assertEqual(report['reason'], 'observed_hp_loss_or_disappearance')
+        # A duplicate of the damaged clearing frame neither loses the new
+        # baseline nor counts as one of the three completed quiet intervals.
+        memory, report = observe(p, memory)
+        self.assertEqual(report['safe_rounds'], 0)
+        for n, count in [(114, 1), (115, 2), (116, 3)]:
+            p['roundNo'] = n
+            memory, report = observe(p, memory)
+            self.assertEqual(report['safe_rounds'], count)
+            self.assertEqual(report['phase'] == 'productive', n == 116)
+
+    def test_isolated_damage_restarts_from_current_hp_without_extra_baseline_round(self):
+        p = board(480)
+        memory, report = observe(p, confirmed(p).cleared_night_state)
+        self.assertEqual(report['phase'], 'productive')
+        p['roundNo'] = 481
+        p['teamOur']['roles'][1]['health'] -= 5
+        memory, report = observe(p, memory)
+        self.assertEqual((report['safe_rounds'], report['phase']), (0, 'defend'))
+        for n, count in [(482, 1), (483, 2), (484, 3)]:
+            p['roundNo'] = n
+            memory, report = observe(p, memory)
+            self.assertEqual(report['safe_rounds'], count)
+            self.assertEqual(report['phase'] == 'productive', n == 484)
+
     def test_json_restore_preserves_only_proven_window(self):
         p = board()
         state = planner.PlannerState.load(json.loads(json.dumps(confirmed(p).dump())))

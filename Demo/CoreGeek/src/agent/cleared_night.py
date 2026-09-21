@@ -130,7 +130,11 @@ def observe(turn, payload, memory, *, quiet_rounds=3, enabled=True):
         reason = 'observed_quiet_interval'
     elif previous:
         reason = 'observation_discontinuity_or_new_night'
-    current['quiet'] = bool(enabled and not turn.is_day and complete and not damage
+    # Damage belongs to the interval ending at this observation: it resets the
+    # counter above, but these complete, threat-free current HP values are still
+    # the baseline for the NEXT interval. Requiring a second baseline would add
+    # an unintended fourth wait after the last kill or a later isolated hit.
+    current['quiet'] = bool(enabled and not turn.is_day and complete
                             and not enemy_threat and not relevant)
     if (previous.get('round') == turn.round_no and previous.get('identity') == identity
             and previous.get('fingerprint') == fingerprint):

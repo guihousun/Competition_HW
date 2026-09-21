@@ -107,6 +107,11 @@ class Issue45TaskTransitionsTests(unittest.TestCase):
                 before=wire(state.dump())
                 response,state=self.step(side,2,BETA,tool=OLD_RESULT)
                 self.assertEqual(response,{'roleCommandMap':{}})
+                # Delayed packets still cannot mutate task/channel history.
+                # The new clearance permission is deliberately revoked on a
+                # backwards observation; no old packet grants night work.
+                before.pop('clearedNightState',None)
+                self.assertEqual(state.cleared_night_state,{})
                 self.assertEqual(state.dump(),before)
 
     def test_old_tool_repeat_cannot_become_new_task_evidence(self):
