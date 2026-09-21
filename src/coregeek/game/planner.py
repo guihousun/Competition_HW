@@ -17,11 +17,11 @@ from typing import Any
 
 from ..protocol import actions  # 指令只能经 Action 产出
 from . import day, night, task
-from .grid import Pos, box_cells
-from .path import step_onto, step_outside, step_toward
+from .grid import Pos
+from .path import step_onto, step_toward
 from .roles import BaseRole, Pioneer, Worker
-from .core import _Ctx, _Queue, _emit, _sell_ore, _upgrade_line
-from .utils import _ring, _short_handed, _trapped
+from .core import WEAPON_COST, _Ctx, _Queue, _emit
+from .utils import _ring, _short_handed
 from .world import Turn
 
 
@@ -47,20 +47,22 @@ def _intents(turn: Turn) -> _Queue:
 def _day_intents(turn: Turn, q: _Queue) -> None:
     """白天那条链，逐角色跑、先命中先定夺：
 
-    ① 开拓者被任务钉死（白天人手恒够，`_short_handed` 恒假）→ ② 砌满墙会被关住的人先迈出
-    盒子 → ③ `day.rescue` 拆墙放人 → ④ `day.BACK_TO_POST` 收工闸门 → ⑤ 开拓者：去接任务 /
-    任务点全空则跑腿买券、卖矿兜底 → ⑥ 工人走 `day.DAY_CHAIN`。
+    ① 开拓者被任务钉死（白天人手恒够，`_short_handed` 恒假）→ ② `day.BACK_TO_POST` 收工门
+    （到点就回岗位）→ ③ 开拓者：有任务点就去接，全空则跑"买券 → 立刻用"的差事 →
+    ④ 工人走 `day.DAY_CHAIN` 那四级。
 
     黑板装在 `_Ctx` 里逐角色顺序累计、不跨回合；环缺口按在场工人数切段也在这里。"""
     cmds = q.cmds
-    # 武器缺口（份额有缺且落点为空的名额）：建武器最优先的判据，也是筹资线的开关
-    pending = list(day.slots(turn))
-    weapon_gap = bool(pending)
-    # 防御盒子的 36 格（空集 = 没基地 ⇒ 没有"里面"）
-    box = box_cells(turn.map.station) if turn.map.station else frozenset()
-    # 砌满墙就会被关在盒子里的人：闸门按人放行，建墙状态随 `leaving` 待命
-    leaving = _trapped(turn, box)
-    ctx = _Ctx(turn, q, weapon_gap=weapon_gap, leaving=leaving, slots=iter(pending))
+    # 还缺的武器名额（落点与种类）：第 1 级的判据，也是"谁建哪几座"那份分配的输入
+    pending = tuple(day.slots(turn))
+    ctx = _Ctx(
+        turn,
+        q,
+        weapon_gap=bool(pending),
+        can_build_all=turn.gold >= WEAPON_COST * len(pending),
+        sites_pending=pending,
+        build_plan=day.assign_sites(turn, pending),
+    )
 
     # 环缺口按在场工人数切段（A 领前段、B 领后段；一个工人 ⇒ 整段）
     workers_no = [r for r in turn.roles if isinstance(r, Worker)]
@@ -75,22 +77,7 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
             task.answer_task(role, turn, cmds)
             continue
 
-        # 要被关住的人先出来：出得去 ⇒ 交 provider 意图；出不去（门被机器人堵死）⇒ 落到 `day.rescue`
-        if role.id in leaving:
-            if step_outside(role.pos, box, turn.map.blocked, turn.map.size) is not None:
-                q.beside(
-                    role,
-                    lambda claimed, r=role, b=box: step_outside(
-                        r.pos, b, turn.map.blocked | claimed, turn.map.size
-                    ),
-                )
-                continue
-
-        # 有人被关在盒子里 ⇒ 工人去拆一格放人（上面那道闸门是预防，这里是补救）
-        if day.rescue(role, turn, q, box):
-            continue
-
-        # 收工：环砌完了、离夜里第一波只剩回程步数才回家（判据在 `day.BackToPost`）
+        # 第 0 级：到收工窗口就回岗位（判据只看还剩多少回合）
         if day.BACK_TO_POST.run(role, ctx):
             continue
 
@@ -98,9 +85,7 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
             if turn.task_points:
                 task.take_task(role, turn, q)
             else:
-                # 任务点全空 ⇒ 真空闲：领"买券 → 用券"差事（武器齐了才跑）；卖矿兜底
-                if not weapon_gap and not _upgrade_line(role, turn, q, ctx.sites):
-                    _sell_ore(role, turn, q, ctx.sites)
+                day.voucher_errand(role, ctx)  # 空闲 ⇒ 买券差事（与工人那条各自独立跑）
             continue
 
         if not isinstance(role, Worker):
@@ -112,7 +97,7 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
         ctx.target = segment[0] if segment else None
         ctx.remaining = len(segment)
 
-        # 白天工人链：从上往下第一个"认领了这一回合"的状态说了算
+        # 第 1–3 级：从上往下第一个"认领了这一回合"的状态说了算
         for state in day.DAY_CHAIN:
             if state.run(role, ctx):
                 break

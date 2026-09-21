@@ -19,10 +19,10 @@ from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, wall_cells, weapon_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.path import step_outside, step_toward, steps_between  # noqa: E402
-from coregeek.game import core, planner  # noqa: E402
+from coregeek.game import core, day, planner  # noqa: E402
 from coregeek.game.day import WEAPONS_BY_SITE  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
-from coregeek.game.core import POST_MARGIN, STONE_RESERVE, WALL  # noqa: E402
+from coregeek.game.core import WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -121,17 +121,17 @@ class BuildWeaponTest(unittest.TestCase):
         self.assertEqual(len(self._weapons()), len(WEAPONS_BY_SITE))
         self.assertGreater(self.gold, 0, "这次不是钱见底才停的")
 
-    def test_a_short_budget_builds_only_one(self):
-        """只有 25 金：只建一座（排第一的火箭），金花光就停手。
+    def test_a_short_budget_builds_nothing_and_mines_instead(self):
+        """只有 25 金（三座要 75）⇒ **一座都不建**，改去挖矿/砌墙（用户口径 1.2.2）。
 
-        金币按递减预算扣；写成 `gold >= 25 * 待建数`（25 < 75 ⇒ 一座都不建）就全错了。
-        跑满到建成 1 座为止 —— 那个落点离工人出生位远，单回合够不着。
+        旧口径是"钱少就先建一座"（递减预算）；新口径要求"钱够建满才动手"（`can_build_all`），
+        不够就两个工人一起去挖矿凑钱、凑够了再回来建。本夹具没有小贩（`_can_fund` 假）⇒
+        筹资不可行 ⇒ 落回墙线：手里 0 块石头、环上还有 14 格 ⇒ 去采石头。
         """
         self.gold = 25
-        self._settle(want=1)
-        self.assertEqual(len(self._weapons()), 1)
-        self.assertEqual(self._weapons()[0], "rocket")
-        self.assertEqual(self.gold, 0, "25 金正好建一座，花光才停")
+        cmd = plan(self._turn())["2"]
+        self.assertNotEqual(cmd["action"], "build", f"钱不够建满 ⇒ 一座都不建：{cmd}")
+        self.assertIn(cmd["action"], ("move", "collect"))
 
     def test_a_blocked_site_drops_only_its_own_weapon(self):
         """排第一的火箭落点被墙占了 ⇒ 只有那一座不建，另两座照落在各自的位置上。
@@ -332,9 +332,9 @@ class BuildWallTest(unittest.TestCase):
     def test_day_one_mines_then_walls_the_whole_ring_in_order(self):
         """把白天串起来跑到砌满：14 格全砌上，且顺序与 `wall_cells` 逐格一致。
 
-        这一条把"回合预算 → 采矿 → 砌墙"整条线钉在一起：预算算大了天黑砌不完，
-        算小了石头不够、工人在工地干等；顺序错了则会先把背面砌满、正面空着。
-        收工时手里剩 `STONE_RESERVE` 块 —— 每多采一块净花 3 回合，攒到上限就该收手。
+        这一条把"算缺口 → 采矿 → 砌墙"整条线钉在一起：算少了工人在工地干等，顺序错了则会
+        先把背面砌满、正面空着。采量是**每回合现算的"还差几块"**（新口径"够了就行"）⇒
+        砌完手里正好 0 块。
         """
         built: list[Pos] = []
         stone = 0
@@ -359,7 +359,7 @@ class BuildWallTest(unittest.TestCase):
                 self.worker = Worker(1, cell, {"stone": stone})
 
         self.assertEqual(built, list(wall_cells(self.BASE, 41)), "顺序必须与优先级表一致")
-        self.assertEqual(stone, STONE_RESERVE, "砌完手里正好留 3 块存货，一块不多")
+        self.assertEqual(stone, 0, "采够就好：砌完手里不留存货（旧口径的 `STONE_RESERVE` 删了）")
 
     def test_the_third_day_seals_the_back_corners_without_rebuilding(self):
         """第 3 天起补背面两个角格（14 → 16），已砌的那 14 格一格都不重砌。
@@ -372,7 +372,7 @@ class BuildWallTest(unittest.TestCase):
         self.assertEqual(len(corners), 2, "只补两个角格")
         self.entries.update({c: WALL for c in open_ring})
         built: list[Pos] = []
-        stone = len(corners) + STONE_RESERVE  # 够那两格 + 存货 ⇒ 不采也不卖
+        stone = len(corners)  # 正好够那两格（新口径不留存货）⇒ 不采也不卖
         day3 = 2 * ROUNDS_PER_DAY + 1
         for _ in range(70):
             cmd = plan(self._turn(round_no=day3, stone=stone)).get("1")
@@ -389,26 +389,27 @@ class BuildWallTest(unittest.TestCase):
 
         self.assertEqual(built, corners, "两个角格按顺序补上、补完就收手")
 
-    def test_a_late_start_stops_mining_and_goes_to_build(self):
-        """白天快过完了（roundNo=60 ⇒ 只剩 11 回合）⇒ 不再采矿，拿着手里的石头直接去工地。
+    def test_the_stone_trip_is_decided_by_the_shortfall_not_by_the_clock(self):
+        """采不采石头只看"还差几块"，**不看还剩多少回合**（新口径：时间只有第 0 级那一道门）。
 
-        「必须在晚上到来前将墙建好，注意计算回合数」（策略指导）—— 这是唯一的时间硬约束。
-        两个局面只差 `roundNo`，走的方向必须反过来。
+        旧口径按"白天剩余 − `TIME_MARGIN`"解一个采量、快天黑就掉头去工地 —— 那条线删了。
+        对照：手里 3 块、环上还差 14 格 ⇒ 两个回合号下**都朝矿走**；手里给够 ⇒ 掉头去工地。
         """
         pos, stone = Pos(6, 24), 3
-        early = plan(self._turn(round_no=1, stone=stone, pos=pos))["1"]
-        late = plan(self._turn(round_no=60, stone=stone, pos=pos))["1"]
-        self.assertEqual({early["action"], late["action"]}, {"move"})
-        early_cell = Pos(early["targetPos"][0]["x"], early["targetPos"][0]["y"])
-        late_cell = Pos(late["targetPos"][0]["x"], late["targetPos"][0]["y"])
-        self.assertLess(early_cell.dist(self.MINE), pos.dist(self.MINE), "白天还长 ⇒ 继续朝矿走")
-        self.assertGreater(late_cell.dist(self.MINE), pos.dist(self.MINE), "时间不够 ⇒ 掉头去工地")
+        for round_no in (1, 60):
+            cmd = plan(self._turn(round_no=round_no, stone=stone, pos=pos))["1"]
+            self.assertEqual(cmd["action"], "move")
+            cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+            self.assertLess(cell.dist(self.MINE), pos.dist(self.MINE), "石头不够 ⇒ 照旧朝矿走")
+        enough = plan(self._turn(round_no=60, stone=14, pos=pos))["1"]
+        cell = Pos(enough["targetPos"][0]["x"], enough["targetPos"][0]["y"])
+        self.assertGreater(cell.dist(self.MINE), pos.dist(self.MINE), "石头够 ⇒ 掉头去工地")
 
-    def test_the_last_cell_still_mines_three_extra_stones(self):
-        """墙上只剩一格、手里一块石头都没有 ⇒ 也采够"那一格 + `STONE_RESERVE`"块再回去砌。
+    def test_the_last_cell_needs_exactly_one_stone(self):
+        """墙上只剩一格、手里一块石头都没有 ⇒ 采一块就够（新口径"够了就行"，不留存货）。
 
-        存货只能在这一趟里攒：环砌满之后墙线整个不参与（`target is None`），白天再没人采石头。
-        这几块是给"夜里被打掉一格、第二天立刻补上"备的（用户口径）。
+        旧口径会多采 `STONE_RESERVE`(3) 块备着 —— 那条删了：没有转移物品的指令，多采的
+        只能自己背着，而环砌满之后这一支就再也不采石头了。
         """
         self.entries.update({c: WALL for c in wall_cells(self.BASE, 41)[:-1]})
         stone, collects, built = 0, 0, 0
@@ -430,8 +431,8 @@ class BuildWallTest(unittest.TestCase):
                 self.worker = Worker(1, cell, {"stone": stone})
 
         self.assertEqual(built, 1, "最后那一格砌上了")
-        self.assertEqual(collects, 1 + STONE_RESERVE, "多采的正好是存货那 3 块")
-        self.assertEqual(stone, STONE_RESERVE, "砌完手里留着 3 块")
+        self.assertEqual(collects, 1, "就差一块 ⇒ 只采一块，不多采")
+        self.assertEqual(stone, 0, "砌完手里空着")
 
     def test_a_finished_ring_stops_the_stone_mining(self):
         """14 格都砌满了 ⇒ 不再采石头（多采的只会压在背包里）。
@@ -449,221 +450,23 @@ class BuildWallTest(unittest.TestCase):
         self.assertEqual(plan(self._turn(stone=0)), {})
 
 
-class WallGateTest(unittest.TestCase):
-    """建墙原则：不能把工人关起来。闸门两半：`_ring` 里"会关人就一格都不砌"
-    （判据 = 砌满这一圈墙之后谁出不去），`plan` 里"要被关住的人先走出来"（仅白天）。
-
-    局面得手工搭：36 格的盒子里不可能有矿（任务书 L78），后方通道里也没有建筑 ⇒
-    现实里只有单位能堵它，6 个单位才够合上闸门；不摆机器人，有几条用例连坏的实现
-    都放不过去（夹具与真实路径不同形）。
-    """
-
-    BASE = Pos(10, 24)
-    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
-    #: 后方通道 = 背面整列 6 格（基地在左半 ⇒ 背面是 x = bx-2）。`wall_cells` 一格都不砌它。
-    DOOR = {Pos(8, y) for y in range(21, 27)}
-    #: 盒内一格空地（武器环上、没摆炮）、盒外一格
-    INSIDE, OUTSIDE = Pos(12, 24), Pos(5, 24)
-
-    def _turn(
-        self,
-        walls: Iterable[Pos] = (),
-        door_blocked: bool = False,
-        *,
-        at1: Pos | None = None,
-        at2: Pos | None = None,
-        round_no: int = 1,
-        robots: tuple[Robot, ...] = (),
-        ores: dict[Pos, str] | None = None,
-        prices: dict[str, int] | None = None,
-        robot_cells: Iterable[Pos] = (),
-    ) -> Turn:
-        """`at1` / `at2` = 两个工人的站位（默认 1 号在盒内、2 号在盒外且手里有一块石头）。
-
-        站位是可以换到盒外的 —— "盒外的人不许否决这一圈墙"那条就得两个都在外面才测得出。
-        `robot_cells` 是额外的挡路机器人（"堵掉通道里的哪几格"要精确到格时才用）。
-        """
-        workers = (
-            Worker(1, at1 or self.INSIDE, {}),
-            Worker(2, at2 or self.OUTSIDE, {"stone": 1}),
-        )
-        robots_on_map = {c: "robot" for c in (self.DOOR if door_blocked else ())}
-        robots_on_map.update({c: "robot" for c in robot_cells})
-        return Turn(
-            round_no=round_no,
-            map=Map(
-                (41, 32),
-                # 角色铺进地形（`model._entries` 就是这么干的）—— "谁站在哪"是真实输入的一部分
-                _terrain(
-                    self.WEAPONS,
-                    {self.BASE: "station"},
-                    {c: WALL for c in walls},
-                    robots_on_map,
-                    ores or {},
-                    {w.pos: "worker" for w in workers},
-                ),
-            ),
-            roles=workers,
-            gold=0,
-            weapons=self.WEAPONS,
-            robots=robots,
-            vendor_prices=prices or {},
-        )
-
-    def test_a_walled_box_never_holds_a_worker_in(self):
-        """14 格全砌满、通道开着 ⇒ 盒里的人照样走得出去。这就是"正面砌满也关不住人"。
-
-        不能拿 `step_toward` 顶替：它的契约是"贴着 goal 即到"（`dist(goal) <= 1 ⇒ None`），
-        用来测"出不出得去"时，一个贴着通道口、而那格被堵住的角色会被判成"到不了"。
-        """
-        turn = self._turn(walls=wall_cells(self.BASE, 41))
-        self.assertNotIn(Pos(8, 24), turn.map.blocked, "背面那一列连砌满之后也不该有东西")
-
-        step = step_outside(self.INSIDE, box_cells(self.BASE), turn.map.blocked, turn.map.size)
-        self.assertIsNotNone(step, "14 格砌满 + 通道开着 ⇒ 出得去")
-        self.assertEqual(self.INSIDE.dist(step), 1, "返回的是从 pos 迈出的第一步")
-
-    def test_a_blocked_door_holds_the_walls_back(self):
-        """通道被堵满 ⇒ 盒外那个工人手里攥着石头也不许砌（砌下去就把 1 号关死了）。
-
-        少砌这一回合的代价是墙晚砌完；砌下去的代价是把人关死在盒里。
-        """
-        turn = self._turn(door_blocked=True)
-        cmds = plan(turn)
-        self.assertNotIn(
-            "2", cmds, "盒外那个工人该原地不动（没矿可采、价目表也空着），而不是去砌墙"
-        )
-        # 顺带钉住"整面墙"这个判据：通道一堵，14 格一格都不该砌
-        self.assertNotIn("build", {c["action"] for c in cmds.values()})
-
-    def test_a_blocked_door_sends_the_worker_out_first(self):
-        """同上通道被堵，但墙上还一个缺口都没砌 ⇒ 被围的人趁缺口先出去。
-
-        闸门两半的关键差别在两套障碍：`leaving` 按"假设墙砌满"判（砌完就真出不去了），
-        而这迈出去的一步按"现在"的障碍算（缺口就是出路）。
-        若这里也按砌满算，`step_outside` 必然返回 None ⇒ 这一支永远空转、白写。
-        """
-        cmds = plan(self._turn(door_blocked=True))
-        self.assertEqual(set(cmds), {"1"}, "要被关住的人这一回合必须动，盒外那个该原地待命")
-        self.assertEqual(cmds["1"]["action"], "move")
-        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
-        self.assertEqual(self.INSIDE.dist(cell), 1, "一步一格，不能瞬移")
-        # 通道整列全堵着 ⇒ 出路只能是没砌的墙那几条边（正面 x = bx+3 最直接）
-        self.assertIn(cell, box_cells(self.BASE), "迈出去的这一步还在盒内，方向朝缺口")
-
-    def test_the_night_guard_never_walks_off_its_cannon(self):
-        """夜里不送人出去：夜里不砌墙（`build` 仅白天）⇒ 没有"会被关住"这回事，
-        这一支唯一的效果是把人从炮位上拉走。判据里那个 `turn.is_day` 就是为它写的。
-
-        局面：门被堵 + 盒内工人贴着一座炮，射程内有个机器人 ⇒ 该开火，不该挪窝。
-        """
-        turn = self._turn(
-            door_blocked=True,
-            at1=Pos(9, 25),  # 贴着 (9,24) 那座轨炮，且在盒内
-            round_no=85,  # 夜里（白天 70 回合）
-            robots=(Robot(pos=Pos(13, 24), health=10),),
-        )
-        cmds = plan(turn)
-        # `attack` 的 key 是武器 id，操控者在 `controllerId` 里（与下面那些 `move` 不同）
-        fired = [c for c in cmds.values() if c.get("controllerId") == "1"]
-        self.assertEqual(len(fired), 1, f"1 号该开火，而不是往盒子外走：{cmds}")
-        self.assertEqual(fired[0]["action"], "attack")
-
-    def test_a_worker_outside_never_vetoes_the_ring(self):
-        """两个工人都在盒外 ⇒ 门堵着也照砌（没人会被关住）。
-
-        钉的坑：`step_outside` 对"本来就在外面"与"走不出去"都返回 `None`，筛"谁在盒子里"
-        时漏掉 `r.pos in box` 就会把所有在盒外干活的人判成要被关住 ⇒ 闸门永远合上、
-        墙一格都砌不上，症状还极安静（不报错、不违规，只是工人站着不动）。
-        2 号工人（后处理的那个）分到后段首格，站位就贴那一格。
-        """
-        gaps = wall_cells(self.BASE, 41)
-        target = gaps[(len(gaps) + 1) // 2]
-        occupied = (
-            set(base_cells(self.BASE)) | {w.pos for w in self.WEAPONS} | self.DOOR | {Pos(5, 24)}
-        )
-        # 站位必须在**盒外** —— 盒里那个会被防关人闸门当成"砌满就出不去"、改走迈出盒子那一支
-        spot = next(
-            Pos(target.x + d.x, target.y + d.y)
-            for d in STEPS
-            if 0 <= target.x + d.x < 41 and 0 <= target.y + d.y < 32
-            and Pos(target.x + d.x, target.y + d.y) not in occupied
-            and Pos(target.x + d.x, target.y + d.y) not in box_cells(self.BASE)
-        )
-        turn = self._turn(door_blocked=True, at1=Pos(5, 24), at2=spot)
-        cmds = plan(turn)
-        self.assertEqual(cmds["2"]["action"], "build", "盒外那个手里有石头、又贴着分到的目标 ⇒ 该砌")
-        self.assertEqual(cmds["2"]["name"], WALL)
-        self.assertEqual(
-            Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"]),
-            target,
-            "砌的正是分给它的后段首格",
-        )
-        self.assertNotIn("1", cmds, "1 号没石头、也没石矿可采 ⇒ 空指令")
-
-    def test_two_workers_walking_out_never_aim_at_the_same_cell(self):
-        """两个人都被围 ⇒ 各走各的格：闸门 (2) 的障碍里必须含 `claimed`。
-
-        漏了它两条 `move` 指向同一格，撞上 §4.5.4 的"目标点争夺"—— 两个人都不动，
-        而日志上只是"这回合没动"，看不出是撞车。
-
-        站位是挑过的：`(9,25)` 与 `(10,25)` 按现在的障碍算第一步都指向 `(9,26)`
-        （穷举盒内空地找到的唯一一对）。随手摆两个人在盒内，两条指令本来就不会撞。
-        """
-        cmds = plan(self._turn(door_blocked=True, at1=Pos(9, 25), at2=Pos(10, 25)))
-        self.assertEqual(len(cmds), 2, f"两个人的处境一样，都该往外走：{cmds}")
-        self.assertEqual({c["action"] for c in cmds.values()}, {"move"})
-        cells = {Pos(c["targetPos"][0]["x"], c["targetPos"][0]["y"]) for c in cmds.values()}
-        self.assertEqual(len(cells), 2, "落点必须分开")
-
-    def test_a_gated_round_never_sends_a_worker_mining_far_away(self):
-        """闸门挡住的那一回合是"墙还没砌完"，不是"砌完了" ⇒ 盒外那个什么都不做。
-
-        两种"没得砌"混在一起的话，它会掉头奔向地图另一头，或者干脆就地砌一格 ——
-        而那一格砌下去正好把这一回合往外走的 1 号关在墙里。局面：门被机器人堵满、
-        环上一格没砌、盒外那个手里有石头、地图另一头有一座贵的铜矿。
-        """
-        turn = self._turn(
-            door_blocked=True,
-            at1=Pos(12, 24),
-            at2=Pos(14, 23),
-            ores={Pos(36, 24): "copper"},
-            prices={"stone": 1, "copper": 5},
-        )
-        cmds = plan(turn)
-        self.assertEqual(set(cmds), {"1"}, f"盒外那个该原地待命：{cmds}")
-        self.assertEqual(cmds["1"]["action"], "move", "被围的那个趁缺口先出来")
-
-    def test_a_colleague_in_the_door_still_holds_the_wall_back(self):
-        """自己人站的那格也算障碍：通道 6 格里 5 格被机器人堵着、剩下一格站着同事 ⇒ 谁都砌不了。
-
-        与 `_ring` 里"自己人算路过"故意相反：那处问"这一格要不要砌"（排掉路过的人，
-        否则两个工人对着改目标来回踱步），这里问"会不会有人出不来"。
-
-        光有同事挡路测不出这条 —— 他站在待砌的墙格上时那格本来就是"假设砌满"里的墙，
-        两种口径下都是障碍；必须是永远不砌的通道格才算数（夹具让 2 号站到通道的一格上）。
-        """
-        door = sorted(self.DOOR)
-        turn = self._turn(at1=Pos(12, 24), at2=door[0], robot_cells=door[1:])
-        self.assertEqual(self.DOOR - turn.map.blocked, set(), "通道 6 格都该挡着")
-        cmds = plan(turn)
-        self.assertEqual(set(cmds), {"1"}, f"盒内那个趁缺口走，站通道上的那个不许砌：{cmds}")
-        self.assertEqual(cmds["1"]["action"], "move")
-
-
 class DayEndGateTest(unittest.TestCase):
-    """白天末尾回炮位：离天黑只剩回程步数时就往回走。
+    """第 0 级收工门：白天还剩 `RETURN_MARGIN(5) + 手里的券数` 个回合 ⇒ 回岗位。
 
-    回程步数走 BFS：环砌满之后回炮位要绕背面那道门、再横穿盒子，切比雪夫直线 5 步的路
-    真实十几步（`StepsBetweenTest` 钉的就是这一条）。这一支只许发 `move`：`attack` 仅黑夜
-    可用（§4.4），白天发一条就是一次异常、累计 5 次整场不再被调度，而复用 `_defend` 是
-    这里最容易犯的错（它贴近炮位会调 `_fire`）⇒ 有一条扫白天各回合、各站位的守门员。
+    判据**只看回合数、不看距离**（用户口径），也**不问环砌完没有** —— 到点就停下手里的活。
+    目标与夜里 `night.defend` 的岗位同一个（`core._post_spots`）：火箭对共用的操作位要**站上去**、
+    加特林站炮旁 —— 天黑时人已经在岗上，夜里第一回合就能交替开火。这一支**只许发 `move`**：
+    `attack` 仅黑夜可用（§4.4），白天发一条就是一次异常、累计 5 次整场不再被调度，而复用
+    `night.defend` 是这里最容易犯的错（它贴近炮位会调 `_fire`）⇒ 有一条扫白天各回合、
+    各站位的守门员。
     """
 
     BASE = Pos(10, 24)
     #: 与 `weapon_sites` 同序的两火箭 + 一加特林（这里只要"有三座炮"就够）
     WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
     SIZE = (41, 32)
+    #: 收工窗口的宽度 = `day.RETURN_MARGIN`
+    WINDOW = 5
 
     def _turn(
         self,
@@ -672,17 +475,18 @@ class DayEndGateTest(unittest.TestCase):
         ring: bool = True,
         at: Pos = Pos(20, 24),
         stone: int = 0,
+        bag: dict[str, int] | None = None,
         weapons: tuple[Weapon, ...] | None = None,
         pioneer: Pos | None = None,
     ) -> Turn:
-        """环默认砌满（闸门只在砌完之后生效）；没有矿、没有小贩、没有金 —— 只留闸门这一支。
+        """环默认砌满；没有矿、没有小贩、没有金 —— 只留收工门这一支。
 
-        `weapons` 换名册（默认三座）；`pioneer` 给一名开拓者，**排在 payload 最前面** ——
-        用它验"炮位按工人优先挑"这类顺序相关的判据。
+        `bag` 给工人背包（验"手里有券就早走"）；`weapons` 换名册；`pioneer` 给一名开拓者，
+        **排在 payload 最前面** —— 用它验"炮位按工人优先挑"这类顺序相关的判据。
         """
         weapons = self.WEAPONS if weapons is None else weapons
         walls = {c: WALL for c in wall_cells(self.BASE, 41)} if ring else {}
-        worker = Worker(1, at, {"stone": stone} if stone else {})
+        worker = Worker(1, at, dict(bag) if bag is not None else ({"stone": stone} if stone else {}))
         roles: tuple[BaseRole, ...] = (
             (worker,) if pioneer is None else (Pioneer(2, pioneer), worker)
         )
@@ -720,6 +524,36 @@ class DayEndGateTest(unittest.TestCase):
                 hops.append(steps + 1 if onto else steps)
         return min(hops)
 
+    def _gate(self, *, round_no: int, at: Pos, bag: dict[str, int] | None = None):
+        """直接问 `day.BACK_TO_POST.run` —— 它返回 True 就是"这一回合归收工门了"。
+
+        报文分不出是谁发的指令（券线也会发 `move`），问返回值才干净。
+        """
+        turn = self._turn(round_no=round_no, at=at, bag=bag)
+        role = next(r for r in turn.roles if isinstance(r, Worker))
+        return day.BACK_TO_POST.run(role, core._Ctx(turn, core._Queue(turn)))
+
+    def test_the_gate_counts_the_rounds_left_not_the_walk_home(self):
+        """门只看"还剩几回合"：还剩 6 回合 ⇒ 站在十几步开外的人**也不动身**。
+
+        旧判据是 `回程步数 ≥ 白天剩余 − POST_MARGIN`（离得远就早点走）；新口径是固定的
+        `剩余 ≤ WINDOW + 券数`，同一局面下不占这一支（环砌满、没矿没价 ⇒ 空指令）。
+        """
+        at = Pos(20, 24)
+        self.assertGreater(self._steps_home(at), 6, "这个站位本来就要走十几步")
+        self.assertFalse(self._gate(round_no=DAY_ROUNDS - self.WINDOW, at=at), "还剩 6 回合 ⇒ 不急")
+        self.assertTrue(self._gate(round_no=DAY_ROUNDS - self.WINDOW + 1, at=at), "还剩 5 回合 ⇒ 回岗位")
+
+    def test_a_voucher_in_hand_opens_the_gate_a_round_earlier(self):
+        """手里每多一张券就早走一个回合 —— 回岗第一件事是用掉它们（用户口径）。"""
+        at = Pos(20, 24)
+        early = DAY_ROUNDS - self.WINDOW  # 还剩 6 回合
+        self.assertFalse(self._gate(round_no=early, at=at), "空手 ⇒ 还剩 6 回合不动身")
+        self.assertTrue(
+            self._gate(round_no=early, at=at, bag={"WeaponUpgradeVoucher1": 1}),
+            "手里一张券 ⇒ 同一个回合就该动身",
+        )
+
     def test_the_gate_aims_at_the_shared_operator_spot(self):
         """收工的落点是那一组的**岗位**，不是"最近那座炮"：火箭对站到共用的操作位上去。
 
@@ -733,30 +567,10 @@ class DayEndGateTest(unittest.TestCase):
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(11, 25), "落点就是共用操作位本身")
 
-    def test_the_gate_opens_exactly_when_the_walk_home_eats_the_day(self):
-        """回程步数 + `POST_MARGIN` ≥ 白天剩余 ⇒ 这一回合就往炮位走。卡在边界上测。
-
-        边界 = `day_rounds_left == steps + POST_MARGIN`（正好合上）；再多剩一回合就不许动身
-        （否则整个白天都在炮位上干等）。
-        """
-        at = Pos(20, 24)
-        steps = self._steps_home(at)
-        self.assertGreater(steps, 0, "这个站位本来就该离炮位远一点")
-        gate = DAY_ROUNDS - steps - POST_MARGIN + 1  # 这一回合的 day_rounds_left 正好是 steps + 3
-        cmds = plan(self._turn(round_no=gate, at=at))
-        self.assertEqual(cmds["1"]["action"], "move", f"该往回赶：{cmds}")
-        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
-        self.assertEqual(at.dist(cell), 1, "一步一格")
-        self.assertLess(
-            self._steps_home(cell), steps, "这一格必须真的离家更近（不许在原地打转）"
-        )
-        # 白天还富裕一回合 ⇒ 不许动身
-        self.assertEqual(plan(self._turn(round_no=gate - 1, at=at)), {})
-
     def test_a_day_round_never_fires(self):
         """红线守门员：白天任何回合、任何站位（含贴着炮）都只许有 `move`。
 
-        "复用 `_defend`"会在这里立刻现形 —— 那正是 5 次异常直通出局的写法。
+        "复用 `night.defend`"会在这里立刻现形 —— 那正是 5 次异常直通出局的写法。
         """
         for round_no in (1, 35, 60, 66, 69, DAY_ROUNDS):
             for at in (Pos(20, 24), Pos(14, 24), Pos(10, 25), Pos(9, 24), Pos(9, 26)):
@@ -767,7 +581,7 @@ class DayEndGateTest(unittest.TestCase):
                     )
 
     def test_the_gate_leaves_the_posts_to_the_workers(self):
-        """工人够操满所有组 ⇒ 收工闸门一个岗位都不给开拓者（与夜里 `_defend` 同一个判据）。
+        """工人够操满所有组 ⇒ 收工门一个岗位都不给开拓者（与夜里 `night.defend` 同一个判据）。
 
         只拦夜里那一处是不够的：白天把开拓者送进岗位、夜里它又不认领，那格就被它占着 ——
         而火箭对只有一个岗位格，整组就此没人操。这里一座炮（一组）、一个工人 ⇒ 开拓者让位。
@@ -778,188 +592,20 @@ class DayEndGateTest(unittest.TestCase):
         self.assertNotIn("2", cmds, f"开拓者不该占岗位：{cmds}")
         self.assertEqual(cmds["1"]["action"], "move", "岗位归那个工人")
 
-    def test_the_gate_never_preempts_the_wall(self):
-        """环没砌完 ⇒ 闸门不生效，照旧砌墙（补墙优先于收工）。
+    def test_the_gate_stops_the_wall_work(self):
+        """环没砌完也照样回岗位 —— 第 0 级在最前面，没有"补墙优先于收工"这个例外了。
 
-        这是有意的顺序：防御靠的是天黑前把墙封死（含正面那个口），
-        早了就没人砌了。对照是同一天同一站位、环砌满时那一支确实动身。
+        旧口径里环上有缺口时这一支整个不生效。对照：同一站位（贴着待砌的那一格）、同一回合，
+        缺口还在时发出的是回岗位那条 `move`，不是 `build`。
         """
-        at = Pos(14, 21)  # 贴着待砌的第一格 (13,21)
-        late = DAY_ROUNDS - 1
-        cmds = plan(self._turn(round_no=late, ring=False, at=at, stone=1))
-        self.assertEqual(cmds["1"]["action"], "build", f"环没砌完 ⇒ 继续砌：{cmds}")
-        self.assertEqual(
-            plan(self._turn(round_no=late, at=at))["1"]["action"], "move", "环砌满 ⇒ 同一格是往回赶"
+        gap = wall_cells(self.BASE, 41)[0]
+        at = next(
+            Pos(gap.x + d.x, gap.y + d.y)
+            for d in STEPS
+            if 0 <= gap.x + d.x < self.SIZE[0] and 0 <= gap.y + d.y < self.SIZE[1]
         )
-
-
-
-
-
-
-
-
-
-
-class RescueTest(unittest.TestCase):
-    """有人被关在盒子里 ⇒ 工人去拆一格放人。
-
-    与 `plan` 里的防关人闸门是预防 vs 补救：闸门管"还没砌完时别把谁关进去"，这一支管
-    "已经被关住了怎么办" —— 后方通道那一列被机器人堵死，是闸门拦不住的。
-
-    工人自己被关住时也走这里（它在差事之前的 `_rescue` 被 `_stuck_inside` 捞出来）；
-    被任务钉死的开拓者只能靠别人救（守门：`TaskHoldTest`）。
-    """
-
-    BASE = Pos(10, 24)
-    SIZE = (41, 32)
-    WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "gatling", Pos(12, 25): "railgun"})
-    PRICES = {"stone": 1, "iron": 3, "copper": 5}
-    #: 后方通道 = 背面整列 6 格（唯一进出口，14 格墙一格都不砌它）
-    DOOR = door_cells(Pos(10, 24), 41)
-
-    def _turn(
-        self,
-        *,
-        round_no: int = ROUNDS_PER_DAY + 1,
-        rescuer: Pos = Pos(14, 24),
-        boxed: Pos = Pos(12, 24),
-        stone: int = 1,
-        robots: bool = True,
-        colleagues: tuple[Pos, ...] = (),
-        gap_robot: Pos | None = None,
-        phase_task: str = "把石头运回基地",
-    ) -> Turn:
-        """默认：通道被 6 台机器人堵死、开拓者被关在盒子里、工人站在正面墙外 `(14,24)`。
-
-        `gap_robot` = 环上留一格不砌、并在那一格里放一台机器人（缺口被堵住 ⇒ 环敞着人也出不去）。
-        """
-        roles: list[BaseRole] = [Worker(1, rescuer, {"stone": stone} if stone else {}), Pioneer(2, boxed, {})]
-        obstacles: dict[Pos, str] = {}
-        if robots:
-            for cell in self.DOOR:
-                obstacles[cell] = "robot:small"
-        for i, colleague in enumerate(colleagues):
-            obstacles[colleague] = "worker"
-            roles.append(Worker(3 + i, colleague, {}))
-        if gap_robot is not None:
-            obstacles[gap_robot] = "robot:small"
-        # 墙既是地形也是实体（`teamOur.roles` 里那份）：`_rescue` 按实体挑要拆的那一格
-        built = [c for c in wall_cells(self.BASE, 41) if c != gap_robot]
-        return Turn(
-            round_no=round_no,
-            walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(built)),
-            map=Map(
-                self.SIZE,
-                _terrain(
-                    self.WEAPONS,
-                    {c: WALL for c in built},
-                    {self.BASE: "station"},
-                    {rescuer: "worker"},
-                    {boxed: "pioneer"},
-                    obstacles,
-                ),
-            ),
-            roles=tuple(roles),
-            gold=0,
-            weapons=self.WEAPONS,
-            vendor_prices=self.PRICES,
-            phase_task=phase_task,
-            llm_resp="<answer>42</answer>",
-        )
-
-    @staticmethod
-    def _holes(cmds: dict[str, dict]) -> dict[str, Pos]:
-        return {
-            rid: Pos(c["targetPos"][0]["x"], c["targetPos"][0]["y"])
-            for rid, c in cmds.items()
-            if c["action"] == "remove"
-        }
-
-    def test_a_worker_opens_the_wall_to_free_a_boxed_pioneer(self):
-        """通道被机器人堵死 + 开拓者在盒内 ⇒ 工人拆一格放人，这一格是 `(13,23)`（并列取坐标序，与 `_rescue` 的 min 同序）。
-
-        `(13,23)` 是墙外那位工人贴着的墙格（`remove` 的站位契约）：拆了它，盒内的人就能
-        从 `(14,23)` 一带迈出去。开拓者这一回合照旧只有 `submitAnswer` —— 它被钉在任务上，
-        谁也挪不动它。
-        """
-        cmds = plan(self._turn())
-        self.assertEqual(self._holes(cmds), {"1": Pos(13, 23)})
-        self.assertEqual(cmds["2"]["action"], "submitAnswer", "开拓者只交答案，不动")
-        self.assertNotIn("attack", {c["action"] for c in cmds.values()})
-
-    def test_the_rescuer_walks_to_the_wall_first(self):
-        """隔着半个盒子 ⇒ 这一回合只挪一格，贴近了下一回合才拆（拆墙要贴着）。
-
-        要拆哪一格由**被困者**定（开拓者贴着 `(13,23)`），不由救援者定 —— 救援者只负责朝它
-        走。候选只认当前已经贴着的墙格（`remove` 的站位契约），刻意不做"走到最优那一格再拆"。
-        判"更近"必须走 BFS：切比雪夫会被绕行骗过（第一步横着没动、直线距离一格不减）。
-        """
-        start = Pos(5, 24)
-        site = Pos(13, 23)  # 被困的开拓者贴着的那一格墙
-        turn = self._turn(rescuer=start)
-        cmds = plan(turn)
-        self.assertEqual(cmds["1"]["action"], "move", f"还没贴近 ⇒ 只能挪一格：{cmds}")
-        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
-        self.assertEqual(start.dist(cell), 1, "一步一格")
-        walk, size = turn.map.blocked, turn.map.size
-        self.assertLess(
-            steps_between(cell, site, walk, size),
-            steps_between(start, site, walk, size),
-            "这一格必须真的更近",
-        )
-
-    def test_colleagues_in_the_doorway_are_not_walls(self):
-        """同事把整列通道都堵上 ⇒ 照旧不拆（他们只是路过，下一回合就走）。
-
-        判据里"自己人一律不算障碍"（把全部角色从障碍里摘掉，起点除外）：算成墙就会白拆
-        一次 —— 1 回合 + 1 块不回收的石头，换来一个下一回合就自动失效的洞。
-        夹具必须堵满整列：只堵几格时盒内的人本来就走得出去，用例会空转
-        （反向验证：只堵几格的夹具在"自己人算障碍"的写法下也照样过）。
-        """
-        cmds = plan(self._turn(robots=False, colleagues=self.DOOR))
-        self.assertEqual(self._holes(cmds), {}, f"同事堵通道不算被关：{cmds}")
-
-    def test_the_first_day_rescues_once_the_ring_is_complete(self):
-        """第 1 天环砌完了照救（用户口径）：环满 ⇒ 上面那个缺口只可能是自己拆出来的。
-
-        按回合号一刀切（第 1 天一律不救）的话，第 1 天被关住的人整整一天没人管。⚠️ 这一天救得了
-        还得赶早：`HOLE_MIN_LEFT`(30) 要求白天还剩 30 回合以上 ⇒ 环得在**第 40 回合前**砌完，
-        否则第 1 天照旧救不了（第 41 回合起 `day_rounds_left` 掉到 30 以下）。
-        """
-        self.assertEqual(self._holes(plan(self._turn(round_no=1))), {"1": Pos(13, 23)})
-
-    def test_the_rescue_never_targets_a_cell_without_a_wall(self):
-        """拆的必须是**真有墙**的那一格：环上没砌的格被机器人踩住时，`_ring` 看不见它（挡路 ⇒ 当已砌）。
-
-        这一幕是第 68 步放开第 1 天救援之后才够得着的：缺口被堵 ⇒ 盒里的人**真的**被困住、
-        `_ring` 也**真的**以为环齐了（没错，那一刻盒子确实是封的）⇒ 救援该来；但它拆的必须是
-        一格墙，不是那个没砌的空地（拆空地 = 白丢一回合，人还在里面）。夹具必须把那格堵上：
-        缺口敞着时人本来就走得出去，用例连坏的实现都放过去。
-        """
-        gap = Pos(13, 23)
-        cmds = plan(self._turn(round_no=1, gap_robot=gap))
-        holes = self._holes(cmds)
-        self.assertTrue(holes, f"人真被困住了，该来救：{cmds}")
-        self.assertNotIn(gap, set(holes.values()), f"没墙的那格不能拆：{cmds}")
-
-    def test_a_stone_short_worker_cannot_rescue(self):
-        """没石头救不了：拆一块少一块，补不回来就是整夜的洞。"""
-        cmds = plan(self._turn(stone=0))
-        self.assertEqual(self._holes(cmds), {}, f"手里没石头不许拆：{cmds}")
-
-    def test_a_boxed_worker_frees_itself(self):
-        """被关住的是工人（盒内、没有差事）⇒ 它自己去拆一格：`(13,23)`。
-
-        这条走的是 `_rescue`：`_stuck_inside` 把"眼下真出不去"的人捞出来，
-        而工人是唯一能发 `remove` 的角色 ⇒ 自己就是救援者。
-        """
-        turn = self._turn(boxed=Pos(7, 24), rescuer=Pos(12, 24))
-        self.assertEqual(self._holes(plan(turn)), {"1": Pos(13, 23)})
-
-
-
-
+        cmds = plan(self._turn(round_no=DAY_ROUNDS - 1, ring=False, at=at, stone=1))
+        self.assertEqual(cmds["1"]["action"], "move", f"到点就回岗位、不再砌墙：{cmds}")
 
 
 class TwoWallBuildersTest(unittest.TestCase):
@@ -1295,202 +941,78 @@ class PathReserveTest(unittest.TestCase):
         )
 
 
-class RepairTest(unittest.TestCase):
-    """弱墙（血 < 满血 1/5 = 不完备）的修复差事：**升级当修**（用户口径）。
+class DemolishTest(unittest.TestCase):
+    """第 2 级的另一半：**L1 弱墙直接拆了重砌**（用户口径 2）。
 
-    文档事实：围墙升级券 20 金（L1→L2）/ 30 金（L2→L3），WallFixer 10 金、目标墙回满血；升级后
-    建筑回满血（任务书 L297）⇒ 升级 = 回满血 + 上限抬高一档，所以 L1/L2 的弱墙一律升级，L3
-    到顶升不动了才用修复包。两件的站位契约同源（站墙一格内 `use`）。**不再拆墙** —— `remove`
-    只剩 `_rescue` 一个调用点。守门：`_weak_walls` 的阈值 + `_repair_line` 的分派。
-
-    两类夹具前提：① 环**砌满**（修墙线排在砌墙之后，有缺口就轮不到它）；② 工人站在**非环格**
-    上（自己站的待砌墙格会留在 `_ring` 里，见其 docstring ⇒ 否则这回合先去砌那一格）。
+    弱墙 = 血 < 满血 1/4（`WALL_MAX_HP[1]` = 1000 ⇒ 判据 `health × 4 < 1000`）。拆一回合、
+    砌一回合 = 2 回合 1 块石头，比 20 金的围墙升级券便宜。**L2/L3 的损伤不碰**：拆了只能重砌回
+    L1（掉一级），它们的损伤留给第 3 级的升级券（升级同时回满血）。
     """
 
     BASE = Pos(10, 24)
-    WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
-    SHOP = Pos(20, 16)
-    WEAK = Pos(13, 22)  # 正面列的一格（弱墙）
-    OTHER = Pos(13, 26)  # 正面列的另一格（第二面弱墙）
-    L2 = 299  # L2 满血 1500 ⇒ 299×5 < 1500
-    L1 = 199  # L1 满血 1000 ⇒ 199×5 < 1000
-    V1, V2 = "WallUpgradeVoucher1", "WallUpgradeVoucher2"
 
-    @classmethod
-    def _ring(cls) -> dict[Pos, str]:
-        """满环的地形层（`WEAK` / `OTHER` 本来就在环上，不用另加）。"""
-        return {c: WALL for c in wall_cells(cls.BASE, 41)}
-
-    def _turn(self, worker: Worker, *, walls=None, shop=True, gold=0, prices=None, ores=()):
-        # 环必须砌满：`_repair_line` 排在 `_build_walls` 之后，环上还有缺口就轮不到修复差事。
-        grid = _terrain(self.WEAPONS, {self.BASE: "station", **self._ring()})
-        grid |= {p: "stone" for p in ores}  # 矿：装进 `ores` 的得是真矿种，否则不成矿
-        if shop:
-            grid[self.SHOP] = "weaponShop"
-        grid[worker.pos] = "worker"
-        if walls is None:
-            walls = (Wall(40000, self.WEAK, self.L2, 2),)
+    def _turn(self, weak: tuple[Wall, ...], *, stone: int, at: Pos, gaps: Iterable[Pos] = ()):
+        ring = wall_cells(self.BASE, 41)
+        walls = {c: WALL for c in ring if c not in set(gaps)}
+        walls.update({w.pos: WALL for w in weak})
+        grid = {**walls, self.BASE: "station", at: "worker"}
+        worker = Worker(10010, at, {"stone": stone} if stone else {})
         return Turn(
             round_no=1,
             map=Map((41, 32), grid),
             roles=(worker,),
-            gold=gold,
-            weapons=self.WEAPONS,
-            shop_prices=prices if prices is not None else {self.V1: 20, self.V2: 30, "WallFixer": 10},
-            walls=walls,
+            gold=0,
+            weapons=_records({Pos(12, 24): "rocket"}),  # 武器齐了 ⇒ 轮得到第 2 级
+            walls=weak,
         )
 
-    def test_a_worker_upgrades_the_second_level_wall_it_has_the_voucher_for(self):
-        """持券2 + 贴着 L2 弱墙 ⇒ `use WallUpgradeVoucher2`（升级 = 回满血 + 上限 1500→2000）。"""
-        worker = Worker(10010, Pos(12, 23), {self.V2: 1})
-        cmd = plan(self._turn(worker))[str(10010)]
-        self.assertEqual(cmd["action"], "use")
-        self.assertEqual(cmd["name"], self.V2)
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.WEAK)
+    def _beside(self, cell: Pos) -> Pos:
+        for d in STEPS:
+            p = Pos(cell.x + d.x, cell.y + d.y)
+            if 0 <= p.x < 41 and 0 <= p.y < 32 and p != cell:
+                return p
+        raise AssertionError("没有邻居格")
 
-    def test_a_worker_upgrades_a_level_one_wall_instead_of_demolishing_it(self):
-        """L1 弱墙 ⇒ `use WallUpgradeVoucher1`（20 金升到 L2）—— **不再拆墙**（用户口径）。
+    def test_a_level_one_wall_below_a_quarter_is_demolished(self):
+        """L1 墙血不到 1/4 ⇒ 直接拆（贴着就 `remove`），下一回合再砌回满血。"""
+        spot = wall_cells(self.BASE, 41)[0]
+        wall = Wall(40000, spot, 200, 1)  # 200 × 4 < 1000
+        cmd = plan(self._turn((wall,), stone=1, at=self._beside(spot)))[str(10010)]
+        self.assertEqual(cmd["action"], "remove", f"该拆了重砌：{cmd}")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), spot)
 
-        旧的"拆掉重建"这条路整个删了：拆墙要石头、当天还得砌回来，而升级券更便宜且顺带抬上限。
-        """
-        worker = Worker(10010, Pos(12, 23), {self.V1: 1, "stone": 1})
-        cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[str(10010)]
-        self.assertEqual(cmd["action"], "use", "L1 升级当修，不是 remove")
-        self.assertEqual(cmd["name"], self.V1)
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.WEAK)
+    def test_a_level_one_wall_above_a_quarter_is_left_alone(self):
+        """血在 1/4 以上 ⇒ 环是完备的，这一级整个不生效（不拆、也不用券）。"""
+        spot = wall_cells(self.BASE, 41)[0]
+        wall = Wall(40000, spot, 300, 1)  # 300 × 4 > 1000
+        cmds = plan(self._turn((wall,), stone=1, at=self._beside(spot)))
+        self.assertNotIn(cmds.get("10010", {}).get("action"), ("remove", "build"), f"不碰它：{cmds}")
 
-    def test_a_third_level_wall_falls_back_to_the_pack(self):
-        """L3 到顶升不动了 ⇒ 只剩 `use WallFixer`（10 金回满血）。"""
-        worker = Worker(10010, Pos(12, 23), {"WallFixer": 1})
-        cmd = plan(self._turn(worker, walls=(Wall(40000, self.WEAK, 399, 3),)))[str(10010)]
-        self.assertEqual(cmd["action"], "use")
-        self.assertEqual(cmd["name"], "WallFixer", "L3 没有券可用")
-
-    def test_the_cheapest_wall_wins(self):
-        """同时有 L1 与 L2 两面弱墙、两件券都在包里 ⇒ 先奔**等级最低**的那面（20 金换 1000 血，
-        比 30 金换 500 血划算）。两面的步数与墙都在，认的是等级序不是距离序。"""
-        walls = (Wall(40000, self.WEAK, self.L2, 2), Wall(40001, self.OTHER, self.L1, 1))
-        grid = _terrain(
-            self.WEAPONS,
-            {self.BASE: "station", self.SHOP: "weaponShop", **self._ring()},
-        )
-        worker = Worker(10010, Pos(12, 24), {self.V1: 1, self.V2: 1})
-        self.assertEqual(worker.pos.dist(self.WEAK), worker.pos.dist(self.OTHER), "夹具前提：两面一样远")
-        grid[worker.pos] = "worker"
-        cmd = plan(
-            Turn(
-                round_no=1, map=Map((41, 32), grid), roles=(worker,), gold=0,
-                weapons=self.WEAPONS, shop_prices={self.V1: 20, self.V2: 30}, walls=walls,
-            )
-        )[str(10010)]
-        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertLess(step.dist(self.OTHER), worker.pos.dist(self.OTHER), "朝 L1 那面走")
-        self.assertGreaterEqual(
-            step.dist(self.WEAK), worker.pos.dist(self.WEAK), "别奔 L2 那面去"
+    def test_a_level_two_wall_below_a_quarter_is_never_touched(self):
+        """L2 弱墙不归第 2 级管（拆了只能重砌回 L1，掉一级）⇒ 不拆也不修。"""
+        spot = wall_cells(self.BASE, 41)[0]
+        wall = Wall(40000, spot, 200, 2)
+        cmds = plan(self._turn((wall,), stone=1, at=self._beside(spot)))
+        self.assertNotIn(
+            cmds.get("10010", {}).get("action"), ("remove", "use", "build"), f"不碰它：{cmds}"
         )
 
-    def test_a_worker_without_a_voucher_buys_one_for_a_second_level_wall(self):
-        """没券 ⇒ 去商店买**这一面要的那张**（贴着就买）；`collect`/挖矿都排在修墙之后。"""
-        worker = Worker(10010, Pos(20, 15), {})
-        cmd = plan(self._turn(worker, gold=30))[str(10010)]
-        self.assertEqual(cmd["action"], "buy")
-        self.assertEqual(cmd["name"], self.V2)
+    def test_a_gap_comes_before_the_demolition(self):
+        """缺口比弱墙急：环上敞着一格时先补那格，弱墙下一回合再说（缺口是夜里机器人进来的门）。"""
+        ring = wall_cells(self.BASE, 41)
+        gap, weak_spot = ring[0], ring[-1]
+        wall = Wall(40000, weak_spot, 200, 1)
+        at = self._beside(gap)
+        cmd = plan(self._turn((wall,), stone=1, at=at, gaps=(gap,)))[str(10010)]
+        self.assertEqual(cmd["action"], "build", f"先补缺口：{cmd}")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), gap)
 
-    def test_a_level_one_wall_buys_the_cheaper_voucher(self):
-        """L1 弱墙要的是券1（20 金），别买成 30 金那张 —— 20 金够、30 金不够时差别立现。"""
-        worker = Worker(10010, Pos(20, 15), {})
-        cmd = plan(self._turn(worker, gold=20, walls=(Wall(40000, self.WEAK, self.L1, 1),)))[
-            str(10010)
-        ]
-        self.assertEqual(cmd["action"], "buy")
-        self.assertEqual(cmd["name"], self.V1)
-
-    def test_a_worker_two_cells_from_the_shop_walks_instead_of_buying(self):
-        """差一格还不许买：`steps_between` 的 **0** 才是"贴着商店"（1 = 还要走一格）。
-
-        `buy` 要在商店周围一格内。站在切比雪夫 2 的地方发出去是非法指令，而且每回合算出来
-        还是 1、下一回合原样再发 —— 一次判错换算成几十次异常，红线只有 5 次。
-        """
-        worker = Worker(10010, Pos(22, 16), {})  # 与商店 (20,16) 切比雪夫 2
-        self.assertEqual(worker.pos.dist(self.SHOP), 2, "夹具前提：与商店差一格")
-        cmd = plan(self._turn(worker, gold=30))[str(10010)]
-        self.assertEqual(cmd.get("action"), "move", f"该走过去，不是隔着一格买：{cmd}")
-        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertLess(step.dist(self.SHOP), worker.pos.dist(self.SHOP), "朝商店走一格")
-
-    def test_a_worker_walks_to_a_second_level_wall_it_cannot_reach_yet(self):
-        """没贴着也照走：差事的目标就是那面墙（不是原地等它自己贴过来）。"""
-        worker = Worker(10010, Pos(5, 22), {self.V2: 1})
-        cmd = plan(self._turn(worker))[str(10010)]
-        self.assertEqual(cmd["action"], "move")
-        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertLess(step.dist(self.WEAK), worker.pos.dist(self.WEAK), "朝弱墙走一格")
-
-    def test_a_level_one_wall_is_left_alone_when_the_voucher_is_out_of_reach(self):
-        """没券又买不起/商店走不到 ⇒ 什么都不发 —— **尤其不拆墙**（拆了那格不回收，砌不回来
-        就只是白开一个洞）。"""
-        worker = Worker(10010, Pos(12, 23), {"stone": 1})
-        cmd = plan(
-            self._turn(worker, shop=False, gold=0, prices={},
-                       walls=(Wall(40000, self.WEAK, self.L1, 1),))
-        ).get(str(10010), {})
-        self.assertNotIn(cmd.get("action"), ("use", "remove"))
-
-    def test_a_second_level_wall_is_never_demolished(self):
-        """L2 弱墙没券又买不起 ⇒ 什么墙都不拆（推倒会把等级赔进去）。"""
-        worker = Worker(10010, Pos(12, 23), {"stone": 1})
-        cmd = plan(
-            self._turn(worker, shop=False, gold=0, prices={})
-        ).get(str(10010), {})
-        self.assertNotEqual(cmd.get("action"), "remove")
-        self.assertNotEqual(cmd.get("action"), "use", "没券就没得 use")
-
-    def test_walls_below_a_fifth_are_fixed_and_above_are_left_alone(self):
-        """阈值是"不到满血 **1/5**"，不是 1/4、不是半血。
-
-        正好 1/5（L1 = 200、L2 = 300）算**达标**（"少于"是严格小于），差一点（199 / 299）就
-        要修 —— 按 1/4 判的话 199 与 299 都会被放过去。满血那两条顺带一起过。
-        """
-        worker = Worker(10010, Pos(12, 23), {self.V1: 1, self.V2: 1, "WallFixer": 1})
-        for level, hp, fixed in ((1, 200, False), (2, 300, False), (1, 1000, False),
-                                 (2, 1500, False), (1, 199, True), (2, 299, True),
-                                 (3, 399, True), (3, 400, False)):
-            with self.subTest(level=level, hp=hp):
-                cmd = plan(
-                    self._turn(worker, walls=(Wall(40000, self.WEAK, hp, level),))
-                ).get(str(10010), {})
-                action = cmd.get("action")
-                if fixed:
-                    self.assertEqual(action, "use", f"L{level} {hp} 血该修（{cmd}）")
-                else:
-                    self.assertNotIn(action, ("use", "remove"), f"L{level} {hp} 血没到线")
-
-    def test_repair_beats_mining(self):
-        """环砌满 ⇒ 修墙压过经济线：手里的券先花在那面弱墙上，别去采旁边那块石头。"""
-        worker = Worker(10010, Pos(12, 23), {self.V2: 1})
-        cmd = plan(self._turn(worker, ores=(Pos(12, 20),)))[str(10010)]
-        self.assertEqual(cmd["action"], "use")
-
-    def test_two_workers_claim_different_weak_walls(self):
-        """两面 L2 弱墙、两个持券工人 ⇒ 各修各的（认领账本，不挤同一面）。"""
-        walls = (Wall(40000, self.WEAK, self.L2, 2), Wall(40001, self.OTHER, self.L2, 2))
-        grid = _terrain(
-            self.WEAPONS,
-            {self.BASE: "station", self.SHOP: "weaponShop", **self._ring()},
-        )
-        a = Worker(10010, Pos(12, 23), {self.V2: 1})
-        b = Worker(10012, Pos(12, 26), {self.V2: 1})
-        grid |= {a.pos: "worker", b.pos: "worker"}
-        cmds = plan(
-            Turn(
-                round_no=1, map=Map((41, 32), grid), roles=(a, b), gold=0,
-                weapons=self.WEAPONS, shop_prices={self.V2: 30}, walls=walls,
-            )
-        )
-        targets = {
-            Pos(v["targetPos"][0]["x"], v["targetPos"][0]["y"]) for v in cmds.values()
-        }
-        self.assertEqual(targets, {self.WEAK, self.OTHER}, "各修各的，不挤同一面墙")
+    def test_a_worker_without_a_stone_does_not_demolish(self):
+        """手里没石头就不拆：拆完那格是敞着的，砌不回来等于白开一个洞。"""
+        spot = wall_cells(self.BASE, 41)[0]
+        wall = Wall(40000, spot, 200, 1)
+        cmds = plan(self._turn((wall,), stone=0, at=self._beside(spot)))
+        self.assertNotIn("remove", {c["action"] for c in cmds.values()}, f"没石头不许拆：{cmds}")
 
 
 class WallPriorityTest(unittest.TestCase):
@@ -1566,21 +1088,22 @@ class WallPriorityTest(unittest.TestCase):
         cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(6, 24), "铜（5 金）优先于石头（1 金）")
 
-    def test_fundraising_sells_the_stone_reserve_down_to_one(self):
-        """筹资路上石头只留 1 块（用户口径）：建武器差的是几十金币，留够封口的量就行。
+    def test_fundraising_sells_the_whole_load(self):
+        """筹资那一趟把货**卖光**（新口径：石头留底那两档都删了）。
 
-        平常的砌墙线留 `STONE_RESERVE`(3) 块 —— 两条路共用一个 `keep` 默认值的话，这位
-        工人会守着 3 块石头不动，25 金币永远凑不齐（它手里别的货一件没有）。
+        旧口径在这里留 1 块（`STONE_KEEP_RAISING`）、平常留 3 块（`STONE_RESERVE`）—— 两条
+        都随"够了就行"的采石口径一起删了：手里几块就卖几块。
         """
         worker = Worker(10010, Pos(7, 25), {"stone": 8})  # 贴着小贩 (7,26)
         turn = self._turn(
             (worker,),
             {self.BASE: "station", Pos(4, 24): "stone", Pos(7, 26): "vendor"},
+            gold=20,  # 差 5 金建武器；背包里的石头（8）凑得上
             prices={"stone": 1},
         )
         cmd = plan(turn)[str(10010)]
         self.assertEqual(
-            cmd, {"action": "sell", "name": "stone", "num": 7}, "留 1 块就够，其余全换成钱"
+            cmd, {"action": "sell", "name": "stone", "num": 8}, "一次卖光，不留底"
         )
 
     def test_fundraising_beats_repairing_a_weak_wall(self):
@@ -1665,54 +1188,53 @@ class WallPriorityTest(unittest.TestCase):
         cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(4, 24))
 
-    def test_no_voucher_runs_while_weapons_are_pending(self):
-        """升级线只在武器齐了之后才跑：份额有缺（两角色一武器 ⇒ 缺一）时，持券工人
-        不去用券 —— 它的时间该花在筹资上（等级是武器齐了以后的事）。"""
+
+    def test_no_stone_mine_means_build_with_what_is_in_hand(self):
+        """环上有缺口、手里就一块石头、地图上**没有石矿** ⇒ 拿这点石头先砌（能做多少做多少）。
+
+        不这么写的话工人会空转 —— 采不到石头 ≠ 这一回合没事干。别处的早退（`_mine_stone`
+        返回 False）都不能把这一支带走。
+        """
+        gap = wall_cells(self.BASE, 41)[0]
+        walls = {c: WALL for c in wall_cells(self.BASE, 41) if c != gap}
+        worker = Worker(10010, Pos(5, 23), {"stone": 1})
+        at = next(
+            Pos(gap.x + d.x, gap.y + d.y)
+            for d in STEPS
+            if 0 <= gap.x + d.x < 41 and 0 <= gap.y + d.y < 32 and Pos(gap.x + d.x, gap.y + d.y) not in walls
+        )
+        worker = Worker(10010, at, {"stone": 1})
+        grid = {**walls, self.BASE: "station", at: "worker"}
+        turn = Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(worker,),
+            gold=0,
+            weapons=_records({Pos(12, 24): "rocket"}),
+        )
+        cmd = plan(turn)[str(10010)]
+        self.assertEqual(cmd["action"], "build", f"采不到石就用手里的砌：{cmd}")
+        self.assertEqual(
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), gap, "砌的是那个缺口"
+        )
+
+    def test_no_buying_or_upgrading_while_the_weapons_are_incomplete(self):
+        """武器没建满 ⇒ 券线整个不跑（第 3 级的前提）：持券、贴着小贩也不许 `use`/`buy`。
+
+        拿建武器的钱去买券是本末倒置（旧口径"武器 ok 才升级"）。这一局面里武器差一座、
+        钱不够、又没有小贩 ⇒ 谁也帮不上忙，工人就该什么都不发。
+        """
         weapons = (Weapon(10020, "rocket", Pos(12, 24), 10, 0),)
-        worker = Worker(10010, Pos(16, 24), {"WeaponUpgradeVoucher1": 1})
+        worker = Worker(10010, Pos(9, 24), {"WeaponUpgradeVoucher1": 1})
         turn = self._turn(
-            (Pioneer(10011, Pos(20, 20)), worker),
+            (Pioneer(10011, Pos(20, 20)), worker),  # 两个角色一座武器 ⇒ 还缺一座
             {self.BASE: "station", Pos(15, 24): "copper"},
             walls=wall_cells(self.BASE, 41),  # 环是满的：没有墙线的事
             prices={"copper": 5},
             weapons=weapons,
         )
-        cmd = plan(turn)[str(10010)]
-        self.assertEqual(cmd["action"], "collect", "武器有缺 ⇒ 筹资采铜，不是去用券")
-
-    def test_no_reachable_stone_falls_to_the_economy(self):
-        """环没砌完但没石矿可采 ⇒ 落经济线采铜，不是原地待命 ——
-        "工人不能什么都不做"。"""
-        worker = Worker(10010, Pos(5, 23))
-        turn = self._turn(
-            (worker,),
-            {self.BASE: "station", Pos(6, 24): "copper"},
-            prices={"stone": 1, "copper": 5},
-        )
-        cmd = plan(turn)[str(10010)]
-        self.assertEqual(cmd["action"], "collect", "采不了石就去采能卖的铜")
-        cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
-        self.assertEqual(cell, Pos(6, 24))
-
-    def test_a_gated_worker_stands_by(self):
-        """`gated`（砌下去会把人关在墙里）⇒ 待命：开拓者被任务钉死在盒内（它走 ① 支路，
-        轮不到"先出来"那道闸），两个工人又恰好占住后方通道的两格（通道共 6 格）⇒ 盒外有墙格要砌的工人
-        这一回合不发指令（口径："安全：别跑远，下回合缺口还在" —— 比落经济线更保环的速度）。
-        对照：没分到墙格的另一个工人照常落经济线干活。"""
-        walls = set(wall_cells(self.BASE, 41)) - {Pos(13, 24)}  # 只剩封口格
-        pinned = Pioneer(10011, Pos(11, 23))   # 盒内、被任务钉死（⇒ 会被墙关住）
-        door_a = Worker(10012, Pos(8, 23))     # 占住门口之一（自己出得去 ⇒ 不在 leaving）
-        door_b = Worker(10013, Pos(8, 24))     # 占住门口之二、领到封口格 ⇒ gated
-        turn = self._turn(
-            (pinned, door_a, door_b),
-            {self.BASE: "station", Pos(11, 22): "copper"},
-            prices={"copper": 5},
-            walls=walls,
-            phase_task="题目",
-        )
-        cmds = plan(turn)
-        self.assertNotIn(str(10013), cmds, "gated ⇒ 待命（不发指令，也不跑去采铜）")
-        self.assertIn(str(10012), cmds, "没分到墙格的工人照常落经济线")
+        cmd = plan(turn).get(str(10010))
+        self.assertIsNone(cmd, f"武器有缺 ⇒ 这一回合不发指令，更不许用券：{cmd}")
 
     def test_a_full_worker_does_not_hoard_the_stone_mine(self):
         """石矿认领只发生在"真要采"之后：石头已够的工人（want=0）不许占住矿格 ——
@@ -1732,6 +1254,228 @@ class WallPriorityTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "move", "B 该去采石，不是被挤去采铜")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(step.dist(Pos(4, 24)), 1, "这一步朝石矿迈（贴着矿那一格）")
+
+
+class SellCargoTest(unittest.TestCase):
+    """第 3 级里的"卖货"那一支：贴着就卖光，隔着就走一步。
+
+    只留两道门：**有货**、**有小贩且走得到** —— 旧的"够本门"（货值 ≥ 2 × 到小贩的步数）
+    与"石头留底"两档都删了（用户口径 3）。**卖不卖由券价触发**：只有"现钱 + 背包货值够买
+    下一张券"（或已经绕到小贩旁边）才去卖，其余时候接着挖矿（见 `VoucherLineTest`）。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    SHOP = Pos(22, 18)
+    VENDOR = Pos(20, 16)
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    SHOP_PRICES = {"WeaponUpgradeVoucher1": 100, "WeaponUpgradeVoucher2": 150}
+    MINE = Pos(20, 30)
+
+    def _turn(self, *, at: Pos, bag: dict[str, int], gold: int = 0, vendor: bool = True, ring: bool = True) -> Turn:
+        walls = {c: WALL for c in wall_cells(self.BASE, 41)} if ring else {}
+        grid = _terrain(
+            self.WEAPONS,
+            {self.BASE: "station"},
+            walls,
+            {self.MINE: "copper"},
+            {self.SHOP: "weaponShop"},
+            {self.VENDOR: "vendor"} if vendor else {},
+        )
+        grid[at] = "worker"
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(Worker(10010, at, dict(bag)),),
+            gold=gold,
+            weapons=self.WEAPONS,
+            vendor_prices=self.PRICES,
+            shop_prices=self.SHOP_PRICES,
+        )
+
+    def test_standing_next_to_the_vendor_sells_the_whole_load(self):
+        """贴着小贩卖光那一种货（一次卖光，`num` = 手上全部件数）。"""
+        turn = self._turn(at=Pos(19, 16), bag={"copper": 3})  # 切比雪夫 1 ⇒ 贴着
+        self.assertEqual(
+            plan(turn)["10010"], {"action": "sell", "name": "copper", "num": 3}
+        )
+
+    def test_one_step_away_still_walks(self):
+        """差一格还不许卖（`steps_between == 0` 才是"贴着"）—— 隔一格就发 `sell` 是非法指令。"""
+        turn = self._turn(at=Pos(18, 16), bag={"copper": 3})
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "move")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), Pos(18, 16).dist(self.VENDOR), "朝小贩走一格")
+
+    def test_the_pricier_ore_is_sold_first(self):
+        """一回合只发得出一条 `sell` ⇒ 先卖收购价最高的那一种。"""
+        turn = self._turn(at=Pos(19, 16), bag={"stone": 2, "copper": 1})
+        self.assertEqual(
+            plan(turn)["10010"], {"action": "sell", "name": "copper", "num": 1}
+        )
+
+    def test_no_vendor_means_no_selling(self):
+        """地图上没有小贩 ⇒ 卖不出去，回去接着挖矿（不是发一条永远失败的空卖）。"""
+        turn = self._turn(at=Pos(19, 16), bag={"copper": 3}, vendor=False)
+        self.assertNotIn("sell", {c["action"] for c in plan(turn).values()})
+
+    def test_the_wall_comes_before_the_selling(self):
+        """环上还有缺口 ⇒ 先砌墙（卖货归第 3 级，第 2 级没做完就轮不到）。"""
+        turn = self._turn(at=Pos(19, 16), bag={"copper": 3}, ring=False)
+        cmd = plan(turn)["10010"]
+        self.assertNotEqual(cmd["action"], "sell", f"墙没砌完不许卖：{cmd}")
+
+    def test_a_load_that_cannot_pay_for_the_ticket_is_not_walked(self):
+        """货值 + 现钱还不够一张券 ⇒ 不去卖，接着挖（1 块铜 = 5 金，离 100 金差得远）。"""
+        turn = self._turn(at=Pos(15, 16), bag={"copper": 1})  # 离小贩 5 格
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "move", f"凑不够券钱就接着挖：{cmd}")
+
+
+class VoucherLineTest(unittest.TestCase):
+    """第 3 级：挖矿攒钱 → 卖 → 买 → **买到手就立刻用掉**。
+
+    券按 `VOUCHER_CHAIN` 取第一张"还有东西可升"的：武器二级 > 武器三级 > 围墙二级 > 围墙三级
+    （用户口径）—— 攒钱的目标就是它，不跳级去买更便宜的券。买入前从共享金币里**预扣券价**，
+    另一条线（另一个工人 / 空闲的开拓者）这一回合就不会重复买同一张。
+    """
+
+    BASE = Pos(10, 24)
+    SHOP = Pos(22, 18)
+    PRICES = {"stone": 1, "copper": 5}
+    SHOP_PRICES = {
+        "WeaponUpgradeVoucher1": 100,
+        "WeaponUpgradeVoucher2": 150,
+        "WallUpgradeVoucher1": 20,
+        "WallUpgradeVoucher2": 30,
+    }
+
+    def _turn(
+        self,
+        roles: tuple[BaseRole, ...],
+        weapons: tuple[Weapon, ...],
+        *,
+        walls: tuple[Wall, ...] = (),
+        gold: int = 0,
+    ) -> Turn:
+        ring = {c: WALL for c in wall_cells(self.BASE, 41)}
+        ring.update({w.pos: WALL for w in walls})
+        grid = _terrain(weapons, {self.BASE: "station"}, ring, {self.SHOP: "weaponShop"})
+        grid |= {r.pos: r.type_name for r in roles}
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=gold,
+            weapons=weapons,
+            walls=walls,
+            vendor_prices=self.PRICES,
+            shop_prices=self.SHOP_PRICES,
+        )
+
+    def _gun(self, wid: int, kind: str, cell: Pos, level: int = 1) -> Weapon:
+        return Weapon(id=wid, kind=kind, pos=cell, attack_range=4, cooldown=0, level=level)
+
+    def test_the_chain_asks_for_the_weapon_voucher_first(self):
+        """武器二级券排在最前 —— 哪怕围墙券（20 金）更便宜、也买得起，也不许跳级买它。"""
+        worker = Worker(10010, Pos(20, 24))  # 盒外空地（盒内去商店要先绕后方通道）
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
+        turn = self._turn((worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200)
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "move", f"该朝商店走：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), worker.pos.dist(self.SHOP), "朝武器商店走")
+
+    def test_wall_vouchers_come_last(self):
+        """武器都到顶了才轮到围墙券（`WeaponUpgradeVoucher1/2` 都没有"还升得动的武器"）。"""
+        worker = Worker(10010, Pos(13, 20))  # 离那面 L1 墙一格
+        weapons = (
+            self._gun(10020, "rocket", Pos(12, 24), 3),
+            self._gun(10021, "gatling", Pos(12, 22), 3),
+        )
+        turn = self._turn(
+            (worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200
+        )
+        cmd = plan(turn)["10010"]
+        self.assertIn(cmd["action"], ("move", "use"), f"该为围墙券忙起来：{cmd}")
+
+    def test_a_voucher_in_hand_is_used_right_away(self):
+        """手里已经持券 ⇒ 立刻走到目标用掉（买完就用，不囤）。"""
+        worker = Worker(10010, Pos(12, 23), {"WeaponUpgradeVoucher1": 1})  # 贴着火箭 (12,24)
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)),)
+        turn = self._turn((worker,), weapons, gold=0)
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "use", f"持券就走到目标用掉：{cmd}")
+        self.assertEqual(cmd["name"], "WeaponUpgradeVoucher1")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
+
+    def test_the_buy_reserves_the_gold_so_the_other_worker_stands_down(self):
+        """预扣共享金币：钱只够一张券时，两个工人里只有一个去商店。
+
+        没有预扣的话两人会在同一回合都判定"买得起"、各奔一座商店 —— 下一回合钱只够一张，
+        另一个白跑一趟。
+        """
+        a = Worker(10010, Pos(20, 24))
+        b = Worker(10012, Pos(24, 24))
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)),)
+        turn = self._turn((a, b), weapons, gold=100)  # 正好一张 WeaponUpgradeVoucher1
+        cmds = plan(turn)
+        buyers = [cid for cid, cmd in cmds.items() if cmd["action"] == "move"]
+        self.assertEqual(len(buyers), 1, f"只该有一个人去商店：{cmds}")
+
+
+class PioneerErrandTest(unittest.TestCase):
+    """空闲的开拓者也跑同一条买券差事（用户口径：开拓者做完任务就买券，且买完就用）。
+
+    它与工人那条**各自独立跑**：谁有钱谁买，靠共享金币的预扣去重。
+    """
+
+    BASE = Pos(10, 24)
+    SHOP = Pos(22, 18)
+
+    def _turn(
+        self,
+        pioneer: Pioneer,
+        *,
+        gold: int,
+        phase_task: str = "",
+        llm_resp: str = "",
+        weapons: tuple[Weapon, ...] = (),
+    ) -> Turn:
+        ring = {c: WALL for c in wall_cells(self.BASE, 41)}
+        grid = _terrain(weapons, {self.BASE: "station"}, ring, {self.SHOP: "weaponShop"})
+        grid[pioneer.pos] = pioneer.type_name
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(pioneer,),
+            gold=gold,
+            phase_task=phase_task,
+            llm_resp=llm_resp,
+            weapons=weapons,
+            vendor_prices={"stone": 1},
+            shop_prices={"WeaponUpgradeVoucher1": 100},
+        )
+
+    def test_an_idle_pioneer_walks_to_the_shop_to_buy(self):
+        """没任务点（任务做完/冷却中）⇒ 跑买券差事：钱够就朝商店走过去。"""
+        pioneer = Pioneer(10011, Pos(20, 20))
+        weapons = (
+            Weapon(id=10020, kind="rocket", pos=Pos(12, 24), attack_range=4, cooldown=0, level=1),
+        )
+        cmd = plan(self._turn(pioneer, gold=200, weapons=weapons))["10011"]
+        self.assertEqual(cmd["action"], "move", f"该朝商店走：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), pioneer.pos.dist(self.SHOP), "朝武器商店走")
+
+    def test_a_pinned_pioneer_answers_instead_of_running_errands(self):
+        """被任务钉死的开拓者只交答案（离开任务点一格任务就作废）—— 再有钱也不跑腿。"""
+        pioneer = Pioneer(10011, Pos(20, 20))
+        cmd = plan(
+            self._turn(pioneer, gold=200, phase_task="题目", llm_resp="<answer>42</answer>")
+        )["10011"]
+        self.assertEqual(cmd["action"], "submitAnswer")
 
 
 class DayOneFinishTest(unittest.TestCase):
