@@ -1,0 +1,69 @@
+{
+  "base": "4cb0a83710ffe99e6013e8c38e8b13d51648caf1",
+  "candidate": "b1765d507a0b438252cfd9f6b92048d9bb038bfa",
+  "base_cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "public_sha256": "9cb2cfe3b053f7d00e0470b38133f601ea7ba6de863aa2dd180f3e0d701d6dbf"
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "public_sha256": "9f8332c0875390d78cb08e61d7d054a74ed2fdcba274acd2b98b2e01b0dae5e6"
+    },
+    {
+      "seed": 7,
+      "side": "challenger",
+      "public_sha256": "0ed72c0ddba272c7ca4f75f25274eefdae129c9ff1f17316e98623cb2279c33c"
+    },
+    {
+      "seed": 7,
+      "side": "defender",
+      "public_sha256": "96c5904d86c8893fafc14aea088af744a3a4cd74ffa5519c374a421be92ec556"
+    },
+    {
+      "seed": 19,
+      "side": "challenger",
+      "public_sha256": "71cbfab7b87012439b8cad939eee6562ad4debf9578c135a93a0a15a4f50a157"
+    },
+    {
+      "seed": 19,
+      "side": "defender",
+      "public_sha256": "8a565f90813a7725a1080a0db80840e4a16904f44fba05a02a384c50b15ffe39"
+    }
+  ],
+  "candidate_cases": [
+    {
+      "seed": 1,
+      "side": "challenger",
+      "public_sha256": "9cb2cfe3b053f7d00e0470b38133f601ea7ba6de863aa2dd180f3e0d701d6dbf"
+    },
+    {
+      "seed": 1,
+      "side": "defender",
+      "public_sha256": "9f8332c0875390d78cb08e61d7d054a74ed2fdcba274acd2b98b2e01b0dae5e6"
+    },
+    {
+      "seed": 7,
+      "side": "challenger",
+      "public_sha256": "0ed72c0ddba272c7ca4f75f25274eefdae129c9ff1f17316e98623cb2279c33c"
+    },
+    {
+      "seed": 7,
+      "side": "defender",
+      "public_sha256": "96c5904d86c8893fafc14aea088af744a3a4cd74ffa5519c374a421be92ec556"
+    },
+    {
+      "seed": 19,
+      "side": "challenger",
+      "public_sha256": "71cbfab7b87012439b8cad939eee6562ad4debf9578c135a93a0a15a4f50a157"
+    },
+    {
+      "seed": 19,
+      "side": "defender",
+      "public_sha256": "8a565f90813a7725a1080a0db80840e4a16904f44fba05a02a384c50b15ffe39"
+    }
+  ],
+  "passed": true
+}

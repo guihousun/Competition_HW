@@ -1,0 +1,30 @@
+{
+  "source_commit": "b1765d507a0b438252cfd9f6b92048d9bb038bfa",
+  "map_layout": "attack-map-observed-v1",
+  "scope": "local one day/night both sides; no real LLM or official replay parity",
+  "elapsed_seconds": 17.10900000000038,
+  "cases": [
+    {
+      "side": "challenger",
+      "rounds": 130,
+      "base_hp": 1500,
+      "score": 386,
+      "execution_failures": [],
+      "errors": [],
+      "trace_sha256": "2b8a113c98adcac092c7e10d3b272f2cc15a4a17ab091e66ff1ab2d60467cfbd",
+      "trace_bytes": 4299450
+    },
+    {
+      "side": "defender",
+      "rounds": 130,
+      "base_hp": 1500,
+      "score": 498,
+      "execution_failures": [],
+      "errors": [],
+      "trace_sha256": "131fc3075301f767e3a649f77d1664ac53e78a01d4fc2f65a2180f175c5b60c5",
+      "trace_bytes": 4307089
+    }
+  ],
+  "passed": true,
+  "outcome_audit": "Re-read actual lastRoundRoleActionResults from archived states; frames.executed contains issued commands, not booleans."
+}

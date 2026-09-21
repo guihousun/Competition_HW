@@ -1,0 +1,16 @@
+{
+  "source_commit": "b1765d507a0b438252cfd9f6b92048d9bb038bfa",
+  "surface": "Codex in-app browser, localhost:8089",
+  "method": "cua_repl UI actions, accessibility state and screenshot",
+  "checks": [
+    "Default new match displays attack_map observed-layout source and incomplete-alignment note",
+    "Challenger match advanced 22 rounds, then paused and rewound to initial frame",
+    "TaskPoint2 selected at (16,17); tooltip explicitly reports 2 x 1",
+    "Switched to defender; new match ran and paused at round49 with 0 failed commands",
+    "Switched to seeded-local-v1; source note changed to random local stress map, paused at round13",
+    "Observed two-cell base and horizontal task-point geometry in full-map screenshot",
+    "Browser error-level console entries: empty"
+  ],
+  "passed": true,
+  "limits": "No supplied official replay file loaded or pixel-matched; screenshot and interaction verify local UI only. No real-model calls."
+}

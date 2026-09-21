@@ -1,0 +1,54 @@
+[
+  {
+    "path": ".gitattributes",
+    "sha256": "2cacd8c5b88d28a6324a5b106d17970ce30df8e32f9b76c87d00d4ca430747a8"
+  },
+  {
+    "path": "browser-check.json",
+    "sha256": "c6cec73bdf4fc31cb6994ddd559235ceabe6d75ab54804ffbda6d0c3a58d6b85"
+  },
+  {
+    "path": "day-night-report.json",
+    "sha256": "1f3c6b20abd9f1fb43983d954263f54f53b108472c9d3bd873a94eb534342e1c"
+  },
+  {
+    "path": "http-report.json",
+    "sha256": "109b69cc516881f40f0dafa89960f130699653607426c3dd273e9d69d74ccc29"
+  },
+  {
+    "path": "package-build.json",
+    "sha256": "50b94776b372a9f3f6fdb82e59b006ff949d0033991421e9cb076f719702fbdc"
+  },
+  {
+    "path": "process-exits.json",
+    "sha256": "27de257e154b773d22e7733cd8c17e0f3bf5e2e6c85df29aaba67f59b1dc9bb6"
+  },
+  {
+    "path": "README.md",
+    "sha256": "2497b56d695b3ad0480237122433374a4fb8a3ae554fb4c6d2f64f1efbfbca3a"
+  },
+  {
+    "path": "runner/compare_seeded.py",
+    "sha256": "10c185e9383e57cd0f208c41bc412452043bfcd743be14e75cdf36d5aeeb278e"
+  },
+  {
+    "path": "runner/run_day_night.py",
+    "sha256": "fdac4fadfca872eb3d6fa6ec8c7729200d265df3327cd1c29c83f7003eab7961"
+  },
+  {
+    "path": "runtime-equivalence.json",
+    "sha256": "e3e4674eca604f74e2e0822baf02a032a7a339a9be2e32d9645d170919d6a423"
+  },
+  {
+    "path": "seeded-compatibility.json",
+    "sha256": "d9c588ecee4915b86878803cc7dd0738ee7a149bd3097139de724a844be90790"
+  },
+  {
+    "path": "tests-receipt.json",
+    "sha256": "d357c232ba267a08e940f131847426e6cbb85734e3d65a02a5847f7051be3c30"
+  },
+  {
+    "path": "tests.log",
+    "sha256": "201c5fe200c02e3f0a518fc5ec5ffdbe030f1c1734776c44aaf13dc3c719f87b"
+  }
+]

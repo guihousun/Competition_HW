@@ -1,0 +1,10 @@
+{
+  "runtime_source": "b1765d507a0b438252cfd9f6b92048d9bb038bfa",
+  "final_test_source": "dce65cfb4146388c7656af7c2132e3295ac01c4c",
+  "changed_files": [
+    "tests/test_tasks.py",
+    "tests/test_viewer.py"
+  ],
+  "runtime_git_diff_empty": true,
+  "reason": "Only map-specific test setup and corrected upper-left footprint expectation changed"
+}

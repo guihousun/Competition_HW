@@ -1,5 +1,5 @@
 {
-  "commit": "28c99224a7bd8649cd697f3604b460b805e90fec",
+  "commit": "b1765d507a0b438252cfd9f6b92048d9bb038bfa",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -98,9 +98,9 @@
       "source": "Demo/CoreGeek/src/agent/coordination.py"
     },
     {
-      "bytes": 24275,
+      "bytes": 25532,
       "path": "CoreGeek/src/agent/debug.py",
-      "sha256": "e431a98366a6e45603035fab1ec129a6da4a7f54366519f1bd3687a9c0c71dc7",
+      "sha256": "1faf1b6df2542da313ce22ff4b0cecdbf189a82c4a68c45d0f941eece6aaeb2c",
       "source": "Demo/CoreGeek/src/agent/debug.py"
     },
     {
@@ -188,6 +188,12 @@
       "source": "Demo/CoreGeek/src/agent/local_world_news.py"
     },
     {
+      "bytes": 4214,
+      "path": "CoreGeek/src/agent/map_layout.py",
+      "sha256": "845c93ae936ae1bfd977b0fa138a3a94a0b50fc831703731a8192958b97fd825",
+      "source": "Demo/CoreGeek/src/agent/map_layout.py"
+    },
+    {
       "bytes": 8950,
       "path": "CoreGeek/src/agent/market.py",
       "sha256": "8cbfaf8c7039617414d8d4dbc9294d04d0b3044001a8e4e5940b082a9c3a3bd9",
@@ -266,9 +272,9 @@
       "source": "Demo/CoreGeek/src/agent/protocol.py"
     },
     {
-      "bytes": 3777,
+      "bytes": 3934,
       "path": "CoreGeek/src/agent/recordings.py",
-      "sha256": "29b6b441ed8686be03da9cd7739b0958c8f5b45fdb6f56e20907aa6057dc7cc7",
+      "sha256": "62ab9170e72bc5a1baf5f3b9232b7eda84c58ab43799d19e2c74686008e27abd",
       "source": "Demo/CoreGeek/src/agent/recordings.py"
     },
     {
@@ -290,9 +296,9 @@
       "source": "Demo/CoreGeek/src/agent/sandbox.py"
     },
     {
-      "bytes": 19039,
+      "bytes": 19414,
       "path": "CoreGeek/src/agent/scenarios.py",
-      "sha256": "01e4c8f767e80a2c80e9ad9cc2c1d7c168a9f608ffd9018dd13cda1877b4318e",
+      "sha256": "c3ec0afa0020fd979cf9156ae7f599ca044cb5a30a61f63d63b04d5ddc5045be",
       "source": "Demo/CoreGeek/src/agent/scenarios.py"
     },
     {
@@ -495,5 +501,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "1b43bfe77d4a34365d6ec39f1b9be030709bfbcecd92a42443f134354ed602c5"
+  "source_digest": "08fc35ab631e06a38610fbdcddf914e15ea80ca64cea1acd6399f20d0e6d42c5"
 }
