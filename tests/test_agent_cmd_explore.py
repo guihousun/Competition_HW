@@ -303,6 +303,42 @@ class CmdExploreStateTest(unittest.TestCase):
         cmd_explore._ROOT = root
         self.addCleanup(setattr, cmd_explore, "_ROOT", old)
 
+    def test_a_top_level_pseudo_dir_is_never_walked(self):
+        """沙盒根那一层的伪文件系统整棵跳过（`_SKIP`）—— 列一遍 /proc 就要好几秒，会 `[TIMEOUT]`。
+
+        用例用临时目录顶沙盒根，"proc" 这个名字对得上就跳（判据是**名字**，不是绝对路径）。
+        """
+        root = Path(self._root.name)
+        (root / "a" / "task").mkdir(parents=True)
+        (root / "a" / "task" / "one.md").write_text("正文一\n", encoding="utf-8")
+        (root / "proc" / "task").mkdir(parents=True)
+        (root / "proc" / "task" / "hidden.md").write_text("伪文件系统里的不该被走\n", encoding="utf-8")
+        self._set_root(str(root).replace("\\", "/"))
+
+        out = self._run_script()
+        self.assertIn("正文一", out)
+        self.assertNotIn("hidden.md", out)
+
+    def test_a_doc_below_the_depth_cap_is_not_fetched(self):
+        """往下只走到 `_MAXDEPTH` 层（相对沙盒根）—— 深到够不着的地方不找，换更短的时间。
+
+        官方示例那条 `find / -maxdepth 6` 也是 6；这一条同时钉住"限深是相对根数的"。
+        """
+        root = Path(self._root.name)
+        deep = root / "a"
+        for name in ("b", "c", "d", "e", "f", "g", "task"):
+            deep = deep / name
+        deep.mkdir(parents=True)
+        (deep / "buried.md").write_text("太深了\n", encoding="utf-8")
+        (root / "a" / "task").mkdir(parents=True, exist_ok=True)
+        (root / "a" / "task" / "one.md").write_text("正文一\n", encoding="utf-8")
+        self._set_root(str(root).replace("\\", "/"))
+
+        out = self._run_script()
+        self.assertIn("正文一", out)
+        self.assertNotIn("buried.md", out)
+
+
     def _run_script(self) -> str:
         return subprocess.run(
             [sys.executable, "-c", cmd_explore._script()],

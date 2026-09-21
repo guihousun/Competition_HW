@@ -150,8 +150,8 @@ class ChatPromptTest(unittest.TestCase):
         （工具块照列，第 107 步），而且不许写「（暂无）」：**"我们还没摸过"不等于"沙盒里没有"**
         —— 写出去就是让 LLM 干脆不去找那些文件。
 
-        "两种写法"（整条全路径、或它的文件名）的规则在**工具描述**里 —— 清单只管列值，
-        不再逐行复述那两种写法；那两条路各自有派发侧的用例（`test_agent.AgentTest`）。
+        两种写法（整条全路径、或它的文件名）的规则在**工具描述**里，清单逐行把两种写法
+        并排给出来 —— 那两条路各自有派发侧的用例（`test_agent.AgentTest`）。
         """
         empty = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertNotIn("/opt/task", empty)
@@ -171,11 +171,12 @@ class ChatPromptTest(unittest.TestCase):
         for path in ("/opt/task/a.md", "/opt/task/b.md"):
             self.assertIn(path, tools, f"清单里少了这条路径：{path}")
             self.assertLess(block, tools.index(path), "清单要落在工具块里，不是别处")
-        # 清单是枚举值 ⇒ 逐行列值、逗号连接（用户手改的版面，第 116 步）
-        self.assertIn("[可选path]：/opt/task/a.md,/opt/task/b.md", tools)
-        # 两种写法这条**规则**搬进了描述本身（清单不再逐行复述）⇒ 改版面别把它一起删掉
-        self.assertIn("传入清单中的完整路径", tools)
-        self.assertIn("传入清单中的文件名", tools)
+        # 清单是一行一条：`- 全路径，文件名`（用户手改的版面：第 116 步逗号连接、第 127 步换回逐行）
+        self.assertIn("- /opt/task/a.md，a.md", tools)
+        self.assertIn("- /opt/task/b.md，b.md", tools)
+        # 两种写法这条**规则**在描述本身里（清单不再复述）⇒ 改版面别把它一起删掉
+        self.assertIn("传入[路径清单]中的完整路径", tools)
+        self.assertIn("传入[路径清单]中的文件名", tools)
 
     def test_the_deposit_rules_pin_the_name_to_a_class_of_tasks(self):
         """`name` 要凝练到"一类问题"上（「订去某地的机票的流程」，不是「订去上海的机票」）。

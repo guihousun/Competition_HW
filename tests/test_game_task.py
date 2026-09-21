@@ -606,7 +606,7 @@ class TaskChannelTest(unittest.TestCase):
             self._turn(self.TASK, cmd_result=PROBE_RESULT)
         )
         self.assertIn("## ToolName - readSandboxFile", prompt)
-        self.assertIn("[可选path]：/opt/task/rescue.md", prompt)
+        self.assertIn("- /opt/task/rescue.md，rescue.md", prompt)
 
     def test_the_inventory_stays_and_the_new_task_walks_the_sandbox_again(self):
         """一趟存档 = 一道题（第 113 步，用户口径"k 个任务启动 k 次"）：**走完就停**，

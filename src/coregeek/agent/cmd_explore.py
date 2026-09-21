@@ -1,9 +1,11 @@
 """沙盒环境探查：一条 python 命令把沙盒里带 task 的 md 正文摸回来，只留在本模块的 dict 里。
 
 占的是任务线空着的 `executeCmd` 槽（问模型、回灌、交答案那几轮本来不发命令）。一条
-`python3 -c '<脚本>'`：脚本自己 `os.walk` 沙箱根、只认全路径含 `task` 的 md（口径在
+`python3 -c '<脚本>'`：脚本自己从沙箱根 `os.walk` 下去、只认全路径含 `task` 的 md（口径在
 `_NEEDLE`）、按 `FETCH_MAX` 预算贪心取一批、每份打一段 `@@@FILE <路径>@@@`、末尾报还剩
-几份（`@@@MORE <n>@@@`）—— 清单与正文同一条命令拿到。
+几份（`@@@MORE <n>@@@`）—— 清单与正文同一条命令拿到。⚠️ 这一趟**限深 `_MAXDEPTH`、跳过
+`_SKIP` 那几个伪文件系统、量尺寸只 `getsize` 不读文件**：判题器给沙盒命令只留 15 秒，
+全盘扫 + 每个候选读两遍会 `[TIMEOUT]`（实盘踩过）。
 
 一趟存档 = 一道题：`new_task` 认边界（任务文本一变就重开；空文本那一轮也记，同一道题
 冷却后同文再现要算新任务），`@@@MORE 0@@@` ⇒ 收工（`_done`，空槽不再发）。每条命令带一份
@@ -30,6 +32,15 @@ _ROOT = "/"
 #: 全路径里必须出现的子串（小写比对）—— 沙盒根目录下 md 一堆，这条线只要任务书那几份
 _NEEDLE = "task"
 
+#: 从 `_ROOT` 往下最多走几层（**相对根**数，不是绝对路径）—— 判题器给沙盒命令只留 15 秒，
+#: 全盘 `os.walk("/")` 会 `[TIMEOUT]`（实盘踩过）。官方示例里那条 `find / -maxdepth 6` 也是 6。
+#: 层数按 `d[len(root):]` 数斜杠，且先把 `os.sep` 归一成 `/` —— 本地（Windows）跑同一个脚本
+#: 时路径是反斜杠，不归一会一层都数不出来（用例 `test_a_doc_below_the_depth_cap_is_not_fetched`）。
+_MAXDEPTH = 6
+
+#: 沙盒根的这些顶层目录**整棵跳过**（伪文件系统：走一遍就要好几秒，任务书不会放在里面）
+_SKIP = ("proc", "sys", "dev", "run", "snap")
+
 #: 一条命令的字节预算（判题器回执上限 64KB；脚本里的 size 已含每份的标记开销，留的余量
 #: 覆盖 `[exitCode:N]` 与末尾那行）。单个文件超预算 ⇒ 独占一趟，正文由 64KB 截断兜着。
 FETCH_MAX = 60 * 1024
@@ -43,16 +54,22 @@ BODY_LOG_MAX = 4000
 #: `python3 -c '…'`，脚本里一个单引号就提前闭合）。`{known}` 排除表用 `json.dumps` 生成
 #: （JSON 双引号串正好是合法的 Python 字面量）。
 _SCRIPT = r"""
+
 import itertools as it,os
 budget={budget}
 known=set({known})
-paths=sorted(os.path.join(d,f) for d,_,fs in os.walk("{root}") for f in fs if f.endswith(".md") and "{needle}" in os.path.join(d,f).lower() and os.access(os.path.join(d,f),os.R_OK))
-paths=[p for p in paths if p not in known]
-size=lambda p:len(open(p,"rb").read())+len(p)+16
-picked=list(it.takewhile(lambda t:t[1]<=budget,it.accumulate(((p,size(p)) for p in paths),lambda a,b:(b[0],a[1]+b[1]))))
+root="{root}"
+skip={skip}
+maxdepth={maxdepth}
+entries=os.listdir(root)
+found=[os.path.join(root,f) for f in entries if f.endswith(".md") and "{needle}" in f.lower() and os.access(os.path.join(root,f),os.R_OK)]+[os.path.join(d,f) for r in (os.path.join(root,x) for x in entries if x not in skip) for d,_,fs in os.walk(r) for f in fs if f.endswith(".md") and "{needle}" in os.path.join(d,f).lower() and d[len(root):].replace(os.sep,"/").count("/")<=maxdepth and os.access(os.path.join(d,f),os.R_OK)]
+paths=sorted(p for p in found if p not in known)
+size=os.path.getsize
+picked=list(it.takewhile(lambda t:t[1]<=budget,it.accumulate(((p,size(p)+len(p)+16) for p in paths),lambda a,b:(b[0],a[1]+b[1]))))
 picked=picked or ([(paths[0],0)] if paths else [])
 out="".join("@@@FILE %s@@@\n%s\n"%(p,open(p,encoding="utf-8",errors="replace").read()) for p,_ in picked)
 print(out+"@@@MORE %d@@@"%len(paths[len(picked):]))
+
 """
 
 #: 沙盒命令的解释器。押沙盒里有 `python3`（未实测）；押错只丢探查、不碰红线。
@@ -159,6 +176,8 @@ def _script() -> str:
         root=_ROOT,
         needle=_NEEDLE,
         budget=FETCH_MAX,
+        maxdepth=_MAXDEPTH,
+        skip=json.dumps(list(_SKIP)),
         known=json.dumps(known_paths(), ensure_ascii=False),
     )
     return ";".join(line.strip() for line in filled.splitlines() if line.strip())

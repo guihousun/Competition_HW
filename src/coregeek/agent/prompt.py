@@ -218,8 +218,8 @@ def gen_tool_prompt(tool) -> str:
     不一致只有实盘上 LLM 报错才看得出来）：
 
         ## ToolName - {toolname}
-        - Description: {description}
-        - Params:
+        ### Description: {description}
+        ### Params:
             - parma1: {parma1 description}
 
     `tool` = `(名字, 描述, ((参数名, 用途), …))` —— 实现那一元在 `gen_all_tool_prompt` 里
