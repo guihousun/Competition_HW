@@ -1,7 +1,19 @@
 from heapq import heappop, heappush
 from itertools import count
+from contextvars import ContextVar
 
 from .protocol import Pos, Turn, Unit, distance
+
+_POLICY_OBSTACLES = ContextVar('competition_path_policy_obstacles', default=None)
+
+
+def policy_obstacles(turn):
+    context = _POLICY_OBSTACLES.get()
+    return context[1] if context and context[0] is turn else frozenset()
+
+
+def set_policy_obstacles(turn, cells=()):
+    _POLICY_OBSTACLES.set((turn, frozenset(cells)))
 
 _STEPS = (
     (-1, -1), (-1, 0), (-1, 1),
@@ -35,7 +47,7 @@ def next_step(turn: Turn, moving: Unit, goal: Pos, *,
     """
     if moving.pos == goal:
         return None
-    blocked = turn.blocked(moving)
+    blocked = turn.blocked(moving) | policy_obstacles(turn)
     limit = max_expansions if max_expansions is not None else MAX_EXPANSIONS
     reachable = _reachable_in_one_hop(turn, moving.pos, blocked)
     order = count()
@@ -113,7 +125,7 @@ def _cost_to_goal(turn: Turn, start: Pos, goal: Pos, limit: int, moving: Unit | 
         return 0
     # Multi-leg route estimates start at a hypothetical future position. The
     # mover will have vacated its old cell; other units remain obstacles.
-    blocked = turn.blocked(moving if moving is not None else _Probe(start))
+    blocked = turn.blocked(moving if moving is not None else _Probe(start)) | policy_obstacles(turn)
     order = count()
     frontier = [(distance(start, goal), 0, next(order), start)]
     best = {start: 0}

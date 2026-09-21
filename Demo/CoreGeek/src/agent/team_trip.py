@@ -28,8 +28,10 @@ def neighbours(pos):
 
 
 def task_cells(turn):
-    return {Pos(p.x + 1, p.y) for p, kind in turn.zones.items()
-            if kind in ('challengerTaskPoint2', 'defenderTaskPoint2')}
+    # Complete task footprint from the shared protocol geometry. Explicit pairs
+    # must not grow a fictitious third cell in route costing.
+    return set(turn.neutral_cells()) - {p for p, kind in turn.zones.items()
+        if kind not in ('challengerTaskPoint2', 'defenderTaskPoint2')}
 
 
 def deadline(turn, index):
@@ -57,7 +59,7 @@ class TripCost:
 
 
 def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
-                  added_walls=(), commands=None):
+                  added_walls=(), commands=None, night_prepare=False):
     """Cost to the SAME target AND a legal sheltered weapon post afterward.
 
     No alternate building, speculative future income, assumed consumption or
@@ -70,7 +72,7 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     stock = commitment.get('operation') == 'stock'
     desired = commitment.get('quantity',1) if stock else 1
     returning = commitment.get('phase') == 'return' or (stock and any(w.unit_id==commitment['owner'] and w.backpack.count(WALL_FIXER)>=desired for w in turn.workers()))
-    if not turn.is_day or (budget <= 0 and not returning):
+    if (not turn.is_day and not night_prepare) or (budget <= 0 and not returning):
         return reject('deadline')
     owner = next((w for w in turn.workers() if w.unit_id == commitment['owner']), None)
     target = next((u for u in turn.ours if u.health > 0 and u.unit_id == commitment['target']), None)
@@ -88,9 +90,12 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
             turn, payload, commands or {}, replacing=owner.unit_id) or owner.backpack_full or (stock and len(owner.backpack)+amount > (owner.capacity or 100))):
         return reject('purchase_unavailable')
     blocked = set(turn.blocked(owner)) | task_cells(turn) | set(added_walls)
+    if night_prepare:
+        from .cleared_night import hazard_cells
+        blocked.update(hazard_cells(turn))
     from . import rocket_post, strategy_config
     config = strategy_config.get()
-    common = (rocket_post.common_cells(turn)[0] if config['enabled']
+    common = (rocket_post.common_cells(turn)[0] if not night_prepare and config['enabled']
               and config['defense']['single_operator_three_rockets'] else set())
     gunner = turn.workers()[0].unit_id
     for uid, pos in (actor_positions or {}).items():
@@ -205,7 +210,7 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
     return TripCost(True,actions,budget,'delivery' if held else 'procurement',command)
 
 
-def evaluate_after_action(turn, payload, commitment, command, commands, *, actor_positions=None, added_walls=()):
+def evaluate_after_action(turn, payload, commitment, command, commands, *, actor_positions=None, added_walls=(), night_prepare=False):
     """One shared conditional next-round slice for new AND active trips.
 
     An emitted first move is fixed, not replaced with a different shortest
@@ -237,13 +242,15 @@ def evaluate_after_action(turn, payload, commitment, command, commands, *, actor
         is_day=turn.round_no%ROUNDS_PER_DAY<DAY_ROUNDS,
         gold=available_gold(turn,payload,commands),
         ours=tuple(owner if u.unit_id==owner.unit_id else u for u in turn.ours))
-    return evaluate_trip(after_turn,payload,after_record,actor_positions=positions,added_walls=walls)
+    return evaluate_trip(after_turn,payload,after_record,actor_positions=positions,added_walls=walls,
+                         night_prepare=night_prepare)
 
 
 class RouteGuard:
     """Bounded per-observation memo, applied to build stands AND emitted steps."""
-    def __init__(self, turn, payload, commitment, commands=(), *, final=False):
+    def __init__(self, turn, payload, commitment, commands=(), *, final=False, night_prepare=False):
         self.turn, self.payload = turn, payload
+        self.night_prepare = night_prepare
         self.commitment = commitment
         self.commands = dict(commands)
         self.owner_action = self.commands.get(commitment['owner']) if commitment else None
@@ -256,8 +263,9 @@ class RouteGuard:
     def evaluate(self, **overlays):
         if self.advance:
             return evaluate_after_action(self.turn,self.payload,self.commitment,
-                self.owner_action,self.commands,**overlays)
-        return evaluate_trip(self.turn,self.payload,self.commitment,commands=self.commands,**overlays)
+                self.owner_action,self.commands,night_prepare=self.night_prepare,**overlays)
+        return evaluate_trip(self.turn,self.payload,self.commitment,commands=self.commands,
+                             night_prepare=self.night_prepare,**overlays)
 
     def check(self, owner, stand, walls=()):
         if self.commitment is None or owner == self.commitment['owner']:
@@ -318,6 +326,8 @@ def clean_memory(value):
                 continue
             common.update({k:row[k] for k in ('target','level','count','item')})
             common.update(phase=row.get('phase','acquire'),last_action=row.get('last_action',''))
+            if row.get('night_preparation') is True:
+                common['night_preparation'] = True
             if row.get('operation') == 'stock':
                 if row['item']!=WALL_FIXER or type(row.get('quantity')) is not int or not 1<=row['quantity']<=10:
                     continue
@@ -340,8 +350,10 @@ def clean_memory(value):
 
 class TripFrame:
     """Stage decisions separately; only final emitted commands start a trip."""
-    def __init__(self, turn, payload, memory, *, purchase_deadline=67, construction_deadline=55):
+    def __init__(self, turn, payload, memory, *, purchase_deadline=67, construction_deadline=55,
+                 night_prepare=False):
         self.turn, self.payload = turn,payload
+        self.night_prepare = night_prepare
         self.purchase_deadline = deadline(turn,purchase_deadline)
         self.construction_deadline = deadline(turn,construction_deadline)
         self.memory = clean_memory(memory)
@@ -354,9 +366,11 @@ class TripFrame:
             reason = None
             if row['owner'] not in live:
                 reason = 'owner_missing'
-            elif not turn.is_day:
+            elif not turn.is_day and (not night_prepare or kind == 'construction'):
                 reason = 'deadline'
-            elif turn.round_no-row['last_round'] not in (0,1) or (turn.round_no-1)//130 != (row['last_round']-1)//130:
+            elif (turn.round_no-row['last_round'] not in (0,1) or
+                  ((turn.round_no-1)//130 != (row['last_round']-1)//130
+                   and not (turn.is_day and row.get('night_preparation')))):
                 reason = 'observation_discontinuity'
             elif kind=='construction' and turn.round_no>=row['deadline']:
                 reason='deadline'
@@ -377,12 +391,12 @@ class TripFrame:
                         self.begin_return(row,'upgrade_confirmed_observed' if confirmed else 'target_changed_observed')
                     elif row['count'] and count<row['count']:
                         self.begin_return(row,'item_absent_observed')
-                if threat(turn):
+                if threat(turn) and not night_prepare:
                     self.begin_return(row,'visible_threat')
                 elif turn.round_no>=row['deadline']:
                     self.begin_return(row,'deadline')
                 if row['phase']=='acquire':
-                    cost = evaluate_trip(turn,payload,row)
+                    cost = evaluate_trip(turn,payload,row,night_prepare=night_prepare)
                     if not cost.feasible:
                         self.begin_return(row,cost.reason)
                     else:
@@ -396,7 +410,7 @@ class TripFrame:
                 continue
             row['last_round'] = turn.round_no
             if kind=='purchase' and row['phase']=='return':
-                if evaluate_trip(turn,payload,row).actions == 0:
+                if evaluate_trip(turn,payload,row,night_prepare=night_prepare).actions == 0:
                     self.cancel(kind,'returned_observed')
             if kind == 'construction':
                 old_walls = row['walls']
@@ -455,6 +469,8 @@ class TripFrame:
             record.update(operation='stock',quantity=report['quantity'])
         elif prior and prior.get('operation')=='stock':
             record.update(operation='stock',quantity=prior['quantity'])
+        if self.night_prepare or (prior or {}).get('night_preparation'):
+            record['night_preparation'] = True
         self.pending['purchase'] = record,deepcopy(command)
 
     def stage_construction(self, owner, command, report):
@@ -487,7 +503,8 @@ class TripFrame:
         Include the exact proposed first step, not a newly recomputed shortcut.
         The real contract still stores the CURRENT bag and target level.
         """
-        return evaluate_after_action(self.turn,self.payload,record,proposed,commands)
+        return evaluate_after_action(self.turn,self.payload,record,proposed,commands,
+                                     night_prepare=self.night_prepare)
 
     def defer_new(self,record,cost):
         if not self._new_deferred:
@@ -521,7 +538,8 @@ class TripFrame:
             if command.get('action') not in ('move','build'):
                 continue
             guard = RouteGuard(self.turn,self.payload,self.purchase,
-                {uid:c for uid,c in result.items() if uid!=worker.unit_id},final=True)
+                {uid:c for uid,c in result.items() if uid!=worker.unit_id},final=True,
+                night_prepare=self.night_prepare)
             if not guard.allows_command(worker,command):
                 if worker.unit_id in priority_return_moves and command.get('action')=='move':
                     # Collision legality was already reconciled. At dusk the

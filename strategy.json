@@ -51,7 +51,8 @@
     "ore_max_distance": 8
   },
   "nightwork": {
-    "allow_after_clear": true
+    "allow_after_clear": true,
+    "quiet_rounds": 3
   },
   "navigation": {
     "enabled": true,

@@ -25,7 +25,7 @@ import json
 from copy import deepcopy
 from typing import Any
 
-from .protocol import Pos, distance
+from .protocol import Pos, distance, TWO_CELL_TASK_TYPES
 from .tasks import REFRESH_ROUNDS, HOLD_RANGE, TaskPipeline
 
 # Local task generation parameters (fixtures, not official numbers). The point
@@ -85,7 +85,15 @@ def _zone_lookup(state: dict[str, Any]) -> dict[str, Pos]:
     for zone in (state.get("mapInfo") or {}).get("zones") or ():
         kind = str(zone.get("neutralType", ""))
         if "TaskPoint" in kind:
-            found[kind] = Pos.load(zone["pos"])
+            pos = Pos.load(zone["pos"])
+            previous = found.get(kind)
+            # Explicit horizontal point-2 cells share one left-hand anchor.
+            # Input order must not shift its region to the right by one cell.
+            if (kind in TWO_CELL_TASK_TYPES and previous is not None
+                    and pos.y == previous.y and abs(pos.x - previous.x) == 1):
+                found[kind] = min((previous, pos), key=lambda cell: cell.x)
+            else:
+                found[kind] = pos
     return found
 
 

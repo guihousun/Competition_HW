@@ -22,7 +22,7 @@ DEFAULTS = {
                     "emergency_fraction": 0.25, "base_emergency_fraction": 0.4},
     "economy": {"return_day_index": 55, "upgrade_return_margin": 3,
                 "stone_batch": 10, "metal_batch": 10, "ore_max_distance": 8},
-    "nightwork": {"allow_after_clear": True},
+    "nightwork": {"allow_after_clear": True, "quiet_rounds": 3},
     "navigation": {"enabled": True, "stall_rounds": 3,
                    "allow_wall_removal": True, "max_openings": 2},
 }
@@ -90,6 +90,7 @@ def validate(config):
         _integer(config["economy"][key], low, high, f"economy.{key}")
     if type(config["nightwork"]["allow_after_clear"]) is not bool:
         raise ValueError("nightwork.allow_after_clear: expected boolean")
+    _integer(config['nightwork']['quiet_rounds'], 1, 20, 'nightwork.quiet_rounds')
     navigation = config["navigation"]
     for key in ("enabled", "allow_wall_removal"):
         if type(navigation[key]) is not bool:

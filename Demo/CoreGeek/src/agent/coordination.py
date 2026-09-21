@@ -166,9 +166,9 @@ def reconcile(turn: Turn, payload: dict[str, Any],
 
     reserved = {Pos.load(pos) for cmd in accepted.values()
                 if cmd.get('action') == 'build' for pos in cmd.get('targetPos', [])}
-    # The second cell of a two-cell task point is occupied too (R02/R07).
-    reserved.update(Pos(pos.x + 1, pos.y) for pos, kind in turn.zones.items()
-                    if kind in ('challengerTaskPoint2', 'defenderTaskPoint2'))
+    # Use the same complete neutral footprint as pathfinding (R02/R07).
+    # Explicit two-cell points must not acquire a phantom third cell here.
+    reserved.update(turn.neutral_cells())
     roles = list(turn.controllable())
     if roles:
         offset = (turn.round_no - 1) % len(roles)

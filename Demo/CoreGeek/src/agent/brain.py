@@ -87,6 +87,12 @@ _TRIP_FRAME = ContextVar('competition_team_trip_frame',default=None)
 _PHASE_MAINTENANCE = ContextVar("phase_maintenance",default=None)
 _TRAFFIC = ContextVar('team_traffic',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
+_CLEARED_NIGHT = ContextVar('competition_cleared_night', default=None)
+
+
+def _productive_night(turn):
+    context = _CLEARED_NIGHT.get()
+    return bool(context and context[0] is turn and context[1]['phase'] == 'productive')
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
 ROUTER_ENV = "COMPETITION_HW_LLM_ROUTER"
@@ -174,6 +180,7 @@ def _respond_locked(payload: dict[str, Any]) -> dict[str, Any]:
     state = _planner_state(payload)
     round_no = Turn.load(payload).round_no
     if state.last_round and round_no < state.last_round and round_no != 1:
+        state.cleared_night_state = {}
         return {"roleCommandMap": {}}
     state.note_round(round_no)
     state.note_results(payload, round_no, routed=llm_router_enabled())
@@ -201,14 +208,31 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     """
     turn = Turn.load(payload)
     _TRIP_FRAME.set(None)
+    _CLEARED_NIGHT.set(None)
+    from . import grid
+    grid.set_policy_obstacles(turn)
     _PHASE_MAINTENANCE.set(None)
     traffic_frame=traffic.Frame(turn,deepcopy(getattr(planner_state,'traffic_state',{})))
     _TRAFFIC.set(traffic_frame)
     last_round = getattr(planner_state, "last_round", 0)
     if last_round and turn.round_no < last_round and turn.round_no != 1:
+        if commit:
+            planner_state.cleared_night_state = {}
         return sandbox.ResponseBuilder()
     if commit:
         _DECISION_REPORT.set(None)
+    from . import cleared_night
+    clearance_memory = getattr(planner_state, 'cleared_night_state', {})
+    clearance_config = strategy_config.get()['nightwork']
+    was_productive = clearance_memory.get('safe_rounds', 0) >= clearance_config['quiet_rounds']
+    next_clearance, clearance = cleared_night.observe(
+        turn, payload, clearance_memory, quiet_rounds=clearance_config['quiet_rounds'],
+        enabled=strategy_config.get()['enabled'] and clearance_config['allow_after_clear'])
+    _CLEARED_NIGHT.set((turn, clearance))
+    if _productive_night(turn):
+        grid.set_policy_obstacles(turn, cleared_night.hazard_cells(turn))
+    if commit:
+        planner_state.cleared_night_state = next_clearance
     if llm_router_enabled():
         if not commit:
             planner_state = planner.PlannerState.load(planner_state.dump())
@@ -241,7 +265,11 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             and site and required and all(pioneer.backpack.count(item) >= required.count(item) for item in required)
             and turn.round_no + max(0, distance(pioneer.pos, Pos.load(site))-1) <= int(notes.get('closesAt') or 0))
     directive = policy_supervisor.evaluate(turn,payload,pioneer_tower,tower_pairs=tower_pairs,
-                                          committed_work=committed_work,dusk_index=RETURN_BEFORE_NIGHT)
+                                          committed_work=committed_work,dusk_index=RETURN_BEFORE_NIGHT,
+                                          cleared=_productive_night(turn))
+    if was_productive and not turn.is_day and not _productive_night(turn):
+        directive = policy_supervisor.Directive('defend', True, 'clearance_revoked_return_now',
+                                                len(turn.robots), 0)
     if commit:
         planner_state.tasks['supervisor'] = directive.summary()
     night_staging = None
@@ -335,7 +363,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         for uid, command in list(commands.items()):
             if command.get('action') == 'attack' and str(command.get('controllerId')) == str(pioneer_role.unit_id):
                 commands.pop(uid)
-    if not turn.is_day:
+    if not turn.is_day and not _productive_night(turn):
         excluded = {pioneer_role.unit_id} if job and job.get('claimed') and pioneer_role is not None else set()
         if night_staging and night_staging['hold']:
             excluded.add(night_staging['owner'])
@@ -355,8 +383,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     staged_maintenance = _PHASE_MAINTENANCE.get()
     if staged_maintenance is not None:
         protected_posts.update(staged_maintenance[1]['owned_roles'])
-    post_reservations = rocket_post.reserve(turn, commands, protected=protected_posts,
-                                           business_goals=traffic_frame.goals)
+    post_reservations = ([] if _productive_night(turn) else
+                         rocket_post.reserve(turn, commands, protected=protected_posts,
+                                            business_goals=traffic_frame.goals))
     traffic_frame.recover(commands,protected_posts)
     commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
     trip_frame = _TRIP_FRAME.get()
@@ -385,7 +414,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         phase_maintenance.finalize(memory,result,commands)
         if commit:
             planner_state.maintenance_state=memory
-    elif commit and turn.is_day:
+    elif commit and (turn.is_day or _productive_night(turn)):
         planner_state.maintenance_state={}
     traffic_memory=traffic_frame.finish(commands)
     if commit:planner_state.traffic_state=traffic_memory
@@ -427,13 +456,34 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                                      'pending_prompt':getattr(judge_state,'pending_prompt',None) is not None if judge_state is not None else None}})
         if getattr(planner_state, "team_agent", None) is not None:
             _DECISION_REPORT.get()["agent"] = planner_state.team_agent.summary()
-        if turn.is_day:
+        if turn.is_day or _productive_night(turn):
             _DECISION_REPORT.get()['upgrade_itinerary'] = deepcopy(_UPGRADE_REPORT.get())
         context = _SHARED_CONTROL.get()
         if context and context[0] is turn:
             _DECISION_REPORT.get()['shared_rocket_control'] = deepcopy(context[1])
         _DECISION_REPORT.get()['pioneer_safety'] = {k:v for k,v in safety.items() if k != 'command'} if safety else None
         _DECISION_REPORT.get()['strategy_config'] = strategy_config.identity()
+        _DECISION_REPORT.get()['cleared_night'] = deepcopy(clearance)
+        _DECISION_REPORT.get()['cleared_night']['observed_round'] = turn.round_no
+        activities = {}
+        operators = {str(c.get('controllerId')): uid for uid, c in commands.items()
+                     if c.get('action') == 'attack'}
+        for role in turn.controllable():
+            action = commands.get(role.unit_id, {}).get('action')
+            if str(role.unit_id) in operators:
+                activities[str(role.unit_id)] = dict(action='attack', reason='weapon_operator',
+                                                     target_weapon=operators[str(role.unit_id)])
+                continue
+            task_hold = role.kind == PIONEER and job and job.get('claimed')
+            hold_reason = ('awaiting_command_result' if judge_state and judge_state.pending_cmd else
+                           'awaiting_model_result' if judge_state and judge_state.pending_prompt else
+                           'task_pipeline_hold')
+            activities[str(role.unit_id)] = {'action': action,
+                'reason': ('issued_action' if action else hold_reason if task_hold else
+                           'no_reachable_affordable_work' if _productive_night(turn) else
+                           'defence_or_phase_wait')}
+        _DECISION_REPORT.get()['cleared_night']['roles'] = activities
+        planner_state.tasks['supervisor']['cleared_night'] = deepcopy(_DECISION_REPORT.get()['cleared_night'])
         _DECISION_REPORT.get()['rocket_post_reservations'] = post_reservations
         _DECISION_REPORT.get()['traffic'] = {'events':traffic_frame.events,
                                             'openings':[p.dump() for p in traffic_frame.openings()]}
@@ -441,7 +491,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             _DECISION_REPORT.get()['maintenance'] = deepcopy(maintenance[1]['report'])
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
         _DECISION_REPORT.get()['worker_shelter'] = home_defense.status(
-            turn, commands, quiet=nightwork.field_clear(turn, payload))
+            turn, commands, quiet=_productive_night(turn))
         if _sale_signals(turn):
             _DECISION_REPORT.get()['news_economy'] = deepcopy(_sale_signals(turn))
         supervisor_notes = planner_state.tasks.get('supervisor')
@@ -611,7 +661,7 @@ def _task_step(turn: Turn, commands: dict[int, dict[str, Any]],
     # while the task walk is repeatable — and letting the pipeline claim the pioneer
     # here replaced the purchase with a walk, so the errand never completed.
     existing = commands.get(pioneer.unit_id) or {}
-    if turn.is_day and payload.get("_treasureRound") == turn.round_no:
+    if (turn.is_day or _productive_night(turn)) and payload.get("_treasureRound") == turn.round_no:
         return None  # includes a publicly justified preparation walk to the shop
     if existing.get("action") in ("buy", "summonTreasure"):
         return None
@@ -638,7 +688,7 @@ def _task_step(turn: Turn, commands: dict[int, dict[str, Any]],
     # Night belongs to the defence (任务书 §4.7): the pioneer must be at a weapon,
     # not walking to a task point. A task already in flight is still held, and the
     # hold rule keeps the pioneer on the point, which the towers do not need.
-    if not turn.is_day and not in_task:
+    if not turn.is_day and not in_task and not _productive_night(turn):
         return None
     plan = None
     claimed = False
@@ -961,7 +1011,7 @@ def _task_walk(turn: Turn, pioneer: Unit, state: dict[str, Any]
     decision is identical whether or not the caller keeps planner memory — the
     official POST is stateless.
     """
-    if not turn.is_day:
+    if not turn.is_day and not _productive_night(turn):
         return False, None
     team = (state.get("teamOur") or {}).get("type", "")
     own_cells = {
@@ -1098,7 +1148,7 @@ def _treasure_route(turn, state, pioneer, notes, commands=None):
 
 def _treasure_claims_pioneer(turn: Turn, state: dict[str, Any], pioneer: Unit) -> bool:
     """Only an open, feasible trip may displace an unstarted task walk."""
-    if pioneer is None or not turn.is_day:
+    if pioneer is None or (not turn.is_day and not _productive_night(turn)):
         return False
     notes = _treasure_notes(state, turn)
     return bool(notes.get("open") and _treasure_route(turn, state, pioneer, notes))
@@ -1144,7 +1194,7 @@ def _treasure_errand(turn: Turn, pioneer: Unit, commands: dict[int, dict[str, An
     Only when the window is close enough to matter and the pioneer can afford the
     items. Returns True when this consumed the pioneer's turn.
     """
-    if not turn.is_day:
+    if not turn.is_day and not _productive_night(turn):
         return False
     key = str(pioneer.unit_id)
     if errands is not None:
@@ -1194,7 +1244,7 @@ def _prepare_treasure(turn, pioneer, commands, state, notes):
     real path budget to return before dusk. These are strategy choices.
     """
     base = turn.station()
-    if (not turn.is_day or base is None or base.health < 1000 or len(turn.weapons()) < 3
+    if ((not turn.is_day and not _productive_night(turn)) or base is None or base.health < 1000 or len(turn.weapons()) < 3
             or state.get("phaseTask")):
         return False
     required = Counter(notes.get("items") or [])
@@ -1218,7 +1268,7 @@ def _prepare_treasure(turn, pioneer, commands, state, notes):
     stand, outbound = approach
     homes = _stand_cells(turn, pioneer, base.pos, set())
     homeward = min((cost(stand, cell) for cell in homes), default=10 ** 9)
-    remaining = RETURN_BEFORE_NIGHT - (turn.round_no - 1) % 130
+    remaining = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - (turn.round_no - 1) % 130
     if outbound + len(missing) + homeward + 2 > remaining:
         return False
     if _adjacent_zone(state, pioneer.pos, "weaponShop"):
@@ -1251,12 +1301,12 @@ def _economy_open(turn: Turn) -> bool:
     all ten days (R02) without hard-coding any day boundary.
     """
     index = (turn.round_no - 1) % 130
-    return ECONOMY_WINDOW_START <= index < RETURN_BEFORE_NIGHT
+    return _productive_night(turn) or ECONOMY_WINDOW_START <= index < RETURN_BEFORE_NIGHT
 
 
 def _is_return_phase(turn: Turn) -> bool:
     """Evening: errands must come home so night defence is not short-handed."""
-    return (turn.round_no - 1) % 130 >= RETURN_SAFE_INDEX
+    return not _productive_night(turn) and (turn.round_no - 1) % 130 >= RETURN_SAFE_INDEX
 
 
 def _towers_done(turn: Turn) -> bool:
@@ -1648,7 +1698,7 @@ def _metal_trip_fits(turn: Turn, role: Unit, mine: Pos, state: dict[str, Any],
     # slack. The budget is measured against the dusk hand-off: the trip must end
     # before the day's economy window does, so `_economy_open` and the evening
     # return keep working exactly as before.
-    budget = RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
+    budget = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
     trip = to_mine + _metal_batch_needed(role, state) + cost_of(stand, home) + 1
     return approach if trip <= budget else None
 
@@ -1758,7 +1808,7 @@ def _forecast_sale_trip_fits(turn: Turn, role: Unit) -> bool:
     if not homes:
         return False
     home_cost = min(cost(stand, home) for home in homes)
-    budget = RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
+    budget = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
     return outward + 1 + home_cost + 1 <= budget
 
 
@@ -1931,12 +1981,86 @@ def _adjacent_mine(turn: Turn, role: Unit) -> Pos | None:
     return mines[0] if mines else None
 
 
+def _night_prepare(turn, commands, state, planner_state):
+    """Explicit legal night economy; no construction allocation or fake clock.
+
+    Reuse the real procurement contract, budget and final route guard. No gunner
+    or repair-return lease owns a role after clearance; actual inventory and HP
+    decide whether maintenance still has work. Sunrise can continue a purchase.
+    """
+    from . import team_trip
+    deadline = 130 + RETURN_BEFORE_NIGHT
+    frame = team_trip.TripFrame(turn, state, getattr(planner_state, 'team_trips', {}),
+                               purchase_deadline=deadline, night_prepare=True)
+    _TRIP_FRAME.set(frame)
+    claimed = set()
+    report = {'phase': 'idle', 'reason': 'no_affordable_upgrade'}
+    if frame.purchase:
+        proposal, report = upgrade_itinerary.plan(turn, state, commands,
+            commitment=frame.purchase, night_prepare=True, deadline=deadline)
+        if proposal:
+            commands[proposal[0]] = proposal[1]
+            frame.stage_purchase(report, proposal)
+    # Consumables are already owned; no lease forces a return to a quiet gun.
+    serviced = set()
+    for role in turn.workers():
+        if role.unit_id in commands:
+            continue
+        for item, target in nightwork._maintenance(turn, role):
+            if item in (MEDICINE, WALL_FIXER) and item in role.backpack and target not in serviced:
+                commands[role.unit_id] = use_command(item, target)
+                serviced.add(target)
+                break
+        if role.unit_id not in commands and WALL_FIXER in role.backpack:
+            candidates = sorted((wall for wall in turn.walls()
+                if wall.pos not in _retired_rear_walls(turn) and wall.pos not in serviced
+                and wall.health <= .7 * (1000, 1500, 2000)[min(3, max(1, wall.level))-1]),
+                key=lambda wall: (nightwork._repair_rank(turn, wall), distance(role.pos, wall.pos), wall.unit_id))
+            for wall in candidates:
+                step = _step_toward(turn, role, wall.pos, claimed)
+                if step is not None:
+                    commands[role.unit_id] = move_command(step)
+                    claimed.add(step)
+                    serviced.add(wall.pos)
+                    break
+    if frame.purchase is None:
+        proposal, report = upgrade_itinerary.plan(turn, state, commands,
+            start=0, deadline=deadline, night_prepare=True)
+        if proposal:
+            commands[proposal[0]] = proposal[1]
+            frame.stage_purchase(report, proposal)
+    _UPGRADE_REPORT.set(report)
+    routes = _RouteCost(turn)
+    for role in turn.workers():
+        if role.unit_id in commands:
+            continue
+        if _try_trade(turn, role, commands, state):
+            continue
+        if _mine_metal(turn, role, claimed, commands, state, routes=routes):
+            continue
+        # Daytime walls still need material, but building is never proposed here.
+        if (_missing_wall_sites(turn) and role.backpack.count('stone') < STONE_BATCH
+                and not role.backpack_full):
+            _mine(turn, role, claimed, commands)
+    pioneer = turn.pioneer()
+    cycle = getattr(planner_state, 'tasks', {}).get('cycle')
+    if pioneer and not (cycle and cycle.phase != 'ended'):
+        if _treasure_errand(turn, pioneer, commands, state, None):
+            state['_treasureRound'] = turn.round_no
+
+
 def _night(turn: Turn, commands: dict[int, dict[str, Any]],
            state: dict[str, Any] | None = None, planner_state: Any = None) -> dict | None:
     _SHARED_CONTROL.set(None)
+    if _productive_night(turn):
+        _night_prepare(turn, commands, state, planner_state)
+        return None
     claimed: set[Pos] = set()
     pairs = _tower_pairs(turn)
-    confine = not nightwork.field_clear(turn, state)
+    # Full planning requires the persistent confirmation window. Isolated legacy
+    # helper calls keep the old instantaneous predicate for diagnostic fixtures.
+    confine = (not _productive_night(turn) if planner_state is not None else
+               not nightwork.field_clear(turn, state))
     if (_STRATEGY['enabled']
             and _STRATEGY['defense']['single_operator_three_rockets']):
         guards=turn.workers()
@@ -1983,7 +2107,7 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
     committed_task = bool(cycle and cycle.description and cycle.phase != 'ended' and not cycle.ended_round)
     committed_task = committed_task and not home_defense.full_night(turn)
     staging = _treasure_night_staging(turn, state, pairs) if state is not None and not committed_task else None
-    extra_work = nightwork.plan(turn, state, pairs) if state is not None and staging is None else {}
+    extra_work = (nightwork.plan(turn, state, pairs) if not confine else nightwork._front_repair(turn, pairs)) if state is not None and staging is None else {}
     for command in extra_work.values():
         if command.get('action') == 'move':
             claimed.add(Pos.load(command['targetPos'][0]))
@@ -2564,8 +2688,11 @@ def _step_toward(
         # final post guard does not reverse the worker's business direction.
         from . import rocket_post
         blocked=turn.blocked(role)|set(claimed)
+        from .grid import policy_obstacles
+        blocked |= policy_obstacles(turn)
         workers=turn.workers()
-        if cfg['defense']['single_operator_three_rockets'] and workers and role.unit_id!=workers[0].unit_id:
+        if (not _productive_night(turn) and cfg['defense']['single_operator_three_rockets']
+                and workers and role.unit_id!=workers[0].unit_id):
             blocked |= rocket_post.common_cells(turn)[0]-{role.pos}
         if inside_only and not turn.is_day and home_defense.inside(turn,role.pos):
             blocked |= {Pos(x,y) for x in range(turn.width) for y in range(turn.height)

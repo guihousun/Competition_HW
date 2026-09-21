@@ -35,7 +35,9 @@ class Directive:
 
 
 def evaluate(turn, payload, pioneer_tower, *, tower_pairs=(), committed_work=False,
-             dusk_index=55, tuning=SupervisorTuning()):
+             dusk_index=55, tuning=SupervisorTuning(), cleared=False):
+    if cleared and not turn.is_day:
+        return Directive('work', False, 'cleared_night_productive_work', 0, 0)
     pioneer, base = turn.pioneer(), turn.station()
     if pioneer is None or base is None or pioneer_tower is None:
         if full_night(turn):

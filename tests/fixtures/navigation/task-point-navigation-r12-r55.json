@@ -1,0 +1,1456 @@
+{
+  "source": "b1765d5",
+  "recording_sha256": "2b8a113c98adcac092c7e10d3b272f2cc15a4a17ab091e66ff1ab2d60467cfbd",
+  "side": "challenger",
+  "seed": 1,
+  "cases": [
+    {
+      "round": 12,
+      "payload": {
+        "roundNo": 12,
+        "mapInfo": {
+          "width": 41,
+          "height": 32,
+          "zones": [
+            {
+              "neutralType": "vendor",
+              "pos": {
+                "x": 20,
+                "y": 16
+              }
+            },
+            {
+              "neutralType": "weaponShop",
+              "pos": {
+                "x": 25,
+                "y": 20
+              }
+            },
+            {
+              "neutralType": "challengerTaskPoint1",
+              "pos": {
+                "x": 14,
+                "y": 14
+              }
+            },
+            {
+              "neutralType": "challengerTaskPoint2",
+              "pos": {
+                "x": 16,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "defenderTaskPoint1",
+              "pos": {
+                "x": 23,
+                "y": 14
+              }
+            },
+            {
+              "neutralType": "defenderTaskPoint2",
+              "pos": {
+                "x": 26,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 4,
+                "y": 1
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 17,
+                "y": 16
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 7,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 34,
+                "y": 6
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 30,
+                "y": 22
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 32,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "iron",
+              "pos": {
+                "x": 25,
+                "y": 18
+              }
+            },
+            {
+              "neutralType": "iron",
+              "pos": {
+                "x": 14,
+                "y": 18
+              }
+            },
+            {
+              "neutralType": "iron",
+              "pos": {
+                "x": 6,
+                "y": 0
+              }
+            },
+            {
+              "neutralType": "copper",
+              "pos": {
+                "x": 33,
+                "y": 23
+              }
+            },
+            {
+              "neutralType": "copper",
+              "pos": {
+                "x": 1,
+                "y": 26
+              }
+            },
+            {
+              "neutralType": "copper",
+              "pos": {
+                "x": 26,
+                "y": 8
+              }
+            }
+          ]
+        },
+        "teamOur": {
+          "type": "challenger",
+          "goldNum": 30,
+          "totalScore": 112,
+          "roles": [
+            {
+              "id": 10013,
+              "roleType": "station",
+              "pos": {
+                "x": 9,
+                "y": 22
+              },
+              "health": 1500,
+              "level": 1,
+              "backPackCapability": 0,
+              "backpack": []
+            },
+            {
+              "id": 10010,
+              "roleType": "worker",
+              "pos": {
+                "x": 6,
+                "y": 18
+              },
+              "health": 220,
+              "level": 1,
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone",
+                "stone"
+              ]
+            },
+            {
+              "id": 10011,
+              "roleType": "pioneer",
+              "pos": {
+                "x": 16,
+                "y": 18
+              },
+              "health": 200,
+              "level": 1,
+              "backPackCapability": 40,
+              "backpack": []
+            },
+            {
+              "id": 10012,
+              "roleType": "worker",
+              "pos": {
+                "x": 7,
+                "y": 18
+              },
+              "health": 220,
+              "level": 1,
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone",
+                "stone"
+              ]
+            },
+            {
+              "id": 10040,
+              "roleType": "rocket",
+              "pos": {
+                "x": 8,
+                "y": 21
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 10041,
+              "roleType": "rocket",
+              "pos": {
+                "x": 8,
+                "y": 23
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 10042,
+              "roleType": "rocket",
+              "pos": {
+                "x": 9,
+                "y": 23
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            }
+          ],
+          "playerTasks": [
+            {
+              "taskType": "自进化类1",
+              "taskPosition": {
+                "x": 14,
+                "y": 14
+              },
+              "coldDownRounds": 0,
+              "scoreReward": 50,
+              "goldReward": 30,
+              "isValid": true,
+              "timeoutRounds": 25
+            },
+            {
+              "taskType": "自进化类2",
+              "taskPosition": {
+                "x": 16,
+                "y": 17
+              },
+              "coldDownRounds": 29,
+              "scoreReward": 50,
+              "goldReward": 30,
+              "isValid": false,
+              "timeoutRounds": 25
+            }
+          ]
+        },
+        "teamEnemy": {
+          "roles": [
+            {
+              "id": 20013,
+              "roleType": "station",
+              "pos": {
+                "x": 30,
+                "y": 10
+              },
+              "health": 1500,
+              "level": 1,
+              "backPackCapability": 0,
+              "backpack": []
+            }
+          ]
+        },
+        "robot": {
+          "roles": []
+        },
+        "phaseTask": "",
+        "llmResp": "",
+        "lastCmdResult": "",
+        "errors": [],
+        "lastRoundRoleActionResults": {
+          "10011": true,
+          "10010": true,
+          "10012": true
+        },
+        "worldNews": {
+          "officialNews": "",
+          "folkLegends": "民间传闻（本地夹具）：祭坛在 (27, 22) 附近，需献祭 AcientTablet、StarSand，第 184-224 回合有效"
+        },
+        "vendorShopList": [
+          {
+            "name": "stone",
+            "price": 1
+          },
+          {
+            "name": "iron",
+            "price": 3
+          },
+          {
+            "name": "copper",
+            "price": 5
+          }
+        ],
+        "weaponShopList": [
+          {
+            "name": "WeaponUpgradeVoucher1",
+            "price": 100
+          },
+          {
+            "name": "WeaponUpgradeVoucher2",
+            "price": 150
+          },
+          {
+            "name": "WallUpgradeVoucher1",
+            "price": 20
+          },
+          {
+            "name": "WallUpgradeVoucher2",
+            "price": 30
+          },
+          {
+            "name": "StationUpgradeVoucher1",
+            "price": 100
+          },
+          {
+            "name": "StationUpgradeVoucher2",
+            "price": 150
+          },
+          {
+            "name": "WallFixer",
+            "price": 10
+          },
+          {
+            "name": "Medicine",
+            "price": 10
+          },
+          {
+            "name": "DizzyWeapon",
+            "price": 100
+          },
+          {
+            "name": "Bomb",
+            "price": 100
+          },
+          {
+            "name": "SmallRobotSummonOrder",
+            "price": 20
+          },
+          {
+            "name": "MiddleRobotSummonOrder",
+            "price": 30
+          },
+          {
+            "name": "LargeRobotSummonOrder",
+            "price": 100
+          },
+          {
+            "name": "BossRobotSummonOrder",
+            "price": 200
+          },
+          {
+            "name": "AcientTablet",
+            "price": 15
+          },
+          {
+            "name": "StarSand",
+            "price": 15
+          },
+          {
+            "name": "FlameBreath",
+            "price": 15
+          },
+          {
+            "name": "FrostPotion",
+            "price": 15
+          },
+          {
+            "name": "ThornAmulet",
+            "price": 15
+          },
+          {
+            "name": "IronWhistle",
+            "price": 15
+          }
+        ],
+        "lastSummonTreasureResult": 0
+      },
+      "planner": {
+        "trafficState": {
+          "last_round": 11,
+          "openings": [],
+          "history": [
+            {
+              "round": 4,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 7,
+                    "y": 22
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 8,
+                    "y": 22
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 5,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 6,
+                    "y": 21
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 7,
+                    "y": 21
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 6,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 5,
+                    "y": 20
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 6,
+                    "y": 20
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 7,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 5,
+                    "y": 19
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 6,
+                    "y": 19
+                  },
+                  "goal": {
+                    "x": 7,
+                    "y": 17
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 8,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 6,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 7,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                }
+              }
+            },
+            {
+              "round": 9,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 6,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 7,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                }
+              }
+            },
+            {
+              "round": 10,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 6,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 7,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                }
+              }
+            },
+            {
+              "round": 11,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 6,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 7,
+                    "y": 18
+                  },
+                  "goal": null,
+                  "action": "collect"
+                }
+              }
+            }
+          ],
+          "walls": {},
+          "board": [
+            41,
+            32,
+            9,
+            22
+          ]
+        },
+        "schema": "competition-hw-planner/1",
+        "degraded": null,
+        "lastRound": 11,
+        "promptsSent": 0,
+        "commandsSent": 0,
+        "tasks": {
+          "cooldown_until": 41,
+          "last_note": "规则解析：字段值直接写在任务描述中",
+          "last_error": "",
+          "solver_notes": {},
+          "accept_retries": {},
+          "acceptance_status": {
+            "phase": "confirmed",
+            "point": {
+              "x": 16,
+              "y": 17
+            }
+          },
+          "supervisor": {
+            "mode": "work",
+            "reserve_pioneer": false,
+            "reason": "daytime_work",
+            "relevant_robots": 0,
+            "return_steps_lower_bound": 5,
+            "ready_workers": 0,
+            "visible_pressure_hp": 0,
+            "recommended_reserve": false
+          },
+          "cycle": null
+        },
+        "judge": {
+          "llmUsedToday": 0,
+          "llmDay": 1,
+          "llmResponses": 0,
+          "cmdRuns": 0,
+          "cmdFailures": 0,
+          "lastPrompt": "",
+          "lastCommand": "",
+          "pendingPrompt": null,
+          "pendingCmd": null,
+          "lastResult": {
+            "status": "empty",
+            "exit_code": null,
+            "output": "",
+            "truncated": false,
+            "raw": ""
+          }
+        },
+        "llmRouter": null,
+        "taskContext": null,
+        "teamAgent": null
+      }
+    },
+    {
+      "round": 55,
+      "payload": {
+        "roundNo": 55,
+        "mapInfo": {
+          "width": 41,
+          "height": 32,
+          "zones": [
+            {
+              "neutralType": "vendor",
+              "pos": {
+                "x": 20,
+                "y": 16
+              }
+            },
+            {
+              "neutralType": "weaponShop",
+              "pos": {
+                "x": 25,
+                "y": 20
+              }
+            },
+            {
+              "neutralType": "challengerTaskPoint1",
+              "pos": {
+                "x": 14,
+                "y": 14
+              }
+            },
+            {
+              "neutralType": "challengerTaskPoint2",
+              "pos": {
+                "x": 16,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "defenderTaskPoint1",
+              "pos": {
+                "x": 23,
+                "y": 14
+              }
+            },
+            {
+              "neutralType": "defenderTaskPoint2",
+              "pos": {
+                "x": 26,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 4,
+                "y": 1
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 34,
+                "y": 6
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 30,
+                "y": 22
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 32,
+                "y": 17
+              }
+            },
+            {
+              "neutralType": "iron",
+              "pos": {
+                "x": 25,
+                "y": 18
+              }
+            },
+            {
+              "neutralType": "iron",
+              "pos": {
+                "x": 14,
+                "y": 18
+              }
+            },
+            {
+              "neutralType": "iron",
+              "pos": {
+                "x": 6,
+                "y": 0
+              }
+            },
+            {
+              "neutralType": "copper",
+              "pos": {
+                "x": 33,
+                "y": 23
+              }
+            },
+            {
+              "neutralType": "copper",
+              "pos": {
+                "x": 1,
+                "y": 26
+              }
+            },
+            {
+              "neutralType": "copper",
+              "pos": {
+                "x": 26,
+                "y": 8
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 24,
+                "y": 7
+              }
+            },
+            {
+              "neutralType": "stone",
+              "pos": {
+                "x": 13,
+                "y": 31
+              }
+            }
+          ]
+        },
+        "teamOur": {
+          "type": "challenger",
+          "goldNum": 30,
+          "totalScore": 112,
+          "roles": [
+            {
+              "id": 10013,
+              "roleType": "station",
+              "pos": {
+                "x": 9,
+                "y": 22
+              },
+              "health": 1500,
+              "level": 1,
+              "backPackCapability": 0,
+              "backpack": []
+            },
+            {
+              "id": 10010,
+              "roleType": "worker",
+              "pos": {
+                "x": 7,
+                "y": 23
+              },
+              "health": 220,
+              "level": 1,
+              "backPackCapability": 100,
+              "backpack": [
+                "stone"
+              ]
+            },
+            {
+              "id": 10011,
+              "roleType": "pioneer",
+              "pos": {
+                "x": 16,
+                "y": 18
+              },
+              "health": 200,
+              "level": 1,
+              "backPackCapability": 40,
+              "backpack": []
+            },
+            {
+              "id": 10012,
+              "roleType": "worker",
+              "pos": {
+                "x": 5,
+                "y": 22
+              },
+              "health": 220,
+              "level": 1,
+              "backPackCapability": 100,
+              "backpack": [
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone",
+                "stone"
+              ]
+            },
+            {
+              "id": 10040,
+              "roleType": "rocket",
+              "pos": {
+                "x": 8,
+                "y": 21
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 10041,
+              "roleType": "rocket",
+              "pos": {
+                "x": 8,
+                "y": 23
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 10042,
+              "roleType": "rocket",
+              "pos": {
+                "x": 9,
+                "y": 23
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40000,
+              "roleType": "wall",
+              "pos": {
+                "x": 12,
+                "y": 22
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40001,
+              "roleType": "wall",
+              "pos": {
+                "x": 12,
+                "y": 21
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40002,
+              "roleType": "wall",
+              "pos": {
+                "x": 12,
+                "y": 20
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40003,
+              "roleType": "wall",
+              "pos": {
+                "x": 12,
+                "y": 24
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40004,
+              "roleType": "wall",
+              "pos": {
+                "x": 12,
+                "y": 23
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40005,
+              "roleType": "wall",
+              "pos": {
+                "x": 12,
+                "y": 19
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40006,
+              "roleType": "wall",
+              "pos": {
+                "x": 10,
+                "y": 24
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40007,
+              "roleType": "wall",
+              "pos": {
+                "x": 10,
+                "y": 19
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40008,
+              "roleType": "wall",
+              "pos": {
+                "x": 11,
+                "y": 24
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            },
+            {
+              "id": 40009,
+              "roleType": "wall",
+              "pos": {
+                "x": 11,
+                "y": 19
+              },
+              "health": 1000,
+              "level": 1,
+              "cooldown": 0
+            }
+          ],
+          "playerTasks": [
+            {
+              "taskType": "自进化类1",
+              "taskPosition": {
+                "x": 14,
+                "y": 14
+              },
+              "coldDownRounds": 0,
+              "scoreReward": 50,
+              "goldReward": 30,
+              "isValid": true,
+              "timeoutRounds": 25
+            },
+            {
+              "taskType": "自进化类2",
+              "taskPosition": {
+                "x": 16,
+                "y": 17
+              },
+              "coldDownRounds": 0,
+              "scoreReward": 50,
+              "goldReward": 30,
+              "isValid": true,
+              "timeoutRounds": 25
+            }
+          ]
+        },
+        "teamEnemy": {
+          "roles": [
+            {
+              "id": 20013,
+              "roleType": "station",
+              "pos": {
+                "x": 30,
+                "y": 10
+              },
+              "health": 1500,
+              "level": 1,
+              "backPackCapability": 0,
+              "backpack": []
+            }
+          ]
+        },
+        "robot": {
+          "roles": []
+        },
+        "phaseTask": "",
+        "llmResp": "",
+        "lastCmdResult": "",
+        "errors": [],
+        "lastRoundRoleActionResults": {
+          "10010": true,
+          "10012": true
+        },
+        "worldNews": {
+          "officialNews": "",
+          "folkLegends": "民间传闻（本地夹具）：祭坛在 (27, 22) 附近，需献祭 AcientTablet、StarSand，第 184-224 回合有效"
+        },
+        "vendorShopList": [
+          {
+            "name": "stone",
+            "price": 1
+          },
+          {
+            "name": "iron",
+            "price": 3
+          },
+          {
+            "name": "copper",
+            "price": 5
+          }
+        ],
+        "weaponShopList": [
+          {
+            "name": "WeaponUpgradeVoucher1",
+            "price": 100
+          },
+          {
+            "name": "WeaponUpgradeVoucher2",
+            "price": 150
+          },
+          {
+            "name": "WallUpgradeVoucher1",
+            "price": 20
+          },
+          {
+            "name": "WallUpgradeVoucher2",
+            "price": 30
+          },
+          {
+            "name": "StationUpgradeVoucher1",
+            "price": 100
+          },
+          {
+            "name": "StationUpgradeVoucher2",
+            "price": 150
+          },
+          {
+            "name": "WallFixer",
+            "price": 10
+          },
+          {
+            "name": "Medicine",
+            "price": 10
+          },
+          {
+            "name": "DizzyWeapon",
+            "price": 100
+          },
+          {
+            "name": "Bomb",
+            "price": 100
+          },
+          {
+            "name": "SmallRobotSummonOrder",
+            "price": 20
+          },
+          {
+            "name": "MiddleRobotSummonOrder",
+            "price": 30
+          },
+          {
+            "name": "LargeRobotSummonOrder",
+            "price": 100
+          },
+          {
+            "name": "BossRobotSummonOrder",
+            "price": 200
+          },
+          {
+            "name": "AcientTablet",
+            "price": 15
+          },
+          {
+            "name": "StarSand",
+            "price": 15
+          },
+          {
+            "name": "FlameBreath",
+            "price": 15
+          },
+          {
+            "name": "FrostPotion",
+            "price": 15
+          },
+          {
+            "name": "ThornAmulet",
+            "price": 15
+          },
+          {
+            "name": "IronWhistle",
+            "price": 15
+          }
+        ],
+        "lastSummonTreasureResult": 0
+      },
+      "planner": {
+        "trafficState": {
+          "last_round": 54,
+          "openings": [],
+          "history": [
+            {
+              "round": 47,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 13,
+                    "y": 15
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 13,
+                    "y": 14
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 48,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 12,
+                    "y": 16
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 12,
+                    "y": 15
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 49,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 11,
+                    "y": 17
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 11,
+                    "y": 16
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 50,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 10,
+                    "y": 18
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 10,
+                    "y": 17
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 51,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 9,
+                    "y": 19
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 9,
+                    "y": 18
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 52,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 8,
+                    "y": 20
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 8,
+                    "y": 19
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 53,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 7,
+                    "y": 21
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 7,
+                    "y": 20
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            },
+            {
+              "round": 54,
+              "roles": {
+                "10010": {
+                  "pos": {
+                    "x": 6,
+                    "y": 22
+                  },
+                  "goal": {
+                    "x": 8,
+                    "y": 24
+                  },
+                  "action": "move"
+                },
+                "10012": {
+                  "pos": {
+                    "x": 6,
+                    "y": 21
+                  },
+                  "goal": {
+                    "x": 9,
+                    "y": 24
+                  },
+                  "action": "move"
+                }
+              }
+            }
+          ],
+          "walls": {
+            "10010": {
+              "pos": {
+                "x": 8,
+                "y": 24
+              },
+              "round": 54
+            },
+            "10012": {
+              "pos": {
+                "x": 9,
+                "y": 24
+              },
+              "round": 54
+            }
+          },
+          "board": [
+            41,
+            32,
+            9,
+            22
+          ]
+        },
+        "schema": "competition-hw-planner/1",
+        "degraded": null,
+        "lastRound": 54,
+        "promptsSent": 0,
+        "commandsSent": 0,
+        "tasks": {
+          "cooldown_until": 41,
+          "last_note": "规则解析：字段值直接写在任务描述中",
+          "last_error": "",
+          "solver_notes": {},
+          "accept_retries": {},
+          "acceptance_status": {
+            "phase": "confirmed",
+            "point": {
+              "x": 16,
+              "y": 17
+            }
+          },
+          "supervisor": {
+            "mode": "work",
+            "reserve_pioneer": false,
+            "reason": "daytime_work",
+            "relevant_robots": 0,
+            "return_steps_lower_bound": 6,
+            "ready_workers": 0,
+            "visible_pressure_hp": 0,
+            "recommended_reserve": false
+          },
+          "cycle": null
+        },
+        "judge": {
+          "llmUsedToday": 0,
+          "llmDay": 1,
+          "llmResponses": 0,
+          "cmdRuns": 0,
+          "cmdFailures": 0,
+          "lastPrompt": "",
+          "lastCommand": "",
+          "pendingPrompt": null,
+          "pendingCmd": null,
+          "lastResult": {
+            "status": "empty",
+            "exit_code": null,
+            "output": "",
+            "truncated": false,
+            "raw": ""
+          }
+        },
+        "llmRouter": null,
+        "taskContext": null,
+        "teamAgent": null
+      }
+    }
+  ]
+}
