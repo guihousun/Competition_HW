@@ -9,7 +9,7 @@ import logging
 from collections.abc import Callable
 
 from . import cmd_explore
-from .chat import is_prices_reply, is_summary_reply, strip_answers
+from .chat import is_prices_reply, is_summary_reply, tool_of
 from .context import Context
 from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
 from .tools import pyexec
@@ -20,6 +20,17 @@ LOGGER = logging.getLogger(__name__)
 
 #: 【工具调用】那行里每个参数值截到多少字（拍的；原文在任务行的「上一轮模型回复」里）。
 ARGS_LOG_MAX = 1000
+
+#: 允许并列的工具：都不产出命令、当回合也没有回执，同回合再搭一条别的才有意义。
+_PARALLEL_TOOLS = frozenset({"SOP2Prompt", "submitAnswer"})
+
+
+def _dispatchable(calls: list[tuple[str, list[tuple[str, str]]]]) -> bool:
+    """这一轮的工具调用能不能派出去 —— 白名单外的并列**整轮作废**（一条都不派）。
+
+    两个消费者（`tool_calls` 派发、`submitted_answer` 读答卷）共用这一条，省得一边认、
+    一边不认（那就会出现"骂一套、交一套"）。"""
+    return len(calls) <= 1 or {name for name, _ in calls} <= _PARALLEL_TOOLS
 
 
 def _call_text(params: list[tuple[str, str]]) -> str:
@@ -108,15 +119,21 @@ class Agent:
                 不要记录一次性答案、临时状态、临时文件/路径、未经验证的猜测或完整探索日志。
                 已有相同 SOP 时应更新，而不是重复创建。
                 文档与实测冲突时以实际执行结果为准 —— 存跑通的那一版。
-
-                SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写成："将最终结果放入 answer 标签" 而不是直接写 XML 标签。
                 """,
                 (
                     ("name", "泛化后的问题类型名称，例如“订去某地的机票的流程”"),
                     ("sop", "该类问题的通用解决流程，以及经过实际执行确认的接口、路径、参数、返回值等环境知识"),
                 ),
             ),
-
+            "submitAnswer": (
+                self.submitAnswer,
+                """
+                提交任务的最终答案 —— 认定任务完成后用它交卷，答案写在 answer 参数里。
+                只放最终结果本身，不要带推导过程、解释或客套：判题器按答案里的字段完整度算通过率，
+                多写的字直接扣分。被判错时判题器会给出反馈，按反馈改了再交一次。
+                """,
+                (("answer", "要提交的最终答案原文"),),
+            ),
         }
 
     def chat(self, request: str, *, result: str = "", retry: str = "") -> str:
@@ -241,7 +258,8 @@ class Agent:
         return ""
 
     def tool_call(self, tool_name: str, params: list[tuple[str, str]]) -> str:
-        """顶层调度入口：按名字调工具，返回要放进响应顶层 `executeCmd` 的那条命令。
+        """**一条**调用的调度（一回合的入口是 `tool_calls`）：返回要放进响应顶层
+        `executeCmd` 的那条命令。
 
         `params` 是 `tool_of` 解析出的 `[(参数名, 原文), …]`，只收具名参数：认不出的名字
         忽略；声明的参数一个不少、值非空才放行，最后 `impl(**resolved)`。`""` = 不产出
@@ -291,6 +309,46 @@ class Agent:
         )
         return command
 
+    def tool_calls(self, calls: list[tuple[str, list[tuple[str, str]]]]) -> str:
+        """顶层调度入口：一回合的调用们 ⇒ 要放进响应顶层 `executeCmd` 的那条命令。
+
+        `calls` 是 `tool_of` 解出的整张表。白名单外的并列（`_dispatchable`）⇒ **整轮不成立**：
+        一条都不派、把"哪些能并列"回灌进会话（那一轮落重问）。放行的逐条走 `tool_call`，
+        任一条不成立只丢那一条、不连坐（并列的那两个本来就不产命令，拼出来还是 `""`）。"""
+        if not _dispatchable(calls):
+            names = "、".join(name for name, _ in calls)
+            LOGGER.info("【工具调用】：%s ⇒ 整轮不成立（这几个不能并列）", names)
+            return self._note_failed_call(
+                f"这一轮同时调了 {names} —— 能并列的只有 {'、'.join(sorted(_PARALLEL_TOOLS))}，"
+                "其他工具一次只调一个。请把任务执行类工具拆到不同的回合"
+            )
+        command = ""
+        for tool_name, params in calls:
+            command += self.tool_call(tool_name, params)
+        return command
+
+    def submitted_answer(self, reply: str) -> str:
+        """这条回复要提交的答案 —— `submitAnswer` 的 `answer` 参数值；没调 / 整轮作废 ⇒ `""`。
+
+        "该提交什么"只有这一个谓词：`task.task_channel` 判据 ④/⑤ 与 `task.answer_task`
+        都走它（分家就会出现"骂一套、交一套"）。`_dispatchable` 同源 ⇒ 被作废的那一轮
+        两边都说没有答案。"""
+        calls = tool_of(reply) or []
+        if not _dispatchable(calls):
+            return ""
+        for name, params in calls:
+            if name == "submitAnswer":
+                return dict(params).get("answer", "")
+        return ""
+
+    def submitAnswer(self, answer: str) -> str:
+        """注册表里的那只手 —— 答案的去处在 `submitted_answer`（它从回复原文里取）。
+
+        恒返回 `""`：交答案不产出 `executeCmd`，真正发指令的是 `game.task.answer_task`
+        （开拓者走 `actions.SubmitAnswer`）。它在这里只为"描述自动进 prompt、参数闸门
+        自动生效、`tool_call` 自动留痕"这三件事，没有任何自己的逻辑。"""
+        return ""
+
     def reject_shape(self) -> str:
         """整条回复像工具调用、但严格解析连工具名都取不出 ⇒ 记日志 + 把说明回灌进会话。
         调用方是 `task.task_channel`（那一轮落重问）。"""
@@ -305,10 +363,8 @@ class Agent:
         """沉淀一条条目（`name` = 这类问题的名字、`sop` = 做法与环境知识），返回 `""`。
 
         存储规则（同名覆盖、条数上限、截断留痕）在 `tools/sop.py`。条目有两类：流程与
-        知识（类型由 `name` 约定区分）。`sop` 里成对的 `<answer>` 入库前挖掉
-        （`chat.strip_answers`）。空文本 = 删掉那条。"""
-        sop, stripped = strip_answers(sop)
-        self._sop = store(self._sop, name, sop, stripped=stripped)
+        知识（类型由 `name` 约定区分）。空文本 = 删掉那条。"""
+        self._sop = store(self._sop, name, sop)
         return ""
 
     @property

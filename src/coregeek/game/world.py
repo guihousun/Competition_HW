@@ -117,9 +117,9 @@ class Turn(NamedTuple):
     #: 当前已领取任务的原文描述。非空 = 开拓者手上有任务 —— 这是"任务进行中"的唯一判据
     #: （用载荷事实，而不是自己记"谁领了任务"）。
     phase_task: str = ""
-    #: 判题器 LLM 的回复，全靠 `agent.chat` 解析：工具调用 ⇒ 命令进 `executeCmd`；`<answer>`
-    #: 包着的 ⇒ `submitAnswer`；两者都不像 ⇒ 原文即答案（兜底）。文档没写"没发 prompt 时它
-    #: 是什么"（对比 `lastCmdResult` 写明了空值约定）⇒ 必须按"它可能粘住"设计。
+    #: 判题器 LLM 的回复，全靠 `agent` 解析：工具调用 ⇒ 命令进 `executeCmd`；调了
+    #: `submitAnswer` ⇒ 开拓者把 `answer` 参数交上去；其余一律不成立。文档没写"没发 prompt
+    #: 时它是什么"（对比 `lastCmdResult` 写明了空值约定）⇒ 必须按"它可能粘住"设计。
     llm_resp: str = ""
     #: 上回合 `executeCmd` 的执行结果。文档明说"未发命令时为空字符串"。格式约定不解析，
     #: 非空即原文回灌。

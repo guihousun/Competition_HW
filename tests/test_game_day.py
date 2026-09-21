@@ -1850,7 +1850,13 @@ class PioneerErrandTest(unittest.TestCase):
         """被任务钉死的开拓者只交答案（离开任务点一格任务就作废）—— 再有钱也不跑腿。"""
         pioneer = Pioneer(10011, Pos(20, 20))
         cmd = plan(
-            self._turn(pioneer, gold=200, phase_task="题目", llm_resp="<answer>42</answer>")
+            self._turn(
+                pioneer,
+                gold=200,
+                phase_task="题目",
+                llm_resp="<tool><tool_name>submitAnswer</tool_name>"
+                "<tool_param><answer>42</answer></tool_param></tool>",
+            )
         )["10011"]
         self.assertEqual(cmd["action"], "submitAnswer")
 

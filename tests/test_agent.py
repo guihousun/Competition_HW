@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
-from coregeek.agent.chat import answer_of, tool_of  # noqa: E402
+from coregeek.agent.chat import tool_of  # noqa: E402
 from coregeek.agent.prompt import gen_all_tool_prompt  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import handle  # noqa: E402
@@ -119,36 +119,6 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertEqual(self.agent.tool_call("SOP2Prompt", []), "")
         self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
 
-    def test_a_sop_containing_the_answer_tags_is_scrubbed_on_the_way_in(self):
-        """`sop` 里成对的 `<answer>…</answer>` 入库前挖掉：沉淀正文讲的正是
-        "答案怎么写" ⇒ 几乎必然带这对标签，不挖就会进后续每一份 prompt。
-        挖掉、不是作废整次调用，挖了几处进日志（"LLM 又把答案格式写进 SOP 了"的信号）。
-        与 `answer_of` 的"先挖工具块"叠起来才是"答案不被 SOP 污染"的完整保证（端到端见
-        `TaskChannelTest.test_a_literal_in_the_sop_does_not_poison_the_submitted_answer`）。
-        """
-        with self.assertLogs(level="INFO") as logs:
-            self.assertEqual(
-                self.agent.tool_call(
-                    "SOP2Prompt",
-                    [
-                        ("name", "答题格式"),
-                        ("sop", "先 ls。答案写成 <answer>示例</answer> 的形状。"),
-                    ],
-                ),
-                "",
-            )
-        self.assertEqual(self.agent.sop, {"答题格式": "先 ls。答案写成  的形状。"})
-        self.assertIn("剔除 1 处 <answer> 段", "\n".join(r.getMessage() for r in logs.records))
-        # 多处 / 空块都算"这对串"，一次挖干净
-        self.agent.tool_call(
-            "SOP2Prompt", [("name", "答题格式"), ("sop", "<answer></answer>先 ls<answer>x</answer>")]
-        )
-        self.assertEqual(self.agent.sop, {"答题格式": "先 ls"})
-        # 半截的标记（有开无闭）不挖 —— `answer_of` 认的也是成对块，
-        # 半截标记在正文里只是普通文字（挖它等于替 LLM 改正文）
-        self.agent.tool_call("SOP2Prompt", [("name", "答题格式"), ("sop", "写 <answer> 但没有闭标签")])
-        self.assertEqual(self.agent.sop, {"答题格式": "写 <answer> 但没有闭标签"})
-
     def test_an_unknown_tool_yields_no_command_and_no_exception(self):
         """未知工具 ⇒ 空串，绝不抛。
 
@@ -178,7 +148,7 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("### Params:\n    - cmd: 需要在沙盒中执行的完整命令原文", desc)
         self.assertIn("### Params:\n    - name: ", desc)
         self.assertIn("    - sop: ", desc)  # 用途是措辞、会改；钉的是"第二个参数叫 sop"
-        self.assertNotIn("- answer:", desc)
+        self.assertIn("    - answer: ", desc)  # 交卷工具的那一个参数
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
         self.assertIn(
             "## ToolName - 查询状态\n### Description: 测试用\n### Params: （无参数）",
@@ -222,6 +192,134 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertIn("    - 参数: 测试参数", gen_all_tool_prompt(self.agent._tools))
         self.assertEqual(self.agent.tool_call("测试用工具", [("参数", "实参")]), "命令:实参")
         self.assertNotIn("测试用工具", gen_all_tool_prompt(Agent()._tools))
+
+
+class SubmitAnswerTest(unittest.TestCase):
+    """交答案走工具：`submitAnswer` 的参数闸门 + `submitted_answer` 的读取。
+
+    答案不再是"把某段文本包起来"的约定 —— 没调这个工具的回复**交不出任何东西**
+    （"整段推演被当成答案交上去"这类错误从此在结构上不可能发生）。
+    """
+
+    def setUp(self) -> None:
+        self.agent = Agent()
+
+    @staticmethod
+    def _reply(answer: str) -> str:
+        return (
+            "<tool><tool_name>submitAnswer</tool_name>"
+            f"<tool_param><answer>{answer}</answer></tool_param></tool>"
+        )
+
+    def test_the_answer_is_the_param_value(self):
+        """答卷 = `answer` 参数的值（过反转义、只去首尾空白），不是整条回复。"""
+        self.assertEqual(self.agent.submitted_answer(self._reply("晴 26 度")), "晴 26 度")
+        self.assertEqual(self.agent.submitted_answer(self._reply("a &lt; b")), "a < b")
+
+    def test_the_tool_itself_yields_no_command(self):
+        """交卷不产出命令：返回值直接进响应顶层 `executeCmd` ⇒ 非空就是往沙盒丢一条
+        不存在的命令。真正发指令的是 `game.task.answer_task`（开拓者）。"""
+        self.assertEqual(self.agent.tool_call("submitAnswer", [("answer", "晴")]), "")
+
+    def test_the_registry_agrees_with_the_reader(self):
+        """注册表声明的那一个参数名 = `submitted_answer` 认的名字。两处一旦分家，
+        写对了名字的调用会被判成"缺参数"、答案永远交不出去 —— 本地全绿，只有实盘看得见。"""
+        self.assertEqual(
+            [pname for pname, _ in self.agent._tools["submitAnswer"][2]], ["answer"]
+        )
+
+    def test_nothing_else_submits(self):
+        """没调 `submitAnswer` 的回复一概不交：纯文本、空回复、别的工具块、旧的
+        `<answer>` 标签全都算。"""
+        for reply in (
+            "晴 26 度",
+            "",
+            "<answer>晴 26 度</answer>",
+            "<tool><tool_name>executeCmd</tool_name>"
+            "<tool_param><cmd>ls</cmd></tool_param></tool>",
+        ):
+            with self.subTest(reply=reply):
+                self.assertEqual(self.agent.submitted_answer(reply), "")
+
+    def test_a_parallel_call_still_submits(self):
+        """沉淀 + 交卷同回合：两块并列 ⇒ 答案照取，谁在前谁在后都一样。"""
+        sop = (
+            "<tool><tool_name>SOP2Prompt</tool_name>"
+            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
+        )
+        self.assertEqual(self.agent.submitted_answer(sop + self._reply("晴")), "晴")
+        self.assertEqual(self.agent.submitted_answer(self._reply("晴") + sop), "晴")
+
+
+class ParallelToolTest(unittest.TestCase):
+    """并列调用只放行白名单里那两个（都不产出命令、当回合也没有回执）。
+
+    白名单外的并列**整轮作废**：一条都不派 —— 派一半出去，"哪条跑了"日志上都答不出来。
+    """
+
+    def setUp(self) -> None:
+        self.agent = Agent()
+        self.agent.chat("题")  # 作废的说明得有地方落
+
+    def _notes(self) -> list[str]:
+        """render 里标着「这次调用不成立」的那几条 tool 消息。"""
+        return [
+            c
+            for c in (m["content"] for m in json.loads(self.agent.chat("题")))
+            if "【工具调用：这次调用不成立】" in c
+        ]
+
+    def test_the_whitelisted_pair_goes_out(self):
+        """`SOP2Prompt` + `submitAnswer`：逐条派出去，各自的出口各留一行。"""
+        reply = (
+            "<tool><tool_name>SOP2Prompt</tool_name>"
+            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
+            "<tool><tool_name>submitAnswer</tool_name>"
+            "<tool_param><answer>晴</answer></tool_param></tool>"
+        )
+        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
+            self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
+        self.assertEqual(self.agent.sop, {"方法": "先找文件"}, "沉淀照落库")
+        self.assertEqual(len(caught.records), 2, "两条调用各留一行")
+
+    def test_a_second_command_tool_voids_the_whole_round(self):
+        """白名单外的并列 ⇒ 整轮作废：连那条合法的也不派，原因回灌进会话。"""
+        reply = (
+            "<tool><tool_name>executeCmd</tool_name>"
+            "<tool_param><cmd>ls</cmd></tool_param></tool>"
+            "<tool><tool_name>SOP2Prompt</tool_name>"
+            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
+        )
+        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
+            self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
+        self.assertEqual(
+            caught.records[0].getMessage(),
+            "【工具调用】：executeCmd、SOP2Prompt ⇒ 整轮不成立（这几个不能并列）",
+        )
+        self.assertEqual(self.agent.sop, {}, "作废那一轮连 SOP 也不落库")
+        (note,) = self._notes()
+        self.assertIn("并列", note)
+        self.assertIn("executeCmd", note)
+
+    def test_a_voided_round_submits_nothing_either(self):
+        """作废那一轮「该提交什么」与「派了没有」同源（`_dispatchable` 一处认）——
+        分家就会出现"骂一套、交一套"。"""
+        reply = (
+            "<tool><tool_name>executeCmd</tool_name>"
+            "<tool_param><cmd>ls</cmd></tool_param></tool>"
+            "<tool><tool_name>submitAnswer</tool_name>"
+            "<tool_param><answer>晴</answer></tool_param></tool>"
+        )
+        self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
+        self.assertEqual(self.agent.submitted_answer(reply), "")
+
+    def test_a_single_call_is_never_voided(self):
+        """一条调用与白名单无关（白名单管的是"并列"）。"""
+        self.assertEqual(
+            self.agent.tool_calls(tool_of("<tool><tool_name>python_exec</tool_name>"
+                                          "<tool_param><code>1+1</code></tool_param></tool>")),
+            "",
+        )
 
 
 class ToolCallLogTest(unittest.TestCase):

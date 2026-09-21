@@ -12,13 +12,7 @@ import logging
 from typing import Any
 
 from ..agent import AGENT, cmd_explore  # 与 LLM 说什么不在策略层
-from ..agent.chat import (
-    answer_of,
-    is_prices_reply,
-    is_summary_reply,
-    looks_like_tool,
-    tool_of,
-)
+from ..agent.chat import is_prices_reply, is_summary_reply, looks_like_tool, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .roles import BaseRole, Pioneer
@@ -71,14 +65,14 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
     if not any(isinstance(r, Pioneer) for r in turn.roles):
         return "", cmd_explore.next_command()
-    # 解析任务答案
-    answer = answer_of(llmReply)
+    # 解析任务答案（调了 submitAnswer 才有）
+    answer = AGENT.submitted_answer(llmReply)
     # 解析工具调用
-    call = tool_of(llmReply)
-    if call is None and looks_like_tool(llmReply):
+    calls = tool_of(llmReply)
+    if calls is None and looks_like_tool(llmReply):
         # 想调工具但形状没写对（严格解析取不出名字）⇒ 记日志 + 说明回灌进会话，这轮落重问
         AGENT.reject_shape()
-    command = AGENT.tool_call(*call) if call else ""  # 工具调度：副作用只发生在这一行
+    command = AGENT.tool_calls(calls) if calls else ""  # 工具调度：副作用只发生在这一行
     # 判题器本轮报的"答案不对"（code 2）—— 判据 ④ 的触发条件；原话一并带回（黑盒里唯一
     # 能回答"错在哪一项"的东西）
     rejected = any(e.code == 2 for e in turn.errors)
@@ -107,13 +101,13 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         # 首问：把题目问出去
         prompt, cmd = AGENT.chat(turn.phase_task), ""
 
-    # 链尾压缩闸门：答案轮不压缩（压缩与 `<answer>` 互斥），只剩命令轮会填上
+    # 链尾压缩闸门：交卷轮不压缩（压缩会占住下一轮的回复槽），只剩命令轮会填上
     if not answer and prompt == "":
         prompt = AGENT.compression_request()
     # 链尾探查闸门：命令槽还空着 ⇒ 拿去摸沙箱环境（回执归探查自己收，不回灌）。
     # 例外：这轮 LLM 点名调了 `executeCmd` 却发不出命令（参数没给全 / 值空白）⇒
     # 槽空着也不给探查占（它才是这个字段的第一优先级）
-    if cmd == "" and not (call and call[0] == "executeCmd"):
+    if cmd == "" and not any(name == "executeCmd" for name, _ in calls or []):
         cmd = cmd_explore.next_command()
     return prompt, cmd
 
@@ -142,8 +136,9 @@ def take_task(
 def answer_task(role: BaseRole, turn: Turn, cmds: dict[str, dict[str, Any]]) -> None:
     """服任务中：把手上的答案原样交上去。这里从来不移动（挪出去任务即作废）。
 
-    答案 = `answer_of(llmResp)`，与 `task_channel` 判据 ④ 骂的那份同源。空答案不发
-    （可能被判成"字段缺失" = 指令非法，红线）。每回合都交：判题器按"通过率最高的答案"算分。"""
-    answer = answer_of(turn.llm_resp)
+    答案 = `AGENT.submitted_answer(llmResp)`，与 `task_channel` 判据 ④ 骂的那份同源。空答案
+    不发（可能被判成"字段缺失" = 指令非法，红线）。每回合都交（`llmResp` 粘住就自然重交）：
+    判题器按"通过率最高的答案"算分。"""
+    answer = AGENT.submitted_answer(turn.llm_resp)
     if answer:
         _emit(cmds, role, actions.SubmitAnswer, answer)

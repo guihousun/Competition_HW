@@ -1,16 +1,16 @@
-"""Agent 的"怎么读回复"：四个谓词 + 一处清洗。模板不在这里（在 `prompt.py`）。
+"""Agent 的"怎么读回复"：五个谓词。模板不在这里（在 `prompt.py`）。
 
-收发全是字符串、不收 `Turn`，零包内 import（`strip_answers` 同住：它认的就是
-`_ANSWER_RE` 那一个模式，分家等于把标签语法抄成两份）。协议形状是我们自己定的
-（任务书只规定了沙盒能跑什么）⇒ 严格只认嵌套形状：prompt 教什么、这里就只认什么；
-其他形状靠 `looks_like_tool` 判宽接住、落重问（丢一回合、不碰红线）。
+收发全是字符串、不收 `Turn`，零包内 import。协议形状是我们自己定的（任务书只规定了沙盒能
+跑什么）⇒ 严格只认嵌套形状：prompt 教什么、这里就只认什么；其他形状靠 `looks_like_tool`
+判宽接住、落重问（丢一回合、不碰红线）。**不认识任何参数名** —— 参数名是 LLM 写的标签、
+由 `Agent.tool_calls` 对注册表认。
 """
 
 import re
 
 # ── 标签的语法 ────────────────────────────────────────────────────────
 #: 所有 `<>` 的解析都在下面这几个正则里；`DOTALL` 一律要（正文里的换行原样保留）。
-#: 成对才作数（半截绝不能当内容用），非贪婪停在第一对上（一回合只跑得了一条命令）。
+#: 成对才作数（半截绝不能当内容用）；非贪婪 ⇒ `summary_of` / `is_prices_reply` 只看第一对。
 #: 开标签按 `>` 定位（多敲一个空格、加个属性不该让整条回复作废）；`\b` 挡住
 #: `<tool_name>`／`<tool_param>` 被当成工具块的开头。
 _TOOL_RE = re.compile(r"<tool\b[^>]*>(.*?)</tool>", re.DOTALL)
@@ -19,10 +19,6 @@ _NAME_RE = re.compile(r"<tool_name\b[^>]*>(.*?)</tool_name>", re.DOTALL)
 #: 那对；`\w+` 是 Unicode 感知的 ⇒ 中文参数名一样认。
 _PARAM_RE = re.compile(r"<tool_param\b[^>]*>(.*?)</tool_param>", re.DOTALL)
 _INNER_RE = re.compile(r"<(\w+)\b[^>]*>(.*?)</\1>", re.DOTALL)
-#: `<answer>` 的两下：成对的取内容，只判标记在不在用 `_ANSWER_MARK_RE`（前缀判据 ——
-#: `<answer>`、`<answer >`、`<answer 乱写>` 都算"它想作答"）。
-_ANSWER_RE = re.compile(r"<answer[^>]*>(.*?)</answer>", re.DOTALL)
-_ANSWER_MARK_RE = re.compile(r"<answer")
 #: 执行摘要：`<summary>` 块。成对才作数，`summary_of` 只取第一对。
 _SUMMARY_RE = re.compile(r"<summary\b[^>]*>(.*?)</summary>", re.DOTALL)
 #: `looks_like_tool` 的宽判据（见那里）。与上面几个相反，它故意只认前缀。
@@ -41,31 +37,23 @@ _ENTITIES = (
 )
 
 
-def strip_answers(text: str) -> tuple[str, int]:
-    """把 `text` 里所有成对的 `<answer>…</answer>` 整段挖掉 ⇒ `(挖过的正文, 挖掉几处)`。
+def tool_of(reply: str) -> list[tuple[str, list[tuple[str, str]]]] | None:
+    """解析这条回复里的工具调用 ⇒ `[(工具名, [(参数名, 原文), …]), …]`（按出现顺序）。
 
-    唯一的调用者是 `Agent.SOP2Prompt`：SOP 正文讲的往往正是"答案要用标签包"，与其要求
-    LLM 每次绕开，不如在入库这唯一一道口子上保证没有。挖掉、不是作废整次调用；只认成对，
-    半截标记原样留着（`answer_of` 认的也是成对块）。"""
-    return _ANSWER_RE.subn("", text)
-
-
-def tool_of(reply: str) -> tuple[str, list[tuple[str, str]]] | None:
-    """解析工具调用 ⇒ `(工具名, [(参数名, 原文), …])`；不是工具调用、或形状不完整 ⇒ `None`。
-
-    严格只认嵌套形状：取第一对 `<tool>…</tool>`；`<tool_name>` 取第一块、`<tool_param>`
-    全部收集，每块里必须有一个或多个具名元素（属性式、裸值都不认），任何一块里一个都
-    没有 ⇒ 整次调用 `None`。只有参数没名字 ⇒ `None`（不猜）；只有名字没有参数是合法
-    形状（放行与否由 `tool_call` 按参数声明判）。参数值只去首尾空白，再过 `_unescape`。"""
-    match = _TOOL_RE.search(reply)
-    if match is None:
-        return None
-    body = match.group(1)
-    name = _NAME_RE.search(body)
-    params = _params(body)
-    if name is None or params is None:
-        return None
-    return name.group(1).strip(), params
+    严格只认嵌套形状，且**整条回复全有或全无**：一个块都没有 ⇒ `None`；任何一个块取不出
+    `<tool_name>`、或某块 `<tool_param>` 里一个具名元素都没有（属性式、裸值都不认）⇒ 整次
+    `None` —— 半条调用比没有更坏，不猜也不静默丢。只有参数没名字由 `_params` 一并挡掉；
+    只有名字没有参数是合法形状（放行与否由 `Agent.tool_calls` 按参数声明判）。
+    参数可拆进多个块（块数不是判据），值只去首尾空白、再过 `_unescape`。"""
+    calls: list[tuple[str, list[tuple[str, str]]]] = []
+    for match in _TOOL_RE.finditer(reply):
+        body = match.group(1)
+        name = _NAME_RE.search(body)
+        params = _params(body)
+        if name is None or params is None:
+            return None
+        calls.append((name.group(1).strip(), params))
+    return calls or None
 
 
 def _params(body: str) -> list[tuple[str, str]] | None:
@@ -101,7 +89,7 @@ def is_summary_reply(reply: str) -> str | None:
     """裸摘要回复（压缩轮的产物）⇒ 返回摘要文本；否则 `None`。
 
     判据：`<summary>` 块取得出内容，且挖掉摘要块之后一个字不剩 —— 任务回复（带工具调用 /
-    答案 / 正文）不算。任务 prompt 不教摘要 ⇒ "裸摘要"几乎必属压缩回复；粘住同文再判仍幂等。"""
+    正文）不算。任务 prompt 不教摘要 ⇒ "裸摘要"几乎必属压缩回复；粘住同文再判仍幂等。"""
     summary = summary_of(reply)
     if summary and not _SUMMARY_RE.sub("", reply).strip():
         return summary
@@ -124,23 +112,6 @@ def looks_like_tool(reply: str) -> bool:
     """这条回复像工具调用吗？只认开标签前缀出现（故意判宽）。
 
     只有 `<tool_name>` 的回复、解析不出的形状都该被认成"它想调工具、但格式没凑对" ⇒
-    落重问，而不是被当成答案交上去。本模块唯一只认前缀的地方 —— 别顺手改成 `_TOOL_RE`：
-    那会把"想调但没凑对"变成"原文即答案"。"""
+    落重问（`Agent.reject_shape` 把原因回灌进会话），而不是被当成一段普通文本打发掉。
+    本模块唯一只认前缀的地方 —— 别顺手改成 `_TOOL_RE`：那会把"想调但没凑对"漏过去。"""
     return _TOOL_MARK_RE.search(reply) is not None
-
-
-def answer_of(reply: str) -> str:
-    """该提交什么 —— `task` 的 `answer_task` 与 `task_channel` 判据共用同一个谓词
-    （"该提交什么"与"该骂什么"必须是同一份，分家会把带标签的原文喂回去纠错）。
-
-    三级判据：① 挖掉全部结构块（`<tool>` 与 `<summary>`）再扫 —— 有 `<answer` 标记 ⇒
-    只认成对块的内容（配不上或为空 ⇒ `""`，不回落原文）。先挖结构块防的是污染：SOP 正文
-    与执行摘要讲的往往正是"答案要用 `<answer>` 包"，落在结构块内的一律不算。② 否则像
-    工具调用 ⇒ `""`。③ 否则原文即答案（判题器的 LLM 是黑盒，这是唯一的退路）。"""
-    rest = _SUMMARY_RE.sub("", _TOOL_RE.sub("", reply))
-    if _ANSWER_MARK_RE.search(rest):
-        block = _ANSWER_RE.search(rest)
-        return block.group(1).strip() if block else ""
-    if looks_like_tool(reply):
-        return ""
-    return rest.strip()

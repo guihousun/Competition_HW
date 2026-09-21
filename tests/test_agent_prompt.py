@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import Agent, cmd_explore  # noqa: E402
-from coregeek.agent.chat import answer_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 
 #: system 的段头，按 `prompt.gen_system_prompt` 那份列表的顺序 —— 段名只在这里写一次，
@@ -221,7 +220,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("当完成任务且认为流程可沉淀时", system)
 
     def test_both_output_shapes_are_shown_verbatim(self):
-        """两个形状（工具调用 / `<answer>`）逐字出现在模板里。
+        """两个形状（工具调用 / `submitAnswer` 交卷）逐字出现在模板里。
 
         这是唯一能提高"LLM 照抄概率"的杠杆：描述得含糊一点，它就自己发明第三种形状，
         而那种失败本地测不出来（我们的解析自洽，判题器认不认只有实盘知道）。
@@ -239,48 +238,46 @@ class ChatPromptTest(unittest.TestCase):
             "        <cmd> cat /tmp/a.txt </cmd>\n    </tool_param>\n</tool>",
             system,
         )
-        self.assertIn("<answer>答案本身</answer>", system)
+        self.assertIn(
+            "    <tool>\n        <tool_name>submitAnswer</tool_name>\n        <tool_param>\n"
+            "            <answer> 答案本身 </answer>\n        </tool_param>\n    </tool>",
+            system,
+        )
 
     def test_the_sop_round_must_carry_the_answer(self):
-        """prompt 里必须有"沉淀 SOP 与作答写在同一条回复里"这条规则与示例 ——
+        """prompt 里必须有"沉淀与交卷同回合"的规则与示例 ——
         不写的话 LLM 就按"一回合只输出一样东西"把沉淀单独占一回合（日志上看着完全
-        正常，只有分数会低）。`sop` 里不许出现 `<answer>` 标签的规则也在这段里：
-        它是 `chat.strip_answers` 在代码侧兜底那条规矩，必须让 LLM 先知道。
+        正常，只有分数会低）。形状 = 两个工具块并列（`SOP2Prompt` 在前），这是允许并列的
+        唯一组合（`Agent._PARALLEL_TOOLS`），描述与放行必须同源。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("它只沉淀、不产出命令", system)
-        self.assertIn("同时采用sop沉淀工具格式和答案输出格式", system)
+        self.assertIn("3. [特殊混合模式]", _section(system, "# 【输出约定】"))
         self.assertIn(
             "    <tool>\n        <tool_name>SOP2Prompt</tool_name>\n        <tool_param>\n"
             "            <name> 流程名 </name>\n            <sop> xxx </sop>\n"
-            "        </tool_param>\n    </tool>\n    <answer>答案本身</answer>",
+            "        </tool_param>\n    </tool>\n    <tool>\n"
+            "        <tool_name>submitAnswer</tool_name>\n        <tool_param>\n"
+            "            <answer> 答案本身 </answer>\n        </tool_param>\n    </tool>",
             system,
         )
-        self.assertIn("不要出现 `<answer>` 与 `</answer>` 这对标签", system)
+        # 并列的例外说在最前面那段"一回合只调一次"的纪律里（示例在输出约定段）
+        self.assertIn("`SOP2Prompt` 与 `submitAnswer`", _section(system, "# 【工具描述】"))
 
-    def test_the_answer_round_says_the_tags_are_mandatory(self):
-        """作答**一定**包在 `<answer></answer>` 里；解释、推演写在标签外面，不许写进标签里。
+    def test_the_answer_round_submits_through_the_tool(self):
+        """交卷**一定**走 `submitAnswer` 工具；解释、推演写在块外面，不许写进 `answer` 里。
 
-        裸文本（"答案是：3"、一段解释后跟个数字）在我们这一侧**会被当答案整段交上去**
-        （`chat.answer_of` 第三级：原文即答案）⇒ 判题器按字段算通过率，多写的字直接扣分，
-        而本地一切自洽、只有在任务行里看得到交出去的那一段不对劲。措辞就是唯一的杠杆：
-        【输出约定】的"只能用 … 包起来、整条回复只写一个这个块"与【工作原则】第 5 条的
-        "其他提交方式均被禁止"是同一件事的两处落点（第 107 步，用户把原来那两句"后果"的
-        说明删了，杠杆换成禁令本身 —— 见 `code-task.md` 第 107 步）。
-        `sop` 那条禁令紧挨着这条，必须写明它**只**管 `sop` 文本 —— 否则 LLM 把
-        "不要出现这对标签"读成"作答也别用"，正是它不守格式的一个入口。
+        裸文本（"答案是：3"、一段解释后跟个数字）在新通道下**什么都交不出去**（旧通道的
+        "原文即答案"兜底已删）—— 结构性堵死 vs 靠措辞。措辞仍然有用：`answer` 参数里只许放
+        最终结果（判题器按字段算通过率，多写的字直接扣分），【输出约定】的"只写一个这个块"
+        与【工作原则】第 5 条的"其他的任务结果提交方式均被禁止"是同一件事的两处落点。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         output = _section(system, "# 【输出约定】")
-        self.assertIn(
-            "2. [任务答案提交格式]只能用 <answer>任务答案</answer> 包起来", output
-        )
-        self.assertIn("只写一个这个块", output)
+        self.assertIn("2. [任务答案提交格式]调用 submitAnswer 工具", output)
+        self.assertIn("整条回复里只写一个这个块", output)
         self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
-        self.assertIn("这条只管 `sop` 那段文本", output)
-        # 【注意事项】第 1 条指的是同一个标签。第 133 步它一度写成 [工具调用格式] ——
-        # 那是把答案指向 `<tool>` 块，与上面那条正面冲突（本地测不出来：`answer_of` 有
-        # "原文即答案"兜底），所以在这里钉住"两处指同一个标签"。
+        # 【注意事项】第 1 条指的是同一个形状。它是"答案不许走别的路"的最后一道措辞闸门
+        # —— 别让它指向 `[工具调用格式]`（那是把答案指向 <tool> 块）。
         self.assertIn(
             "[任务答案提交格式]或[特殊混合模式]", _section(system, "# 【注意事项】")
         )

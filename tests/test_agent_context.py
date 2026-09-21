@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import Agent  # noqa: E402
-from coregeek.agent.chat import answer_of  # noqa: E402
 from coregeek.agent.context import Context  # noqa: E402
 
 
@@ -51,7 +50,7 @@ class ContextTest(unittest.TestCase):
 
     def test_hear_records_the_reply_verbatim(self):
         """回复原文进 assistant 消息 —— 会话记的是它真说过的话
-        （纠错块才收 `answer_of` 解包后的那份）。"""
+        （纠错块才收 `answer` 参数里那一份）。"""
         self.ctx.hear("<tool>ls</tool>")
         self.assertEqual(
             self.messages()[-1], {"role": "assistant", "content": "<tool>ls</tool>"}
@@ -127,7 +126,7 @@ class ContextTest(unittest.TestCase):
         钉在下面的窗口用例里；存储始终是全量逐字。）"""
         self.ctx.hear("回复 {'a': 1}")
         self.ctx.feed("结果 {task} {0}", "")
-        self.ctx.hear("<answer>答案</answer>")
+        self.ctx.hear("<tool><tool_name>submitAnswer</tool_name><tool_param><answer>答案</answer></tool_param></tool>")
         self.assertEqual(
             [(m["role"], m["content"]) for m in self.messages()],
             [
@@ -135,7 +134,11 @@ class ContextTest(unittest.TestCase):
                 ("user", "请查询北京天气"),
                 ("assistant", "回复 {'a': 1}"),
                 ("tool", "【上一条命令的执行结果（原文）】\n结果 {task} {0}"),
-                ("assistant", "<answer>答案</answer>"),
+                (
+                    "assistant",
+                    "<tool><tool_name>submitAnswer</tool_name>"
+                    "<tool_param><answer>答案</answer></tool_param></tool>",
+                ),
             ],
         )
 

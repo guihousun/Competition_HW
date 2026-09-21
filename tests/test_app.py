@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import SAMPLE  # noqa: E402
 from coregeek.agent import AGENT, cmd_explore  # noqa: E402
-from coregeek.agent.chat import answer_of  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import LOG_PROMPT_MAX, _clip, handle  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
@@ -25,6 +24,14 @@ from coregeek.utils import LOG_TEXT_MAX  # noqa: E402
 #: 官方样例（roundNo=85，夜里）的落点：**开拓者 10011（炮手）朝武器组的岗位走**，
 #: 两个工人各朝自己认领的那座矿走（第 130 步的夜班分工）。夜里 `build`/`collect` 一条都不该有。
 EXPECTED_MOVES = {"10010": [5, 24], "10012": [11, 15], "10011": [9, 13]}
+
+
+def _submit(answer: str) -> str:
+    """交卷的回复 —— 答案走 `submitAnswer` 的参数（`answer` 的值两侧空白无所谓）。"""
+    return (
+        "<tool><tool_name>submitAnswer</tool_name>"
+        f"<tool_param><answer>{answer}</answer></tool_param></tool>"
+    )
 
 
 #: 任务线那两条日志的行首标记。它们由 `task` 打（不是 `coregeek.app`）——
@@ -205,12 +212,13 @@ class HandleTest(unittest.TestCase):
         ):
             self.assertIn(piece, messages[0]["content"])
 
-        # 判题器答了 ⇒ 回复那一格才有内容，而且不再提问。答案轮只交答案：prompt 槽完全
-        # 空着（压缩与 `<answer>` 互斥 —— 压缩回复会占住下一轮的 `llmResp` 槽，
+        # 判题器答了 ⇒ 回复那一格才有内容，而且不再提问。交卷轮只交答案：prompt 槽完全
+        # 空着（压缩与交卷互斥 —— 压缩回复会占住下一轮的 `llmResp` 槽，
         # 答案被判错时纠错分支拿不到答案原文）
-        task, ask = asked_after_sending(llmResp="答案")
-        self.assertIn("【上一轮模型回复】：答案", task)
-        self.assertEqual(ask, "", "答案轮不提问也不压缩（第 47 步）")
+        reply = _submit("晴 26 度")
+        task, ask = asked_after_sending(llmResp=reply)
+        self.assertIn(f"【上一轮模型回复】：{reply}", task)
+        self.assertEqual(ask, "", "交卷轮不提问也不压缩（第 47 步）")
 
         long_text = "题" * (LOG_TEXT_MAX + 7)
         task, _ = asked_after_sending(phaseTask=long_text)
@@ -222,13 +230,13 @@ class HandleTest(unittest.TestCase):
         # 已经空了）—— 所以触发条件里带着 `llm_resp`，不能只判任务。
         task, _ = asked_after_sending(phaseTask="")
         self.assertIn("【本轮任务】：无", task)
-        self.assertIn("【上一轮模型回复】：答案", task)
+        self.assertIn(f"【上一轮模型回复】：{reply}", task)
 
     def test_a_long_answer_in_the_actions_line_passes_through(self):
         """`submitAnswer` 的 `taskAnswer` 是 LLM 给的自由文本，基本不截 —— `LOG_TEXT_MAX`
         已是 40000：9000 字的答案原文全量进日志，只有过了上限才截、且留痕。
 
-        这条走真链路（`answer_of` → `submitAnswer` → `describe`）：上面那条证明"`describe`
+        这条走真链路（`tool_of` → `submitted_answer` → `describe`）：上面那条证明"`describe`
         会用递进来的 `clip`"，这条证明"`app` 递的是真的那个"。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
@@ -236,7 +244,7 @@ class HandleTest(unittest.TestCase):
         raw["errors"] = []
         raw["lastRoundRoleActionResults"] = {}
         raw["phaseTask"] = "请查询北京天气"  # 有任务 ⇒ 开拓者 `_answer_task`（不管白天夜里）
-        raw["llmResp"] = "<answer>" + "答" * 9000 + "</answer>"
+        raw["llmResp"] = _submit("答" * 9000)
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         acts = [
@@ -248,7 +256,7 @@ class HandleTest(unittest.TestCase):
         self.assertNotIn("（共", acts[0])
 
         # 过了上限才截，而且必须留痕
-        raw["llmResp"] = "<answer>" + "答" * (LOG_TEXT_MAX + 10) + "</answer>"
+        raw["llmResp"] = _submit("答" * (LOG_TEXT_MAX + 10))
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         acts = [
@@ -448,10 +456,10 @@ class HandleTest(unittest.TestCase):
         self.assertIn("[exitCode:0]\n2", messages[3]["content"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ④ LLM 给出答案 ⇒ 只交 `<answer>` 里的内容（不是整段回复），prompt 与 executeCmd
-        #    全空（压缩与 `<answer>` 互斥）。清 `lastCmdResult`：上一轮我们没发命令
+        # ④ LLM 调 `submitAnswer` 交卷 ⇒ 只交 `answer` 参数里那段（不是整段回复），prompt 与
+        #    executeCmd 全空（压缩与交卷互斥）。清 `lastCmdResult`：上一轮我们没发命令
         raw["lastCmdResult"] = ""
-        raw["llmResp"] = "<answer>晴 26 度</answer>"
+        raw["llmResp"] = _submit("晴 26 度")
         body = ask()
         self.assertEqual(
             body["roleCommandMap"]["10011"],
@@ -462,13 +470,13 @@ class HandleTest(unittest.TestCase):
 
         # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，同时照旧提交（两条通道独立；
         #    接口文档 L140 取"通过率最高"，重交零成本）。会话里两份"它说过的话"各归各的：
-        #    assistant 消息收整段原文（带标签，它真说过的话），纠错块收的必须是交上去的
-        #    那一份（`answer_of` 解包后的）—— 给错前者，LLM 会去改一个并不存在的问题。
+        #    assistant 消息收整段原文（它真说过的话），纠错块收的必须是交上去的那一份
+        #    （`answer` 参数的值）—— 给错前者，LLM 会去改一个并不存在的问题。
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
         messages = json.loads(body["prompt"])
         self.assertIn(
-            "<answer>晴 26 度</answer>",
+            _submit("晴 26 度"),
             [m["content"] for m in messages if m["role"] == "assistant"],
         )
         self.assertIn(
@@ -481,13 +489,13 @@ class HandleTest(unittest.TestCase):
             body["roleCommandMap"]["10011"]["action"], "submitAnswer", "提交不该被提问挤掉"
         )
 
-        # ⑥ 落回裸文本 ⇒ 照旧原文提交（兜底：判题器的 LLM 不按我们的形状回时唯一的退路）
+        # ⑥ 落回裸文本 ⇒ 什么都交不出去（旧通道的"原文即答案"兜底已删）⇒ 落 ⑥ 重问。
+        #    这条纪律现在只有一条路：LLM 必须调 `submitAnswer`（判题器报错时它看得见纠错段）。
         raw["llmResp"] = "晴 26 度"
         body = ask()
-        self.assertEqual(
-            body["roleCommandMap"]["10011"],
-            {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
-        )
+        self.assertNotIn("10011", body["roleCommandMap"], "裸文本不是答案")
+        self.assertEqual(body["executeCmd"], "")
+        self.assertNotEqual(body["prompt"], "", "落 ⑥ 重问（纠错段还在）")
 
     def test_the_sandbox_line_only_appears_with_a_result(self):
         """沙盒行只在真有回执时出现 —— "没发命令就一定是空串"是文档写死的（接口文档 L33），
