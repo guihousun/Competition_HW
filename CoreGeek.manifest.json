@@ -1,5 +1,5 @@
 {
-  "commit": "9f3c253960227335ac9fd27d48e0a50abd7b974d",
+  "commit": "96b2792f2c5c7a44bb77f6eea124f59bcfce4633",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -332,9 +332,9 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 10911,
+      "bytes": 11598,
       "path": "CoreGeek/src/agent/strategy_config.py",
-      "sha256": "bb758e17a8a1a7651aabe6498d6cb460989ec3524604f2e770b02f860d8e136c",
+      "sha256": "48bb2cf8989f036dc5607b590eb0480e7482e023d20af737d0516995a18db4cf",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -519,5 +519,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "563431b89f65724a0827b5de32ed705fcfe072638d320f105a1efefe27ce46e8"
+  "source_digest": "f8f20570717730322cdbd79543d33c4a602149b4812b618be6a9c3c1f52392c7"
 }
