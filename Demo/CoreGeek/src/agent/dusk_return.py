@@ -119,7 +119,12 @@ class Frame:
             # A command already selected at a legal target is one atomic action;
             # finish it, then arbitrate the return on the next observation.
             keep = bool(current and (atomic or ((fits or stays_home) and not self.emergency)))
-            if not keep and (self.required(role) or (current and not fits)):
+            # Before the calculated return threshold, preserve a legal work
+            # move even when the observed map has no complete route from its
+            # proposed landing cell.  A partial public map must not turn the
+            # daylight policy into an early stop; once the role is required,
+            # the route check above still stages it home.
+            if not keep and self.required(role):
                 result.pop(role.unit_id,None)
                 return_costs, return_steps = self.routes(role,result)
                 step = return_steps.get(role.pos)

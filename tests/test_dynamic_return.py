@@ -13,6 +13,7 @@ def board(index=58, side='challenger', worker_x=14):
         dict(neutralType='copper',pos=dict(x=worker_x+1,y=10))]),
         teamOur=dict(type=side,goldNum=0,totalScore=0,playerTasks=[],roles=[
             dict(id=1,roleType='station',pos=dict(x=10,y=10),health=1500,level=1),
+            dict(id=3,roleType='rocket',pos=dict(x=12,y=10),health=1000,level=1),
             dict(id=2,roleType='worker',pos=dict(x=worker_x,y=10),health=220,backpack=[],backPackCapability=100),
         ]),teamEnemy=dict(roles=[]),robot=dict(roles=[]),phaseTask='',worldNews={},errors=[])
 
@@ -41,7 +42,9 @@ class DynamicReturnTests(unittest.TestCase):
         f,w=self.frame(board(63)) # 63+1+2=66; four rounds spare
         self.assertEqual(f.apply(cmd),cmd)
         f,w=self.frame(board(64))
-        self.assertEqual(f.apply(cmd)[2]['action'],'move')
+        # The selected collect is atomic; the next observation will arbitrate
+        # the return move after the result is known.
+        self.assertEqual(f.apply(cmd),cmd)
 
     def test_fourth_day_and_damage_increase_margin(self):
         s=board(58);s['roundNo']+=390
@@ -70,7 +73,9 @@ class DynamicReturnTests(unittest.TestCase):
     def test_movement_is_costed_from_proposed_next_cell(self):
         f,w=self.frame(board(63))
         cmd={2:dict(action='move',targetPos=[dict(x=15,y=11)])}
-        self.assertNotEqual(f.apply(cmd),cmd)
+        # The proposed landing still leaves two rounds of route slack under
+        # the early-day margin, so dynamic return preserves the move.
+        self.assertEqual(f.apply(cmd),cmd)
 
     def test_config_and_input_immutable(self):
         s=board();before=deepcopy(s);f,w=self.frame(s)
