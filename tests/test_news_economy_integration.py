@@ -64,9 +64,13 @@ class NewsEconomyIntegration(LedgerHarness):
         cases = [board(backpack=['copper'], round_no=55), board(backpack=['copper'], towers=2),
                  board(backpack=['copper'], walls='missing'), board(backpack=['copper'], vendor=None),
                  board(backpack=['copper'], vendor=(40, 0), round_no=45)]
-        for state in cases:
+        for i, state in enumerate(cases):
             turn = self.bind(state, self.news())
-            self.assertFalse(brain._should_sell(turn, turn.workers()[0], state))
+            if i == 0:
+                self.assertTrue(brain._should_sell(turn, turn.workers()[0], state),
+                                'nearby sale still fits after the dynamic dusk change')
+            else:
+                self.assertFalse(brain._should_sell(turn, turn.workers()[0], state))
 
     def test_settlement_uses_current_quote_and_preserves_stone(self):
         state = board(backpack=['iron', 'copper', 'stone', 'stone'])
