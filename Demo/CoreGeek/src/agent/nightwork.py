@@ -7,7 +7,7 @@ from collections import Counter
 
 from .coordination import available_gold
 from .grid import next_step
-from . import home_defense, defense_layout, upgrade_itinerary
+from . import home_defense, defense_layout, upgrade_itinerary, frontline, strategy_config
 from .market import can_upgrade, shop_prices, vendor_prices, VOUCHER_TARGETS
 from .protocol import (Pos, Turn, Unit, WALL, STATION, TOWER_TYPES, MEDICINE,
                        WALL_FIXER, distance, use_command, buy_command,
@@ -26,10 +26,17 @@ def _near(turn, role, kind):
 def _maintenance(turn, role):
     if role.health <= 154:
         yield MEDICINE, None
+    central_policy = strategy_config.get()['enabled']
+    rear = set(frontline.rear_walls(turn)) if central_policy else set()
+    def key(building):
+        old = upgrade_itinerary.priority(building)
+        if central_policy and building.kind == WALL:
+            return (old[0], _repair_rank(turn, building), old[1:])
+        return (old, _wall_rank(turn, building)) if not central_policy else (old[0], (0, 0, 0), old[1:])
     buildings = sorted((u for u in turn.ours if u.health > 0
                         and distance(role.pos, u.pos) == 1
-                        and u.kind in (STATION, WALL) + TOWER_TYPES),
-                       key=lambda u: (upgrade_itinerary.priority(u), _wall_rank(turn, u)))
+                        and u.kind in (STATION, WALL) + TOWER_TYPES
+                        and not (u.kind == WALL and u.pos in rear)), key=key)
     for building in buildings:
         for item in sorted(VOUCHER_TARGETS):
             if can_upgrade(item, building.kind, building.level):
@@ -40,9 +47,18 @@ def _maintenance(turn, role):
 
 
 def _wall_rank(turn, building):
+    if strategy_config.get()['enabled'] and building.kind == WALL:
+        return frontline.wall_tier(turn, building.pos)
     base = turn.station()
     return (defense_layout.wall_priority(building.pos, base.pos, turn.width, turn.height)[0]
             if base and building.kind == WALL else 0)
+
+
+def _repair_rank(turn, wall):
+    fraction = wall.health / (1000, 1500, 2000)[min(3, max(1, wall.level)) - 1]
+    config = strategy_config.get()
+    return ((fraction > config['maintenance']['emergency_fraction']) if config['enabled'] else False,
+            _wall_rank(turn, wall), fraction)
 
 
 def _front_repair(turn, pairs):
@@ -54,18 +70,20 @@ def _front_repair(turn, pairs):
     if len(ready) < 2:
         return {}
     options = []
+    central_policy = strategy_config.get()['enabled']
+    rear = set(frontline.rear_walls(turn)) if central_policy else set()
     for worker in ready:
         if WALL_FIXER not in worker.backpack:
             continue
         for wall in turn.walls():
             full = (1000, 1500, 2000)[min(3, max(1, wall.level)) - 1]
             if (0 < wall.health <= .7 * full and distance(worker.pos, wall.pos) == 1
-                    and _wall_rank(turn, wall) <= 1):
-                options.append((_wall_rank(turn, wall), wall.health / full,
+                    and wall.pos not in rear and (central_policy or _wall_rank(turn, wall) <= 1)):
+                options.append((_repair_rank(turn, wall),
                                 wall.unit_id, worker.unit_id, wall.pos))
     if not options:
         return {}
-    _, _, _, uid, pos = min(options)
+    _, _, uid, pos = min(options)
     return {uid: use_command(WALL_FIXER, pos)}
 
 

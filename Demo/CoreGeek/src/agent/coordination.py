@@ -57,6 +57,62 @@ def available_gold(turn: Turn, payload: dict[str, Any],
     return max(0, remaining)
 
 
+def wall_build_seals_role(turn: Turn, targets, *, existing_additions=()) -> bool:
+    """Preserve structural exit/return access for roles inside and outside.
+
+    This is a strategy guard, not new build-zone physics. Only observed terrain
+    and standing permanent buildings form the structural graph; movable roles
+    are not claimed to have moved. The graph never supplies a move command.
+    Actual occupancy and simultaneous movement remain separately checked.
+    """
+    base = turn.station()
+    if base is None:
+        return False
+    x,y = base.pos.x,base.pos.y
+    sheltered = [r for r in turn.controllable()
+                 if x-1 <= r.pos.x <= x+2 and y-2 <= r.pos.y <= y+1]
+    outside = [r for r in turn.controllable() if r not in sheltered]
+    blocked = {p for u in turn.ours+turn.enemies
+               if u.health>0 and u.kind not in CONTROLLABLE_TYPES for p in turn.footprint(u)}
+    blocked.update(existing_additions)
+    added = set(targets)
+    def reaches_outside(start, obstacles):
+        seen,pending = {start},[start]
+        while pending:
+            at = pending.pop()
+            if at.x<x-2 or at.x>x+3 or at.y<y-3 or at.y>y+2:
+                return True
+            for nxt in _neighbours(at):
+                if nxt not in seen and nxt not in obstacles and turn.land(nxt):
+                    seen.add(nxt);pending.append(nxt)
+        return False
+    if any(reaches_outside(r.pos,blocked) and not reaches_outside(r.pos,blocked|added)
+           for r in sheltered):
+        return True
+    if not outside:
+        return False
+
+    def reachable_from_inner(obstacles):
+        # Reverse flood computes all structurally reachable return origins once,
+        # bounded by the public map (normally 41*32), regardless of crew size.
+        seen = {Pos(xx,yy) for xx in range(x-1,x+3) for yy in range(y-2,y+2)
+                if turn.land(Pos(xx,yy)) and Pos(xx,yy) not in obstacles}
+        pending = list(seen)
+        while pending:
+            at = pending.pop()
+            for nxt in _neighbours(at):
+                if nxt not in seen and nxt not in obstacles and turn.land(nxt):
+                    seen.add(nxt);pending.append(nxt)
+        return seen
+
+    before = reachable_from_inner(blocked)
+    affected = [r for r in outside if r.pos in before]
+    if not affected:
+        return False  # An already inaccessible base was not closed by this build.
+    after = reachable_from_inner(blocked|added)
+    return any(r.pos not in after for r in affected)
+
+
 def reconcile(turn: Turn, payload: dict[str, Any],
               commands: dict[int, dict[str, Any]], *,
               day_yield_deadline: int | None = None) -> dict[int, dict[str, Any]]:
@@ -75,9 +131,19 @@ def reconcile(turn: Turn, payload: dict[str, Any],
     living = {str(role.unit_id) for role in turn.controllable()}
     direct = {str(uid) for uid in commands if str(uid) in living}
     controllers_used = set()
-    from . import frontline
+    from . import frontline, strategy_config
+    rear_walls = set(frontline.rear_walls(turn)) if strategy_config.get()['enabled'] else set()
     protected_walls=frontline.protected_walls(turn)
+    build_additions=set()
     for uid, command in commands.items():
+        if command.get('action')=='build' and command.get('name')=='wall' and any(
+                Pos.load(p) in rear_walls for p in command.get('targetPos',())):
+            continue  # Optional team investment policy, not an official forbidden zone.
+        if command.get('action')=='build' and command.get('name')=='wall' and strategy_config.get()['enabled']:
+            targets={Pos.load(p) for p in command.get('targetPos',())}
+            if wall_build_seals_role(turn,targets,existing_additions=build_additions):
+                continue  # Preserve a real structural exit before closing the last gap.
+            build_additions.update(targets)
         if command.get('action')=='remove':
             actor=next((w for w in turn.workers() if str(w.unit_id)==str(uid)),None)
             targets=command.get('targetPos') or []

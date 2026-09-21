@@ -1,8 +1,14 @@
-"""Independent action/budget expectations for public daylight construction."""
+"""Independent action/budget expectations for public daylight construction.
+
+Historical hand-drawn routes deliberately build the rear edge. Run them under
+explicit legacy strategy to preserve their original geometry/budget oracle;
+new enabled rear-row policy is covered by test_rear_wall_build_policy.
+"""
 from copy import deepcopy
 from pathlib import Path
 import sys
 import unittest
+from legacy_strategy import LegacyStrategyCase
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Demo/CoreGeek/src'))
 from agent import construction_trip, simulator
@@ -34,7 +40,7 @@ def confine(state, free):
                                for x in range(41) for y in range(32) if (x, y) not in free]
 
 
-class ConstructionTripTests(unittest.TestCase):
+class ConstructionTripTests(LegacyStrategyCase):
     def test_worker_on_future_wall_cell_must_move_aside_then_build(self):
         state=board(worker_pos=(8,10),bag=['stone'])
         confine(state,{(7,10),(8,10),(9,10)})

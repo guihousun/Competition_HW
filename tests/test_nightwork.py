@@ -99,7 +99,9 @@ class QuietNightTests(unittest.TestCase):
             for hp in [threshold, threshold + 1, full]:
                 payload = board()
                 payload['teamOur']['roles'][0]['backpack'] = ['WallFixer']
-                wall = unit(99, 'wall', 3, 5, hp)
+                # Use a front wall: the rear x=3 row is intentionally retired.
+                payload['teamOur']['roles'][0]['pos'] = dict(x=7, y=7)
+                wall = unit(99, 'wall', 8, 7, hp)
                 wall['level'] = level
                 payload['teamOur']['roles'].append(wall)
                 result = plan(payload)

@@ -46,6 +46,34 @@ class FrontlineTests(unittest.TestCase):
     def test_missing_base_has_no_invented_front(self):
         payload=self.geometry(9,22);payload['teamOur']['roles']=[]
         self.assertEqual(frontline.wall_groups(Turn.load(payload)),((),()))
+        self.assertEqual(frontline.center_walls(Turn.load(payload)),())
+        self.assertEqual(frontline.rear_walls(Turn.load(payload)),())
+
+    def test_center_two_and_entire_rear_edge_both_horizontal_sides(self):
+        for x,front_x,rear_x in ((9,12,7),(30,28,33)):
+            with self.subTest(base_x=x):
+                turn=Turn.load(self.geometry(x,22))
+                self.assertEqual(frontline.center_walls(turn),(Pos(front_x,21),Pos(front_x,22)))
+                self.assertEqual(frontline.rear_walls(turn),tuple(Pos(rear_x,y) for y in range(19,25)))
+                self.assertFalse(set(frontline.rear_walls(turn)) & frontline.protected_walls(turn))
+                self.assertEqual([frontline.wall_tier(turn,Pos(front_x,y)) for y in range(19,25)],[2,1,0,0,1,2])
+
+    def test_center_and_rear_rotate_with_vertical_approach(self):
+        for y,front_y,rear_y in ((5,7,2),(25,22,27)):
+            with self.subTest(base_y=y):
+                turn=Turn.load(self.geometry(19,y))
+                self.assertEqual(frontline.center_walls(turn),(Pos(19,front_y),Pos(20,front_y)))
+                self.assertEqual(frontline.rear_walls(turn),tuple(Pos(x,rear_y) for x in range(17,23)))
+                self.assertEqual([frontline.wall_tier(turn,Pos(x,front_y)) for x in range(17,23)],[2,1,0,0,1,2])
+
+    def test_center_and_rear_land_filters_do_not_reassign_priorities(self):
+        p=self.geometry(9,22)
+        p['mapInfo']['zones']=[dict(pos=dict(x=12,y=21),neutralType='water'),
+                               dict(pos=dict(x=7,y=19),neutralType='water')]
+        turn=Turn.load(p)
+        self.assertEqual(frontline.center_walls(turn),(Pos(12,22),))
+        self.assertEqual(frontline.wall_tier(turn,Pos(12,20)),1)
+        self.assertEqual(frontline.rear_walls(turn),tuple(Pos(7,y) for y in range(20,25)))
 
 
 class FrontlineUpgradeTests(unittest.TestCase):
@@ -130,6 +158,27 @@ class FrontlineUpgradeTests(unittest.TestCase):
         self.assertEqual(report['building'],99)
         self.assertEqual(report['voucher'],'WallUpgradeVoucher2')
 
+    def test_second_upgrade_center_precedes_first_upgrade_outer_front(self):
+        p=self.payload();self.add_wall(p,99,6,3,level=2,health=1500)
+        self.add_wall(p,10,6,2);self.add_wall(p,11,6,5);self.add_wall(p,12,6,1)
+        proposal,report=upgrade.plan(Turn.load(p),p,{})
+        self.assertIsNotNone(proposal,report)
+        self.assertEqual(report['building'],99)
+        self.assertEqual(report['voucher'],'WallUpgradeVoucher2')
+
+    def test_maxed_center_releases_outer_front_before_corners(self):
+        p=self.payload()
+        self.add_wall(p,30,6,3,level=3,health=2000);self.add_wall(p,31,6,4,level=3,health=2000)
+        self.add_wall(p,99,6,2);self.add_wall(p,10,6,1)
+        proposal,report=upgrade.plan(Turn.load(p),p,{})
+        self.assertIsNotNone(proposal,report);self.assertEqual(report['building'],99)
+
+    def test_critical_front_corner_keeps_priority_over_weapon_purchase(self):
+        p=self.payload(levels=(2,2,2));self.add_wall(p,99,6,1,health=200)
+        proposal,report=upgrade.plan(Turn.load(p),p,{})
+        self.assertIsNotNone(proposal,report)
+        self.assertEqual(report['building'],99);self.assertEqual(report['voucher'],AV)
+
     def test_maxed_front_four_releases_candidate_slots_for_corner(self):
         p=self.payload()
         for uid,y in enumerate((2,3,4,5),30):self.add_wall(p,uid,6,y,level=3,health=2000)
@@ -140,9 +189,24 @@ class FrontlineUpgradeTests(unittest.TestCase):
     def test_six_maxed_front_walls_allow_remaining_wall_upgrades(self):
         p=self.payload()
         for uid,y in enumerate(range(1,7),30):self.add_wall(p,uid,6,y,level=3,health=2000)
-        self.add_wall(p,10,1,2)
+        self.add_wall(p,10,3,1)  # flank remains eligible; retired rear does not
         proposal,report=upgrade.plan(Turn.load(p),p,{})
         self.assertIsNotNone(proposal,report);self.assertEqual(report['building'],10)
+
+    def test_existing_rear_wall_gets_no_new_upgrade_investment(self):
+        p=self.payload();self.add_wall(p,10,1,2,health=100)
+        proposal,report=upgrade.plan(Turn.load(p),p,{})
+        self.assertIsNone(proposal,report)
+        self.assertEqual(report['reason'],'no_affordable_upgrade')
+        self.assertEqual(p['teamOur']['roles'][-1]['level'],1)
+        self.assertEqual(p['teamOur']['roles'][-1]['health'],100)
+
+    def test_carried_wall_voucher_is_directed_to_flank_not_retired_rear(self):
+        p=self.payload();self.add_wall(p,10,1,2,health=100);self.add_wall(p,99,3,1)
+        worker=next(r for r in p['teamOur']['roles'] if r['id']==11)
+        worker['backpack']=[AV]
+        proposal,report=upgrade.plan(Turn.load(p),p,{})
+        self.assertIsNotNone(proposal,report);self.assertEqual(report['building'],99)
 
 
 if __name__=='__main__':unittest.main()

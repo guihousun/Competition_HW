@@ -327,7 +327,7 @@ def clean_memory(value):
         else:
             cells = row.get('walls')
             if (row.get('phase') not in ('work','return') or not isinstance(cells,list)
-                    or not 1 <= len(cells) <= 10 or any(not isinstance(p,dict)
+                    or not (0 if row.get('phase')=='return' else 1) <= len(cells) <= 10 or any(not isinstance(p,dict)
                         or set(p) != {'x','y'} or any(type(p[k]) is not int or not 0 <= p[k] < (41 if k=='x' else 32)
                         for k in ('x','y')) for p in cells)):
                 continue
@@ -347,6 +347,8 @@ class TripFrame:
         self.memory = clean_memory(memory)
         self.events, self.pending = [], {}
         self._new_deferred = False
+        from . import frontline, strategy_config
+        rear = set(frontline.rear_walls(turn)) if strategy_config.get()['enabled'] else set()
         live = {w.unit_id:w for w in turn.workers()}
         for kind,row in list(self.memory.items()):
             reason = None
@@ -362,7 +364,9 @@ class TripFrame:
                 if row['phase']=='acquire':
                     target = next((u for u in turn.ours if u.unit_id==row['target'] and u.health>0),None)
                     count = live[row['owner']].backpack.count(row['item'])
-                    if row.get('operation')=='stock':
+                    if target is not None and target.kind=='wall' and target.pos in rear:
+                        self.begin_return(row,'rear_wall_investment_retired')
+                    elif row.get('operation')=='stock':
                         if count>=row['quantity']:
                             self.begin_return(row,'stock_observed')
                         elif target is None:
@@ -395,6 +399,11 @@ class TripFrame:
                 if evaluate_trip(turn,payload,row).actions == 0:
                     self.cancel(kind,'returned_observed')
             if kind == 'construction':
+                old_walls = row['walls']
+                row['walls'] = [p for p in old_walls if Pos.load(p) not in rear]
+                if len(row['walls']) != len(old_walls):
+                    self.events.append({'kind':kind,'event':'revalidate','reason':'rear_wall_targets_retired',
+                                        'owner':row['owner'],'removed_count':len(old_walls)-len(row['walls'])})
                 if threat(turn):
                     row['phase']='return'
                     self.events.append({'kind':kind,'event':'return','reason':'visible_threat','owner':row['owner']})

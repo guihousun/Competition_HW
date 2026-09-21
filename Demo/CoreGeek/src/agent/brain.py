@@ -729,7 +729,8 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
             # Existing/carried vouchers finish first. New investment competes
             # with stock only after the phase firepower target or wall emergency.
             held_voucher = any(can_upgrade(item,b.kind,b.level) for r in turn.workers()
-                               for item in r.backpack for b in turn.ours if b.health>0)
+                               for item in r.backpack for b in turn.ours if b.health>0
+                               and not (b.kind==WALL and b.pos in _retired_rear_walls(turn)))
             if not held_voucher:
                 stock,stock_report=phase_supply.plan(turn,state,commands,
                     deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
@@ -834,7 +835,8 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
                    walls_missing if only_sites is None else only_sites)
         if contract and contract['phase']=='return':
             targets = []
-        targets = [p for p in targets if p not in standing_walls and (p not in occupied or p==role.pos)]
+        targets = [p for p in targets if p not in standing_walls and p not in _retired_rear_walls(turn)
+                   and (p not in occupied or p==role.pos)]
         guard = team_trip.RouteGuard(turn,state,frame.purchase,commands)
         trip = construction_trip.plan(turn,role,targets,claimed=landings,
             deadline=RETURN_BEFORE_NIGHT,batch_limit=STONE_BATCH,
@@ -850,7 +852,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
                 free_walls[:] = [p for p in free_walls if p not in destinations]
         elif contract:
             if home_defense.inside(turn,role.pos) and any(distance(role.pos,g.pos)==1 for g in turn.weapons()):
-                frame.cancel('construction','safe_stop')
+                frame.cancel('construction','returned_observed')
             else:
                 contract['phase']='return'
         report['team_route'] = guard.report()
@@ -1365,6 +1367,9 @@ def _worker_day(
     other_errand: bool = False,
     routes: Any = None,
 ) -> None:
+    # Strategy-retired rear targets must not consume a worker's construction turn.
+    rear = _retired_rear_walls(turn)
+    walls_missing[:] = [p for p in walls_missing if p not in rear]
     planned = sum(
         cmd.get("action") == "build" and cmd.get("name") in TOWER_LOADOUT
         for cmd in commands.values()
@@ -1714,7 +1719,7 @@ def _should_sell(turn: Turn, role: Unit, state: dict[str, Any]) -> bool:
     sellable = sellable_inventory(role_state, state)
     if not sellable:
         return False
-    stones_needed = max(0, len(_wall_order(turn)) - len(turn.walls()))
+    stones_needed = len(_missing_wall_sites(turn))
     surplus = 0
     for material, amount in sellable.items():
         if material == WALL_MATERIAL:
@@ -1734,7 +1739,7 @@ def _should_sell(turn: Turn, role: Unit, state: dict[str, Any]) -> bool:
 def _forecast_sale_trip_fits(turn: Turn, role: Unit) -> bool:
     """Do not accelerate a speculative errand at the expense of construction or return."""
     if (not _economy_open(turn) or not _towers_done(turn)
-            or len(turn.walls()) < len(_wall_order(turn))
+            or _missing_wall_sites(turn)
             or any(robot.health > 0 for robot in turn.robots)
             or any(enemy.health > 0 for enemy in turn.enemies)):
         return False
@@ -1820,7 +1825,7 @@ def _try_trade(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
     # Selling: at a vendor, keep the stone the walls still need.
     if _adjacent_zone(state, role.pos, "vendor"):
         prices = vendor_prices(state)
-        stones_needed = max(0, len(_wall_order(turn)) - len(turn.walls()))
+        stones_needed = len(_missing_wall_sites(turn))
         signals = _sale_signals(turn)
         for material, amount in sorted(sellable_inventory(role_state, state).items(),
                                        key=lambda entry: (entry[0] not in signals, entry[0])):
@@ -1871,7 +1876,14 @@ def _shop_choice(turn: Turn, role: Unit, state: dict[str, Any],
         price = prices.get(name)
         return price is not None and price <= gold and upgrade_itinerary.purchase_allowed(turn, state, name, commands)
 
-    for building in sorted(turn.ours, key=upgrade_itinerary.priority):
+    def investment_priority(building):
+        if strategy_config.get()['enabled'] and building.kind == WALL:
+            return (5, frontline.wall_tier(turn, building.pos)) + upgrade_itinerary.priority(building)[1:]
+        return upgrade_itinerary.priority(building)
+
+    for building in sorted(turn.ours, key=investment_priority):
+        if building.kind == WALL and building.pos in _retired_rear_walls(turn):
+            continue
         if distance(role.pos, building.pos) > 1:
             continue
         for item in sorted(prices):
@@ -1887,7 +1899,7 @@ def _shop_choice(turn: Turn, role: Unit, state: dict[str, Any],
         fallback.append(BOMB)
     if any(unit.health <= 0 for unit in turn.ours):
         fallback.append(MEDICINE)
-    if any(unit.kind == WALL and unit.health < 1000 for unit in turn.ours):
+    if any(unit.kind == WALL and unit.health < 1000 and unit.pos not in _retired_rear_walls(turn) for unit in turn.ours):
         fallback.append(WALL_FIXER)
     for item in fallback:
         if item in planned_items:
@@ -2492,6 +2504,14 @@ def _build_or_walk(
     claimed: set[Pos],
     commands: dict[int, dict[str, Any]],
 ) -> None:
+    if name == WALL:
+        from .coordination import wall_build_seals_role
+        if target in _retired_rear_walls(turn):
+            return  # Team build policy, not an official restriction on these cells.
+        additions={Pos.load(p) for c in commands.values() if c.get('action')=='build'
+                   for p in c.get('targetPos',())}
+        if strategy_config.get()['enabled'] and wall_build_seals_role(turn,{target},existing_additions=additions):
+            return
     if role.pos != target and distance(role.pos, target) <= 1:
         commands[role.unit_id] = build_command(target, name)
         claimed.add(target)
@@ -2843,21 +2863,40 @@ def _matched_controller_cells(towers: list[Pos], stands: set[Pos]) -> int:
     return sum(1 for tower in towers if augment(tower, set()))
 
 
-def _wall_order(turn: Turn) -> tuple[Pos, ...]:
-    """Wall cells in build priority order: approach front, flanks, rear.
+def _retired_rear_walls(turn: Turn) -> set[Pos]:
+    """Entire rear row is retired only for the enabled team strategy."""
+    return set(frontline.rear_walls(turn)) if strategy_config.get()['enabled'] else set()
 
-    The geometry is a local assumption (D01: the request carries no build-zone
-    field). The set is derived from the radius-2 perimeter itself and only the
-    deliberate two-cell exit is removed, so no accidental hole can appear at a
-    corner or an edge boundary. Priority follows the expected approach: for an
-    east-facing defence the order is right, top, bottom, left, and the exit sits
-    on the rear so the crew is not sealed in.
+
+def _missing_wall_sites(turn: Turn) -> set[Pos]:
+    """Count required locations, never credit unrelated or old rear walls."""
+    return set(_wall_order(turn)) - {wall.pos for wall in turn.walls()}
+
+
+def _wall_order(turn: Turn) -> tuple[Pos, ...]:
+    """Build center two, other front two, front corners, then retained flanks.
+
+    The radius-two footprint remains the existing D01 layout assumption.
+    Enabled strategy leaves the entire rear row open, including its corners;
+    existing rear walls remain obstacles and are not automatically demolished.
+    Proven traffic openings remain excluded. Disabled strategy uses the legacy
+    perimeter/order and is not subject to the new rear-row policy.
     """
     plan = _defence_layout(turn)
-    order=plan.wall_order if plan is not None else ()
-    frame=_TRAFFIC.get()
-    openings=frame.openings() if frame is not None and frame.turn is turn else set()
-    return tuple(p for p in order if p not in openings)
+    order = plan.wall_order if plan is not None else ()
+    if plan is not None and strategy_config.get()['enabled']:
+        # Old rear walls may make the layout pick a missing FRONT wall as its
+        # temporary physical exit. It is still an unmet investment target.
+        base = turn.station()
+        order = tuple(sorted(plan.ring, key=lambda p: defense_layout.wall_priority(
+            p,base.pos,turn.width,turn.height)))
+    frame = _TRAFFIC.get()
+    openings = frame.openings() if frame is not None and frame.turn is turn else set()
+    rear = _retired_rear_walls(turn)
+    retained = [p for p in order if p not in openings and p not in rear]
+    if strategy_config.get()['enabled']:
+        retained.sort(key=lambda p: frontline.wall_tier(turn,p))  # stable within tier
+    return tuple(retained)
 
 
 def _exit_cells(turn: Turn) -> tuple[Pos, ...]:

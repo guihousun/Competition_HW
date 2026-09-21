@@ -164,9 +164,11 @@ def plan(turn, role, wall_sites, *, claimed=(), deadline=55, batch_limit=10,
     if index + MARGIN >= deadline:
         return return_home('deadline')
 
+    from . import frontline, strategy_config
+    rear = set(frontline.rear_walls(turn)) if strategy_config.get()['enabled'] else set()
     occupied = turn.occupied_cells()
     sites = tuple(dict.fromkeys(p for p in wall_sites
-                               if p in board.free and (p not in occupied or p == role.pos)
+                               if p not in rear and p in board.free and (p not in occupied or p == role.pos)
                                and p not in claimed))
     if not sites or not limit:
         return return_home('no_missing_wall')

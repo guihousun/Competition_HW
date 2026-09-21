@@ -7,7 +7,7 @@ Entry/exit fractions are policy, not changed official health or repair amounts.
 from collections import deque
 from copy import deepcopy
 
-from . import home_defense, defense_layout
+from . import home_defense, defense_layout, frontline, strategy_config
 from .coordination import available_gold
 from .market import shop_prices
 from .protocol import Pos, WALL_FIXER, distance, move_command, use_command, buy_command
@@ -111,6 +111,14 @@ def night_plan(turn, memory, commands, ready_weapons=(), excluded_roles=(), conf
     busy = _busy(commands, excluded_roles)
     workers = {w.unit_id: w for w in turn.workers()}
     walls = {w.unit_id: w for w in turn.walls() if 1 <= w.level <= 3}
+    central_policy = strategy_config.get()['enabled']
+    rear = set(frontline.rear_walls(turn)) if central_policy else set()
+    eligible_walls = {uid: w for uid, w in walls.items() if w.pos not in rear}
+    emergency = cfg.get('emergency_fraction', strategy_config.get()['maintenance']['emergency_fraction'])
+    def repair_rank(wall):
+        if central_policy:
+            return (_fraction(wall) > emergency, frontline.wall_tier(turn, wall.pos), _fraction(wall))
+        return (False, defense_layout.wall_priority(wall.pos, base.pos, turn.width, turn.height)[0], _fraction(wall))
     entry, exit_at = cfg.get('entry_fraction', .55), cfg.get('exit_fraction', .85)
     lease = memory.get('lease')
     if lease and (lease.get('owner') not in workers or lease.get('owner') in busy):
@@ -126,16 +134,15 @@ def night_plan(turn, memory, commands, ready_weapons=(), excluded_roles=(), conf
             if worker.unit_id in busy or WALL_FIXER not in worker.backpack:
                 continue
             dist, _ = _paths(turn, worker, commands)
-            for wall in walls.values():
+            for wall in eligible_walls.values():
                 if _fraction(wall) > entry:
                     continue
                 stands = [p for p in _neighbours(wall.pos) if p in dist]
                 if stands:
-                    priority = defense_layout.wall_priority(wall.pos, base.pos, turn.width, turn.height)[0]
-                    candidates.append((priority, _fraction(wall), min(dist[p] for p in stands), worker.unit_id, wall.unit_id))
+                    candidates.append((repair_rank(wall), min(dist[p] for p in stands), worker.unit_id, wall.unit_id))
         if not candidates:
             return result
-        _, _, _, uid, wid = min(candidates)
+        _, _, uid, wid = min(candidates)
         lease = dict(owner=uid, target=wid, home=workers[uid].pos.dump(), phase='repair', issued_round=turn.round_no)
         memory['lease'] = lease
     worker = workers[lease['owner']]
@@ -157,6 +164,21 @@ def night_plan(turn, memory, commands, ready_weapons=(), excluded_roles=(), conf
             lease['phase'] = 'return'
         lease.pop('use_round')
         lease.pop('item_count')
+    if wall and wall.pos in rear:
+        lease['phase'] = 'return'
+        report['released_target_reason'] = 'rear_wall_no_longer_maintained'
+    # Keep the original return post, but do not let an ordinary center-wall
+    # hysteresis lease consume supplies while another reachable wall is critical.
+    if (central_policy and lease['phase'] == 'repair' and wall
+            and _fraction(wall) > emergency and WALL_FIXER in worker.backpack):
+        distances, _ = _paths(turn, worker, commands)
+        urgent = [(repair_rank(other), other.unit_id, other) for other in eligible_walls.values()
+                  if 0 < _fraction(other) <= min(entry, emergency)
+                  and any(p in distances for p in _neighbours(other.pos))]
+        if urgent:
+            wall = min(urgent)[-1]
+            lease['target'] = wall.unit_id
+            report.update(target=wall.unit_id, retarget_reason='reachable_wall_emergency')
     if wall is None or WALL_FIXER not in worker.backpack or (wall and _fraction(wall) >= exit_at):
         lease['phase'] = 'return'
     dist, first = _paths(turn, worker, commands)

@@ -6,6 +6,7 @@ from test_baseline import ROOT
 from test_coordination import unit
 from agent import phase_maintenance as pm, home_defense
 from agent.protocol import Turn, WALL_FIXER, Pos, move_command
+from legacy_strategy import LegacyStrategyCase
 
 
 def observation():
@@ -20,7 +21,9 @@ def observation():
     return p
 
 
-class PhaseMaintenanceTests(unittest.TestCase):
+# The historical fixture deliberately repairs x=7, the rear of the x=9 base.
+# Keep lease/feedback rollback coverage; new default front geometry has its own tests.
+class PhaseMaintenanceTests(LegacyStrategyCase):
     def plan(self, p, memory=None, **kwargs):
         memory = {} if memory is None else memory
         return pm.night_plan(Turn.load(p), memory, kwargs.pop('commands', {}),

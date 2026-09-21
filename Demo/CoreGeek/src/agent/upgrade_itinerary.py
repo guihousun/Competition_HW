@@ -139,11 +139,14 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
         rank = wall_priority(b.pos, base.pos, turn.width, turn.height)[0] if base and b.kind == WALL else 0
         if config['enabled'] and b.kind == WALL:
             tier = frontline.wall_tier(turn,b.pos)
-            # Keep all front-four before either corner, including mixed levels.
+            # Center two, outer front two, then corners, including mixed levels.
             # An urgent front-six group retains its emergency spending escape.
-            return (0.5 if wall_emergency and tier < 2 else 5,tier)+priority(b)[1:]
+            return (0.5 if wall_emergency and b.pos in frontline.protected_walls(turn) else 5,tier)+priority(b)[1:]
         return (priority(b)[0],rank)+priority(b)[1:]
-    buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3 and b.kind in (STATION,WALL)+TOWER_TYPES),key=building_priority)
+    retired_rear=set(frontline.rear_walls(turn)) if config['enabled'] else set()
+    buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3
+                      and b.kind in (STATION,WALL)+TOWER_TYPES
+                      and not (b.kind==WALL and b.pos in retired_rear)),key=building_priority)
     # Bound planning cost on crowded wall maps; retain all base/tower targets.
     wall_ids={b.unit_id for b in buildings if b.kind==WALL}
     allowed_walls=[b.unit_id for b in buildings if b.kind==WALL][:4]

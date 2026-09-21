@@ -3,7 +3,7 @@
 Stock is carried back unused for night repair. No future income or robot wave
 is assumed; only current quotes, stock, route and day deadline permit dispatch.
 """
-from . import team_trip, upgrade_itinerary, strategy_config
+from . import team_trip, upgrade_itinerary, strategy_config, frontline
 from .protocol import WALL_FIXER
 from .coordination import available_gold
 from .market import shop_prices
@@ -33,7 +33,8 @@ def plan(turn, payload, commands, *, deadline, reserved_workers=()):
     if price is None or price<0 or price*needed>available_gold(turn,payload,commands):
         report['reason']='stock_not_affordable'
         return None,report
-    emergency=any(0<w.health<=tuning['emergency_fraction']*(1000,1500,2000)[w.level-1] for w in turn.walls())
+    rear=set(frontline.rear_walls(turn))
+    emergency=any(w.pos not in rear and 0<w.health<=tuning['emergency_fraction']*(1000,1500,2000)[w.level-1] for w in turn.walls())
     reserve=upgrade_itinerary.weapon_reserve(turn,payload)
     if reserve and not emergency:
         report['reason']='finish_phase_weapon_target_first'
