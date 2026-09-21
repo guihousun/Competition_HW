@@ -22,13 +22,12 @@ from coregeek.protocol import actions, model  # noqa: E402
 from coregeek.utils import LOG_TEXT_MAX  # noqa: E402
 
 
-#: 官方样例（roundNo=85）的落点。样例是夜里，三个角色（含开拓者）各朝最近一座未被
-#: 认领的炮走一格：10010→(9,24)；10012→(10,25)（(9,24) 已被认领）；10011→(9,25)。
-#: 夜里 `build`/`collect` 一条都不该有。
-EXPECTED_MOVES = {"10010": [6, 22], "10012": [9, 17], "10011": [9, 13]}
+#: 官方样例（roundNo=85，夜里）的落点：**开拓者 10011（炮手）朝武器组的岗位走**，
+#: 两个工人各朝自己认领的那座矿走（第 130 步的夜班分工）。夜里 `build`/`collect` 一条都不该有。
+EXPECTED_MOVES = {"10010": [5, 24], "10012": [11, 15], "10011": [9, 13]}
 
 
-#: 任务线那两条日志的行首标记。它们由 `planner` 打（不是 `coregeek.app`）——
+#: 任务线那两条日志的行首标记。它们由 `task` 打（不是 `coregeek.app`）——
 #: 用例按标记取行，既不依赖日志顺序，也不依赖"哪张日志归哪个 logger"。
 ASK = "【本轮提问】："
 
@@ -51,7 +50,12 @@ class HandleTest(unittest.TestCase):
     def _handle(self, raw: bytes) -> dict:
         return json.loads(handle(raw).decode("utf-8"))
 
-    def test_sample_payload_moves_all_three_roles_to_a_weapon(self):
+    def test_sample_payload_sends_the_gunner_to_the_guns_and_the_rest_mining(self):
+        """夜里：**开拓者（炮手）朝武器去**，两个工人出门挖矿 —— 第 130 步的分工。
+
+        旧的"三个角色都奔炮位"（每人认领一组）随三火箭一阵形作废：三座共用一个操作位、
+        一人全操，其余人手全部产矿。样例里没人贴着炮 ⇒ `attack` 不会被调到、key 全是角色 id。
+        """
         body = self._handle(SAMPLE.read_bytes())
         self.assertEqual(set(body), {"roleCommandMap", "prompt", "executeCmd"})
         cmds = body["roleCommandMap"]
@@ -59,9 +63,8 @@ class HandleTest(unittest.TestCase):
             {k: [v["targetPos"][0]["x"], v["targetPos"][0]["y"]] for k, v in cmds.items()},
             EXPECTED_MOVES,
         )
-        # 样例是夜里：三个角色都只走一格，没有 build / collect（`build` 仅白天）
+        # 夜里只走一步：没有 build（仅白天）；样例的矿都不在脚边 ⇒ 也没有 collect
         self.assertEqual({v["action"] for v in cmds.values()}, {"move"})
-        # 三个角色离三座炮都还有十几格 ⇒ 没人贴着炮、`_fire` 不会被调到 ⇒ key 全是角色 id
         self.assertEqual(set(cmds), {"10010", "10011", "10012"})
 
     def test_bad_json_falls_back_to_empty_commands(self):
@@ -70,7 +73,7 @@ class HandleTest(unittest.TestCase):
         self.assertEqual(body, {"roleCommandMap": {}, "prompt": "", "executeCmd": ""})
 
     def test_every_round_logs_the_summary_then_the_actions(self):
-        """每回合的复盘日志：先请求原文、再局面（摘要）、再动作、再判题器的回执（顺序是重点）；
+        """每回合的复盘日志：banner → 局面（摘要）→ 动作 → 判题器的回执（顺序是重点）；
         局面 = 摘要单条（顺带钉住"图例与整张地图确实不在日志里"）。
 
         `assertLogs` 拦到的正是 `main3.py` 重定向到 stdout 的那几条。样例自带一条假
@@ -84,12 +87,10 @@ class HandleTest(unittest.TestCase):
         text = json.dumps(raw)  # 默认 `ensure_ascii=True` —— 逐字比对的是发出去的那一串
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(text.encode("utf-8"))
-        # 六条：banner + 请求 + 摘要 + 动作 + 报错 + 回执。banner 与请求是 `handle` 打的、
-        # 不归 `_log` 管 —— 数记录数时最容易漏的就是它们。
-        banner, req, head, acts, errors, failed = (r.getMessage() for r in caught.records)
+        # 五条：banner + 摘要 + 动作 + 报错 + 回执（【本回合请求】那条已由用户禁用）。
+        # banner 是 `handle` 打的、不归 `_log` 管 —— 数记录数时最容易漏的就是它。
+        banner, head, acts, errors, failed = (r.getMessage() for r in caught.records)
         self.assertEqual(banner, f"{'#' * 35}第85回合{'#' * 35}")
-        # 请求那条打的正是判题器推来的原文（逐字）：摘要单条看不见地图与未解析的字段
-        self.assertEqual(req, f"【本回合请求】：{text}")
         lines = head.splitlines()
         # 摘要 4 块（各占一行）+ 摘要头前面留给 `logging` 前缀的那个空行
         self.assertEqual(len(lines), 1 + 4)
@@ -100,7 +101,7 @@ class HandleTest(unittest.TestCase):
         self.assertNotIn("【图例】：", head)
         self.assertNotIn("—" * 43, head, "地图的标尺行不该再出现")
         self.assertEqual(
-            acts, "【动作】：10010 move (6,22)；10012 move (9,17)；10011 move (9,13)"
+            acts, "【动作】：10010 move (5,24)；10012 move (11,15)；10011 move (9,13)"
         )
         self.assertEqual(errors, "【判题器报错】：2：xxx")
         # 按 id 排序（不照 payload 的顺序）：样例那份恰好就是升序，靠样例测不出这一条 ——
@@ -125,12 +126,12 @@ class HandleTest(unittest.TestCase):
         with self.assertLogs("coregeek.app", level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
         self.assertEqual(
-            len(caught.records), 4, [r.getMessage()[:40] for r in caught.records]
+            len(caught.records), 3, [r.getMessage()[:40] for r in caught.records]
         )
         self.assertTrue(caught.records[0].getMessage().startswith("###"), "banner 该在最前")
         self.assertTrue(
-            caught.records[1].getMessage().startswith("【本回合请求】："),
-            "请求紧随 banner（它是这一回合的输入，排在复盘之前）",
+            caught.records[1].getMessage().startswith("\n【回合】"),
+            "摘要在 banner 之后、动作之前",
         )
 
     def test_the_receipt_line_lists_every_entity_sorted(self):
@@ -163,7 +164,7 @@ class HandleTest(unittest.TestCase):
         """任务日志必须能看见全文：短文本原样打全；超长时截到 `LOG_TEXT_MAX` 并明说被截了、
         原文共多少字（静默截断会让"任务一直失败"无从查起）。
 
-        `assertLogs` 必须收 root：任务行由 `planner` 自己打（`coregeek.game.planner`），
+        `assertLogs` 必须收 root：任务行由 `task` 自己打（`coregeek.game.task`），
         只盯 `coregeek.app` 会把整块漏掉 —— 与 SOP 那条同一个坑。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
@@ -301,19 +302,20 @@ class HandleTest(unittest.TestCase):
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 85  # 夜
-        # 10010 挪到加特林 (9,24) 旁边；射程内放一只机器人（加特林射程 4 ⇒ 放 (9,21)）
+        # 10011（开拓者 = 炮手，第 130 步）挪到加特林 (9,24) 旁边；射程内放一只机器人
+        # （加特林射程 4 ⇒ 放 (9,21)）。挪工人没用 —— 夜里操炮的是开拓者，工人在挖矿。
         for node in raw["teamOur"]["roles"]:
-            if node["id"] == 10010:
+            if node["id"] == 10011:
                 node["pos"] = {"x": 9, "y": 23}
         raw["robot"]["roles"] = [{"id": 9001, "pos": {"x": 9, "y": 21}, "health": 30}]
 
         cmds = self._handle(json.dumps(raw).encode("utf-8"))["roleCommandMap"]
-        self.assertIn("10020", cmds, "加特林 10020 该由 10010 开火 —— key 是武器 id")
+        self.assertIn("10020", cmds, "加特林 10020 该由开拓者 10011 开火 —— key 是武器 id")
         self.assertEqual(
             cmds["10020"],
-            {"action": "attack", "controllerId": "10010", "targetPos": [{"x": 9, "y": 21}]},
+            {"action": "attack", "controllerId": "10011", "targetPos": [{"x": 9, "y": 21}]},
         )
-        self.assertNotIn("10010", cmds, "角色 id 不能当 attack 的 key")
+        self.assertNotIn("10011", cmds, "角色 id 不能当 attack 的 key")
 
     def test_describe_survives_a_command_without_a_target(self):
         """`acceptTask` / `submitAnswer` 没有 `targetPos` —— `describe` 必须活得过它们。
@@ -560,33 +562,16 @@ class HandleTest(unittest.TestCase):
         上界 `LOG_TEXT_MAX` 兜底（与沙盒行、SOP 那条同一条规则）：超长截断且留痕 ——
         不留痕的静默截断会让"这回合的 payload 到底多长"无从查起。
         """
-        raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
-        raw["roundNo"] = 1
-        raw["worldNews"] = {"officialNews": "铁矿产区塌方，明日停工"}
-        text = json.dumps(raw, ensure_ascii=False)
-        with self.assertLogs("coregeek.app", level="INFO") as caught:
-            self._handle(text.encode("utf-8"))
-        (line,) = [r.getMessage() for r in caught.records if r.getMessage().startswith("【本回合请求】：")]
-        self.assertEqual(line, f"【本回合请求】：{text}")
-        self.assertIn("铁矿产区塌方", line, "未解析字段也要在（摘要里没有它）")
-        # 超大 payload ⇒ 截断 + 留痕，绝不静默
-        raw["officialNews"] = ""
-        huge = json.dumps({**raw, "worldNews": {"officialNews": "字" * 50000}}, ensure_ascii=False)
-        with self.assertLogs("coregeek.app", level="INFO") as caught:
-            self._handle(huge.encode("utf-8"))
-        (line,) = [r.getMessage() for r in caught.records if r.getMessage().startswith("【本回合请求】：")]
-        self.assertIn("…（共", line, "截断必须留痕")
-
     def test_a_clean_round_stays_small(self):
         """硬约束 5 的结构性守卫：大字段基本不截之后，守得住的只有结构部分 —— 没有大字段
         的回合必须仍然小（摘要有自己的上界 `SUMMARY_MAX_ITEMS`、动作行最多几个角色、
         banner 一行）。它抓的是"又加进来一个每回合都打的大块"—— 那类膨胀几百字节起步。
 
-        【本回合请求】那一行**单算**（第 111 步）：它的体量由判题器推来的 payload 决定、
-        不是我们能收的（`LOG_TEXT_MAX` 兜底），所以守卫量的是"扣掉它之后"的那部分。
+        ⚠️ 【本回合请求】那一行已由用户禁用（第 130 步：64KB 管道的账，见 `CLAUDE.md`
+        硬约束 5）—— 本守卫量的就是全部记录。
 
         `assertLogs` 必须收 root：SOP 那条走 `coregeek.agent.tools.sop`、任务行与沙盒行
-        走 `coregeek.game.planner`，只盯 `coregeek.app` 它们就绕开本守卫。
+        走 `coregeek.game.task`，只盯 `coregeek.app` 它们就绕开本守卫。
         """
         raw = json.loads(SAMPLE.read_text(encoding="utf-8"))
         raw["roundNo"] = 1
@@ -594,11 +579,8 @@ class HandleTest(unittest.TestCase):
         raw["lastRoundRoleActionResults"] = {}
         with self.assertLogs(level="INFO") as caught:
             self._handle(json.dumps(raw).encode("utf-8"))
-        sizes = {r.getMessage()[:20]: len(r.getMessage().encode("utf-8")) for r in caught.records}
-        request = sum(n for h, n in sizes.items() if h.startswith("【本回合请求】"))
-        total = sum(sizes.values()) - request
-        self.assertGreater(request, 0, "请求那行必须真的打出来，否则本守卫在守一个空集合")
-        self.assertLess(total, 1500, f"干净回合除请求外 {total} 字节 —— 结构部分不该这么大")
+        total = sum(len(r.getMessage().encode("utf-8")) for r in caught.records)
+        self.assertLess(total, 1500, f"干净回合 {total} 字节 —— 结构部分不该这么大")
 
 
 if __name__ == "__main__":

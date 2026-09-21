@@ -7,9 +7,9 @@
 `_Queue.step` / `_walk_out` 那边必须把同事当硬障碍（撞上就是执行失败）。
 """
 
-from .grid import Pos, wall_cells, weapon_sites
-from .roles import Worker
-from .world import ROUNDS_PER_DAY, Turn, Weapon
+from .grid import Pos, wall_cells
+from .roles import Pioneer, Worker
+from .world import ROUNDS_PER_DAY, Turn
 
 
 def _passable(turn: Turn) -> set[Pos]:
@@ -44,42 +44,24 @@ def _ring(turn: Turn) -> tuple[Pos, ...]:
     return tuple(c for c in cells if c not in turn.map.blocked or c in mine)
 
 
-def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
-    """把武器分成操作组：同一组的武器由同一个角色操作。
+def _night_gunner(turn: Turn) -> int | None:
+    """这一夜**谁上炮位** ⇒ 角色 id；没人合适 ⇒ `None`。
 
-    当前阵形 = 2 火箭（相邻）+ 1 加特林 ⇒ 两组。分组依据是 `weapon_sites` 的下标（0,1 =
-    火箭对；2 = 加特林），不按场上已有武器的种类猜。某座还没建出来 ⇒ 那一组只含已建的。"""
-    station = turn.map.station
-    sites = weapon_sites(station, turn.map.size[0]) if station is not None else ()
-    by_pos = {w.pos: w for w in turn.weapons}
-    grouped: set[Pos] = set()
-    groups: list[tuple[Weapon, ...]] = []
-    for indices in ((0, 1), (2,)):
-        group = tuple(by_pos[sites[i]] for i in indices if i < len(sites) and sites[i] in by_pos)
-        if group:
-            groups.append(group)
-            grouped.update(w.pos for w in group)
-    # 不在 `weapon_sites` 里的武器（测试手搭的位置）⇒ 单独成组，降级为"一人操一座"
-    for w in turn.weapons:
-        if w.pos not in grouped:
-            groups.append((w,))
-    return tuple(groups)
-
-
-def _pioneer_mans_guns(turn: Turn) -> bool:
-    """开拓者这一轮该不该上炮位：只有工人不够覆盖全部武器组时才补位。
-
-    工人夜里除了操炮没别的活，而开拓者是任务线的主力 —— 工人阵亡（只可能在夜里）后人手
-    不够了它才补位。昼夜同一个判据：白天用它决定收工回不回到炮位（`day.BackToPost`），夜里用它
-    决定认不认领武器（`night.defend`）—— 两处必须同源，只改一处会让白天把人送进岗位、夜里又不
-    认领，那格被占着、整组没人操。`_short_handed` 取用它。"""
-    workers = sum(1 for r in turn.roles if isinstance(r, Worker))
-    return workers < len(_weapon_groups(turn))
+    三座火箭共用一个操作位 ⇒ 只需要一个角色：开拓者上（用户口径"夜里开拓者操炮"）—— 被
+    任务钉死时**名册里第一个工人顶上**（火力不断）；被钉死且一个工人都没有 ⇒ 还是它上
+    （`_short_handed`：生存第一，弃任务回炮位）。昼夜同一个判据：白天用它决定收工回不回
+    到炮位（`day.BackToPost`），夜里用它决定谁认领那组武器（`night.defend`）—— 两处必须
+    同源，只改一处会让白天把人送进岗位、夜里又没人认领。不带跨回合状态。"""
+    pioneer = next((r for r in turn.roles if isinstance(r, Pioneer)), None)
+    if pioneer is not None and (not turn.phase_task or _short_handed(turn)):
+        return pioneer.id
+    worker = next((r for r in turn.roles if isinstance(r, Worker)), None)
+    return worker.id if worker is not None else None
 
 
 def _short_handed(turn: Turn) -> bool:
-    """夜里操炮的人手够不够：不够 ⇒ 被任务钉死的开拓者也得弃任务回炮位（生存第一）。
+    """夜里操炮的人手够不够：**一个工人都没有**（开拓者被任务钉死时没人能顶）⇒ 不够，
+    被钉死的开拓者也得弃任务回炮位（生存第一）。
 
-    白天恒假：白天不能开火、回炮位没有意义（那一支只发 `move`）。判据与
-    `_pioneer_mans_guns` 同源（一人只能操一组，少一人空一组），不带跨回合状态。"""
-    return not turn.is_day and _pioneer_mans_guns(turn)
+    白天恒假：白天不能开火、回炮位没有意义。不带跨回合状态。"""
+    return not turn.is_day and not any(isinstance(r, Worker) for r in turn.roles)

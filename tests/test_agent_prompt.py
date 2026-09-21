@@ -28,6 +28,7 @@ SECTIONS = (
     "# 【工具描述】",
     "# 【沉淀的SOP】",
     "# 【输出约定】",
+    "# 【注意事项】",
 )
 
 
@@ -93,11 +94,9 @@ class ChatPromptTest(unittest.TestCase):
 
         守的是"措辞只增不减"的漂移：每次加一句话都看不出什么，几十次之后 prompt 就
         被稀释得没法看了。阈值是拍的：顶格那一档实测 11800，上浮约 7%。
-        基线数字会漂，量的时候看是**哪一档**：第 128 步实测干净 system **6753**
-        （第 116 步删【输出示例】后是 6718、删段前 7965；中间的差来自 `[路径清单]` 措辞与工具块的
-        `###` 小标题）；沙箱清单每多探明一条路径 **+29**（第一条 +49，含清单头），
-        满 SOP（5 × `SOP_MAX`(1000)）再 **+5082** ⇒ **顶格 11800**。要加内容先删同等量级的
-        旧话，或者改这个阈值并说明理由。
+        基线数字会漂，量的时候看是**哪一档**：第 130 步实测干净 system **6845**
+        （用户加回【注意事项】段后八段；第 128 步是 6753）；满 SOP（5 × `SOP_MAX`(1000)）
+        ⇒ **顶格 11927**。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertLess(len(system), 12600)
@@ -268,7 +267,9 @@ class ChatPromptTest(unittest.TestCase):
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         output = _section(system, "# 【输出约定】")
-        self.assertIn("提交答案时只能用 <answer>任务答案</answer> 包起来", output)
+        self.assertIn(
+            "2. [任务答案提交格式]只能用 <answer>任务答案</answer> 包起来", output
+        )
         self.assertIn("只写一个这个块", output)
         self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
         self.assertIn("这条只管 `sop` 那段文本", output)

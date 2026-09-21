@@ -39,9 +39,9 @@ def handle(raw: bytes) -> bytes:
         if turn is None:
             raise ValueError("payload 不是 JSON 对象")
         LOGGER.info(f"###################################第{turn.round_no}回合###################################")
-        # 判题器推来的原文逐字进日志（摘要单条看不见地图与未解析字段）。换行原样保留：
-        # 要的就是"整段拷出来能直接 json.loads"—— 带缩进的 payload 会让一条记录跨多行。
-        LOGGER.info("【本回合请求】：%s", _clip(text, LOG_TEXT_MAX))
+        # 【本回合请求】（payload 原文逐字）因体量停用 —— 解开下面这一行即恢复（摘要单条
+        # 看不见地图与未解析字段，本地调试只有它能回答"判题器这回合给了什么"）
+        # LOGGER.info("【本回合请求】：%s", _clip(text, LOG_TEXT_MAX))
         # 处理任务逻辑
         prompt, execute = task.task_channel(turn)
         # 处理动作逻辑
@@ -62,9 +62,9 @@ def handle(raw: bytes) -> bytes:
 def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     """本回合的复盘日志：局面 → 动作 → 判题器回执 → 提问，顺序固定。
 
-    实际排列 = banner → 请求 → 任务 → 沙盒 → 局面 → 动作 → 回执 → 提问；任务行与沙盒行由
-    `task_channel` 自己打、banner 与请求由 `handle` 打（数记录数时后两样单独 +2）。每条
-    "有事才吭声"：干净的白天回合本函数只打 2 条。摘要那条以 `\\n` 开头 —— 空行是留给
+    实际排列 = banner → 任务 → 沙盒 → 局面 → 动作 → 回执 → 提问；任务行与沙盒行由
+    `task_channel` 自己打、banner 由 `handle` 打（数记录数时它单独 +1）。每条"有事才吭声"：
+    干净的白天回合 = banner + 局面 + 动作 = 3 条。摘要那条以 `\\n` 开头 —— 空行是留给
     `logging` 时间戳前缀的。写在 try 里：日志代码逃到 `do_POST` 没人接异常 ⇒ 判题器那边
     是响应超时（红线第一条）。
 
@@ -73,15 +73,13 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
 
     | 局面 | 行 | 字节 |
     |---|---|---|
-    | 干净回合（没回执、没任务） | 9 | 6266 |
-    | 有回执（判题器报错 + 回执名单） | 11 | 6493 |
-    | 提问那一轮（题目 400 字） | 11 | 27339 |
-    | 顶格：题目/回复/沙盒各 40000 字（`LOG_TEXT_MAX`） | 12 | 492050 |
+    | 干净回合（没回执、没任务） | 8 | 1051 |
+    | 有回执（判题器报错 + 回执名单） | 10 | 1199 |
+    | 提问那一轮（题目 400 字） | 10 | 18652 |
+    | 顶格：题目/回复/沙盒各 40000 字（`LOG_TEXT_MAX`） | 11 | 376907 |
 
-    其中【本回合请求】一行 = 判题器推来的 payload 原文（样例紧凑重序列化 5164 字节；
-    `request.txt` 那份 12032 是带缩进的 —— 判题器发来的形状未知，缩进越多越大，
-    `LOG_TEXT_MAX` 兜底）。命令轮另有一条 prompt 行（压缩请求，随原始历史线性变大），
-    上表四格没有这一行。
+    命令轮另有一条 prompt 行（压缩请求，随原始历史线性变大），上表四格没有这一行。
+    判题器推来的 payload 原文那行已停用（体量）⇒ 要看它去 `handle` 里解开那一条。
 
     量法（`logs/measure_bytes.py`）：① 量真 stdout 的形状（带 asctime 前缀的 handler、取
     utf-8 字节数，别只加 `getMessage()` 的长度）；② 每格先 `AGENT.reset()`；③ 顶格那行的

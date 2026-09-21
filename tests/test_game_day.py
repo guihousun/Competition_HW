@@ -29,6 +29,20 @@ from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, W
 from coregeek.protocol import model  # noqa: E402
 
 
+def _guns_at_sites(base: Pos) -> dict[Pos, str]:
+    """三座武器按**新阵形**摆好（种类与落点由 `WEAPONS_BY_SITE` / `weapon_sites` 绑定）——
+    夹具不再手抄坐标，换阵形只改这一处。"""
+    return dict(zip(weapon_sites(base, 41), WEAPONS_BY_SITE))
+def _operator_post(base: Pos) -> Pos:
+    """三座火箭共用的操作位（`core._operator_spots` 的几何等价）：三座邻域交集里去掉基地那格。"""
+    sites = weapon_sites(base, 41)
+    common: set[Pos] | None = None
+    for site in sites:
+        nbrs = {Pos(site.x + d.x, site.y + d.y) for d in STEPS}
+        common = nbrs if common is None else common & nbrs
+    assert common is not None
+    return next(iter(common - base_cells(base)))
+
 class BuildWeaponTest(unittest.TestCase):
     """合成开局：白天、0 武器、基地在左半 —— 工人会建满三座、建在该建的地方、然后收手。
 
@@ -136,20 +150,21 @@ class BuildWeaponTest(unittest.TestCase):
         self.assertIn(cmd["action"], ("move", "collect"))
 
     def test_a_blocked_site_drops_only_its_own_weapon(self):
-        """排第一的火箭落点被墙占了 ⇒ 只有那一座不建，另两座照落在各自的位置上。
+        """排第一的落点被墙占了 ⇒ 只有那一座不建，另两座照落在各自的位置上。
 
-        钉的是 `_slots` 里"落点与种类绑死、再滤 `blocked`"的顺序：反过来（先滤空再
+        钉的是 `slots` 里"落点与种类绑死、再滤 `blocked`"的顺序：反过来（先滤空再
         `zip`）整体前移，每个种类都挪到别人家的落点上，而报文完全合法、本地全绿。
         顺带守住"覆盖会把原武器打成 level1"（§4.5.1 补充说明）。
         """
-        self.walls[Pos(12, 24)] = WALL  # 第一座火箭的落点被墙占了
+        sites = weapon_sites(self.BASE, 41)
+        self.walls[sites[0]] = WALL  # 第一座火箭的落点被墙占了
         self._settle(want=2)
         self.assertEqual(
             {(name, cell) for name, cell in self.builds},
-            {("rocket", Pos(12, 25)), ("gatling", Pos(12, 22))},
+            {("rocket", sites[1]), ("rocket", sites[2])},
         )
         built_cells = {cell for _, cell in self.builds}
-        self.assertNotIn(Pos(12, 24), built_cells, "落点被占 ⇒ 那一座就是不建，不换地方")
+        self.assertNotIn(sites[0], built_cells, "落点被占 ⇒ 那一座就是不建，不换地方")
 
     def test_night_builds_nothing(self):
         """夜里 `build` 不可用（任务书 §4.4）—— 0 武器、75 金也一座都不许建。"""
@@ -458,19 +473,19 @@ class BuildWallTest(unittest.TestCase):
 
 
 class DayEndGateTest(unittest.TestCase):
-    """第 0 级收工门：白天还剩 `RETURN_MARGIN(5) + 手里的券数` 个回合 ⇒ 回岗位。
+    """第 0 级收工门：`回岗步数 + POST_MARGIN(3) ≥ 白天剩余` ⇒ 回岗位（走它的只有夜里上炮
+    的那个人，`utils._night_gunner`）。它**不问环砌完没有** —— 到点就停下手里的活。
 
-    判据**只看回合数、不看距离**（用户口径），也**不问环砌完没有** —— 到点就停下手里的活。
-    目标与夜里 `night.defend` 的岗位同一个（`core._post_spots`）：火箭对共用的操作位要**站上去**、
-    加特林站炮旁 —— 天黑时人已经在岗上，夜里第一回合就能交替开火。这一支**只许发 `move`**：
-    `attack` 仅黑夜可用（§4.4），白天发一条就是一次异常、累计 5 次整场不再被调度，而复用
-    `night.defend` 是这里最容易犯的错（它贴近炮位会调 `_fire`）⇒ 有一条扫白天各回合、
-    各站位的守门员。
+    步数当场算（BFS 真实步数，"回岗要走多久就得多早动身"）。目标与夜里 `night.defend` 的岗位
+    同一个（`core._post_spots`）：三火箭共用的操作位要**站上去** —— 天黑时人已经在岗上，夜里
+    第一回合就能开火。这一支**只许发 `move`/`use`**：`attack` 仅黑夜可用（§4.4），白天发一条
+    就是一次异常、累计 5 次整场不再被调度，而复用 `night.defend` 是这里最容易犯的错
+    （它贴近炮位会调 `_fire`）⇒ 有一条扫白天各回合、各站位的守门员。
     """
 
     BASE = Pos(10, 24)
-    #: 与 `weapon_sites` 同序的两火箭 + 一加特林（这里只要"有三座炮"就够）
-    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    #: 与 `weapon_sites` 同序的三座火箭（这里只要"有三座炮"就够）
+    WEAPONS = _records(_guns_at_sites(Pos(10, 24)))
     SIZE = (41, 32)
     #: 收工门的容错余量 = `day.POST_MARGIN`
     MARGIN = 3
@@ -491,8 +506,8 @@ class DayEndGateTest(unittest.TestCase):
     ) -> Turn:
         """环默认砌满；没有矿、没有小贩、没有金 —— 只留收工门这一支。
 
-        `bag` 给工人背包（验"手里有券就早走"）；`weapons` 换名册；`pioneer` 给一名开拓者，
-        **排在 payload 最前面** —— 用它验"炮位按工人优先挑"这类顺序相关的判据。
+        `bag` 给工人背包；`weapons` 换名册；`pioneer` 给一名开拓者，**排在 payload 最前面**
+        —— 用它验"谁去收工"这类顺序相关的判据。
         """
         weapons = self.WEAPONS if weapons is None else weapons
         walls = {c: WALL for c in wall_cells(self.BASE, 41)} if ring else {}
@@ -517,22 +532,17 @@ class DayEndGateTest(unittest.TestCase):
         )
 
     def _steps_home(self, at: Pos) -> int:
-        """从 `at` 走到最近那个**岗位**的真实步数（与 `planner` 同一个障碍、同一个口径）。
+        """从 `at` 走到**岗位**的真实步数（与 `planner` 同一个障碍、同一个口径）。
 
-        岗位两处：火箭对的共用操作位 `(11,25)` —— 它是空地、要**站上去**（比"贴着"多一步）；
-        加特林单列一组，岗位就是它的炮位 `(12,22)`（贴着它即可）。障碍取 `Map.blocked`
-        （含基地与武器格）：只在墙环上算的话，BFS 会穿过基地与炮位抄近路。
+        岗位 = 三座火箭共用的那个操作位 —— 它是空地、要**站上去**（比"贴着"多一步）。
+        障碍取 `Map.blocked`（含基地与武器格）：只在墙环上算的话，BFS 会穿过基地与炮位抄近路。
         """
         walk = self._turn(at=at).map.blocked
-        hops = []
-        for post, onto in ((Pos(11, 25), True), (Pos(12, 22), False)):
-            if at == post:
-                hops.append(0)  # 已经在岗位上
-                continue
-            steps = steps_between(at, post, walk, self.SIZE)
-            if steps >= 0:
-                hops.append(steps + 1 if onto else steps)
-        return min(hops)
+        post = _operator_post(self.BASE)
+        if at == post:
+            return 0  # 已经在岗位上
+        steps = steps_between(at, post, walk, self.SIZE)
+        return steps + 1 if steps >= 0 else -1  # 多座组的岗位是空地、要站上去
 
     def _gate(self, *, round_no: int, at: Pos, bag: dict[str, int] | None = None):
         """直接问 `day.BACK_TO_POST.run` —— 它返回 True 就是"这一回合归收工门了"。
@@ -544,10 +554,10 @@ class DayEndGateTest(unittest.TestCase):
         return day.BACK_TO_POST.run(role, core._Ctx(turn, core._Queue(turn)))
 
     def test_the_gate_counts_the_walk_home_plus_the_margin(self):
-        """门 = **实时的回岗步数 + `POST_MARGIN`(3) + 武器券数**（第 123 步用户口径）。
+        """门 = **实时的回岗步数 + `POST_MARGIN`(3)**，手里有几张券都不改它（用户口径）。
 
-        第 121 步那版是"固定 5 回合、不看距离"—— 站在十几步开外的人根本赶不回来（用户报
-        "没有容错，问题很大"）。现在步数当场算：`剩余 == 步数 + 3` 正好动身，多剩一回合不动。
+        步数当场算：`剩余 == 步数 + 3` 正好动身，多剩一回合不动 —— 站在十几步开外的人必须
+        更早动身（"固定几回合、不看距离"那版正是这里出的问题）。
         """
         at = Pos(20, 24)
         steps = self._steps_home(at)
@@ -555,26 +565,10 @@ class DayEndGateTest(unittest.TestCase):
         gate = DAY_ROUNDS - steps - self.MARGIN + 1  # 这一回合的 `day_rounds_left` 正好是 steps + 3
         self.assertTrue(self._gate(round_no=gate, at=at), "正好到点 ⇒ 回岗位")
         self.assertFalse(self._gate(round_no=gate - 1, at=at), "还富余一回合 ⇒ 照常干活")
-    def test_a_weapon_voucher_opens_the_gate_a_round_earlier(self):
-        """手里的**武器**券每多一张就早走一个回合（到岗第一件事是用掉它们）。
-
-        ⚠️ **围墙券不算**（用户口径"武器券数"）：它们的目标是墙、不在炮位上。
-        """
-        at = Pos(20, 24)
-        steps = self._steps_home(at)
-        early = DAY_ROUNDS - steps - self.MARGIN  # 比到点早一回合
-        self.assertFalse(self._gate(round_no=early, at=at), "空手 ⇒ 这一回合还不动身")
-        self.assertTrue(
-            self._gate(round_no=early, at=at, bag={"WeaponUpgradeVoucher1": 1}),
-            "一张武器券 ⇒ 同一个回合就该动身",
-        )
-        self.assertTrue(
-            self._gate(round_no=early, at=at, bag={"WeaponUpgradeVoucher1": 2}),
-            "两张 ⇒ 再早一回合也照样动身",
-        )
+        # 券不参与判据：手里握着券也照样按步数走（到岗之后再一张一张用掉）
         self.assertFalse(
-            self._gate(round_no=early, at=at, bag={"WallUpgradeVoucher1": 1}),
-            "围墙券不占收工门（到岗也用不上它）",
+            self._gate(round_no=gate - 1, at=at, bag={"WeaponUpgradeVoucher1": 2}),
+            "券不提前开闸",
         )
 
     def test_a_held_weapon_voucher_is_used_once_at_the_post(self):
@@ -582,7 +576,7 @@ class DayEndGateTest(unittest.TestCase):
 
         不满足（手里没券 / 要升的那座离得远）⇒ 什么都不发（待命），这一支照旧只发 `move`/`use`。
         """
-        at = Pos(11, 25)  # 火箭对共用的操作位（岗位本身）
+        at = _operator_post(self.BASE)  # 三火箭共用的操作位（岗位本身）
         late = DAY_ROUNDS - self.MARGIN  # 已经在岗 ⇒ 门怎么算都命中
         cmds = plan(self._turn(round_no=late, at=at, bag={"WeaponUpgradeVoucher1": 1}))
         self.assertEqual(cmds["1"]["action"], "use", f"到岗先用券：{cmds}")
@@ -595,12 +589,12 @@ class DayEndGateTest(unittest.TestCase):
         "站上去"是这件事的全部意义（`(10,25)` 只是进那个口袋的必经格）：天黑时人已经在岗，
         夜里第一回合两座火箭就能交替；停在邻格则永远只贴着其中一座。
         """
-        at = Pos(10, 25)
-        self.assertEqual(self._steps_home(at), 1, "就差站上操作位这一步")
+        post = _operator_post(self.BASE)
+        at = Pos(post.x - 1, post.y)  # 后方通道那一格（其余邻格是武器/基地/墙）
         cmds = plan(self._turn(round_no=DAY_ROUNDS - 1, at=at))
         self.assertEqual(cmds["1"]["action"], "move", f"该走上岗位：{cmds}")
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
-        self.assertEqual(cell, Pos(11, 25), "落点就是共用操作位本身")
+        self.assertEqual(cell, post, "落点就是共用操作位本身")
 
     def test_a_day_round_never_fires(self):
         """红线守门员：白天任何回合、任何站位（含贴着炮）都只许有 `move`。
@@ -615,17 +609,17 @@ class DayEndGateTest(unittest.TestCase):
                         "attack", {c["action"] for c in cmds.values()}, f"白天开火非法：{cmds}"
                     )
 
-    def test_the_gate_leaves_the_posts_to_the_workers(self):
-        """工人够操满所有组 ⇒ 收工门一个岗位都不给开拓者（与夜里 `night.defend` 同一个判据）。
+    def test_the_pioneer_is_the_one_who_goes_to_the_post(self):
+        """收工回岗位的是**夜里上炮的那个角色**（`utils._night_gunner`）：有开拓者就是它，
+        工人不收工（他们夜里挖矿）。
 
-        只拦夜里那一处是不够的：白天把开拓者送进岗位、夜里它又不认领，那格就被它占着 ——
-        而火箭对只有一个岗位格，整组就此没人操。这里一座炮（一组）、一个工人 ⇒ 开拓者让位。
+        与夜里同一个判据 —— 只改一处会让白天把人送进岗位、夜里又没人认领（或反过来：
+        工人回了岗位却在夜里出门挖矿）。
         """
-        only_gun = _records({Pos(12, 22): "gatling"})
         late = DAY_ROUNDS - 1
-        cmds = plan(self._turn(round_no=late, weapons=only_gun, pioneer=Pos(20, 28)))
-        self.assertNotIn("2", cmds, f"开拓者不该占岗位：{cmds}")
-        self.assertEqual(cmds["1"]["action"], "move", "岗位归那个工人")
+        cmds = plan(self._turn(round_no=late, pioneer=Pos(20, 28)))
+        self.assertIn("2", cmds, f"开拓者该回岗位：{cmds}")
+        self.assertNotIn("1", cmds, "工人不收工（夜里挖矿，不用站岗）")
 
     def test_the_gate_stops_the_wall_work(self):
         """环没砌完也照样回岗位 —— 第 0 级在最前面，没有"补墙优先于收工"这个例外了。
@@ -994,9 +988,9 @@ class PathReserveTest(unittest.TestCase):
 class DemolishTest(unittest.TestCase):
     """第 2 级的另一半：**L1 弱墙直接拆了重砌**（用户口径 2）。
 
-    弱墙 = 血 < 满血 1/4（`WALL_MAX_HP[1]` = 1000 ⇒ 判据 `health × 4 < 1000`）。拆一回合、
-    砌一回合 = 2 回合 1 块石头，比 20 金的围墙升级券便宜。**L2/L3 的损伤不碰**：拆了只能重砌回
-    L1（掉一级），它们的损伤留给第 3 级的升级券（升级同时回满血）。
+    弱墙 = 血 < `WEAK_WALL_HP`(200)。拆一回合、砌一回合 = 2 回合 1 块石头，比 20 金的围墙升级券
+    便宜。**L2/L3 的损伤不碰**：拆了只能重砌回 L1（掉一级），它们的损伤留给第 3 级的升级券
+    （升级同时回满血）。
     """
 
     BASE = Pos(10, 24)
@@ -1026,25 +1020,25 @@ class DemolishTest(unittest.TestCase):
                 return p
         raise AssertionError("没有邻居格")
 
-    def test_a_level_one_wall_below_a_quarter_is_demolished(self):
-        """L1 墙血不到 1/4 ⇒ 直接拆（贴着就 `remove`），下一回合再砌回满血。"""
+    def test_a_level_one_wall_below_the_threshold_is_demolished(self):
+        """L1 墙血低于 `WEAK_WALL_HP`(200) ⇒ 直接拆（贴着就 `remove`），下一回合再砌回满血。"""
         spot = wall_cells(self.BASE, 41)[0]
-        wall = Wall(40000, spot, 200, 1)  # 200 × 4 < 1000
+        wall = Wall(40000, spot, 199, 1)  # < WEAK_WALL_HP(200)
         cmd = plan(self._turn((wall,), stone=1, at=self._beside(spot)))[str(10010)]
         self.assertEqual(cmd["action"], "remove", f"该拆了重砌：{cmd}")
         self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), spot)
 
-    def test_a_level_one_wall_above_a_quarter_is_left_alone(self):
-        """血在 1/4 以上 ⇒ 环是完备的，这一级整个不生效（不拆、也不用券）。"""
+    def test_a_level_one_wall_above_the_threshold_is_left_alone(self):
+        """血不低于 200 ⇒ 环是完备的，这一级整个不生效（不拆、也不用券）。"""
         spot = wall_cells(self.BASE, 41)[0]
-        wall = Wall(40000, spot, 300, 1)  # 300 × 4 > 1000
+        wall = Wall(40000, spot, 200, 1)  # 正好 200 ⇒ 不拆
         cmds = plan(self._turn((wall,), stone=1, at=self._beside(spot)))
         self.assertNotIn(cmds.get("10010", {}).get("action"), ("remove", "build"), f"不碰它：{cmds}")
 
-    def test_a_level_two_wall_below_a_quarter_is_never_touched(self):
-        """L2 弱墙不归第 2 级管（拆了只能重砌回 L1，掉一级）⇒ 不拆也不修。"""
+    def test_a_level_two_wall_below_the_threshold_is_never_touched(self):
+        """L2 弱墙不归第 2 级管（拆了只能重砌回 L1，掉一级）⇒ 不拆也不修（用户拍板）。"""
         spot = wall_cells(self.BASE, 41)[0]
-        wall = Wall(40000, spot, 200, 2)
+        wall = Wall(40000, spot, 150, 2)
         cmds = plan(self._turn((wall,), stone=1, at=self._beside(spot)))
         self.assertNotIn(
             cmds.get("10010", {}).get("action"), ("remove", "use", "build"), f"不碰它：{cmds}"
@@ -1054,7 +1048,7 @@ class DemolishTest(unittest.TestCase):
         """缺口比弱墙急：环上敞着一格时先补那格，弱墙下一回合再说（缺口是夜里机器人进来的门）。"""
         ring = wall_cells(self.BASE, 41)
         gap, weak_spot = ring[0], ring[-1]
-        wall = Wall(40000, weak_spot, 200, 1)
+        wall = Wall(40000, weak_spot, 199, 1)
         at = self._beside(gap)
         cmd = plan(self._turn((wall,), stone=1, at=at, gaps=(gap,)))[str(10010)]
         self.assertEqual(cmd["action"], "build", f"先补缺口：{cmd}")
@@ -1063,7 +1057,7 @@ class DemolishTest(unittest.TestCase):
     def test_a_worker_without_a_stone_does_not_demolish(self):
         """手里没石头就不拆：拆完那格是敞着的，砌不回来等于白开一个洞。"""
         spot = wall_cells(self.BASE, 41)[0]
-        wall = Wall(40000, spot, 200, 1)
+        wall = Wall(40000, spot, 199, 1)
         cmds = plan(self._turn((wall,), stone=0, at=self._beside(spot)))
         self.assertNotIn("remove", {c["action"] for c in cmds.values()}, f"没石头不许拆：{cmds}")
 
@@ -1113,7 +1107,7 @@ class WallPriorityTest(unittest.TestCase):
     def test_weapons_beat_walls_when_affordable(self):
         """顺序锁：武器是最高优先级 —— 份额有缺且钱够（75 金）时，哪怕环上一格没砌、
         石矿贴着脚，工人也先建武器。武器排后的话这里会发出"采石"，立即挂。"""
-        worker = Worker(10010, Pos(11, 25))  # 贴着 0 号落点 (12,24)
+        worker = Worker(10010, Pos(9, 24))  # 站在共用操作位上（贴着三个落点）
         turn = self._turn(
             (worker,),
             {self.BASE: "station", Pos(4, 24): "stone", Pos(6, 24): "copper"},
@@ -1123,7 +1117,10 @@ class WallPriorityTest(unittest.TestCase):
         cmd = plan(turn)[str(10010)]
         self.assertEqual(cmd["action"], "build", "先建武器，不是先采石/采铜")
         self.assertEqual(cmd["name"], "rocket")
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
+        self.assertEqual(
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]),
+            weapon_sites(self.BASE, 41)[0],
+        )
 
     def test_a_weapon_gap_without_gold_fundraises(self):
         """份额有缺、钱不够、筹资可行（有小贩有价）⇒ 整条墙线让位：先卖背包的货
@@ -1319,7 +1316,7 @@ class SellCargoTest(unittest.TestCase):
     """
 
     BASE = Pos(10, 24)
-    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    WEAPONS = _records(_guns_at_sites(Pos(10, 24)))
     SHOP = Pos(22, 18)
     VENDOR = Pos(20, 16)
     PRICES = {"stone": 1, "iron": 3, "copper": 5}
@@ -1402,10 +1399,10 @@ class DetourSellTest(unittest.TestCase):
     """
 
     BASE = Pos(10, 24)
-    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    WEAPONS = _records(_guns_at_sites(Pos(10, 24)))
     MINE = Pos(16, 30)      # 铜矿，在工人南边
-    NEAR_VENDOR = Pos(18, 27)  # 绕 ≤ 2 格的小贩
-    FAR_VENDOR = Pos(30, 18)   # 绕远的小贩
+    NEAR_VENDOR = Pos(17, 26)  # 切比雪夫 2 格内的小贩
+    FAR_VENDOR = Pos(30, 18)   # 离得远的小贩
     SHOP_PRICES = {"WeaponUpgradeVoucher1": 100}
 
     def setUp(self) -> None:
@@ -1432,7 +1429,7 @@ class DetourSellTest(unittest.TestCase):
         )
 
     def test_it_detours_when_the_vendor_is_on_the_way(self):
-        """小贩几乎顺路（绕 ≤ 2 格）⇒ 先朝小贩迈一步，而不是直奔矿。
+        """路过小贩（切比雪夫 ≤ 2）⇒ 先朝小贩迈一步，而不是直奔矿。
 
         判据取"有货 / 空手两步必须不同"：这一步本身就朝小贩（离小贩 3 → 2，离矿 6 → 5，
         两个目标都变近）⇒ 只比"离小贩更近"是分不出绕没绕的。
@@ -1478,6 +1475,8 @@ class VoucherLineTest(unittest.TestCase):
     """
 
     BASE = Pos(10, 24)
+    #: 三个落点（顺序即券链优先级：非角上的两个在前、角上那个最后）
+    SIDE_A, SIDE_B, CORNER = weapon_sites(Pos(10, 24), 41)
     SHOP = Pos(22, 18)
     PRICES = {"stone": 1, "copper": 5}
     SHOP_PRICES = {
@@ -1516,11 +1515,19 @@ class VoucherLineTest(unittest.TestCase):
     def _gun(self, wid: int, kind: str, cell: Pos, level: int = 1) -> Weapon:
         return Weapon(id=wid, kind=kind, pos=cell, attack_range=4, cooldown=0, level=level)
 
+    def _sides(self, level: int = 1) -> tuple[Weapon, ...]:
+        """非角上那两座火箭 —— 券链第 1/2 步的目标就是它们。"""
+        return (
+            self._gun(10020, "rocket", self.SIDE_A, level),
+            self._gun(10021, "rocket", self.SIDE_B, level),
+        )
+
     def test_the_chain_asks_for_the_weapon_voucher_first(self):
         """武器二级券排在最前 —— 哪怕围墙券（20 金）更便宜、也买得起，也不许跳级买它。"""
         worker = Worker(10010, Pos(20, 24))  # 盒外空地（盒内去商店要先绕后方通道）
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
-        turn = self._turn((worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200)
+        turn = self._turn(
+            (worker,), self._sides(), walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200
+        )
         cmd = plan(turn)["10010"]
         self.assertEqual(cmd["action"], "move", f"该朝商店走：{cmd}")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
@@ -1529,12 +1536,8 @@ class VoucherLineTest(unittest.TestCase):
     def test_wall_vouchers_come_last(self):
         """武器都到顶了才轮到围墙券（`WeaponUpgradeVoucher1/2` 都没有"还升得动的武器"）。"""
         worker = Worker(10010, Pos(13, 20))  # 离那面 L1 墙一格
-        weapons = (
-            self._gun(10020, "rocket", Pos(12, 24), 3),
-            self._gun(10021, "gatling", Pos(12, 22), 3),
-        )
         turn = self._turn(
-            (worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200
+            (worker,), self._sides(3), walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200
         )
         cmd = plan(turn)["10010"]
         self.assertIn(cmd["action"], ("move", "use"), f"该为围墙券忙起来：{cmd}")
@@ -1542,7 +1545,7 @@ class VoucherLineTest(unittest.TestCase):
     def test_it_never_buys_more_than_the_board_can_use(self):
         """**只买用得上的张数**（用户口径）：场上只有一座升得动的炮 ⇒ 最多买一张，钱再多也一样。"""
         worker = Worker(10010, Pos(21, 17))  # 贴着商店 (22,18)
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22), 3))
+        weapons = (self._gun(10020, "rocket", self.SIDE_A), self._gun(10021, "rocket", self.SIDE_B, 3))
         turn = self._turn((worker,), weapons, gold=900)
         cmd = plan(turn)["10010"]
         self.assertEqual(cmd["action"], "buy", cmd)
@@ -1556,7 +1559,7 @@ class VoucherLineTest(unittest.TestCase):
         """
         pioneer = Pioneer(10011, Pos(21, 17))  # 贴着商店
         worker = Worker(10010, Pos(21, 19))  # 也贴着商店
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22), 3))
+        weapons = (self._gun(10020, "rocket", self.SIDE_A), self._gun(10021, "rocket", self.SIDE_B, 3))
         cmds = plan(self._turn((pioneer, worker), weapons, gold=900))
         buys = [cid for cid, cmd in cmds.items() if cmd["action"] == "buy"]
         self.assertEqual(len(buys), 1, f"只该有一个人买：{cmds}")
@@ -1569,21 +1572,69 @@ class VoucherLineTest(unittest.TestCase):
         """
         holder = Worker(10012, Pos(20, 20), {"WeaponUpgradeVoucher1": 1})
         worker = Worker(10010, Pos(21, 17))  # 贴着商店
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22), 3))
+        weapons = (self._gun(10020, "rocket", self.SIDE_A), self._gun(10021, "rocket", self.SIDE_B, 3))
         cmds = plan(self._turn((holder, worker), weapons, gold=900))
         self.assertNotIn(
             "buy", {cmd["action"] for cmd in cmds.values()}, f"那张券够了，别再买：{cmds}"
         )
 
+
+    def test_the_chain_upgrades_the_two_side_rockets_before_the_corner_one(self):
+        """优先链的落点：非角上那两座先升（第 1/2 步），角上那座排在正面墙券**之后**（第 4 步）
+        —— `weapon_sites` 的顺序（非角、非角、角）就是这条优先级，不另立一份判据。
+        """
+        weapons = (
+            self._gun(10020, "rocket", self.SIDE_A),
+            self._gun(10021, "rocket", self.SIDE_B),
+            self._gun(10022, "rocket", self.CORNER),
+        )
+        turn = self._turn((Worker(10010, Pos(20, 24)),), weapons, gold=900)
+        voucher, spots = day._voucher_target(turn)
+        self.assertEqual(voucher, "WeaponUpgradeVoucher1", "第 1 步：武器二级、非角两座")
+        self.assertEqual(set(spots), {self.SIDE_A, self.SIDE_B}, "先升非角上的两座")
+
+        # 非角两座到顶 ⇒ 下一步是正面墙券（第 3 步），不是角上那座（第 4 步）
+        weapons = (
+            self._gun(10020, "rocket", self.SIDE_A, 3),
+            self._gun(10021, "rocket", self.SIDE_B, 3),
+            self._gun(10022, "rocket", self.CORNER),
+        )
+        front = wall_cells(self.BASE, 41)[:6]  # 面向敌人的一列
+        turn = self._turn(
+            (Worker(10010, Pos(20, 24)),),
+            weapons,
+            walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(front)),
+            gold=900,
+        )
+        voucher, spots = day._voucher_target(turn)
+        self.assertEqual(voucher, "WallUpgradeVoucher1", "第 3 步排在第 4 步（角上火箭）之前")
+        self.assertEqual(set(spots), set(front), "墙券打的是正面那一列")
+
+    def test_it_picks_the_weaker_of_the_two_rockets_first(self):
+        """同一步里**血少的先升**（用户口径"先升级血少的"）；血量未知（-1）排最后。
+
+        用户原话的后半是"相同血量随机"—— 本仓所有并列判据一律取坐标序（真随机会让用例
+        与日志都没法复现），那条口径就此落成坐标序。
+        """
+        weapons = (
+            self._gun(10020, "rocket", self.SIDE_A)._replace(health=-1),  # 未知
+            self._gun(10021, "rocket", self.SIDE_B)._replace(health=300),
+        )
+        turn = self._turn((Worker(10010, Pos(20, 24)),), weapons, gold=900)
+        _voucher, spots = day._voucher_target(turn)
+        self.assertEqual(spots, (self.SIDE_B, self.SIDE_A), "血 300 的在前、未知的垫底")
+
     def test_a_voucher_in_hand_is_used_right_away(self):
         """手里已经持券 ⇒ 立刻走到目标用掉（买完就用，不囤）。"""
-        worker = Worker(10010, Pos(12, 23), {"WeaponUpgradeVoucher1": 1})  # 贴着火箭 (12,24)
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)),)
+        worker = Worker(10010, Pos(9, 24), {"WeaponUpgradeVoucher1": 1})  # 站在共用操作位上
+        weapons = (self._gun(10020, "rocket", self.SIDE_A),)
         turn = self._turn((worker,), weapons, gold=0)
         cmd = plan(turn)["10010"]
         self.assertEqual(cmd["action"], "use", f"持券就走到目标用掉：{cmd}")
         self.assertEqual(cmd["name"], "WeaponUpgradeVoucher1")
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
+        self.assertEqual(
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.SIDE_A
+        )
 
     def test_the_buy_reserves_the_gold_so_the_other_worker_stands_down(self):
         """预扣共享金币：钱只够一张券时，两个工人里只有一个去商店。
@@ -1593,7 +1644,7 @@ class VoucherLineTest(unittest.TestCase):
         """
         a = Worker(10010, Pos(20, 24))
         b = Worker(10012, Pos(24, 24))
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)),)
+        weapons = (self._gun(10020, "rocket", self.SIDE_A),)
         turn = self._turn((a, b), weapons, gold=100)  # 正好一张 WeaponUpgradeVoucher1
         cmds = plan(turn)
         buyers = [cid for cid, cmd in cmds.items() if cmd["action"] == "move"]
@@ -1608,8 +1659,9 @@ class VoucherLineTest(unittest.TestCase):
         取小的那个。
         """
         worker = Worker(10010, Pos(21, 17))  # 贴着商店 (22,18)
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
-        turn = self._turn((worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200)
+        turn = self._turn(
+            (worker,), self._sides(), walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200
+        )
         cmd = plan(turn)["10010"]
         self.assertEqual(
             cmd, {"action": "buy", "name": "WeaponUpgradeVoucher1", "num": 2}, cmd
@@ -1618,20 +1670,22 @@ class VoucherLineTest(unittest.TestCase):
     def test_it_buys_only_what_the_purse_allows(self):
         """钱只够一张 ⇒ 就买一张（另一张等攒够了再买），不是"买不起两张就一张不买"。"""
         worker = Worker(10010, Pos(21, 17))
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
-        turn = self._turn((worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=100)
+        turn = self._turn(
+            (worker,), self._sides(), walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=100
+        )
         cmd = plan(turn)["10010"]
         self.assertEqual(cmd["action"], "buy", cmd)
         self.assertEqual(cmd["num"], 1, f"钱只够一张：{cmd}")
 
     def test_each_held_voucher_gets_used_on_its_own_target(self):
         """手里攒着两张 ⇒ 一张一张用掉，每回合挑**还升得动的第一格**。"""
-        worker = Worker(10010, Pos(12, 23), {"WeaponUpgradeVoucher1": 2})  # 贴着火箭 (12,24)
-        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
-        turn = self._turn((worker,), weapons, gold=0)
+        worker = Worker(10010, Pos(9, 24), {"WeaponUpgradeVoucher1": 2})  # 站在共用操作位上
+        turn = self._turn((worker,), self._sides(), gold=0)
         cmd = plan(turn)["10010"]
         self.assertEqual(cmd["action"], "use", f"该把手里那张用掉：{cmd}")
-        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
+        # 同血（都未知）⇒ 坐标序：SIDE_B((9,23)) 排在 SIDE_A((10,25)) 前面（用户口径的
+        # "相同血量随机"按本仓惯例落成坐标序，否则用例与日志都没法复现）
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), self.SIDE_B)
 
 class NoTaskModeTest(unittest.TestCase):
     """无任务模式的白天（第 126 步用户口径）：**工人只挖矿卖矿，买卖券全归开拓者**。
@@ -1642,7 +1696,7 @@ class NoTaskModeTest(unittest.TestCase):
     """
 
     BASE = Pos(10, 24)
-    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    WEAPONS = _records(_guns_at_sites(Pos(10, 24)))
     SHOP = Pos(22, 18)
     VENDOR = Pos(20, 16)
     MINE = Pos(20, 30)
@@ -1717,6 +1771,8 @@ class PioneerErrandTest(unittest.TestCase):
         phase_task: str = "",
         llm_resp: str = "",
         weapons: tuple[Weapon, ...] = (),
+        cooling_tasks: tuple[tuple[Pos, int], ...] = (),
+        tasks_exhausted: bool = False,
     ) -> Turn:
         ring = {c: WALL for c in wall_cells(self.BASE, 41)}
         grid = _terrain(weapons, {self.BASE: "station"}, ring, {self.SHOP: "weaponShop"})
@@ -1729,6 +1785,8 @@ class PioneerErrandTest(unittest.TestCase):
             phase_task=phase_task,
             llm_resp=llm_resp,
             weapons=weapons,
+            cooling_tasks=cooling_tasks,
+            tasks_exhausted=tasks_exhausted,
             vendor_prices={"stone": 1},
             shop_prices={"WeaponUpgradeVoucher1": 100},
         )
@@ -1743,6 +1801,34 @@ class PioneerErrandTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "move", f"该朝商店走：{cmd}")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.SHOP), pioneer.pos.dist(self.SHOP), "朝武器商店走")
+
+
+    def test_an_idle_pioneer_waits_at_the_soonest_task_point(self):
+        """空闲、券买不起、任务点都在冷却 ⇒ 去**刷新最快**那个点旁边等着（用户口径）。
+
+        到地方就待命（什么都不发）；这一条只钉"朝哪儿走"。
+        """
+        pioneer = Pioneer(10011, Pos(20, 20))
+        turn = self._turn(
+            pioneer,
+            gold=0,  # 券买不起
+            cooling_tasks=((Pos(14, 14), 5), (Pos(17, 17), 30)),
+        )
+        cmd = plan(turn)["10011"]
+        self.assertEqual(cmd["action"], "move", f"该去任务点旁等着：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(
+            step.dist(Pos(14, 14)), pioneer.pos.dist(Pos(14, 14)), "朝刷新最快（5 回合）那个点走"
+        )
+
+    def test_an_idle_pioneer_waits_at_the_shop_when_tasks_are_done(self):
+        """任务全做完（`tasks_exhausted`）、券又买不起 ⇒ 去武器商店旁边等着（用户口径）。"""
+        pioneer = Pioneer(10011, Pos(20, 20))
+        turn = self._turn(pioneer, gold=0, tasks_exhausted=True)
+        cmd = plan(turn)["10011"]
+        self.assertEqual(cmd["action"], "move", f"该去商店旁等着：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.SHOP), pioneer.pos.dist(self.SHOP), "朝商店走")
 
     def test_a_pinned_pioneer_answers_instead_of_running_errands(self):
         """被任务钉死的开拓者只交答案（离开任务点一格任务就作废）—— 再有钱也不跑腿。"""

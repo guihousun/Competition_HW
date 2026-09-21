@@ -21,7 +21,7 @@ from .grid import Pos
 from .path import step_onto, step_toward
 from .roles import BaseRole, Pioneer, Worker
 from .core import WEAPON_COST, _Ctx, _Queue, _emit
-from .utils import _ring, _short_handed
+from .utils import _night_gunner, _ring, _short_handed
 from .world import Turn
 
 
@@ -48,8 +48,8 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
     """白天那条链，逐角色跑、先命中先定夺：
 
     ① 开拓者被任务钉死（白天人手恒够，`_short_handed` 恒假）→ ② `day.BACK_TO_POST` 收工门
-    （到点就回岗位）→ ③ 开拓者：有任务点就去接，全空则跑"买券 → 立刻用"的差事 →
-    ④ 工人走 `day.DAY_CHAIN` 那四级。
+    （到点就回岗位）→ ③ 开拓者：有任务点就去接，全空则跑"买券 → 立刻用"的差事、
+    都没得干就去最该等的地方站着（`day.wait_errand`）→ ④ 工人走 `day.DAY_CHAIN` 那四级。
 
     黑板装在 `_Ctx` 里逐角色顺序累计、不跨回合；环缺口按在场工人数切段也在这里。"""
     cmds = q.cmds
@@ -84,8 +84,9 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
         if isinstance(role, Pioneer):
             if turn.task_points:
                 task.take_task(role, turn, q)
-            else:
-                day.voucher_errand(role, ctx)  # 空闲 ⇒ 买券差事（与工人那条各自独立跑）
+            elif not day.voucher_errand(role, ctx):
+                # 空闲又没什么可买/可升 ⇒ 去最该等的地方站着（刷新最快的任务点 / 商店）
+                day.wait_errand(role, ctx)
             continue
 
         if not isinstance(role, Worker):
@@ -107,64 +108,44 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     """夜里那条链（顺序就是夜里的策略），逐角色跑：
 
     ① 被任务钉死的开拓者 —— **人手够才钉得住**（工人阵亡 ⇒ 弃任务回炮位，生存第一）→
-    ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ 清场后工人出门采最值钱的矿
-    （`night.is_cleared` + `night.mine_ore`）→ ④ 其余角色回炮位开火。
+    ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **清场了 ⇒ 整夜改走白天那两条线**
+    （`night.is_cleared`：工人 `day.sell_or_mine`、开拓者 `day.voucher_errand`）→
+    ④ 没清场：炮手 `night.defend`、其余工人 `night.mine_ore`。
 
     两本账是**本函数的局部变量** —— 夜里不碰白天那个 `_Ctx` 黑板：炮位认领 `taken`
-    （一人一组，组内任一座被认领 = 整组被认领）与伤害记账 `assigned`（先开火的把估计伤害
-    记上，后开的按剩余血挑目标）。"""
+    （一人一组，组内任一座被认领 = 整组被认领）与矿格认领 `ore_taken`（清场那支自己
+    现造一个 `_Ctx` 把同一本账交给白天那几条线）。"""
     cmds = q.cmds
     taken: set[Pos] = set()
     ore_taken: set[Pos] = set()
-    assigned: dict[Pos, int] = {}
-
-    if turn.tasks_exhausted:
-        _no_task_night(turn, q, taken, ore_taken, assigned)
-        return
+    # 这一夜谁上炮位（三座火箭共用一个操作位 ⇒ 只要一个角色）：开拓者没被钉死就是它，
+    # 否则名册第一个工人顶上；其余角色整夜挖矿。
+    gunner = _night_gunner(turn)
+    cleared = night.is_cleared(turn)
+    # 清场后走白天那两条线 ⇒ 它们收的是 `_Ctx`（矿格认领那本账与挖矿共用同一份）
+    ctx = _Ctx(turn, q, ore_taken=ore_taken)
 
     for role in turn.roles:
         # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，夜里都不回炮位）；
-        # 唯一例外是夜里人手不够（工人阵亡 ⇒ 有炮没人操），生存第一、弃任务
+        # 唯一例外是一个工人都没有（没人能顶炮位），生存第一、弃任务
         if isinstance(role, Pioneer) and turn.phase_task and not _short_handed(turn):
             task.answer_task(role, turn, cmds)
             continue
         if night.upgrade_station(role, turn, q):
             continue
-        # 判据是"没有打我方的活机器人"、不是"场上全空"：打对方那波也在表里、我们从不打它
-        if night.is_cleared(turn) and isinstance(role, Worker):
+        # 清场了 ⇒ **走白天那套**（工人挖矿卖矿、开拓者买券/等刷新）：它们只发
+        # `collect`/`sell`/`buy`/`use`/`move`，夜里合法；`build`/`remove` 一条都不会发
+        if cleared:
+            if isinstance(role, Worker):
+                day.sell_or_mine(role, ctx)
+            else:
+                day.voucher_errand(role, ctx)  # 开拓者：买券 / 去最该等的地方
+            continue
+        if role.id == gunner:
+            night.defend(role, turn, q, taken)
+            continue
+        if isinstance(role, Worker):
             night.mine_ore(role, turn, q, ore_taken)
-            continue
-        night.defend(role, turn, q, taken, assigned)
-
-
-def _no_task_night(
-    turn: Turn, q: _Queue, taken: set[Pos], ore_taken: set[Pos], assigned: dict[Pos, int]
-) -> None:
-    """无任务模式的夜班分工（用户口径）：**火箭对 → 开拓者、加特林 → 一个工人、其余工人出门挖矿**。
-
-    ⚠️ 出门挖矿那一个的**前提是"两个武器位都站得人"**（用户原话）：炮位一共两组（火箭对共用
-    一个操作位），所以要有**第三个**角色才放得出手 —— 人手不足（有人阵亡）时全员上炮，缺的
-    那一组由 `defend` 的既有逻辑兜底（换组 / 退路）。
-
-    ⚠️ 挖矿的那个**不管清没清场都出门**（它不操炮，站着也是站着）—— 这一夜它按白天的规矩
-    采最值钱的矿（`night.mine_ore` 里那条排序与白天第 3 级同源）。"""
-    roles = list(turn.roles)
-    chief = next((r for r in roles if isinstance(r, Pioneer)), None)
-    workers = [r for r in roles if isinstance(r, Worker)]
-    # 上炮的排队：开拓者在前（它守火箭对），工人按名册顺序补（第一个守加特林）
-    gunners: list[BaseRole] = ([chief] if chief is not None else []) + workers
-    spare = {r.id for r in gunners[2:]}  # 两组炮最多两个人；余下的出门挖矿
-    rocket_id = gunners[0].id if gunners else None
-
-    for role in roles:
-        if role.id in spare:
-            night.mine_ore(role, turn, q, ore_taken)
-            continue
-        if night.upgrade_station(role, turn, q):
-            continue
-        night.defend(
-            role, turn, q, taken, assigned, kinds=("rocket",) if role.id == rocket_id else ("gatling",)
-        )
 
 
 def _walk_out(turn: Turn, q: _Queue) -> None:

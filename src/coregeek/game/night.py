@@ -1,8 +1,9 @@
-"""夜里：认领武器组、走到岗位、按最大伤害落点开火，外加基地升级与"清场没有"。
+"""夜里：一个角色操三座火箭、其余工人出门采矿，外加基地升级与"清场没有"。
 
-四个入口（`planner._night_intents` 按这个顺序问，那条链的代码在 `planner.py`）：`upgrade_station`
-（基地残血 + 持券）→ `is_cleared`（没有还会打我方的活机器人）→ `mine_ore`（清场后工人出门采矿）
-→ `defend`（其余角色回炮位开火）。**判据顺序就是夜里的策略**，改序先看 `strategy.md` §5。
+三个入口（`planner._night_intents` 按这个顺序问，那条链的代码在 `planner.py`）：`upgrade_station`
+（基地残血 + 持券）→ `is_cleared`（没有还会打我方的活机器人 ⇒ 整夜改走白天那两条线）→
+`defend`（炮手回岗位开火）/ `mine_ore`（其余工人采最值钱的矿）。**判据顺序就是夜里的策略**，
+改序先看 `strategy.md` §5。
 
 岗位几何在 `core`（`_post_spots` / `_operator_spots` / `_near_spots`）：白天收工闸门与
 这里必须同一个口径，只改一处会让白天把人送进岗位、夜里又不认领，那格被占着、整组没人操。
@@ -11,14 +12,22 @@
 `_fired` 是本模块唯一的跨回合状态（本地开火账 —— 判题器不发 `cooldown` 字段）。
 """
 
-from collections.abc import Mapping
 from typing import Any
 
 from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, base_cells
-from .roles import BaseRole, Pioneer, Worker
-from .core import _Queue, _collect, _emit, _near_spots, _operator_spots, _post_spots, _priciest_ore
-from .utils import _passable, _pioneer_mans_guns, _weapon_groups
+from .roles import BaseRole, Worker
+from .core import (
+    _Queue,
+    _collect,
+    _emit,
+    _near_spots,
+    _operator_spots,
+    _post_spots,
+    _priciest_ore,
+    _weapon_groups,
+)
+from .utils import _passable
 from .world import Robot, Turn, Weapon
 
 
@@ -40,6 +49,9 @@ _fired: dict[int, int] = {}
 #: 火箭发射后的冷却回合数（任务书 §4.5.1：发射后 3 回合空窗）。
 ROCKET_COOLDOWN = 3
 
+#: 夜里挖矿要离机器人多远（切比雪夫）：工人这一夜在盒外采，机器人周围这一圈当走不通。
+DANGER = 2
+
 
 #: 基地升级券（夜里基地升级用）。
 STATION_VOUCHERS = ("StationUpgradeVoucher1", "StationUpgradeVoucher2")
@@ -56,29 +68,54 @@ def is_cleared(turn: Turn) -> bool:
     return not _alive(_foe_robots(turn))
 
 
-def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
-    """清场后的夜里，工人去采最值钱的那座矿 —— 囤到第二天由白天那条链卖掉。
+def _safe(turn: Turn) -> set[Pos]:
+    """夜里挖矿用的地形：`_passable` **再加上每个机器人周围切比雪夫 ≤ `DANGER` 的格子**。
 
-    排序与白天第 1/3 级共用一处（`core._priciest_ore`：按收购价，不读新闻修正、不看路程）；
+    工人这一夜在盒外采，机器人很可能就在旁边 —— 挑矿与"走得到吗"都按这份地形算，等于把
+    机器人附近当成走不通（用户口径"保证安全"）。⚠️ 只是**挑矿与估算**用；真迈步那一步把它
+    当**软避让**（绕不开退回硬障碍照走，绝不原地卡死）。"""
+    blocked = _passable(turn)
+    for robot in _alive(turn.robots):
+        blocked |= {
+            Pos(robot.pos.x + dx, robot.pos.y + dy)
+            for dx in range(-DANGER, DANGER + 1)
+            for dy in range(-DANGER, DANGER + 1)
+        }
+    return blocked
+
+
+def _danger_cells(turn: Turn) -> frozenset[Pos]:
+    """机器人周围那圈格子（切比雪夫 ≤ `DANGER`）—— 挖矿路上当软避让用。"""
+    return frozenset(_safe(turn) - _passable(turn))
+
+
+def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
+    """夜里（炮手之外的）工人去采最值钱的那座矿 —— 囤到第二天由白天那条链卖掉。
+
+    排序与白天第 1/3 级共用一处（`core._priciest_ore`：按实际单价，不读新闻修正）；
     区别只在白天那一支动身前会看一眼顺路买卖、挖到的货是拿去凑券钱的。
 
-    夜里这条**不卖、不买、不回炮位**：清场之后没有回炮位的义务（`attack` 只在夜里，天亮前
-    赶不回去也没有代价，白天还有 70 个回合走回来）⇒ 只问"走得到吗"，连时间预算都不算。"""
-    mine = _priciest_ore(role, turn, ore_taken)
+    夜里这条**不买、不回炮位**：天亮前赶不回去也没有代价（白天还有 70 个回合走回来）⇒
+    只问"走得到吗"，连时间预算都不算。清场之后才轮到它的是 `planner`：清场后走
+    `day.sell_or_mine`（会卖也会买）。
+
+    ⚠️ **机器人还活着时按 `_safe` 挑矿**（把机器人周围 `DANGER` 格内当走不通）⇒ 矿被机器人
+    占着就换下一座；迈步那一步把它们当**软避让**（绕不开照走，绝不为躲机器人原地卡死）。"""
+    foes = _alive(turn.robots)
+    area = _safe(turn) if foes else None
+    mine = _priciest_ore(role, turn, ore_taken, walk=area)
     if mine is None:
         return
     ore_taken.add(mine)
     if role.pos.dist(mine) <= 1:
         _collect(q.cmds, role, mine)
         return
-    q.step(role, mine, with_paths=True, reserve=True)
-
-
-def _stands_on_a_post(role: BaseRole, turn: Turn) -> bool:
-    """这个角色是不是正站在某组的操作位上（多座组那格要踩上去；单座组的岗位就是炮自己）。"""
-    blocked = _passable(turn)
-    return any(
-        role.pos in _operator_spots(g, blocked, turn.map.size) for g in _weapon_groups(turn)
+    q.step(
+        role,
+        mine,
+        avoid=_danger_cells(turn) if foes else frozenset(),
+        with_paths=True,
+        reserve=True,
     )
 
 
@@ -93,15 +130,7 @@ def _cooling(weapon: Weapon, round_no: int) -> bool:
     return last is not None and round_no - last <= ROCKET_COOLDOWN
 
 
-def defend(
-    role: BaseRole,
-    turn: Turn,
-    q: _Queue,
-    taken: set[Pos],
-    assigned: dict[Pos, int],
-    *,
-    kinds: tuple[str, ...] | None = None,
-) -> None:
+def defend(role: BaseRole, turn: Turn, q: _Queue, taken: set[Pos]) -> None:
     """夜里：认领一组还没被本回合别人认领的武器，走到操作位，开火。所有角色都走这里。
 
     回合号缺失（`round_no < 0`）时一发不发：`is_day` 把缺失判成夜里，那个降级方向对
@@ -109,31 +138,17 @@ def defend(
 
     选组：最近且没人认领的（组内任一座被认领 = 整组被认领）。先开火、打不了才挪岗：贴着
     组内某座就先打它（只贴一座也打），站上岗位又都打不了 ⇒ 待命；没贴着 ⇒ 朝共用操作位走。
-    不换组 —— 每回合重挑会让角色在炮位之间来回走。开拓者是补位炮手（`_pioneer_mans_guns`）：
-    工人够操满所有组时它一个组都不认领；例外：它已站在某组操作位上 ⇒ 认领那一组（那格被
-    它占着、工人站不上去，再不打整组白丢一夜）。
+    不换组 —— 每回合重挑会让角色在炮位之间来回走。
 
     岗位去不了时不许整组无人可打：主岗位被非我方单位堵死 / 走不进那条一格宽的走廊 ⇒ 退到
     `_near_spots` 的邻座格上，只打得了其中一座也照打。岗位被同事占着不在此列 —— 那组归他。
 
-    `kinds` 给定时只看含这些种类的组（**无任务模式的固定分工**：开拓者守火箭对、工人守加特林）
-    —— 那是调用方定好的岗位，所以同时也**跳过"补位炮手"那道门**（开拓者这一夜就是炮手）。"""
+    本模块只被 `planner._night_intents` 调用、且只调**炮手一个人**（`utils._night_gunner`：
+    开拓者，没有就第一个工人）—— 三座火箭共用一个操作位（`core._weapon_groups` 并成一组），
+    站上去按冷却轮换就能全操，其余角色出门挖矿。"""
     if turn.round_no < 0:
         return
-    # 工人够操满所有组 ⇒ 炮位留给工人，开拓者一个组都不认领（补位炮手）。
-    # `kinds` 给定时是"指定岗位"（无任务模式），这道门不适用。
-    if (
-        kinds is None
-        and isinstance(role, Pioneer)
-        and not _pioneer_mans_guns(turn)
-        and not _stands_on_a_post(role, turn)
-    ):
-        return
-    groups = tuple(
-        g
-        for g in _weapon_groups(turn)
-        if kinds is None or any(w.kind in kinds for w in g)
-    )
+    groups = _weapon_groups(turn)
     blocked = _passable(turn)
     # 退路（贴着组内任意一座的格子）：主岗位一个都站不上时才用 —— 主岗位能站就先站
     # （多座组那格交替得起来，退路只守得了一座）
@@ -156,7 +171,7 @@ def defend(
                 k = turn.round_no % len(ready)
                 ready = ready[k:] + ready[:k]
             for w in ready + cooling:
-                if _fire(role, w, turn, q.cmds, assigned):
+                if _fire(role, w, turn, q.cmds):
                     return
             if len(adjacent) == len(group):
                 return  # 站在岗位上了、这回合又打不了 ⇒ 原地待命（不换组）
@@ -225,36 +240,28 @@ def _foe_robots(turn: Turn) -> tuple[Robot, ...]:
     )
 
 
-def _fire(
-    role: BaseRole,
-    weapon: Weapon,
-    turn: Turn,
-    cmds: dict[str, dict[str, Any]],
-    assigned: dict[Pos, int],
-) -> bool:
+def _fire(role: BaseRole, weapon: Weapon, turn: Turn, cmds: dict[str, dict[str, Any]]) -> bool:
     """贴着炮了：按最大伤害落点开火。打不了就什么都不发。
 
     `targetPos` 的个数必须等于武器等级（接口文档 L218，多一个少一个都是指令非法）：电磁恒 1、
     加特林/火箭 = 等级数，多发全指同一个最优落点。火箭（`_rocket_site`）落点任选、中心 +
     溅射全场算账；加特林/电磁（`_beam_site`）落点打在某台身上（终点必在弹道 ⇒ 必命中），
-    取有效伤害最高的、并列打近的。`assigned` 记账：先开火的把估计伤害记在机器人身上，
-    后开的按剩余血算 —— 不挤同一个将死的目标。只打打我方的（`_foe_robots`）。"""
+    取有效伤害最高的、并列打近的。只打打我方的（`_foe_robots`）。一个炮手一回合只发一座
+    ⇒ 没有"同回合两座挤同一个将死者"这回事，不需要跨炮的伤害记账。"""
     if _cooling(weapon, turn.round_no):
         return False
     foes = _foe_robots(turn)
     if not foes:
         return False
     if weapon.kind == "rocket":
-        target = _rocket_site(weapon, foes, turn.map.size, assigned)
+        target = _rocket_site(weapon, foes, turn.map.size)
         if target is None:
             return False
-        _book_rocket(weapon, target, foes, assigned)
     else:
-        victim = _beam_site(weapon, foes, assigned)
+        victim = _beam_site(weapon, foes)
         if victim is None:
             return False
         target = victim.pos
-        assigned[victim.pos] = assigned.get(victim.pos, 0) + _beam_damage(weapon)
     count = 1 if weapon.kind == "railgun" else weapon.level
     # key 是武器 id，操控角色在报文的 `controllerId` 里
     fired = _emit(
@@ -277,9 +284,7 @@ def _rocket_damage(weapon: Weapon) -> tuple[int, int]:
     return ROCKET_CENTER * weapon.level, ROCKET_SPLASH * weapon.level
 
 
-def _beam_site(
-    weapon: Weapon, robots: tuple[Robot, ...], assigned: Mapping[Pos, int]
-) -> Robot | None:
+def _beam_site(weapon: Weapon, robots: tuple[Robot, ...]) -> Robot | None:
     """加特林/电磁的目标：有效伤害最高的那台（并列打近的、再并列按坐标序）。
 
     "有效伤害" = min(伤害, 剩余血)：差别只在将死者 —— 别把整发浪费在已被打得差不多的人
@@ -287,7 +292,7 @@ def _beam_site(
     shot = _beam_damage(weapon)
 
     def effective(r: Robot) -> int:
-        return min(shot, max(0, r.health - assigned.get(r.pos, 0)))
+        return min(shot, max(0, r.health))
 
     reach = [r for r in _alive(robots) if weapon.pos.dist(r.pos) <= weapon.attack_range]
     best = max(reach, key=lambda r: (effective(r), -weapon.pos.dist(r.pos), r.pos), default=None)
@@ -295,10 +300,7 @@ def _beam_site(
 
 
 def _rocket_site(
-    weapon: Weapon,
-    robots: tuple[Robot, ...],
-    size: tuple[int, int],
-    assigned: Mapping[Pos, int],
+    weapon: Weapon, robots: tuple[Robot, ...], size: tuple[int, int]
 ) -> Pos | None:
     """火箭的最大伤害落点：候选 = 机器人占的格及其 8 邻格（别的格子摸不到伤害），且落点
     须在射程内 —— 溅射可以够到射程之外的机器人。评分 = Σ min(伤害, 剩余血)，并列取坐标
@@ -317,7 +319,7 @@ def _rocket_site(
         return sum(
             min(
                 center if cell == r.pos else splash if cell.dist(r.pos) == 1 else 0,
-                max(0, r.health - assigned.get(r.pos, 0)),
+                max(0, r.health),
             )
             for r in alive
         )
@@ -325,13 +327,3 @@ def _rocket_site(
     in_range = [cell for cell in cands if weapon.pos.dist(cell) <= weapon.attack_range]
     return min(in_range, key=lambda cell: (-score(cell), cell), default=None)
 
-
-def _book_rocket(
-    weapon: Weapon, target: Pos, robots: tuple[Robot, ...], assigned: dict[Pos, int]
-) -> None:
-    """把火箭这一发的估计伤害记到账上（同回合后开的炮按剩余血挑目标）。"""
-    center, splash = _rocket_damage(weapon)
-    for r in _alive(robots):
-        hit = center if r.pos == target else splash if r.pos.dist(target) == 1 else 0
-        if hit:
-            assigned[r.pos] = assigned.get(r.pos, 0) + hit

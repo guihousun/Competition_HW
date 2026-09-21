@@ -33,6 +33,7 @@ def load(payload: Any) -> Turn | None:
         weapons=_weapons(payload),
         robots=_robots(payload),
         task_points=_tasks(payload),
+        cooling_tasks=_cooling_tasks(payload),
         tasks_exhausted=_tasks_exhausted(payload),
         phase_task=_text(payload, "phaseTask"),
         llm_resp=_text(payload, "llmResp"),
@@ -127,7 +128,7 @@ def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
     武器与角色混在 `teamOur.roles` 里，靠 `roleType` 认（`world.WEAPON_KINDS`），只扫我方。
     两条丢掉的规则都是"别发出非法指令"：`id < 0`（字段缺失）⇒ 丢、已毁 ⇒ 丢（`_destroyed`）。
     `attackRange` / `cooldown` 解析不出来 ⇒ `-1`，方向故意分开：射程 -1 ⇒ 不开火；冷却 -1
-    ⇒ 照打。"""
+    ⇒ 照打。`health` 缺失同样 `-1`（未知）—— 券链"先升血少的"会把它排到最后。"""
     out = []
     for node in _items(payload, "teamOur", "roles"):
         if not isinstance(node, dict) or _destroyed(node):
@@ -146,6 +147,8 @@ def _weapons(payload: dict[str, Any]) -> tuple[Weapon, ...]:
                 cooldown=_int(node.get("cooldown")),
                 # 缺失按文档的"初始等级 1"算：-1 会被升级线当成"还升得动"去买券
                 level=max(1, _int(node.get("level"))),
+                # 血量缺失 ⇒ -1（未知）：券链"先升血少的"，未知的排最后
+                health=_int(node.get("health")),
             )
         )
     return tuple(out)
@@ -232,6 +235,21 @@ def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
         if pos is not None and _int(node.get("coldDownRounds")) <= 0:
             out.append(pos)
     return tuple(out)
+
+
+def _cooling_tasks(payload: dict[str, Any]) -> tuple[tuple[Pos, int], ...]:
+    """我方正在冷却的任务点（点 → 还有几回合就绪），按冷却升序、并列取坐标序。
+
+    开拓者空闲时去**刷新最快**的那个点旁边等着（用户口径）—— `task_points` 只管能接的，
+    这里管还没好的；来源同一处（`teamOur.playerTasks`）。"""
+    out = []
+    for node in _items(payload, "teamOur", "playerTasks"):
+        if not isinstance(node, dict) or node.get("isValid") is not False:
+            continue
+        pos, cool = _pos(node, "taskPosition"), _int(node.get("coldDownRounds"))
+        if pos is not None and cool > 0:
+            out.append((pos, cool))
+    return tuple(sorted(out, key=lambda item: (item[1], item[0])))
 
 
 def _tasks_exhausted(payload: dict[str, Any]) -> bool:

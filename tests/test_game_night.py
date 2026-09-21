@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from _fixtures import _reset_ledgers  # noqa: E402
 from _fixtures import _terrain  # noqa: E402
 from coregeek.game import night  # noqa: E402
-from coregeek.game.grid import Pos, wall_cells  # noqa: E402
+from coregeek.game.grid import Pos, wall_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.core import WALL  # noqa: E402
@@ -107,13 +107,17 @@ class NightWeaponTest(unittest.TestCase):
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(13, 25), "朝最近的 (12,25) 迈一步，停在它旁边")
 
-    def test_two_roles_do_not_share_a_weapon(self):
-        """一人只能操一座武器 —— 两个角色都挤同一座，等于白白少一门火力。"""
+    def test_only_the_gunner_mans_the_guns(self):
+        """**只有炮手上炮**（`utils._night_gunner` = 名册第一个工人）：第二个工人出门挖矿，
+        不再"换一座去操"—— 三座火箭一组、一人按冷却轮换就够，多余的人手全部产矿。
+
+        夹具没有矿 ⇒ 挖矿那位这一回合什么都不发（空指令合法）。
+        """
         cmds = plan(self._turn(Worker(1, Pos(14, 26)), Worker(2, Pos(14, 24))))
-        second = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
-        # 两个角色到 (12,25) 都是 2 格，最近的都是它；没有去重的话 2 号也会奔它去
-        self.assertGreater(second.dist(self.NEAR), 1, "2 号必须换一座，不能也去挤 (12,25)")
-        self.assertLess(second.dist(self.FAR), 5, "换的那座该是下一近的 (9,22)")
+        self.assertEqual(set(cmds), {"1"}, f"只有炮手有指令：{cmds}")
+        self.assertEqual(cmds["1"]["action"], "move", "炮手朝炮位走")
+        cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
+        self.assertLess(cell.dist(self.NEAR), Pos(14, 26).dist(self.NEAR), "这一步朝炮位去")
 
     def test_no_weapons_means_nothing_to_do(self):
         """武器全没了 ⇒ 不动（空指令合法），而不是瞎走。"""
@@ -134,24 +138,21 @@ class NightWeaponTest(unittest.TestCase):
         self.assertEqual(set(cmds), {str(self.GUN)}, "开拓者开的那一炮在不在？")
         self.assertEqual(cmds[str(self.GUN)]["controllerId"], "1", "操控者是开拓者")
 
-    def test_the_pioneer_stays_off_the_guns_while_both_workers_are_alive(self):
-        """两个工人活着 ⇒ 炮位全归工人，开拓者一组都不认领（用户口径）。
+    def test_the_pioneer_mans_the_guns_and_the_workers_mine(self):
+        """**开拓者就是炮手**（用户口径"晚上开拓者操三个火箭筒"）：它上炮位，工人出门挖矿。
 
-        开拓者排在 payload 最前面：不先把工人挑完，它会把最近的那一组抢走，被挤掉的那个工人
-        整夜站着不动 —— 火力没多，任务线的主力还被拴在炮位上。
+        旧的"工人够多 ⇒ 开拓者一组都不认领"（第 74 步补位炮手）随新阵形作废 —— 三座火箭
+        共用一个操作位、一人全操，人手不再紧张。夹具没有矿 ⇒ 工人这一回合空指令。
         """
         cmds = plan(
             self._turn(
-                Pioneer(1, Pos(14, 26)),  # 离 NEAR 更近，不拦的话它先抢
-                Worker(2, Pos(12, 24)),  # 贴着 NEAR
-                Worker(3, Pos(9, 19)),  # 还差三格到 FAR
+                Pioneer(1, Pos(14, 26)),  # 离 NEAR 更近
+                Worker(2, Pos(12, 24)),
+                Worker(3, Pos(9, 19)),
             )
         )
-        self.assertNotIn("1", cmds, f"开拓者不该占炮位：{cmds}")
-        self.assertEqual(cmds[str(self.GUN)]["controllerId"], "2", "NEAR 归工人")
-        self.assertEqual(cmds["3"]["action"], "move", "另一个工人去 FAR，不是干等")
-        cell = Pos(cmds["3"]["targetPos"][0]["x"], cmds["3"]["targetPos"][0]["y"])
-        self.assertLess(cell.dist(self.FAR), Pos(9, 19).dist(self.FAR), "这一格得真的离 FAR 更近")
+        self.assertEqual(set(cmds), {"1"}, f"只有开拓者有指令：{cmds}")
+        self.assertEqual(cmds["1"]["action"], "move", "开拓者朝炮位走")
 
     def test_the_command_hangs_on_the_weapon_id(self):
         """`attack` 的 key 是武器 id，操控角色在 `controllerId` 里（`docs/response.txt`）。
@@ -223,28 +224,6 @@ class NightWeaponTest(unittest.TestCase):
             cmd["targetPos"][0],
             [{"x": 13, "y": 25}, {"x": 13, "y": 26}, {"x": 14, "y": 25}],
             "该落进簇里（中心+溅射都吃得到），不打孤台",
-        )
-
-    def test_two_guns_do_not_pile_onto_a_dying_robot(self):
-        """同回合记账（`assigned`）：先开火的把伤害记在账上，后开的按剩余血挑 ⇒ 两座炮不挤
-        同一个将死的目标（方针是打死所有，不集火补刀）。
-
-        例：两座射程 4 的加特林都能打到 (11,24)（12 血）与 (9,26)（40 血），1 号先开记 10 点
-        ⇒ 2 号看到前者只剩 2 血，转打 40 血那只；没有记账的话两座都去打 12 血那只。
-        """
-        guns = self._guns(Pos(12, 25), Pos(9, 22))
-        turn = self._turn(
-            Worker(1, Pos(12, 24)),  # 贴着 1 号炮
-            Worker(2, Pos(9, 23)),  # 贴着 2 号炮
-            weapons=guns,
-            robots=(Robot(Pos(11, 24), 12), Robot(Pos(9, 26), 40)),
-        )
-        cmds = plan(turn)
-        self.assertEqual(cmds[str(self.GUN)]["targetPos"], [{"x": 11, "y": 24}], "1 号先开，打近的")
-        self.assertEqual(
-            cmds[str(self.GUN + 1)]["targetPos"],
-            [{"x": 9, "y": 26}],
-            "2 号按剩余血算：(11,24) 只剩 2 血，转打 40 血的",
         )
 
     def test_range_boundary_is_chebyshev(self):
@@ -502,13 +481,6 @@ class NightPostTest(unittest.TestCase):
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(11, 22), "绕开基地那一角、朝操作位去")
 
-    def test_a_colleague_on_the_spot_never_freezes_the_pair(self):
-        """同事站在操作位上 ⇒ 他照旧开火，另一位换一组去（岗位被占了，不是两人一起卡住）。"""
-        cmds = plan(self._turn(Worker(1, Pos(10, 25)), Worker(2, self.SPOT), gatling=True))
-        self.assertEqual(set(cmds), {"201", "1"}, f"火箭归站在岗位上的那位：{cmds}")
-        self.assertEqual(cmds["201"]["controllerId"], "2")
-        self.assertEqual(cmds["1"]["action"], "move", "另一位该去加特林，不是干等")
-
     def test_a_gunner_beside_a_rocket_fires_it_though_the_spot_is_taken(self):
         """贴着 `200` 的那位该把它打出去 —— 岗位格被占不能让这一组变成无人可打。
 
@@ -639,14 +611,15 @@ class NightEconomyTest(unittest.TestCase):
         self.assertIsNotNone(cmd, "远矿也是矿：夜里不该因为'回不来'就干等")
         self.assertIn(cmd["action"], ("move", "collect"))
 
-    def test_a_cleared_night_never_sells_or_buys(self):
-        """背着货、贴着小贩、钱也够买券 ⇒ 夜里照旧只采矿：**买卖都不做**（第 119 步）。
+    def test_a_cleared_night_follows_the_day_line(self):
+        """清场后**走白天那条线**（用户口径"机器人死完了直接走白天逻辑"）：贴着小贩、背包有货
+        ⇒ 当场卖掉 —— 夜里 `sell` 合法（§4.4 没给它写昼夜门）。
 
-        货留到白天由 `SellCargo` 卖（那才是定价、够本、回得来都算得清的地方）。
+        旧的"夜里只采矿、不卖不买"（第 119 步）随这条口径作废。
         """
         worker = Worker(10010, Pos(20, 15), {"copper": 1})  # 切比雪夫 1 ⇒ "贴着小贩"
         cmd = plan(self._turn(worker, vendor=True, shop=True, gold=100)).get("10010")
-        self.assertIn(cmd["action"], ("move", "collect"), cmd)
+        self.assertEqual(cmd, {"action": "sell", "name": "copper", "num": 1}, cmd)
 
     def test_night_economy_never_builds_or_removes(self):
         """夜里这条线绝不发 build / remove（§4.4：两条都仅白天）—— 环上留多少缺口、包里有没有
@@ -706,26 +679,31 @@ class NightEconomyTest(unittest.TestCase):
 
 
 class NoTaskNightTest(unittest.TestCase):
-    """无任务模式的夜班分工（第 126 步用户口径）：**火箭对 → 开拓者、加特林 → 一个工人、
-    其余工人出门挖矿**。
+    """无任务模式的夜班**与平常夜班是同一套**（第 130 步）：炮手上炮、其余挖矿；清场走白天线。
 
-    ⚠️ 出门挖矿那一个的前提是"两个武器位都站得人"（用户原话）：炮位两组（火箭对共用一个操作位），
-    要有第三个角色才放得出手；人手不足就全员上炮。⚠️ 挖矿的那个不管清没清场都出门（它不操炮）。
+    第 126 步那套"火箭对 → 开拓者、加特林 → 工人、其余挖矿"的固定分工随新阵形作废 ——
+    三座火箭一组、一个炮手全操，分工只剩"谁上炮、谁挖矿"一件事（`utils._night_gunner`）。
     """
 
     BASE = Pos(10, 24)
     NIGHT = 85
-    ROCKET_A, ROCKET_B = Pos(12, 24), Pos(12, 25)
-    GATLING = Pos(12, 22)
-    MINE = Pos(20, 30)
+    COPPER, IRON = Pos(20, 30), Pos(4, 30)  # 两座矿（两个工人各领一座）
 
-    def _turn(self, *roles: BaseRole, robots=(Robot(pos=Pos(14, 26), health=40),)) -> Turn:
-        weapons = (
-            Weapon(10020, "rocket", self.ROCKET_A, 10, 0),
-            Weapon(10021, "rocket", self.ROCKET_B, 10, 0),
-            Weapon(10022, "gatling", self.GATLING, 4, 0),
+    def setUp(self) -> None:
+        _reset_ledgers()
+        night._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
+
+    def _turn(
+        self,
+        *roles: BaseRole,
+        tasks_exhausted: bool = True,
+        robots=(Robot(pos=Pos(14, 26), health=40),),
+    ) -> Turn:
+        weapons = tuple(
+            Weapon(10020 + i, "rocket", pos, 10, 0)
+            for i, pos in enumerate(weapon_sites(self.BASE, 41))
         )
-        grid = _terrain(weapons, {self.BASE: "station"}, {self.MINE: "copper"})
+        grid = _terrain(weapons, {self.BASE: "station"}, {self.COPPER: "copper", self.IRON: "iron"})
         grid |= {r.pos: r.type_name for r in roles}
         return Turn(
             round_no=self.NIGHT,
@@ -734,47 +712,68 @@ class NoTaskNightTest(unittest.TestCase):
             gold=0,
             weapons=weapons,
             robots=robots,
-            tasks_exhausted=True,
-            vendor_prices={"copper": 5},
+            tasks_exhausted=tasks_exhausted,
+            vendor_prices={"copper": 5, "iron": 3},
         )
 
-    def _by_controller(self, cmds: dict) -> dict[str, str]:
-        """`attack` 的 key 是武器 id ⇒ 按操控者摊平成 `{角色id: 动作}`（`move` 的 key 就是角色）。"""
-        out = {}
-        for key, cmd in cmds.items():
-            out[cmd.get("controllerId", key)] = cmd["action"]
-        return out
+    def test_the_night_shift_is_the_same_with_or_without_tasks(self):
+        """任务耗不耗尽，夜班的指令**一条不变** —— 分工只看"谁上炮、谁挖矿"，与任务无关。"""
+        roles = (Pioneer(1, Pos(9, 24)), Worker(2, Pos(5, 24)), Worker(3, Pos(6, 24)))
+        with_tasks = plan(self._turn(*roles, tasks_exhausted=False))
+        night._fired.clear()  # 两次跑要从同一本账起步，否则第二次看到的是"刚打过的冷却"
+        without = plan(self._turn(*roles, tasks_exhausted=True))
+        self.assertEqual(with_tasks, without)
+        # 开拓者站在共用操作位上 ⇒ 它开火（attack 的 key 是武器 id、controllerId 才是角色）
+        attacks = {c["controllerId"] for c in with_tasks.values() if c["action"] == "attack"}
+        self.assertEqual(attacks, {"1"}, f"开拓者操炮：{with_tasks}")
+        for rid in ("2", "3"):
+            self.assertIn(
+                with_tasks[rid]["action"], ("move", "collect"), f"工人 {rid} 该在挖矿：{with_tasks}"
+            )
 
-    def test_the_pioneer_takes_the_rockets_and_a_worker_takes_the_gatling(self):
-        """三个角色 ⇒ 开拓者守火箭对、第一个工人守加特林、第二个工人出门挖矿。
+    def test_without_a_pioneer_the_first_worker_mans_the_guns(self):
+        """名册里没有开拓者 ⇒ **第一个工人顶上操炮**（火力不断），其余照旧挖矿。"""
+        cmds = plan(self._turn(Worker(2, Pos(9, 24)), Worker(3, Pos(5, 24))))
+        attacks = {c["controllerId"] for c in cmds.values() if c["action"] == "attack"}
+        self.assertEqual(attacks, {"2"}, f"第一个工人操炮：{cmds}")
+        self.assertIn(cmds["3"]["action"], ("move", "collect"), f"另一个工人挖矿：{cmds}")
 
-        ⚠️ 这一条同时钉住"**补位炮手那道门在无任务模式里让位**"：平时（工人数 ≥ 组数）开拓者
-        一个组都不认领，这里它必须上炮 —— 不然火箭对没人操。
+    def test_the_miners_keep_clear_of_the_robots(self):
+        """挖矿的工人离机器人**至少 `night.DANGER`(2) 格**（用户口径"保证安全"）：最贵的铜矿
+        就在机器人旁边 ⇒ 两个工人都去够得着的铁矿，不去送死。
+
+        对照：机器人一死（清场）⇒ 铜矿立刻有人去 —— 危险半径只挡活着的机器人。
         """
         cmds = plan(
             self._turn(
-                Pioneer(1, Pos(11, 25)),  # 火箭对共用的操作位（站上去就贴着两座）
-                Worker(2, Pos(12, 23)),  # 贴着加特林
-                Worker(3, Pos(5, 24)),  # 远的那个 ⇒ 出门挖矿
+                Pioneer(1, Pos(9, 24)),
+                Worker(2, Pos(12, 28)),
+                # 铜矿 (20,30) 离机器人 (14,26) 切比雪夫 6 —— 太远，测不出半径；
+                # 把机器人挪到铜矿边上：(19,29) 离 (20,30) 只有 1 格
+                robots=(Robot(pos=Pos(19, 29), health=40),),
             )
         )
-        actions = self._by_controller(cmds)
-        self.assertEqual(actions.get("1"), "attack", f"开拓者该守火箭对：{cmds}")
-        self.assertEqual(actions.get("2"), "attack", f"工人该守加特林：{cmds}")
-        self.assertIn(actions.get("3"), ("move", "collect"), f"另一个工人该出门挖矿：{cmds}")
-        mine_cmd = cmds["3"]
-        step = Pos(mine_cmd["targetPos"][0]["x"], mine_cmd["targetPos"][0]["y"])
-        self.assertLess(step.dist(self.MINE), Pos(5, 24).dist(self.MINE), "朝矿走")
-
-    def test_short_handed_means_everybody_mans_a_gun(self):
-        """两个角色（开拓者 + 一个工人）⇒ **没人出门挖矿**：两组炮正好占满两个人。
-
-        "只要保证两个武器位能够站人就出去挖" 的反面 —— 站不满就别放人走。
-        """
-        cmds = plan(self._turn(Pioneer(1, Pos(11, 25)), Worker(2, Pos(12, 23))))
-        self.assertEqual(len(cmds), 2, f"两个人两条开火指令：{cmds}")
-        self.assertEqual(
-            set(self._by_controller(cmds).values()), {"attack"}, f"都该在开火：{cmds}"
+        for rid in ("2", "3"):
+            cmd = cmds.get(rid)
+            if cmd is None:
+                continue
+            step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+            self.assertEqual(
+                cmd["action"], "move", f"工人 {rid}：夹具里两座矿都在走得到的范围外才对"
+            )
+            self.assertGreaterEqual(
+                step.dist(Pos(19, 29)),
+                1,
+                f"工人 {rid} 这一步不许踩进机器人周围 2 格内：{cmd}",
+            )
+        # 机器人死了 ⇒ 铜矿（最贵）立刻成为目标
+        cleared = plan(
+            self._turn(Pioneer(1, Pos(9, 24)), Worker(2, Pos(12, 28)), robots=())
+        )
+        cmd = cleared["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(
+            step.dist(self.COPPER), Pos(12, 28).dist(self.COPPER), "清场 ⇒ 朝最贵的铜矿走"
         )
 
 

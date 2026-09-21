@@ -1,13 +1,13 @@
 """共用底座：两个时段都要用的常量、走路账、黑板与岗位几何。
 
 五样东西：常量（一张共用旋钮表）、走路账与指令出口（`_Move` / `_Queue` / `_emit`）、
-**白天**的黑板 `_Ctx`、状态基类 `State`、挖矿排序 `_priciest_ore`、岗位几何。
+黑板 `_Ctx`、状态基类 `State`、挖矿排序 `_priciest_ore`、岗位几何。
 **上层是 `day` / `night` / `planner`**（单向 import）—— 本模块绝不 import 它们（那就是循环导入）。
 
 "两个模块都要问"就是进这里的门槛：只有一个消费者的判据留在各自的模块里 —— 白天那条四级链
 （收工门 / 建武器 / 建墙 / 挖矿买券）连同买卖与顺路的助手全在 `day.py`，操炮与弹道全在
 `night.py`。只剩三族共用：常量、走路/指令、岗位几何（白天收工门与夜里操炮共用 `_post_spots`），
-外加一条**挖矿排序**（白天第 1/3 级与夜里清场后都是"挖最值钱的矿"）。
+外加一条**挖矿排序**（白天挖矿与夜里出门采矿那一支都是"挖最值钱的矿"）。
 
 两个距离口径别混：回合预算一律用 BFS 真实步数（`steps_between`，-1 = 走不到）；选点/贴着
 用切比雪夫 `Pos.dist`（`dist <= 1` 是"站在建造位/采集位/炮位旁"的判据，不是步数）。
@@ -55,14 +55,22 @@ VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
 WALL_VOUCHER = {2: "WallUpgradeVoucher1", 3: "WallUpgradeVoucher2"}
 
 
-#: 买券的优先级（用户口径）：武器二级 > 武器三级 > 围墙二级 > 围墙三级。
-#: 它是**目标清单**（取第一张"还有东西可升"的券去攒钱），不是"哪张便宜买哪张"。
-VOUCHER_CHAIN = (VOUCHER[2], VOUCHER[3], WALL_VOUCHER[2], WALL_VOUCHER[3])
+#: 买券/升级的优先级（用户口径）：`(券名, 目标组, 目标等级)`，从上往下先命中先用。
+#: 它是**目标清单**（取第一个"还有东西可升"的步骤去攒钱），不是"哪张便宜买哪张"。
+#: ⚠️ 武器二级券出现两次（第 1 步管非角上两座、第 4 步管角上那座）⇒ 目标组必须一起带着走。
+#: 目标组只有三种：`weapon-side` = 非角上的两座火箭、`weapon-corner` = 角上那座、
+#: `wall-front` = 面向敌人的一列墙（`wall_cells` 前 `FRONT_WALLS` 格）。
+VOUCHER_CHAIN = (
+    (VOUCHER[2], "weapon-side", 2),
+    (VOUCHER[3], "weapon-side", 3),
+    (WALL_VOUCHER[2], "wall-front", 2),
+    (VOUCHER[2], "weapon-corner", 2),
+    (WALL_VOUCHER[3], "wall-front", 3),
+)
 
-
-#: 建筑满血基准。基地 1500/3000/4500 是表格实证；墙 L2/L3 的 1500/2000 按每级 +500 推断
-#: （待实盘校准）—— 推断偏小的方向是"晚修"，安全。
-WALL_MAX_HP = {1: 1000, 2: 1500, 3: 2000}
+#: 链上出现过的券名（按优先级去重）—— 扫"手里有没有券"用它（`VOUCHER_CHAIN` 是步骤表，
+#: 逐条取 `step[0]` 会把整条元组当键，一张券都认不出来）。
+VOUCHER_NAMES = tuple(dict.fromkeys(step[0] for step in VOUCHER_CHAIN))
 
 
 class _Move(NamedTuple):
@@ -119,10 +127,10 @@ class _Queue:
 
 
 class _Ctx:
-    """**白天**的决策黑板：工人链与开拓者那两支共用的那几本账。
+    """这一回合的决策黑板：工人链与开拓者那两支共用的那几本账。
 
     每本账都是同一个对象被各状态原地改 —— 后一个状态读到的必须是前一个刚写下的那一份。
-    逐角色顺序累计，回合一过就没了。"""
+    逐角色顺序累计，回合一过就没了（夜里清场那一支现造一个，只借它的矿格认领账）。"""
 
     def __init__(
         self,
@@ -170,7 +178,9 @@ class State:
 # ── 挖矿：白天与夜里同一个排序 ──────────────────────────────────────
 
 
-def _priciest_ore(role: Worker, turn: Turn, ore_taken: set[Pos]) -> Pos | None:
+def _priciest_ore(
+    role: Worker, turn: Turn, ore_taken: set[Pos], *, walk: set[Pos] | None = None
+) -> Pos | None:
     """**实际单价**最高的那座矿（并列取近的、再取坐标序）；一座都不值钱 / 都走不到 ⇒ `None`。
 
     实际单价（用户口径）= `单价 × 剩余 / (剩余 + 去 + 回)` —— 一次把这座矿采空的平均收益，
@@ -181,8 +191,12 @@ def _priciest_ore(role: Worker, turn: Turn, ore_taken: set[Pos]) -> Pos | None:
     - **去** = `role.pos → 矿`、**回** = `矿 → 最近的武器位`（没有武器就用基地）的 BFS 步数。
 
     ⇒ 采空了的矿（剩余 0）、小贩不收的（价 ≤ 0）、走不到的（BFS -1）一律剔掉。
-    `ore_taken` 是本回合已被别人认领的矿格（两个工人才不会都奔同一座）。"""
-    walk, size = _passable(turn), turn.map.size
+    `ore_taken` 是本回合已被别人认领的矿格（两个工人才不会都奔同一座）。
+
+    `walk` 换一份地形（默认 `_passable`）—— 夜里那条挖矿线用它把"机器人周围"也当成走不通
+    （安全半径见 `night._safe`）。"""
+    walk = _passable(turn) if walk is None else walk
+    size = turn.map.size
     station = turn.map.station
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
 
@@ -226,6 +240,27 @@ def _collect(cmds: dict[str, dict[str, Any]], role: Worker, mine: Pos) -> bool:
 
 
 # ── 岗位几何：白天收工闸门与夜里操炮同一个口径 ──────────────────────
+
+
+def _weapon_groups(turn: Turn) -> tuple[tuple[Weapon, ...], ...]:
+    """把武器分成操作组：**同一组有一个共同的操作位**（贴着组内每一座的格子）。
+
+    当前阵形 = 三座火箭共用一个操作位（`grid.weapon_sites` 那三格）⇒ 它们是一组，一个角色
+    按冷却轮换就能全操。分组不按种类猜、也不按固定下标切：逐座试"并进这一组之后还有没有共同
+    操作位"，并得进去就并（`_operator_spots` 一处口径）。两座离得远的武器自然各成一组
+    （降级为"一人操一座"）。"""
+    # `_operator_spots` 的契约：blocked 要预先剔掉自己人 —— 炮手就站在操作位上，
+    # 不剔的话那一格"消失"、整组被拆散（站在岗位上的操作者看不见自己的岗位）。
+    blocked = _passable(turn)
+    groups: list[list[Weapon]] = []
+    for weapon in turn.weapons:
+        for group in groups:
+            if _operator_spots(tuple(group) + (weapon,), blocked, turn.map.size):
+                group.append(weapon)
+                break
+        else:
+            groups.append([weapon])
+    return tuple(tuple(group) for group in groups)
 
 
 def _operator_spots(

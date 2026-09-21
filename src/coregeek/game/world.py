@@ -51,13 +51,16 @@ class Weapon(NamedTuple):
     """冷却剩余回合数；只有火箭有。缺失 ⇒ -1 ⇒ 照打。"""
     level: int = 1
     """当前等级（1..3）。缺失按 1 算 —— -1 会被升级线当成"还升得动"。"""
+    health: int = -1
+    """当前血量。券链挑目标用（"先升血少的"）；缺失 ⇒ -1 = 未知，排在最后。"""
 
 
 class Wall(NamedTuple):
-    """我方一座围墙实体，修墙线的判据来源。
+    """我方一座围墙实体，拆墙与升级两条线的判据来源。
 
-    health 是修墙判据（不到满血 1/5 ⇒ 不完备，升级当修）；level 决定满血基准、也决定用
-    哪件东西。已毁（health == 0）的在 `model._walls` 就丢掉 —— 那是一格缺口，归 `_ring` 管。"""
+    `health` 是拆墙判据（`day._weak_l1`：L1 且 < `WEAK_WALL_HP` ⇒ 拆了重砌）；`level` 是升级
+    判据（券只能打在低一级的墙上）。已毁（health == 0）的在 `model._walls` 就丢掉 ——
+    那是一格缺口，归 `_ring` 管。"""
 
     id: int
     pos: Pos
@@ -105,8 +108,10 @@ class Turn(NamedTuple):
     robots: tuple[Robot, ...] = ()
     #: 本回合可接取的己方任务点（冷却中 / 已做完的已在 `model._tasks` 滤掉）。
     task_points: tuple[Pos, ...] = ()
+    #: 正在冷却的任务点 `(点, 还有几回合就绪)`，按冷却升序 —— 开拓者空闲时去最快那个旁边等。
+    cooling_tasks: tuple[tuple[Pos, int], ...] = ()
     #: 任务点全都没戏了（`coldDownRounds == 0` 且 `isValid is False`）⇒ 切"无任务模式"：
-    #: 工人只挖矿卖矿、买卖券全归开拓者，夜里开拓者守火箭对、一个工人守加特林、其余出门挖。
+    #: 白天工人只挖矿卖矿（`day.sell_or_mine`）、买卖券全归开拓者 —— 夜里那套分工不变。
     #: 判据在 `model._tasks_exhausted`；每回合从 payload 现算（又出现可接的点就自然退出）。
     tasks_exhausted: bool = False
     #: 当前已领取任务的原文描述。非空 = 开拓者手上有任务 —— 这是"任务进行中"的唯一判据

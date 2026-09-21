@@ -104,17 +104,22 @@ def door_cells(base: Pos, width: int, *, sealed: bool = False) -> tuple[Pos, ...
 
 
 def weapon_sites(base: Pos, width: int) -> tuple[Pos, ...]:
-    """三座武器的落点，按建造顺序：前排相邻两格（2 火箭）+ 前排下一格（加特林）。
+    """三座火箭的落点，按建造顺序排 —— **顺序就是券链的优先级**（非角上的两座在前）。
 
-    两火箭相邻 ⇒ 一个角色站内侧那格 `(bx+1, by+1)`（左半基地即 `(11, 25)`）就能同时贴两座、
-    利用火箭 3 回合冷却交替开火 ⇒ 2 个角色即可操 3 座武器。正/背面由 `_front_back` 给（左半
-    front_x = bx+2）：左半基地 `(10,24)` ⇒ `((12,24), (12,25), (12,22))`，三格都在
-    `weapon_cells` 的可建造环里（公式来自图片）。
+    左半基地 `(10,24)` 的阵形（右半镜像，`back_x` 跟着 `_front_back` 翻）：
+
+        y=25   火 火  .  .      ← 顶排后俩
+        y=24   操 地 地  .      ← 操作位（唯一一格同时贴着三座）
+        y=23   火 地 地  .      ← 基地后方下格
+
+    三格都在 `weapon_cells` 的可建造环里（公式来自图片）。`back_x = near - d` = 武器环的背面列
+    （左半 `bx-1`）；顶排外围那一格还是环的**角**（券链把它排到最后），另两格不是 —— 所以
+    `[0]`/`[1]` = 非角上的两座、`[2]` = 角上那座。
     """
-    d, far, near = _front_back(base, width)
-    front_x = far + d
+    d, _far, near = _front_back(base, width)
+    back_x = near - d
     return (
-        Pos(front_x, base.y),       # rocket 1（前排、基地纵深中心行）
-        Pos(front_x, base.y + 1),   # rocket 2（前排、上一格，与 rocket 1 相邻）
-        Pos(front_x, base.y - 2),   # gatling（前排、下两格）
+        Pos(back_x + d, base.y + 1),  # 顶排靠里（非角）
+        Pos(back_x, base.y - 1),      # 基地后方下格（非角）
+        Pos(back_x, base.y + 1),      # 顶排外围 = 环的角（最后建、最后升）
     )

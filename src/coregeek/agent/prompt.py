@@ -160,9 +160,9 @@ OUTPUT_PROMPT = """
 一回合只输出一样东西：一次工具调用，或者一个答案（开头那段推演不算，它是写给你自己看的）。
 唯一的例外是 SOP2Prompt —— 它只沉淀、不产出命令，所以调用它的那一回合照样是你的作答回合：
 工具块后面再跟一个 `<answer>`。
-1. 只进行工具调用时：严格按照工具调用格式输出，用<tool></tool>块包裹
-2. 提交答案时只能用 <answer>任务答案</answer> 包起来，整条回复里只写一个这个块。
-3. 特殊格式：当要沉淀且同回合要交答案时，同时采用sop沉淀工具格式和答案输出格式，例如
+1. [工具调用格式]严格按照工具调用格式输出，用<tool></tool>块包裹
+2. [任务答案提交格式]只能用 <answer>任务答案</answer> 包起来，整条回复里只写一个这个块。
+3. [特殊混合模式]当要沉淀且同回合要交答案时，同时采用sop沉淀工具格式和答案输出格式，例如
     <tool>
         <tool_name>SOP2Prompt</tool_name>
         <tool_param>
@@ -173,6 +173,12 @@ OUTPUT_PROMPT = """
     <answer>答案本身</answer>
 `sop` 的正文里**不要出现 `<answer>` 与 `</answer>` 这对标签**（讲答案格式时换个说法，比如"把答案用 answer 标签包起来"）。
 这条只管 `sop` 那段文本，不管你的作答 —— 你的答卷照旧**必须**用这对标签包起来。
+"""
+
+ATTENTION_PROMPT = """
+# 【注意事项】
+1. 任务的答案必须用 `<answer>…</answer>` 包起来，其他的提交方式都不允许。
+2. 任务的答案必须是最终结果，不能是中间过程。
 """
 
 # 6. 推理引导：收尾的 COT 触发语（**没有段头**，整份 system 的最后一段，别挪到前面去）。
@@ -199,6 +205,7 @@ def gen_system_prompt(tools, sop) -> str:
         gen_all_tool_prompt(tools=tools),
         gen_sop_prompt(sop=sop),
         OUTPUT_PROMPT,
+        ATTENTION_PROMPT,
         COT_PROMPT,
     ]
     return "\n\n".join(text for text in (section.strip() for section in sections) if text)
@@ -304,3 +311,8 @@ def gen_news_prompt(news: str) -> str:
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+if __name__ == "__main__":
+    from agent import Agent
+    AGENT = Agent()
+    print(gen_system_prompt(AGENT.prompt_tools(), AGENT._sop))
