@@ -524,8 +524,8 @@ class NightEconomyTest(unittest.TestCase):
 
     "清完"的判据是**没有打我方的活机器人**（`night.is_cleared`）：一夜一波（任务书 L352）但
     全图可见（L95）⇒ 打对方那一波也在 `turn.robots` 里，我们从不打它；已毁的照旧留在表里
-    （`model._robots`）。这一支只发 `collect` / `move` —— **`build` / `remove` 夜里非法**（§4.4），
-    `sell` / `buy` 也不再出现在夜里。
+    （`model._robots`）。这一支只发 `collect` / `sell` / `buy` / `use` / `acceptTask` / `move` ——
+    **`build` / `remove` 夜里非法**（§4.4），一条都不会发。
     """
 
     BASE = Pos(10, 24)
@@ -543,7 +543,7 @@ class NightEconomyTest(unittest.TestCase):
 
     def _turn(
         self,
-        worker: Worker,
+        role: BaseRole,
         *,
         ores: dict[Pos, str] | None = None,
         vendor: bool = False,
@@ -551,6 +551,8 @@ class NightEconomyTest(unittest.TestCase):
         gold: int = 0,
         robots=(),
         walls: tuple[Wall, ...] = (),
+        task_points: tuple[Pos, ...] = (),
+        cooling_tasks: tuple[tuple[Pos, int], ...] = (),
     ) -> Turn:
         grid = _terrain(
             self.WEAPONS,
@@ -559,16 +561,19 @@ class NightEconomyTest(unittest.TestCase):
             {self.NEAR: "stone"} if ores is None else ores,
             {self.VENDOR: "vendor"} if vendor else {},
             {self.SHOP: "weaponShop"} if shop else {},
+            {p: "challengerTaskPoint1" for p in task_points},
         )
-        grid[worker.pos] = "worker"
+        grid[role.pos] = role.type_name
         return Turn(
             round_no=85,  # 夜里（within = 85，夜里剩 45 回合）
             map=Map((41, 32), grid),
-            roles=(worker,),
+            roles=(role,),
             gold=gold,
             weapons=self.WEAPONS,
             robots=robots,
             walls=walls,
+            task_points=task_points,
+            cooling_tasks=cooling_tasks,
             vendor_prices=self.PRICES,
             shop_prices=self.SHOP_PRICES,
             our_team="challenger",
@@ -620,6 +625,30 @@ class NightEconomyTest(unittest.TestCase):
         worker = Worker(10010, Pos(20, 15), {"copper": 1})  # 切比雪夫 1 ⇒ "贴着小贩"
         cmd = plan(self._turn(worker, vendor=True, shop=True, gold=100)).get("10010")
         self.assertEqual(cmd, {"action": "sell", "name": "copper", "num": 1}, cmd)
+
+    def test_a_cleared_night_sends_the_idle_pioneer_to_the_task_point(self):
+        """清场后开拓者**提前进入白天状态**（用户口径）：有可接的任务点就走过去接 ——
+        `acceptTask` §4.4 没写昼夜限制（写"仅白天"的只有 `build` / `remove`）。
+
+        旧口径这一支只跑"买券 / 去等刷新"，`take_task` 只挂在白天那条链上 ⇒ 夜里刷出来的点
+        一个都接不到，开拓者白站一整夜。
+        """
+        pioneer = Pioneer(10011, Pos(20, 20))
+        point = Pos(14, 14)
+        cmd = plan(self._turn(pioneer, task_points=(point,))).get("10011")
+        self.assertIsNotNone(cmd, "有任务点 ⇒ 夜里也该去接")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(point), pioneer.pos.dist(point), f"朝任务点走：{cmd}")
+
+    def test_a_cleared_night_sends_the_penniless_pioneer_to_the_waiting_spot(self):
+        """没任务点、券又买不起 ⇒ 开拓者去**最该等的地方**站着（刷新最快那个任务点 / 商店）——
+        与白天同一支。"""
+        pioneer = Pioneer(10011, Pos(20, 20))
+        point = Pos(14, 14)
+        cmd = plan(self._turn(pioneer, cooling_tasks=((point, 5),))).get("10011")
+        self.assertIsNotNone(cmd, "清场后开拓者不该干等")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(point), pioneer.pos.dist(point), f"朝等着的那格走：{cmd}")
 
     def test_night_economy_never_builds_or_removes(self):
         """夜里这条线绝不发 build / remove（§4.4：两条都仅白天）—— 环上留多少缺口、包里有没有

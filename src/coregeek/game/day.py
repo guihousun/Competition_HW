@@ -576,22 +576,21 @@ def _sell_cargo(role: BaseRole, ctx: _Ctx) -> bool:
 
 
 def _detour_sell(role: BaseRole, ctx: _Ctx, mine: Pos) -> bool:
-    """去矿的路上**顺手卖矿**（用户口径）：路上的每一格离小贩切比雪夫 ≤ `DETOUR_MAX`(2) ⇒
-    这一回合先朝小贩迈一步。
+    """去矿的路上**顺手卖矿**（用户口径）：离小贩切比雪夫 ≤ `DETOUR_MAX`(2) ⇒ 这一回合先卖。
 
     判据是**切比雪夫距离**（不是"绕路多花几步"）：路过小贩边上就卖掉，别再考虑值不值 ——
     前提当然是背包里有卖得掉的货（`_best_load` 判，口径只有一份）。已经贴着矿就别绕了（该采了）；
-    已经贴着小贩（`dist == 0`）也 `return False` —— 那时该卖，由 `voucher_errand` /
-    `sell_or_mine` 的"贴着就卖"那一支接手。"""
+    **贴着小贩的那一格就是 `sell` 的站位** ⇒ 当场卖（走 `_sell_cargo` 那一支），
+    不是"再朝它迈一步"：贴着时 `step_toward` 返回 `None`，迈步会退化成这一回合空指令。"""
     turn, q = ctx.turn, ctx.q
     if role.pos.dist(mine) <= 1:
         return False
     if _best_load(role, turn.vendor_prices)[1] <= 0:
         return False
-    for vendor in sorted(turn.map.vendors):
-        if 0 < role.pos.dist(vendor) <= DETOUR_MAX:
-            return q.step(role, vendor)
-    return False
+    if _at_vendor(role, turn):
+        return _sell_cargo(role, ctx)
+    near = [v for v in turn.map.vendors if role.pos.dist(v) <= DETOUR_MAX]
+    return q.step(role, min(near, key=lambda v: (role.pos.dist(v), v))) if near else False
 
 
 def _best_load(role: BaseRole, prices: Mapping[str, int]) -> tuple[str, int]:

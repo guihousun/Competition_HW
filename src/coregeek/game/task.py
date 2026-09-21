@@ -122,10 +122,11 @@ def task_channel(turn: Turn) -> tuple[str, str]:
 def take_task(
     role: BaseRole, turn: Turn, q: _Queue
 ) -> None:
-    """白天：走到最近一个能接的任务点旁边，贴着就 `acceptTask`。
+    """走到最近一个能接的任务点旁边，贴着就 `acceptTask`（`acceptTask` 没有昼夜限制，
+    白天与夜里清场后的开拓者都走这里）。
 
     与 `build` / `collect` 同一条契约：任务点挡路，`step_toward` 天然停在贴着它的一格。
-    一个能接的点都没有 ⇒ 什么都不发，不去蹲守。领到之后本函数进不来了（`planner._day_intents`
+    一个能接的点都没有 ⇒ 什么都不发，不去蹲守。领到之后本函数进不来了（`planner` 两条链
     最前面那道分支先一步接管）。"""
     if not turn.task_points:
         return

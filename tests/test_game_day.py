@@ -1390,9 +1390,9 @@ class SellCargoTest(unittest.TestCase):
 class DetourSellTest(unittest.TestCase):
     """去矿的路上**顺路卖矿**（`day._detour_sell`）—— 用户口径：这一条必须留着。
 
-    绕去小贩比直走多花 ≤ `DETOUR_MAX`(2) 格 ⇒ 先朝小贩迈一步；贴上小贩的那一回合由
-    `voucher_errand` 的"贴着就卖"接手（所以 `via == 0` 时要返回 False —— 绕一步 = 原地不动 =
-    这一回合空指令）。背包里没有卖得掉的货 ⇒ 不绕。
+    离小贩切比雪夫 ≤ `DETOUR_MAX`(2) ⇒ 这一回合先朝小贩迈一步；**已经贴上了就当场卖**
+    （贴着小贩的那一格就是 `sell` 的站位 —— 再"迈一步"是原地不动 = 这一回合空指令）。
+    背包里没有卖得掉的货 ⇒ 不绕。
 
     局面：环砌满、三座炮（第 1/2 级都做完了），只有一张买不起的券 ⇒ 落到第 3 级的挖矿那一支
     （买券的钱离得远，所以不会先去卖 —— 那是另一条支路，`SellCargoTest` 钉着）。
@@ -1408,22 +1408,25 @@ class DetourSellTest(unittest.TestCase):
     def setUp(self) -> None:
         _reset_ledgers()
 
-    def _turn(self, *, at: Pos, bag: dict[str, int], vendor: Pos) -> Turn:
+    def _turn(
+        self,
+        *,
+        at: Pos,
+        bag: dict[str, int],
+        vendor: Pos,
+        weapons: tuple[Weapon, ...] | None = None,
+        gold: int = 0,
+    ) -> Turn:
+        guns = self.WEAPONS if weapons is None else weapons
         ring = {c: WALL for c in wall_cells(self.BASE, 41)}
-        grid = _terrain(
-            self.WEAPONS,
-            {self.BASE: "station"},
-            ring,
-            {self.MINE: "copper"},
-            {vendor: "vendor"},
-        )
+        grid = _terrain(guns, {self.BASE: "station"}, ring, {self.MINE: "copper"}, {vendor: "vendor"})
         grid[at] = "worker"
         return Turn(
             round_no=1,
             map=Map((41, 32), grid),
             roles=(Worker(10010, at, dict(bag)),),
-            gold=0,  # 买不起券 ⇒ 落到挖矿那一支
-            weapons=self.WEAPONS,
+            gold=gold,  # 默认买不起券 ⇒ 落到挖矿那一支
+            weapons=guns,
             vendor_prices={"stone": 1, "copper": 5},
             shop_prices=self.SHOP_PRICES,
         )
@@ -1464,6 +1467,19 @@ class DetourSellTest(unittest.TestCase):
         self.assertEqual(
             near["targetPos"], far["targetPos"], "空手 ⇒ 小贩近不近都走同一步"
         )
+
+    def test_a_laden_worker_beside_the_vendor_sells_instead_of_freezing(self):
+        """第 1 级的筹资那一支（`RaiseForWeapons` → `_mine_ore`）前面**没有**"贴着小贩"那道
+        闸门 ⇒ 贴着小贩又背着货时必须当场卖掉。
+
+        旧口径在这一格上记了一条"朝小贩迈一步"的意图，而 `step_toward` 对"已经贴着 goal"
+        返回 `None` ⇒ 这一回合一条指令都不发；局面不变就每回合重演（工人整局钉在小贩旁边）。
+        """
+        at = Pos(17, 25)  # 贴着 (17,26) 那个小贩
+        turn = self._turn(at=at, bag={"copper": 1}, vendor=self.NEAR_VENDOR, weapons=())
+        cmd = plan(turn).get("10010")
+        self.assertIsNotNone(cmd, "贴着小贩又背着货 ⇒ 这一回合必须有指令")
+        self.assertEqual(cmd["action"], "sell", f"贴上了 ⇒ 当场卖：{cmd}")
 
 
 class VoucherLineTest(unittest.TestCase):

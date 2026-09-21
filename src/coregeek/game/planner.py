@@ -44,12 +44,23 @@ def _intents(turn: Turn) -> _Queue:
     return q
 
 
+def _pioneer_errand(role: BaseRole, turn: Turn, q: _Queue, ctx: _Ctx) -> None:
+    """空闲开拓者那一支（白天与**夜里清场后**共用，用户口径"提前进入白天状态"）：有任务点就
+    去接，否则跑"买券 → 立刻用"的差事，连券都干不了就去最该等的地方站着。
+
+    只发 `move` / `acceptTask` / `buy` / `use` —— 夜里全合法（`acceptTask` §4.4 没写昼夜限制）。"""
+    if turn.task_points:
+        task.take_task(role, turn, q)
+    elif not day.voucher_errand(role, ctx):
+        # 空闲又没什么可买/可升 ⇒ 去最该等的地方站着（刷新最快的任务点 / 商店）
+        day.wait_errand(role, ctx)
+
+
 def _day_intents(turn: Turn, q: _Queue) -> None:
     """白天那条链，逐角色跑、先命中先定夺：
 
     ① 开拓者被任务钉死（白天人手恒够，`_short_handed` 恒假）→ ② `day.BACK_TO_POST` 收工门
-    （到点就回岗位）→ ③ 开拓者：有任务点就去接，全空则跑"买券 → 立刻用"的差事、
-    都没得干就去最该等的地方站着（`day.wait_errand`）→ ④ 工人走 `day.DAY_CHAIN` 那四级。
+    （到点就回岗位）→ ③ 开拓者走 `_pioneer_errand` → ④ 工人走 `day.DAY_CHAIN` 那四级。
 
     黑板装在 `_Ctx` 里逐角色顺序累计、不跨回合；环缺口按在场工人数切段也在这里。"""
     cmds = q.cmds
@@ -82,11 +93,7 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
             continue
 
         if isinstance(role, Pioneer):
-            if turn.task_points:
-                task.take_task(role, turn, q)
-            elif not day.voucher_errand(role, ctx):
-                # 空闲又没什么可买/可升 ⇒ 去最该等的地方站着（刷新最快的任务点 / 商店）
-                day.wait_errand(role, ctx)
+            _pioneer_errand(role, turn, q, ctx)
             continue
 
         if not isinstance(role, Worker):
@@ -109,7 +116,7 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
 
     ① 被任务钉死的开拓者 —— **人手够才钉得住**（工人阵亡 ⇒ 弃任务回炮位，生存第一）→
     ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **清场了 ⇒ 整夜改走白天那两条线**
-    （`night.is_cleared`：工人 `day.sell_or_mine`、开拓者 `day.voucher_errand`）→
+    （`night.is_cleared`：工人 `day.sell_or_mine`、开拓者 `_pioneer_errand`）→
     ④ 没清场：炮手 `night.defend`、其余工人 `night.mine_ore`。
 
     两本账是**本函数的局部变量** —— 夜里不碰白天那个 `_Ctx` 黑板：炮位认领 `taken`
@@ -133,13 +140,13 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
             continue
         if night.upgrade_station(role, turn, q):
             continue
-        # 清场了 ⇒ **走白天那套**（工人挖矿卖矿、开拓者买券/等刷新）：它们只发
-        # `collect`/`sell`/`buy`/`use`/`move`，夜里合法；`build`/`remove` 一条都不会发
+        # 清场了 ⇒ **走白天那套**（工人挖矿卖矿、开拓者接任务/买券/等刷新）：它们只发
+        # `collect`/`sell`/`buy`/`use`/`acceptTask`/`move`，夜里合法；`build`/`remove` 一条都不会发
         if cleared:
             if isinstance(role, Worker):
                 day.sell_or_mine(role, ctx)
             else:
-                day.voucher_errand(role, ctx)  # 开拓者：买券 / 去最该等的地方
+                _pioneer_errand(role, turn, q, ctx)
             continue
         if role.id == gunner:
             night.defend(role, turn, q, taken)

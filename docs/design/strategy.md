@@ -126,7 +126,7 @@ app.handle(payload)
 |---|---|---|---|---|
 | ① | **钉死** `TASK` | 开拓者 **且** `phase_task` 非空 **且人手够**（白天恒够；夜里看 `_short_handed`） | `task.answer_task`：原样交手上的答案（**不移动**） | 非开拓者；`phase_task` 空；**夜里一个工人都没有**（没人能顶炮位 ⇒ 弃任务回炮位，落夜里的 ④） |
 | ② | **收工门** `GO_HOME`（`day.BACK_TO_POST`，第 0 级） | 白天 **且是这一夜的炮手**（`utils._night_gunner`）**且** `回岗步数 + POST_MARGIN(3) ≥ 白天剩余`（步数实时算） | **只发 `move`** 往**那一个操作位**挪（`core._post_spots`：三座火箭共用一个位、要站上去）；已在岗 ⇒ 先用券、用不上就待命 | 还没到窗口；**不是炮手**（工人白天在矿边干到天黑、不回炮位） |
-| ③ | **开拓者的白天** `DAY_PIONEER` | `isinstance(role, Pioneer)` | 有任务点 ⇒ `task.take_task`；全空 ⇒ `day.voucher_errand`（§3），它也说没事干 ⇒ `day.wait_errand`（去最该等的地方站着） | 非开拓者 |
+| ③ | **开拓者的白天** `DAY_PIONEER`（`planner._pioneer_errand`，**夜里清场后同一支**） | `isinstance(role, Pioneer)` | 有任务点 ⇒ `task.take_task`；全空 ⇒ `day.voucher_errand`（§3），它也说没事干 ⇒ `day.wait_errand`（去最该等的地方站着） | 非开拓者 |
 | ④ | **夜里** `NIGHT` | `not is_day` | 见 §1.3 —— 夜里**必然**停在这一级 | 白天 |
 | ⑤ | **工人的白天** `DAY_WORKER` | 其余（工人） | 走 `day.DAY_CHAIN` 那四级（§1.4） | —— 这级**必然**给出结论（最差是空指令待命） |
 
@@ -165,7 +165,7 @@ app.handle(payload)
 ⚠️ N1 / N2 是**当回合放弃开火**，不是"打不了才退而求其次" —— 别把它们读成兜底。
 ⚠️ 夜里**绝不发 `build` / `remove`**（仅白天，非法即红线），所以 N2 只发 `collect` / `move`。
 ⚠️ **清场之后整条链换挡**（`night.is_cleared` = 没有还会打我方的活机器人）：工人改走
-`day.sell_or_mine`、开拓者改走 `day.voucher_errand` —— 见下表之前的说明（`planner._night_intents` ③）。
+`day.sell_or_mine`、开拓者改走**白天第 ③ 行那一支**（`planner._pioneer_errand`：接任务 / 买券 / 等刷新）—— 见下表之前的说明（`planner._night_intents` ③）。⚠️ 这一支会发 `acceptTask`，而"夜里能不能接任务"是**赌的**（§4.4 没写昼夜限制，`code-task.md` 文末表 #73）。
 ⚠️ **判据不是"场上全空"**（第 85 步）：机器人**全图可见**（L95）⇒ 对方那一波也在 `turn.robots`
 里、我们从不打它（`_fire` 同样过 `_foe_robots`）⇒ 照全空判的话对方机器人活多久，工人就在炮位上
 钉多久、这一支永远进不去。
@@ -244,7 +244,8 @@ app.handle(payload)
 - **挖实际单价最高的矿**（`core._priciest_ore`，第 122 步）：`单价 × 剩余 / (剩余 + 去 + 回)`
   —— 把这座矿采空的平均收益（`剩余` 来自本地账 `core._collected`，`回` = 矿到最近武器位的 BFS 步数）；
   并列取近的、再取坐标序，**不读新闻修正**。动身前先看**顺路卖矿**（`day._detour_sell`：绕去小贩 ≤
-  `DETOUR_MAX`(2) 格且背包里有货 ⇒ 先朝小贩迈一步）。
+  `DETOUR_MAX`(2) 格且背包里有货 ⇒ 先朝小贩迈一步；**已经贴上了就当场 `sell`** —— 贴着时
+  `step_toward` 返回 `None`，不这么写那一支每回合都发不出指令，第 131 步）。
 - **券的目标**（`day._voucher_target`）：按 `VOUCHER_CHAIN` 取**第一个还有东西可升**的步骤 ——
   **五步**（第 130 步，用户口径）：
   ① 武器 2 级券 → 两座**非角上**的火箭；② 武器 3 级券 → 同这两座；③ 二级墙券 → 正面那一列；
@@ -260,7 +261,7 @@ app.handle(payload)
 - ⚠️ **卖货只剩两道门**（有货、有小贩且走得到）：旧的"够本门"（货值 ≥ 2 × 路程）与"石头留底"
   两档都删了 —— 什么时候去卖由券价决定。⚠️ **第 130 步给差事加了第三条卖矿触发**：背包里售价
   最高的那种攒过 `BAG_SELL_AT`(15) 件就先去卖（`_bag_is_full`）。三条触发在代码里各占一处：
-  顺路（`_detour_sell`，切比雪夫 ≤ `DETOUR_MAX`(2) 就先朝小贩迈一步，**不进券链**）、背包满、
+  顺路（`_detour_sell`，切比雪夫 ≤ `DETOUR_MAX`(2) 就先朝小贩迈一步、**贴上了就当场卖**，**不进券链**）、背包满、
   券价够了 —— 后两条都走 `sell_or_mine` / `voucher_errand` 自己的分支。
 - ⚠️ **第 3 级的前提是武器建满**：`weapon_gap` 为真就整条不跑（拿建武器的钱去买券是本末倒置）。
 
