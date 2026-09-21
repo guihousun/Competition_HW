@@ -7,7 +7,7 @@ import os
 
 from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
-from . import home_defense, strategy_config, phase_maintenance
+from . import home_defense, strategy_config, phase_maintenance, traffic, frontline
 _STRATEGY = strategy_config.get()
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -85,6 +85,7 @@ _SHARED_CONTROL = ContextVar('competition_shared_control', default=None)
 _UPGRADE_REPORT = ContextVar('competition_upgrade_report',default=None)
 _TRIP_FRAME = ContextVar('competition_team_trip_frame',default=None)
 _PHASE_MAINTENANCE = ContextVar("phase_maintenance",default=None)
+_TRAFFIC = ContextVar('team_traffic',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
 # Explicit opt-in for the P0b shared cognitive-channel scheduler. Default off:
 # with the variable unset the judge path runs the reviewed deterministic strategy.
@@ -201,6 +202,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     turn = Turn.load(payload)
     _TRIP_FRAME.set(None)
     _PHASE_MAINTENANCE.set(None)
+    traffic_frame=traffic.Frame(turn,deepcopy(getattr(planner_state,'traffic_state',{})))
+    _TRAFFIC.set(traffic_frame)
     last_round = getattr(planner_state, "last_round", 0)
     if last_round and turn.round_no < last_round and turn.round_no != 1:
         return sandbox.ResponseBuilder()
@@ -352,7 +355,9 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     staged_maintenance = _PHASE_MAINTENANCE.get()
     if staged_maintenance is not None:
         protected_posts.update(staged_maintenance[1]['owned_roles'])
-    post_reservations = rocket_post.reserve(turn, commands, protected=protected_posts)
+    post_reservations = rocket_post.reserve(turn, commands, protected=protected_posts,
+                                           business_goals=traffic_frame.goals)
+    traffic_frame.recover(commands,protected_posts)
     commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
     trip_frame = _TRIP_FRAME.get()
     if trip_frame is not None:
@@ -382,6 +387,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             planner_state.maintenance_state=memory
     elif commit and turn.is_day:
         planner_state.maintenance_state={}
+    traffic_memory=traffic_frame.finish(commands)
+    if commit:planner_state.traffic_state=traffic_memory
     response = sandbox.ResponseBuilder()
     response.commands = {str(key): value for key, value in commands.items()}
     plan = job.get("plan") if job else None
@@ -428,6 +435,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         _DECISION_REPORT.get()['pioneer_safety'] = {k:v for k,v in safety.items() if k != 'command'} if safety else None
         _DECISION_REPORT.get()['strategy_config'] = strategy_config.identity()
         _DECISION_REPORT.get()['rocket_post_reservations'] = post_reservations
+        _DECISION_REPORT.get()['traffic'] = {'events':traffic_frame.events,
+                                            'openings':[p.dump() for p in traffic_frame.openings()]}
         if maintenance is not None:
             _DECISION_REPORT.get()['maintenance'] = deepcopy(maintenance[1]['report'])
         _DECISION_REPORT.get()['weapon_readiness'] = _weapon_readiness(turn, commands)
@@ -1396,7 +1405,11 @@ def _worker_day(
             busy.add(role.unit_id)
             return
         if stones:
-            for site in walls_missing:
+            frame=_TRAFFIC.get()
+            chosen=frame.wall_target(role,walls_missing) if frame and frame.turn is turn else None
+            candidates=([chosen]+[p for p in walls_missing if p!=chosen]) if chosen else walls_missing
+            if frame and frame.turn is turn and frame.enabled and chosen is None:candidates=[]
+            for site in candidates:
                 if site not in claimed:
                     _build_or_walk(turn, role, site, WALL, claimed, commands)
                     walls_missing.remove(site)
@@ -2107,6 +2120,8 @@ def _guard_access_repair(turn, pairs):
         for wall in turn.ours:
             if wall.kind != WALL or wall.health <= 0 or distance(wall.pos, post.pos) != 1:
                 continue
+            if wall.pos in frontline.protected_walls(turn):
+                continue
             for stand in _stand_cells(turn, role, wall.pos, set()):
                 cost = routes(role.pos, stand)
                 if cost < 10 ** 6:
@@ -2518,6 +2533,26 @@ def _step_toward(
     *,
     inside_only: bool = False,
 ) -> Pos | None:
+    frame=_TRAFFIC.get()
+    if frame is not None and frame.turn is turn:frame.goal(role,target,inside_only)
+    cfg=strategy_config.get()
+    if cfg['enabled'] and cfg.get('navigation',{}).get('enabled',False):
+        # Select the shortest complete approach, not the nearest-looking stand.
+        # Reserve the gunner's post before searching an economic trip so the
+        # final post guard does not reverse the worker's business direction.
+        from . import rocket_post
+        blocked=turn.blocked(role)|set(claimed)
+        workers=turn.workers()
+        if cfg['defense']['single_operator_three_rockets'] and workers and role.unit_id!=workers[0].unit_id:
+            blocked |= rocket_post.common_cells(turn)[0]-{role.pos}
+        if inside_only and not turn.is_day and home_defense.inside(turn,role.pos):
+            blocked |= {Pos(x,y) for x in range(turn.width) for y in range(turn.height)
+                        if not home_defense.inside(turn,Pos(x,y))}
+        goals=set(_stand_cells(turn,role,target,claimed,inside_only))-blocked
+        route=traffic.path(turn,role.pos,goals,blocked)
+        if route and len(route)>1:
+            claimed.add(route[1]);return route[1]
+        return None
     for stand in _stand_cells(turn, role, target, claimed, inside_only):
         if stand == role.pos:
             return None
@@ -2819,7 +2854,10 @@ def _wall_order(turn: Turn) -> tuple[Pos, ...]:
     on the rear so the crew is not sealed in.
     """
     plan = _defence_layout(turn)
-    return plan.wall_order if plan is not None else ()
+    order=plan.wall_order if plan is not None else ()
+    frame=_TRAFFIC.get()
+    openings=frame.openings() if frame is not None and frame.turn is turn else set()
+    return tuple(p for p in order if p not in openings)
 
 
 def _exit_cells(turn: Turn) -> tuple[Pos, ...]:

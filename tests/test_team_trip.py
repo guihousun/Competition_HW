@@ -278,6 +278,14 @@ class TeamTripTests(unittest.TestCase):
             before=Turn.load(p)
             commands=brain.plan_for_state(deepcopy(p),memory,judge_tasks=False).commands
             started=started or 'construction' in memory.team_trips
+            if started and 'construction' not in memory.team_trips:
+                # Completion is observed BEFORE this round's next ordinary job.
+                # A returned worker may immediately depart with remaining stone.
+                events=(brain.decision_report().get('upgrade_itinerary') or {}).get('team_trip_events',[])
+                if any(e.get('kind')=='construction' and e.get('reason')=='returned_observed' and e.get('owner')==12 for e in events):
+                    worker=next(w for w in before.workers() if w.unit_id==12)
+                    finished=team_trip.inside(before,worker.pos) and any(distance(worker.pos,g.pos)==1 for g in before.weapons())
+                    self.assertTrue(finished,'contract must only release after observed safe arrival')
             for uid,cmd in commands.items():
                 if cmd['action']=='move':
                     role=next(r for r in before.controllable() if str(r.unit_id)==uid)
@@ -288,10 +296,7 @@ class TeamTripTests(unittest.TestCase):
             p=simulator.step(p,external_response={'roleCommandMap':commands})['state']
             self.assertFalse(any(v is False for v in p['lastRoundRoleActionResults'].values()))
             memory=planner.PlannerState.load(json.loads(json.dumps(memory.dump())))
-            if started and 'construction' not in memory.team_trips:
-                worker=next(w for w in Turn.load(p).workers() if w.unit_id==12)
-                finished=team_trip.inside(Turn.load(p),worker.pos) and any(distance(worker.pos,g.pos)==1 for g in Turn.load(p).weapons())
-                if finished:break
+            if finished:break
         self.assertTrue(started)
         self.assertIn('collect',actions)
         self.assertIn('build',actions)

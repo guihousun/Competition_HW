@@ -41,7 +41,7 @@ class StrategyConfigTests(unittest.TestCase):
         self.assertEqual(value["defense"]["full_defense_from_day"], 4)
 
     def test_unknown_and_missing_fields_are_errors(self):
-        for section in (None, "defense", "upgrades", "maintenance", "economy", "nightwork"):
+        for section in (None, "defense", "upgrades", "maintenance", "economy", "nightwork", "navigation"):
             for missing in (False, True):
                 value = sc.validate(sc.DEFAULTS)
                 target = value if section is None else value[section]
@@ -154,9 +154,9 @@ class StrategyConfigTests(unittest.TestCase):
         from agent import upgrade_itinerary as ui
         from agent.protocol import Turn
         self._activate(sc.validate(sc.DEFAULTS))
-        for round_no, expected in ((1, (1, 1, 1)), (130, (1, 1, 1)),
-                                   (131, (1, 2, 2)), (261, (2, 2, 2)),
-                                   (391, (2, 2, 2))):
+        for round_no, expected in ((1, (3, 3, 3)), (130, (3, 3, 3)),
+                                   (131, (3, 3, 3)), (261, (3, 3, 3)),
+                                   (391, (3, 3, 3))):
             with self.subTest(round_no=round_no):
                 payload = self._weapon_observation(round_no)
                 turn = Turn.load(payload)
@@ -184,6 +184,7 @@ class StrategyConfigTests(unittest.TestCase):
         from agent import upgrade_itinerary as ui
         from agent.protocol import Turn
         config = sc.validate(sc.DEFAULTS)
+        config["upgrades"]["day_targets"][0] = [1, 1, 1]
         config["upgrades"]["day_targets"][1] = [1, 2, 1]
         config["upgrades"]["late_weapon_target"] = [3, 3, 3]
         self._activate(config)

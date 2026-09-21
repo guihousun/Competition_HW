@@ -75,7 +75,16 @@ def reconcile(turn: Turn, payload: dict[str, Any],
     living = {str(role.unit_id) for role in turn.controllable()}
     direct = {str(uid) for uid in commands if str(uid) in living}
     controllers_used = set()
+    from . import frontline
+    protected_walls=frontline.protected_walls(turn)
     for uid, command in commands.items():
+        if command.get('action')=='remove':
+            actor=next((w for w in turn.workers() if str(w.unit_id)==str(uid)),None)
+            targets=command.get('targetPos') or []
+            target=Pos.load(targets[0]) if len(targets)==1 else None
+            if (actor is None or target is None or target in protected_walls
+                    or distance(actor.pos,target)!=1 or not any(w.pos==target for w in turn.walls())):
+                continue
         if command.get('action') == 'attack':
             controller = str(command.get('controllerId'))
             # Explicit role work (including a task override) releases its weapon

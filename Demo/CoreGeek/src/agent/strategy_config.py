@@ -15,14 +15,16 @@ DEFAULTS = {
     "defense": {"full_defense_from_day": 4,
                 "single_operator_three_rockets": True,
                 "tower_loadout": ["rocket", "rocket", "rocket"]},
-    "upgrades": {"day_targets": [[1, 1, 1], [1, 2, 2], [2, 2, 2]],
-                 "late_weapon_target": [2, 2, 2]},
+    "upgrades": {"day_targets": [[3, 3, 3], [3, 3, 3], [3, 3, 3]],
+                 "late_weapon_target": [3, 3, 3]},
     "maintenance": {"from_day": 4, "stock_target": 2,
                     "entry_fraction": 0.55, "exit_fraction": 0.85,
                     "emergency_fraction": 0.25, "base_emergency_fraction": 0.4},
     "economy": {"return_day_index": 55, "upgrade_return_margin": 3,
                 "stone_batch": 10, "metal_batch": 10, "ore_max_distance": 8},
     "nightwork": {"allow_after_clear": True},
+    "navigation": {"enabled": True, "stall_rounds": 3,
+                   "allow_wall_removal": True, "max_openings": 2},
 }
 _cache = None
 _identity = None
@@ -50,7 +52,7 @@ def validate(config):
         raise ValueError("name: expected nonempty string of at most 80 characters")
     if type(config["enabled"]) is not bool:
         raise ValueError("enabled: expected boolean")
-    for section in ("defense", "upgrades", "maintenance", "economy", "nightwork"):
+    for section in ("defense", "upgrades", "maintenance", "economy", "nightwork", "navigation"):
         _keys(config[section], DEFAULTS[section], section)
     defense = config["defense"]
     _integer(defense["full_defense_from_day"], 1, 10, "defense.full_defense_from_day")
@@ -88,6 +90,12 @@ def validate(config):
         _integer(config["economy"][key], low, high, f"economy.{key}")
     if type(config["nightwork"]["allow_after_clear"]) is not bool:
         raise ValueError("nightwork.allow_after_clear: expected boolean")
+    navigation = config["navigation"]
+    for key in ("enabled", "allow_wall_removal"):
+        if type(navigation[key]) is not bool:
+            raise ValueError(f"navigation.{key}: expected boolean")
+    _integer(navigation["stall_rounds"], 2, 8, "navigation.stall_rounds")
+    _integer(navigation["max_openings"], 0, 6, "navigation.max_openings")
     return deepcopy(config)
 
 

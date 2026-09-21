@@ -8,7 +8,7 @@ from .protocol import Pos, WALL, STATION, TOWER_TYPES, MEDICINE, WALL_FIXER, dis
 from .market import VOUCHER_TARGETS, can_upgrade, shop_prices
 from .coordination import available_gold
 from .defense_layout import wall_priority
-from . import strategy_config
+from . import strategy_config, frontline
 
 
 def routes(turn, role, start):
@@ -77,10 +77,12 @@ def purchase_allowed(turn, payload, item, commands):
         # Cap only new weapon investment; already held vouchers remain usable.
         if any(can_upgrade(item, kind, level) for kind in TOWER_TYPES for level in (1,2)):
             return any(can_upgrade(item,g.kind,g.level) and g.level < target_level(turn,g) for g in turn.weapons())
-        base = turn.station()
-        late = (turn.round_no-1)//130+1 >= config['maintenance']['from_day']
-        pressure = any(0 < w.health <= config['maintenance']['entry_fraction']*(1000,1500,2000)[w.level-1] for w in turn.walls())
-        if late and pressure and any(can_upgrade(item,WALL,w.level) for w in turn.walls()):
+        # Real emergency front-wall upgrades may precede weapons; ordinary
+        # late-game wear must not indefinitely block the day-four 333 target.
+        pressure = any(w.pos in frontline.protected_walls(turn)
+                       and 0 < w.health <= config['maintenance']['emergency_fraction']*(1000,1500,2000)[min(3,max(1,w.level))-1]
+                       and can_upgrade(item,WALL,w.level) for w in turn.walls())
+        if pressure:
             return True
     reserve = weapon_reserve(turn, payload)
     if reserve is None or item == reserve['voucher']:
@@ -129,13 +131,18 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     if index>=deadline:return stop('return_before_night')
     workers=[w for w in turn.workers() if w.unit_id not in commands and w.unit_id not in reserved_workers]
     base = turn.station()
+    config = strategy_config.get()
+    wall_emergency = any(w.pos in frontline.protected_walls(turn)
+                         and w.health <= config['maintenance']['emergency_fraction']*(1000,1500,2000)[min(3,max(1,w.level))-1]
+                         for w in turn.walls()) if config['enabled'] else False
     def building_priority(b):
         rank = wall_priority(b.pos, base.pos, turn.width, turn.height)[0] if base and b.kind == WALL else 0
-        config = strategy_config.get()
-        urgent = (config['enabled'] and (turn.round_no-1)//130+1 >= config['maintenance']['from_day']
-                  and b.kind==WALL and rank<=1
-                  and b.health <= config['maintenance']['entry_fraction']*(1000,1500,2000)[b.level-1])
-        return ((0 if urgent else priority(b)[0]),rank)+priority(b)[1:]
+        if config['enabled'] and b.kind == WALL:
+            tier = frontline.wall_tier(turn,b.pos)
+            # Keep all front-four before either corner, including mixed levels.
+            # An urgent front-six group retains its emergency spending escape.
+            return (0.5 if wall_emergency and tier < 2 else 5,tier)+priority(b)[1:]
+        return (priority(b)[0],rank)+priority(b)[1:]
     buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3 and b.kind in (STATION,WALL)+TOWER_TYPES),key=building_priority)
     # Bound planning cost on crowded wall maps; retain all base/tower targets.
     wall_ids={b.unit_id for b in buildings if b.kind==WALL}

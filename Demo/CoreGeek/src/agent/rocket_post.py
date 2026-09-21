@@ -20,7 +20,7 @@ def common_cells(turn):
     return common, inner
 
 
-def reserve(turn, commands, *, protected=()):
+def reserve(turn, commands, *, protected=(), business_goals=None):
     config = strategy_config.get()
     if not config['enabled'] or not config['defense']['single_operator_three_rockets']:
         return []
@@ -43,6 +43,22 @@ def reserve(turn, commands, *, protected=()):
         if current and (current.get('action') != 'move' or landing not in common):
             continue
         if role.pos not in common and landing not in common:
+            continue
+        if current and landing in common and role.unit_id in (business_goals or {}):
+            target,inside_only=business_goals[role.unit_id]
+            from . import traffic
+            blocked=turn.blocked(role)|common
+            if inside_only and not turn.is_day and home_defense.inside(turn,role.pos):
+                blocked |= {Pos(x,y) for x in range(turn.width) for y in range(turn.height)
+                            if not home_defense.inside(turn,Pos(x,y))}
+            blocked.update(Pos.load(p) for uid,cmd in commands.items() if uid!=role.unit_id
+                           and cmd.get('action') in ('move','build') for p in cmd.get('targetPos',()))
+            goals={p for p in traffic.neighbours(target) if turn.land(p) and p not in blocked
+                   and (not inside_only or home_defense.inside(turn,p))}
+            route=traffic.path(turn,role.pos,goals,blocked)
+            if route and len(route)>1:commands[role.unit_id]=move_command(route[1])
+            else:commands.pop(role.unit_id,None)
+            notes.append({'role':role.unit_id,'reason':'reroute_business_around_common_post'})
             continue
         claimed = {Pos.load(p) for uid, cmd in commands.items() if uid != role.unit_id
                    and cmd.get('action') in ('move', 'build') for p in cmd.get('targetPos', ())}
