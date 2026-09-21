@@ -36,7 +36,7 @@ button:focus-visible, summary:focus-visible, input:focus-visible, select:focus-v
 .hud-cell .k { font-size:10px; }
 .hud-cell small { font-size:10px; white-space:normal; }
 .transport { gap:6px; }
-.console-block > .transport { order:-1; }
+.console-block > .transport { order:0; }
 .console-head .brand { min-width:0; }
 .console-head .brand-tag { display:block; }
 .console-head #debug-toggle { flex-shrink:0; white-space:nowrap; }
