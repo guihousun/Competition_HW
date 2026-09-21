@@ -328,31 +328,37 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
     target = _voucher_target(turn)
     if target is None:
         return _mine_for_voucher(role, ctx)
-    voucher, _ = target
+    voucher, spots = target
     price = turn.shop_prices.get(voucher, 0)
     worth = _cargo_value(role, turn)
     if worth and _at_vendor(role, turn):
         return _sell_cargo(role, ctx)  # 顺路绕到了 ⇒ 先出手
-    if price > 0 and ctx.budget >= price:
-        ctx.budget -= price  # 预扣：这一回合的另一条线不会再买同一张
-        if _walk_to_shop(role, ctx, voucher):
+    # 按需要多少张就买多少张（用户口径）：需要几张看"还升得动的目标有几个"，买得起几张看金币；
+    # 取小的那个一次买够 —— 200 金、两张 100 金的券、两座待升的武器 ⇒ 一条 `buy num=2`
+    count = min(len(spots), ctx.budget // price) if price > 0 else 0
+    if count:
+        ctx.budget -= price * count  # 预扣：这一回合的另一条线不会再买
+        if _walk_to_shop(role, ctx, voucher, count):
             return True
     if worth and worth + ctx.budget >= price:
         return _sell_cargo(role, ctx)  # 攒够了 ⇒ 背去卖（卖完下一回合买得上）
     return _mine_for_voucher(role, ctx)
 
 
-def _voucher_target(turn: Turn) -> tuple[str, Pos] | None:
-    """优先链上第一张**还有东西可升**的券 + 它的目标格；全升满 ⇒ `None`。"""
+def _voucher_target(turn: Turn) -> tuple[str, tuple[Pos, ...]] | None:
+    """优先链上第一张**还有东西可升**的券 + 它这一回合能打的**全部**目标（按优先级排）。
+
+    全升满 ⇒ `None`。返回的是一串而不是一格：买券要"按需要多少张就买多少张"（用户口径），
+    张数就是这一串的长度。"""
     for voucher in VOUCHER_CHAIN:
-        spot = _voucher_spot(voucher, turn)
-        if spot is not None:
-            return voucher, spot
+        spots = _voucher_targets(voucher, turn)
+        if spots:
+            return voucher, spots
     return None
 
 
-def _voucher_spot(voucher: str, turn: Turn) -> Pos | None:
-    """这张券该往哪儿用 ⇒ 目标建筑那一格；没有可升的 ⇒ `None`。
+def _voucher_targets(voucher: str, turn: Turn) -> tuple[Pos, ...]:
+    """这张券现在能打的所有目标（按优先级排）；一张都不剩 ⇒ 空元组。
 
     武器券：`level == 目标等级 − 1` 的武器，**火箭优先**（群体打击口径）、同类按 id。
     围墙券：`level == 目标等级 − 1` 的墙，先挑**残血的**（升级同时回满血，等于顺手修好），
@@ -360,28 +366,31 @@ def _voucher_spot(voucher: str, turn: Turn) -> Pos | None:
     if voucher in VOUCHER.values():
         want = 2 if voucher == VOUCHER[2] else 3
         guns = [w for w in turn.weapons if w.level == want - 1]
-        if not guns:
-            return None
-        return min(guns, key=lambda w: (0 if w.kind == "rocket" else 1, w.id)).pos
+        return tuple(
+            w.pos for w in sorted(guns, key=lambda w: (0 if w.kind == "rocket" else 1, w.id))
+        )
     want = 2 if voucher == WALL_VOUCHER[2] else 3
     walls = [w for w in turn.walls if w.level == want - 1]
-    if not walls:
-        return None
-    return min(walls, key=lambda w: (not _is_weak(w), w.pos)).pos
+    return tuple(w.pos for w in sorted(walls, key=lambda w: (not _is_weak(w), w.pos)))
 
 
 def _walk_to_use(role: BaseRole, ctx: _Ctx, voucher: str) -> bool:
-    """把手里这张券用掉：贴着目标就 `use`，否则走一步（没有可用的目标 ⇒ False）。"""
-    spot = _voucher_spot(voucher, ctx.turn)
-    if spot is None:
+    """把手里这张券用掉：贴着目标就 `use`，否则走一步（没有可用的目标 ⇒ False）。
+
+    手里可能攒着好几张（"尽可能多买"那一条）⇒ 每回合挑**还升得动的第一格**用掉一张。"""
+    spots = _voucher_targets(voucher, ctx.turn)
+    if not spots:
         return False
+    spot = spots[0]
     if role.pos.dist(spot) <= 1:
         return _emit(ctx.q.cmds, role, actions.Use, voucher, spot)
     return ctx.q.step(role, spot, avoid=frozenset(ctx.sites))
 
 
-def _walk_to_shop(role: BaseRole, ctx: _Ctx, voucher: str) -> bool:
-    """走到武器商店买下这张券：贴着就 `buy`，否则走一步（没有走得到的商店 ⇒ False）。"""
+def _walk_to_shop(role: BaseRole, ctx: _Ctx, voucher: str, count: int = 1) -> bool:
+    """走到武器商店买券：贴着就 `buy num=count`，否则走一步（没有走得到的商店 ⇒ False）。
+
+    `count` 由上一条按"还缺几张 + 买得起几张"算好 —— 一次买够，别一回合一张地磨。"""
     turn, q = ctx.turn, ctx.q
     walk, size = _passable(turn), turn.map.size
     hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
@@ -391,7 +400,7 @@ def _walk_to_shop(role: BaseRole, ctx: _Ctx, voucher: str) -> bool:
     to_shop, shop = min(hops)
     if to_shop == 0:
         # 0 = 已经贴着商店（`steps_between` 的口径）；1 是"差一格"，那时候还不许买
-        return _emit(q.cmds, role, actions.Buy, voucher, 1)
+        return _emit(q.cmds, role, actions.Buy, voucher, count)
     return q.step(role, shop, avoid=frozenset(ctx.sites))
 
 
@@ -535,8 +544,10 @@ def _can_fund(turn: Turn) -> bool:
 
 
 def _vouchers_in_hand(role: BaseRole) -> int:
-    """手里还没用掉的升级券数（收工门要按它多留几个回合）。"""
-    return sum(1 for name in VOUCHER_CHAIN if role.bag.get(name, 0) > 0)
+    """手里还没用掉的升级券**张数**（收工门要按它多留几个回合 —— 一张券用掉一回合）。
+
+    数的是张数不是"有几种"：一次买够 N 张（用户口径"尽可能多买"）就得留出 N 个回合给它们。"""
+    return sum(role.bag.get(name, 0) for name in VOUCHER_CHAIN)
 
 
 def _is_weak(wall: Wall) -> bool:

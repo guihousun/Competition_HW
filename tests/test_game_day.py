@@ -544,14 +544,28 @@ class DayEndGateTest(unittest.TestCase):
         self.assertFalse(self._gate(round_no=DAY_ROUNDS - self.WINDOW, at=at), "还剩 6 回合 ⇒ 不急")
         self.assertTrue(self._gate(round_no=DAY_ROUNDS - self.WINDOW + 1, at=at), "还剩 5 回合 ⇒ 回岗位")
 
-    def test_a_voucher_in_hand_opens_the_gate_a_round_earlier(self):
-        """手里每多一张券就早走一个回合 —— 回岗第一件事是用掉它们（用户口径）。"""
+    def test_every_voucher_in_hand_opens_the_gate_a_round_earlier(self):
+        """手里每多一张券就早走一个回合 —— 回岗第一件事是把它们一张张用掉（用户口径）。
+
+        数的是**张数**：一次买够 N 张（"尽可能多买"那条）就得留出 N 个回合。
+        """
         at = Pos(20, 24)
-        early = DAY_ROUNDS - self.WINDOW  # 还剩 6 回合
-        self.assertFalse(self._gate(round_no=early, at=at), "空手 ⇒ 还剩 6 回合不动身")
+        for held, expect in ((0, False), (1, True), (2, True)):
+            bag = {"WeaponUpgradeVoucher1": held} if held else None
+            with self.subTest(held=held):
+                # 还剩 6 回合：空手不动身，手里有券（哪怕一张）就该动身
+                self.assertIs(
+                    self._gate(round_no=DAY_ROUNDS - self.WINDOW, at=at, bag=bag),
+                    expect,
+                )
+        # 两张券 ⇒ 窗口再宽一格：还剩 7 回合就该动身
         self.assertTrue(
-            self._gate(round_no=early, at=at, bag={"WeaponUpgradeVoucher1": 1}),
-            "手里一张券 ⇒ 同一个回合就该动身",
+            self._gate(
+                round_no=DAY_ROUNDS - self.WINDOW - 1,
+                at=at,
+                bag={"WeaponUpgradeVoucher1": 2},
+            ),
+            "两张券 ⇒ 还剩 7 回合就动身",
         )
 
     def test_the_gate_aims_at_the_shared_operator_spot(self):
@@ -1424,6 +1438,39 @@ class VoucherLineTest(unittest.TestCase):
         buyers = [cid for cid, cmd in cmds.items() if cmd["action"] == "move"]
         self.assertEqual(len(buyers), 1, f"只该有一个人去商店：{cmds}")
 
+
+    def test_it_buys_as_many_as_the_board_needs(self):
+        """**按需要多少张就买多少张**（用户口径）：两座待升到二级的武器 + 200 金、券价 100
+        ⇒ 一条 `buy num=2` 买够，而不是一回合一张地磨。
+
+        需要几张是"这张券还升得动的目标有几个"（跟场上的武器等级一起算），买得起几张看金币 ——
+        取小的那个。
+        """
+        worker = Worker(10010, Pos(21, 17))  # 贴着商店 (22,18)
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
+        turn = self._turn((worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200)
+        cmd = plan(turn)["10010"]
+        self.assertEqual(
+            cmd, {"action": "buy", "name": "WeaponUpgradeVoucher1", "num": 2}, cmd
+        )
+
+    def test_it_buys_only_what_the_purse_allows(self):
+        """钱只够一张 ⇒ 就买一张（另一张等攒够了再买），不是"买不起两张就一张不买"。"""
+        worker = Worker(10010, Pos(21, 17))
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
+        turn = self._turn((worker,), weapons, walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=100)
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "buy", cmd)
+        self.assertEqual(cmd["num"], 1, f"钱只够一张：{cmd}")
+
+    def test_each_held_voucher_gets_used_on_its_own_target(self):
+        """手里攒着两张 ⇒ 一张一张用掉，每回合挑**还升得动的第一格**。"""
+        worker = Worker(10010, Pos(12, 23), {"WeaponUpgradeVoucher1": 2})  # 贴着火箭 (12,24)
+        weapons = (self._gun(10020, "rocket", Pos(12, 24)), self._gun(10021, "gatling", Pos(12, 22)))
+        turn = self._turn((worker,), weapons, gold=0)
+        cmd = plan(turn)["10010"]
+        self.assertEqual(cmd["action"], "use", f"该把手里那张用掉：{cmd}")
+        self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
 
 class PioneerErrandTest(unittest.TestCase):
     """空闲的开拓者也跑同一条买券差事（用户口径：开拓者做完任务就买券，且买完就用）。
