@@ -657,9 +657,12 @@ class RunPathParityTests(unittest.TestCase):
         from agent.brain import plan_for_state
         from agent.scenarios import observation, scenario
         from agent.simulator import step
-        for seed in (3, 7):
-            viewer_state = debug.scenario_payload(seed, "challenger", 1)["state"]
-            direct_state = scenario(seed, "challenger", 1)
+        from itertools import product
+        # Debug defaults to the observed map; historical scenario() defaults to
+        # seeded stress layouts. Compare identical input layouts on both paths.
+        for seed, layout in product((3, 7), ('seeded-local-v1', 'attack-map-observed-v1')):
+            viewer_state = debug.scenario_payload(seed, "challenger", 1, map_layout=layout)["state"]
+            direct_state = scenario(seed, "challenger", 1, map_layout=layout)
             for index in range(self.ROUNDS):
                 carried = (viewer_state.get("_demo") or {}).get("planner")
                 viewer_out = debug.step_payload(viewer_state)
@@ -672,7 +675,7 @@ class RunPathParityTests(unittest.TestCase):
                 self.assertEqual(
                     self._fingerprint(viewer_state, viewer_out["events"]),
                     self._fingerprint(direct_state, direct_out["events"]),
-                    f'seed {seed} 第 {index + 1} 回合：调试传输路径与直接驱动必须一致')
+                    f'{layout} seed {seed} 第 {index + 1} 回合：调试传输路径与直接驱动必须一致')
                 if direct_out["done"]:
                     break
 

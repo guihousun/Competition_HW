@@ -143,8 +143,10 @@ check('a 2x2 footprint centres between its four cells', () => {
   const two = renderer.cellCenterScreen({ x: 7, y: 26 }, view, 2);
   assert(close(two.x - one.x, HW.BASE_TILE * renderer.camera.scale / 2, 0.01),
     'footprint centre shifts half a tile right');
-  assert(close(two.y - one.y, -HW.BASE_TILE * renderer.camera.scale / 2, 0.01),
-    'footprint centre shifts half a tile up (official +y is up)');
+  // Station pos is its upper-left occupied cell (R02), so the other row is
+  // below it: lower protocol y, larger screen y.
+  assert(close(two.y - one.y, HW.BASE_TILE * renderer.camera.scale / 2, 0.01),
+    'footprint centre shifts half a tile down from its upper-left anchor');
 });
 
 check('zoom keeps the point under the cursor fixed', () => {
