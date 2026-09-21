@@ -37,8 +37,16 @@ class StrategyConfigTests(unittest.TestCase):
 
     def test_known_single_operator_loadout(self):
         value = sc.validate(sc.DEFAULTS)
-        self.assertEqual(value["defense"]["tower_loadout"], ["rocket", "railgun", "rocket"])
+        self.assertEqual(value["defense"]["tower_loadout"], ["rocket"] * 3)
         self.assertEqual(value["defense"]["full_defense_from_day"], 4)
+
+    def test_public_view_exposes_strategy_and_keeps_rule_constants_out(self):
+        view = sc.public_view()
+        keys = {row['key'] for row in view['parameters']}
+        self.assertIn('llm.answer_instruction', keys)
+        self.assertIn('defense.tower_loadout', keys)
+        self.assertNotIn('robot_attack_range', keys)
+        self.assertGreaterEqual(len(view['immutable']), 3)
 
     def test_unknown_and_missing_fields_are_errors(self):
         for section in (None, "defense", "upgrades", "maintenance", "economy", "nightwork", "navigation"):
@@ -67,14 +75,15 @@ class StrategyConfigTests(unittest.TestCase):
             with self.subTest(fraction=fraction), self.assertRaises(ValueError):
                 sc.validate(value)
 
-    def test_target_downgrade_and_mixed_shared_allowed(self):
+    def test_target_downgrade_and_nonrocket_shared_rejected(self):
         value = sc.validate(sc.DEFAULTS)
         value["upgrades"]["late_weapon_target"] = [1, 1, 1]
         with self.assertRaises(ValueError):
             sc.validate(value)
         value = sc.validate(sc.DEFAULTS)
         value["defense"]["tower_loadout"][1] = "railgun"
-        self.assertEqual(sc.validate(value), value)
+        with self.assertRaises(ValueError):
+            sc.validate(value)
         value["defense"]["single_operator_three_rockets"] = False
         self.assertEqual(sc.validate(value), value)
 

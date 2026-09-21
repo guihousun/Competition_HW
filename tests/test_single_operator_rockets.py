@@ -86,27 +86,6 @@ class SingleOperatorTests(unittest.TestCase):
                 self.assertEqual(list(cmd),[expected])
                 self.assertEqual(cmd[expected]['controllerId'],'2')
 
-    def test_mixed_rocket_railgun_loadout_uses_same_common_post(self):
-        """The common post covers the configured 2R+1 railgun loadout."""
-        p = board(base=REPORTED, round_no=90)
-        p['teamOur']['roles'] = [unit(1, 'station', *REPORTED, 1500),
-            unit(2, 'worker', 8, 22, 220)]
-        p['teamOur']['roles'] += [unit(10, 'rocket', 8, 21),
-                                   unit(11, 'railgun', 8, 23),
-                                   unit(12, 'rocket', 9, 23)]
-        p['robot'] = {'roles': [dict(id=90, roleType='largeRobot', health=500,
-                                     pos=dict(x=15, y=21))]}
-        config = deepcopy(self.config)
-        config['defense']['tower_loadout'] = ['rocket', 'railgun', 'rocket']
-        with patch.object(strategy_config, 'get', return_value=config):
-            turn = Turn.load(p)
-            cmd = {}
-            result = brain._coordinate_rockets(turn, cmd, set())
-        self.assertEqual(result['stand'], {'x': 8, 'y': 22})
-        self.assertTrue(result['common_stand_feasible'])
-        self.assertEqual(list(cmd), [10])
-        self.assertEqual(cmd[10]['controllerId'], '2')
-
     def test_higher_useful_damage_ready_gun_wins(self):
         p = fixture()
         p['teamOur']['roles'][5]['level'] = 3

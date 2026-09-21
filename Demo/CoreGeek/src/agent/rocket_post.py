@@ -7,15 +7,7 @@ from .protocol import Pos, distance, move_command
 
 def common_cells(turn):
     """Public geometry only; no transient role occupancy decides ownership."""
-    # The compatibility flag historically said "three rockets", but the
-    # current enabled strategy is one controller for the configured three
-    # weapons (2 rocket + 1 railgun by default). Disabled/legacy diagnostics
-    # retain their old two/three-rocket geometry.
-    from . import strategy_config
-    config = strategy_config.get()
-    guns = (list(turn.weapons()) if config['enabled']
-            and config['defense']['single_operator_three_rockets']
-            else [g for g in turn.weapons() if g.kind == 'rocket'])
+    guns = [g for g in turn.weapons() if g.kind == 'rocket']
     base = turn.station()
     if len(guns) != 3 or base is None:
         return set(), set()

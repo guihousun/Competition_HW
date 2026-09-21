@@ -7,7 +7,7 @@
     "single_operator_three_rockets": true,
     "tower_loadout": [
       "rocket",
-      "railgun",
+      "rocket",
       "rocket"
     ]
   },
@@ -63,5 +63,10 @@
     "stall_rounds": 3,
     "allow_wall_removal": true,
     "max_openings": 2
+  },
+  "llm": {
+    "task_prompt_prefix": "你在协助一个自动化参赛程序回答游戏内的任务。",
+    "answer_instruction": "请按题目要求作答，只输出答案本身；多个字段用 '字段=值' 并以 '; ' 分隔。",
+    "include_recent_history": 4
   }
 }

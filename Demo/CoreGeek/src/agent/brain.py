@@ -571,7 +571,7 @@ def _route_task_channel(payload: dict[str, Any], planner_state: Any, plan: Any,
                                               source_digest, turn)
             # The context body, instruction header and nonce room share one
             # coherent prompt budget (task_context.render_prompt).
-            text = (task_context.render_prompt(envelope, instruction=ROUTER_ANSWER_INSTRUCTION)
+            text = (task_context.render_prompt(envelope, instruction=strategy_config.get()['llm']['answer_instruction'])
                     if envelope is not None else (plan.prompt or ""))
         else:
             text = plan.prompt if plan.kind == "prompt" else plan.command
@@ -2467,20 +2467,14 @@ def _try_battle_items(turn: Turn, commands: dict[int, dict[str, Any]],
 
 
 def _coordinate_rockets(turn, commands, claimed):
-    """Single mode stages a common post for the configured three guns.
-
-    The historical helper name is retained because it is part of the local
-    diagnostics API.  In single-operator mode the post is no longer limited
-    to rockets: a railgun or gatling in the configured loadout is covered by
-    the same public adjacency and cooldown checks.
-    """
+    """Single mode stages a three-rocket post; legacy mode shares two rockets."""
     from . import strategy_config
     config = strategy_config.get()
     if config['enabled'] and config['defense']['single_operator_three_rockets']:
         # R01/R04: one worker controls at most one ready rocket per round. A
         # failed approach never licenses a second worker/pioneer to take over.
         workers = turn.workers()
-        guns = sorted(turn.weapons(),
+        guns = sorted((g for g in turn.weapons() if g.kind == 'rocket'),
                       key=lambda g: g.unit_id)
         worker = workers[0] if workers else None
         result = {'owner': worker.unit_id if worker else None, 'stand': None,
@@ -3108,15 +3102,9 @@ def _inner_connected(graph, blocked):
 
 def _shared_rocket_cells(intended, stands):
     from . import strategy_config
-    # In single-operator mode every configured weapon participates in the
-    # common-post requirement.  Legacy mode deliberately keeps its old
-    # two-rocket contract for comparison fixtures.
     config = strategy_config.get()
-    single = config['enabled'] and config['defense']['single_operator_three_rockets']
-    rockets = [p for p, kind in intended.items()
-               if ((single and kind in ('rocket', 'railgun', 'gatling'))
-                   or (not single and kind == 'rocket'))]
-    count = (len(config['defense']['tower_loadout']) if single else 2)
+    rockets = [p for p, kind in intended.items() if kind == 'rocket']
+    count = 3 if config['enabled'] and config['defense']['single_operator_three_rockets'] else 2
     if len(rockets) != count:
         return ()
     return tuple(sorted((p for p in stands if all(distance(p, gun) == 1 for gun in rockets)),

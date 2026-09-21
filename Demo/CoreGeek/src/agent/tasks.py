@@ -385,8 +385,9 @@ def solver_llm_ask(context: SolverContext) -> Plan | None:
     if notes.get("llm_asked") or not context.cycle.description:
         return None
     notes["llm_asked"] = True
+    from . import strategy_config
     prompt = (
-        "你在协助一个自动化参赛程序回答游戏内的任务。\n"
+        strategy_config.get()['llm']['task_prompt_prefix'] + "\n"
         "请只输出答案本身，多个字段用 '字段=值' 并用 '; ' 分隔，不要解释、不要多余文字。\n"
         f"任务描述：\n{context.cycle.description}\n"
     )
@@ -742,7 +743,8 @@ class TaskPipeline:
 
     @staticmethod
     def _default_prompt(cycle: TaskCycle) -> str:
-        return ("请回答下面这个自动化任务，只输出答案本身，多个字段用 '字段=值' 并用 '; ' 分隔。\n"
+        from . import strategy_config
+        return (strategy_config.get()['llm']['answer_instruction'] + "\n"
                 f"任务描述：\n{cycle.description}\n")
 
 

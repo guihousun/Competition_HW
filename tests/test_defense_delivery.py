@@ -46,7 +46,7 @@ class DefenceDeliveryTests(unittest.TestCase):
                                 first_wall=command['targetPos'][0]
                     towers=[r for r in state['teamOur']['roles'] if r['roleType'] in ('rocket','gatling','railgun')]
                     self.assertEqual(len(towers),3)
-                    self.assertEqual([r['roleType'] for r in towers],['rocket','railgun','rocket'])
+                    self.assertEqual([r['roleType'] for r in towers],['rocket']*3)
                     operator=min((r for r in state['teamOur']['roles'] if r['roleType']=='worker' and r['health']>0),key=lambda r:r['id'])
                     self.assertTrue(all(max(abs(operator['pos']['x']-g['pos']['x']),
                                             abs(operator['pos']['y']-g['pos']['y']))==1 for g in towers),

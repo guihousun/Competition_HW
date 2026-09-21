@@ -1,4 +1,4 @@
-"""Observed, safe handover of a three-gun post (strategy; R01/R04/R07).
+"""Observed, safe handover of a three-rocket post (strategy; R01/R04/R07).
 
 No speculative occupancy or extra control range: a replacement enters the post
 only after the current observation shows it empty. Worker coverage remains until
@@ -36,7 +36,7 @@ def plan(turn, payload, state, commands, claimed, aim_points):
     common, inner = rocket_post.common_cells(turn)
     if not common:
         return None  # Preserve existing worker fallback for non-shared layouts.
-    guns = sorted(turn.weapons(), key=lambda g: g.unit_id)
+    guns = sorted((g for g in turn.weapons() if g.kind == 'rocket'), key=lambda g: g.unit_id)
     eligible, reason = pioneer_status(turn, payload, state)
     hero = turn.pioneer()
     if hero is not None and hero.unit_id in commands:

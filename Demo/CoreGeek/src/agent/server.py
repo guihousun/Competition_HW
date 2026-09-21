@@ -85,6 +85,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/debug/rules":
             self._json(200, {"rows": debug.RULE_ROWS, "notes": debug.mismatch_notes()})
             return
+        if path == "/debug/strategy":
+            from . import strategy_config
+            self._json(200, strategy_config.public_view())
+            return
         if path == "/debug/scenario":
             try:
                 self._json(200, debug.scenario_payload(

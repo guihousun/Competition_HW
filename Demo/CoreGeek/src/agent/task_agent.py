@@ -146,9 +146,11 @@ class TaskAgent:
             '工程校验优先用kind=check和tool_args={path:"绝对check路径"}，只在内存处理CRLF，'
             '不修改check原件，保持工作目录和退出码。http/check不同时提供command或answer。\n'
         )
+        from . import strategy_config
+        history_count = strategy_config.get()['llm']['include_recent_history']
         events = json.dumps([{**item, 'text': item['text'][:200],
                               'truncated': item['truncated'] or len(item['text']) > 200}
-                             for item in self.history[-4:]], ensure_ascii=False)
+                             for item in self.history[-history_count:]], ensure_ascii=False)
         body = '\n可引用证据ID：' + json.dumps(evidence_ids, ensure_ascii=False) + '\n' + context + '\n近期操作摘要：' + events
         label = '\n本任务已明确判错（同答案禁止重交；未展示旧项仍自动拦截）：'
         rows = [{'round': row['round'], 'error': row['error'][:100],
