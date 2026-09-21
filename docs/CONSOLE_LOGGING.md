@@ -79,3 +79,12 @@ python tools/analyze_console.py reduce <rows.json|rows.jsonl> --dump .\evidence\
 控制台是本地工程观测，不代表内网或官方 PASS。
 
 HTTP响应后的后台摘要可能乱序到达。已知较早事件号记为 `late` 并保留动作/错误计数，不冒充对局重启、不回退最新HP或策略状态；回放以完整trace事件索引对齐。
+# 2026-09-21：任务结果与模型计划拒绝的补充说明
+
+`task_outcome_summary.official_success_confirmed=false` 表示当前日志没有确认正向官方判题，不能据此把任务计为失败。新增 `success_confirmation_capability=no_explicit_official_positive_result_field`、`unconfirmed_is_failure=false`、`success_rate_eligible=false` 明确这一限制。已提交未确认、明确负向反馈、未提交分别保留原status，不凭金币或积分变化计算成功率。
+
+`agent_state.lastPlanRejection` 记录当前题最近一次模型计划被拒绝的回合与静态原因，例如 `wrong model correlation`、`unverified evidence reference`、`JSONDecodeError`。它是最近拒绝记录，不表示此后每轮仍在拒绝；结合prompts、commands、stage和回合查看。日志不回显模型正文或凭据，也没有修改工程调用上限。
+
+`stream` 是本地运行与队伍/地图/基地身份键，不是官方battle_id或half_id；不能仅因stream改变就认定换边。真换边需要原始teamOur.type与官方半场信息核对。
+
+裸 `./check` 的兼容工具回执新增 `path_source=sandbox_cwd`，代表路径在实际执行沙盒中解析。`absolute_path` 表示使用显式绝对路径；两者均不证明check已通过，仍需读真实exit_code及输出。

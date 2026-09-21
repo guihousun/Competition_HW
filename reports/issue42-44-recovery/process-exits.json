@@ -1,0 +1,16 @@
+{
+  "source": "Actual unified exec/write_stdin completion inspected by Codex",
+  "source_commit": "043918d495313229b3d123aeca7b92a4a45d1281",
+  "processes": [
+    {
+      "task": "full_unittest",
+      "session_id": 67311,
+      "exit_code": 0
+    },
+    {
+      "task": "package_build_and_http_200",
+      "session_id": 42001,
+      "exit_code": 0
+    }
+  ]
+}

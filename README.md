@@ -8,6 +8,8 @@
 可编辑参数在 [strategy.json](strategy.json)，含义、微调与重新打包步骤见 [策略配置说明](docs/STRATEGY_TUNING.md)。
 验证范围、完整对局失败样本和当前限制见 [本版交付报告](reports/frontline-routes/README.md)。
 
+任务check兼容与实战统计核对：[Issue #29、#42–44 交付](reports/issue42-44-recovery/README.md)（裸check恢复、未知成功状态、计划拒绝原因）。
+
 本轮反馈迭代：[策略架构](docs/POLICY_ARCHITECTURE.md) · [精简日志](docs/CONSOLE_LOGGING.md) · [验证报告](reports/issue-14-17-architecture/REVIEW.md)。
 
 LLM能力建设：[测试候选与回退开关](docs/AGENT_CANDIDATE.md) · [本地Agent演示](docs/LOCAL_LLM.md) · [交付验证](reports/llm-tasks-delivery/README.md) · [总Spec与阶段进度](specs/LLM_TASKS_ROADMAP.md)。

@@ -1,0 +1,34 @@
+[
+  {
+    "path": ".gitattributes",
+    "sha256": "2cacd8c5b88d28a6324a5b106d17970ce30df8e32f9b76c87d00d4ca430747a8"
+  },
+  {
+    "path": "http-report.json",
+    "sha256": "9333f15bfff991b2fa2f4b6c844c96bf2cd8094c27c5cf9aa010a0ecd86d5cd8"
+  },
+  {
+    "path": "input-digests.json",
+    "sha256": "506ddc28e5bdf994bf9e77dda715893fbc53242f8749499dda6bfa926fa63dde"
+  },
+  {
+    "path": "package-build.json",
+    "sha256": "e70720f43de69f8e68ac9ba16a00cee983b671a5c8aa1c732f3679810055a57b"
+  },
+  {
+    "path": "process-exits.json",
+    "sha256": "da6f3030f8a45d45790c185c3a2cb1fdef02cafc957bd698ec8c8f3fae6e8c50"
+  },
+  {
+    "path": "README.md",
+    "sha256": "92d8c3ba799b5562466f6f7692d8366efc72a868a8d2ed1a9840bf37b099873e"
+  },
+  {
+    "path": "tests-receipt.json",
+    "sha256": "c85770ba388f9d49d8a87634c77fb1ed0805553d26957aa3319f2877519d196d"
+  },
+  {
+    "path": "tests.log",
+    "sha256": "df54b09b11a17711bcf5cbd2e2fcdb5bfaffa5a5497c1faa1c9186f81cca6b4c"
+  }
+]
