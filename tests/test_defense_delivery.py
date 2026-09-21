@@ -23,7 +23,7 @@ class DefenceDeliveryTests(unittest.TestCase):
         self.assertEqual(len(sites),3)
         self.assertIn((8,20),[(p.x,p.y) for p in sites])
 
-    def test_web_simulator_builds_approach_towers_and_front_walls_on_both_sides(self):
+    def test_web_simulator_builds_common_post_rockets_and_front_walls_on_both_sides(self):
         http=server.ThreadingHTTPServer(('127.0.0.1',0),server.Handler)
         thread=threading.Thread(target=http.serve_forever,daemon=True);thread.start()
         url=f'http://127.0.0.1:{http.server_port}'
@@ -46,12 +46,15 @@ class DefenceDeliveryTests(unittest.TestCase):
                                 first_wall=command['targetPos'][0]
                     towers=[r for r in state['teamOur']['roles'] if r['roleType'] in ('rocket','gatling','railgun')]
                     self.assertEqual(len(towers),3)
+                    self.assertEqual([r['roleType'] for r in towers],['rocket']*3)
+                    operator=min((r for r in state['teamOur']['roles'] if r['roleType']=='worker' and r['health']>0),key=lambda r:r['id'])
+                    self.assertTrue(all(max(abs(operator['pos']['x']-g['pos']['x']),
+                                            abs(operator['pos']['y']-g['pos']['y']))==1 for g in towers),
+                                    'actual web simulation stages the worker at the common post before night')
                     self.assertIsNotNone(first_wall)
                     if side=='challenger':
-                        self.assertTrue(all(r['pos']['x']>base['x']+1 for r in towers if r['roleType']=='rocket'))
                         self.assertEqual(first_wall['x'],base['x']+3)
                     else:
-                        self.assertTrue(all(r['pos']['x']<base['x'] for r in towers if r['roleType']=='rocket'))
                         self.assertEqual(first_wall['x'],base['x']-2)
         finally:
             http.shutdown();http.server_close();thread.join(timeout=3)

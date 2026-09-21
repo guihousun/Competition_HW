@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import patch
 
 from test_defense_layout import board, unit, REPORTED, MIRROR
-from agent import rocket_post, strategy_config, home_defense, planner, brain
-from agent.protocol import Turn, Pos
+from agent import rocket_post, strategy_config, home_defense, planner, brain, team_trip
+from agent.protocol import Turn, Pos, WALL_FIXER
 
 
 def setup(base=REPORTED, round_no=450):
@@ -68,6 +68,36 @@ class RocketPostTests(unittest.TestCase):
         p,_=setup();commands={}
         self.assertEqual(rocket_post.reserve(Turn.load(p),commands),[])
         self.assertEqual(commands,{})
+
+    def test_stock_courier_return_never_commits_gunners_common_post(self):
+        p,common=setup();p['teamOur']['roles'][2]=unit(3,'worker',7,22,220)
+        p['teamOur']['roles'][2]['backpack']=[WALL_FIXER]*2
+        record=dict(owner=3,target=1,item=WALL_FIXER,operation='stock',quantity=2,
+                    phase='return',deadline=460)
+        for round_no in range(450,460):
+            p['roundNo']=round_no
+            cost=team_trip.evaluate_trip(Turn.load(p),p,record)
+            self.assertTrue(cost.feasible,cost.reason)
+            if cost.command is None:
+                self.assertEqual(cost.reason,'returned')
+                break
+            pos=cost.command['targetPos'][0]
+            self.assertNotEqual(pos,common.dump())
+            p['teamOur']['roles'][2]['pos']=deepcopy(pos)
+        else:
+            self.fail('stock courier must complete another safe return')
+
+    def test_day_trip_returns_gunner_through_rear_to_exact_common_post(self):
+        p,common=setup();p['teamOur']['roles'][2]['health']=0
+        record=dict(owner=2,target=1,item=WALL_FIXER,operation='stock',quantity=1,
+                    phase='return',deadline=460)
+        for round_no in range(450,460):
+            p['roundNo']=round_no
+            cost=team_trip.evaluate_trip(Turn.load(p),p,record)
+            self.assertTrue(cost.feasible,cost.reason)
+            if cost.command is None:break
+            p['teamOur']['roles'][1]['pos']=deepcopy(cost.command['targetPos'][0])
+        self.assertEqual(p['teamOur']['roles'][1]['pos'],common.dump())
 
 
 if __name__=='__main__':unittest.main()

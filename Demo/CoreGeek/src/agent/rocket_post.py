@@ -5,22 +5,30 @@ from . import home_defense, strategy_config
 from .protocol import Pos, distance, move_command
 
 
-def reserve(turn, commands, *, protected=()):
-    config = strategy_config.get()
-    if not config['enabled'] or not config['defense']['single_operator_three_rockets']:
-        return []
-    workers = turn.workers()
+def common_cells(turn):
+    """Public geometry only; no transient role occupancy decides ownership."""
     guns = [g for g in turn.weapons() if g.kind == 'rocket']
     base = turn.station()
-    if not workers or len(guns) != 3 or base is None:
-        return []
-    owner = workers[0].unit_id
+    if len(guns) != 3 or base is None:
+        return set(), set()
     permanent = {p for u in turn.ours + turn.enemies if u.health > 0
                  and u.kind not in ('worker', 'pioneer') for p in turn.footprint(u)}
     inner = {Pos(x, y) for x in range(base.pos.x-1, base.pos.x+3)
              for y in range(base.pos.y-2, base.pos.y+2)
              if turn.land(Pos(x, y)) and Pos(x, y) not in permanent}
     common = {p for p in inner if all(distance(p, g.pos) == 1 for g in guns)}
+    return common, inner
+
+
+def reserve(turn, commands, *, protected=()):
+    config = strategy_config.get()
+    if not config['enabled'] or not config['defense']['single_operator_three_rockets']:
+        return []
+    workers = turn.workers()
+    if not workers:
+        return []
+    owner = workers[0].unit_id
+    common, inner = common_cells(turn)
     if not common:
         return []
     notes = []

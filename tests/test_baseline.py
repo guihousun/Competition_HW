@@ -38,15 +38,16 @@ class BaselineTests(unittest.TestCase):
         self.assertLessEqual(len(builds), 1)
         for build in builds:
             self.assertIn(build["name"], ("gatling", "railgun", "rocket"))
-        # Issue 12: the two rocket slots face the expected approach (east here), so
-        # the worker may walk to the site before building; either way the target
-        # must be a front-side weapon-ring cell.
+        # Current three-rocket strategy prefers a common post over front bias.
+        # Budget and max-tower invariants still apply while workers approach.
         sites = brain._tower_sites(turn)
         self.assertTrue(sites, "a missing tower must still be planned")
-        station_x = turn.station().pos.x
-        for site in sites[::2]:
-            self.assertGreater(site.x, station_x + 1,
-                               "tower slots must face the approach (issue 12)")
+        station = turn.station().pos
+        inner = {Pos(x,y) for x in range(station.x-1,station.x+3)
+                 for y in range(station.y-2,station.y+2)} - set(sites)
+        inner -= set(turn.footprint(turn.station()))
+        self.assertTrue(any(all(max(abs(p.x-g.x),abs(p.y-g.y))==1 for g in sites)
+                            for p in inner), 'planned rockets share a legal inner post')
         if not builds:
             self.assertTrue(any(c["action"] == "move" for c in commands.values()),
                             "with a tower planned but not yet adjacent, a worker moves")

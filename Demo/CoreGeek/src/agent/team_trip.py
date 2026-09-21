@@ -88,6 +88,13 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
             turn, payload, commands or {}, replacing=owner.unit_id) or owner.backpack_full or (stock and len(owner.backpack)+amount > (owner.capacity or 100))):
         return reject('purchase_unavailable')
     blocked = set(turn.blocked(owner)) | task_cells(turn) | set(added_walls)
+    from . import rocket_post, strategy_config
+    config = strategy_config.get()
+    common = (rocket_post.common_cells(turn)[0] if config['enabled']
+              and config['defense']['single_operator_three_rockets'] else set())
+    gunner = turn.workers()[0].unit_id
+    if common and owner.unit_id != gunner:
+        blocked.update(common - {owner.pos})
     for uid, pos in (actor_positions or {}).items():
         actor = next((u for u in turn.controllable() if u.unit_id == uid), None)
         if actor is None or actor.unit_id == owner.unit_id:
@@ -110,20 +117,22 @@ def evaluate_trip(turn, payload, commitment, *, actor_positions=None,
                 queue.append(nxt)
         return distances, first
 
-    # Reverse return graph. Once sheltered, returning may not exit the ring
-    # again merely to reach another gun; exterior starts may enter normally.
+    # Reverse return graph. A common-post layout may use the rear opening
+    # during daylight to cross inner pockets; legacy layouts keep confinement.
     base=turn.station()
     inside_region=({p for cell in turn.footprint(base) for p in (cell,*neighbours(cell))}
                    if base is not None else set())
     homes = {p for gun in turn.weapons() for p in neighbours(gun.pos)
              if p in inside_region and turn.land(p) and p not in blocked}
+    if common:
+        homes = homes & common if owner.unit_id == gunner else homes - common
     return_cost = {p:0 for p in homes}; home_step = {p:None for p in homes}
     queue = deque(sorted(homes,key=lambda p:(p.x,p.y)))
     while queue:
         cell = queue.popleft()
         for predecessor in neighbours(cell):
             if (predecessor in return_cost or predecessor in blocked or not turn.land(predecessor)
-                    or (predecessor in inside_region and cell not in inside_region)):
+                    or (not common and predecessor in inside_region and cell not in inside_region)):
                 continue
             return_cost[predecessor]=return_cost[cell]+1
             home_step[predecessor]=cell
