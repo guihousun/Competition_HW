@@ -1,0 +1,22 @@
+[
+  {
+    "case": "training-1-challenger",
+    "sha256": "f7d2cf76d311adc1d7617cf99ffa88be1dd783d6e5b1cd3127f47bb2b29d3c98",
+    "bytes": 7762959
+  },
+  {
+    "case": "training-1-defender",
+    "sha256": "cc9a9b692df4c98481e7868880fe563ff8cfcdeebb6f1a2d2c59d71c43db72ab",
+    "bytes": 7777322
+  },
+  {
+    "case": "training-19-challenger",
+    "sha256": "49bcb7f0ac77527f36fea1d7a79ae0785f7d1e6d0861cb65f09973a17040c71c",
+    "bytes": 7704835
+  },
+  {
+    "case": "training-19-defender",
+    "sha256": "3c643896d18edfdf8d453e7ee13cb1da562320642f263473e2620da2ebfcc158",
+    "bytes": 7573036
+  }
+]

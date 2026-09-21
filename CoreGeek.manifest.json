@@ -1,5 +1,5 @@
 {
-  "commit": "c0743915a5ca4b470259a4b7fa9f40fed9b94774",
+  "commit": "b53365553f3903efd610fb1e4e34de755fa43468",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -68,9 +68,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 137626,
+      "bytes": 140024,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "efbadf208287317a9373162fdf40dcd8a03555e3e4f3b3288a0b3b8b1577c162",
+      "sha256": "e9e54b9f5bee176719e24611293c099d4f57644d2bd740b5ef1b26bae6d816df",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -92,9 +92,9 @@
       "source": "Demo/CoreGeek/src/agent/construction_trip.py"
     },
     {
-      "bytes": 9027,
+      "bytes": 9561,
       "path": "CoreGeek/src/agent/coordination.py",
-      "sha256": "9b4071c1d38ea606351c5b87ab4b21b1fa2732e11519d9f4fd2c6e7439b8eecc",
+      "sha256": "f55abda588b7f124a876c64d71b4a44891c80498b4d34a6a8a2ba8869853417e",
       "source": "Demo/CoreGeek/src/agent/coordination.py"
     },
     {
@@ -126,6 +126,12 @@
       "path": "CoreGeek/src/agent/evidence_memory.py",
       "sha256": "ae737d7bd1e2136a4bfc09bb6c834bd41c450ca360b626ed671d179f485c1a35",
       "source": "Demo/CoreGeek/src/agent/evidence_memory.py"
+    },
+    {
+      "bytes": 1761,
+      "path": "CoreGeek/src/agent/frontline.py",
+      "sha256": "4a05107a4ce1b9d26f9bc3ba960267ce420609dc4d95a6ddf77e39974dad2b99",
+      "source": "Demo/CoreGeek/src/agent/frontline.py"
     },
     {
       "bytes": 6016,
@@ -242,9 +248,9 @@
       "source": "Demo/CoreGeek/src/agent/pioneer_safety.py"
     },
     {
-      "bytes": 22816,
+      "bytes": 23139,
       "path": "CoreGeek/src/agent/planner.py",
-      "sha256": "362561e2e8bf953cc811783a4be8ef7edf6defe19e64b84bf4c41a4b7c64a22a",
+      "sha256": "4e8df21b81674f5c73f4a7eeceee43a4e450bdf5be1ee646762deea0b9739703",
       "source": "Demo/CoreGeek/src/agent/planner.py"
     },
     {
@@ -272,9 +278,9 @@
       "source": "Demo/CoreGeek/src/agent/robot_occupancy.py"
     },
     {
-      "bytes": 6647,
+      "bytes": 7824,
       "path": "CoreGeek/src/agent/rocket_post.py",
-      "sha256": "dd9c1213e49eebf78e39e15dc393720a20f6a0b9f771cccc07f7ba7c66925a89",
+      "sha256": "c87634229a18d72609f56548e0217ff57d6e7535d3af1c0589ad7ee950c60f67",
       "source": "Demo/CoreGeek/src/agent/rocket_post.py"
     },
     {
@@ -302,9 +308,9 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 6890,
+      "bytes": 7376,
       "path": "CoreGeek/src/agent/strategy_config.py",
-      "sha256": "249e485f4cd3418a6f37a64a3b7e56ec352031cc9807f4c03a1ddcd187218d66",
+      "sha256": "0d912e42cf848383251e4ec1bf6bbeaddf9e81e6a5af7ab58caa0f173cc2cc12",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -404,6 +410,12 @@
       "source": "Demo/CoreGeek/src/agent/telemetry.py"
     },
     {
+      "bytes": 12157,
+      "path": "CoreGeek/src/agent/traffic.py",
+      "sha256": "c78dc2640e23721d889dbf507edd3d3f615373b05af3f0a7daeefc6714cc5054",
+      "source": "Demo/CoreGeek/src/agent/traffic.py"
+    },
+    {
       "bytes": 11379,
       "path": "CoreGeek/src/agent/treasure.py",
       "sha256": "3ea358a764697769bbbb77a80bd1818eabf3a48d46badf5045e615cc9573002d",
@@ -422,9 +434,9 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 10755,
+      "bytes": 11226,
       "path": "CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "12a36e3b1f87c560598c9fbaf8effea3a3fe1e04fa5e426b983ab8316d8bf9d9",
+      "sha256": "3fb224524709b74ccffbea1dcf5e334a047707f1356eee2bf8f2e540111088c7",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -458,9 +470,9 @@
       "source": "Demo/CoreGeek/src/agent/world_memory.py"
     },
     {
-      "bytes": 890,
+      "bytes": 1011,
       "path": "CoreGeek/strategy.json",
-      "sha256": "dabac18ac5c5b9d3a60e339e36762e44e0962cfa32158c4c7a7d7976aaecf53c",
+      "sha256": "1b60c916df5da653aaceda9423f0d6ae6cb33edf465cca7398491b2212f85fbb",
       "source": "strategy.json"
     },
     {
@@ -483,5 +495,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "6963a5ad3fbf39bed2598d6a39425952e88134484a9cd8fe3d97cc990d4857c8"
+  "source_digest": "b5aeb907c62fc88bbeab93e2ebd9e75a48f876c36200a25ae22933868cd994e7"
 }

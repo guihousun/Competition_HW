@@ -1,0 +1,2049 @@
+[
+  {
+    "case": "training-1-challenger",
+    "source": "b53365553f3903efd610fb1e4e34de755fa43468",
+    "rounds": 1300,
+    "max_gold_first4days": 130,
+    "income_positive_deltas": 240,
+    "negative_deltas": 205,
+    "gold_at_460": 110,
+    "cash_deltas": [
+      {
+        "round": 1,
+        "delta": -50
+      },
+      {
+        "round": 4,
+        "delta": -25
+      },
+      {
+        "round": 135,
+        "delta": 80
+      },
+      {
+        "round": 142,
+        "delta": -15
+      },
+      {
+        "round": 143,
+        "delta": -15
+      },
+      {
+        "round": 272,
+        "delta": 80
+      },
+      {
+        "round": 295,
+        "delta": -100
+      },
+      {
+        "round": 299,
+        "delta": 80
+      }
+    ],
+    "economic": [
+      {
+        "round": 142,
+        "role": "10011",
+        "action": "buy",
+        "name": "AcientTablet"
+      },
+      {
+        "round": 143,
+        "role": "10011",
+        "action": "buy",
+        "name": "StarSand"
+      },
+      {
+        "round": 295,
+        "role": "10012",
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      },
+      {
+        "round": 318,
+        "role": "10012",
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 25
+          }
+        ]
+      }
+    ],
+    "levels": [
+      {
+        "id": 10040,
+        "kind": "rocket",
+        "level": 2,
+        "pos": {
+          "x": 6,
+          "y": 25
+        }
+      },
+      {
+        "id": 10041,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 6,
+          "y": 27
+        }
+      },
+      {
+        "id": 10042,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 7,
+          "y": 27
+        }
+      }
+    ],
+    "daylight_reasons": {
+      "initial_weapons_first": 4,
+      "saving_for_weapon_upgrade": 142,
+      "return_before_night": 9,
+      "to_shop": 1,
+      "procurement": 22,
+      "delivery": 23,
+      "return": 1,
+      "trip_unreachable_full_or_too_late": 8,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 22,
+      "return_blocked": 47
+    },
+    "funded_daylight_reasons": {
+      "to_shop": 1,
+      "procurement": 22,
+      "delivery": 19,
+      "return": 1,
+      "trip_unreachable_full_or_too_late": 8,
+      "return_before_night": 3,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 22,
+      "return_blocked": 47
+    },
+    "samples": [
+      {
+        "round": 414,
+        "gold": 110,
+        "report": {
+          "building": 10013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "return_wait",
+          "quantity": 2,
+          "reason": "return_blocked",
+          "route": {
+            "budget": 44,
+            "feasible": false,
+            "reason": "return_blocked",
+            "remaining_actions": null,
+            "slack": null
+          },
+          "team_trip_events": [
+            {
+              "event": "return",
+              "kind": "purchase",
+              "owner": 10012,
+              "reason": "stock_return_unreachable"
+            }
+          ],
+          "voucher": "WallFixer",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 413,
+          "level": 1,
+          "operation": "stock",
+          "owner": 10012,
+          "phase": "acquire",
+          "quantity": 2,
+          "target": 10013
+        }
+      },
+      {
+        "round": 274,
+        "gold": 130,
+        "report": {
+          "building": 10040,
+          "committed": true,
+          "phase": "to_shop",
+          "reason": "procurement",
+          "route": {
+            "budget": 54,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 46,
+            "slack": 8
+          },
+          "team_trip_events": [],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 328,
+          "issued_round": 273,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 273,
+          "level": 1,
+          "owner": 10012,
+          "phase": "acquire",
+          "target": 10040
+        }
+      },
+      {
+        "round": 392,
+        "gold": 110,
+        "report": {
+          "building": 10013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "to_shop",
+          "quantity": 2,
+          "reason": "stock_procurement",
+          "route": {
+            "budget": 66,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 46,
+            "slack": 20
+          },
+          "team_trip_events": [],
+          "voucher": "WallFixer",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 391,
+          "level": 1,
+          "operation": "stock",
+          "owner": 10012,
+          "phase": "acquire",
+          "quantity": 2,
+          "target": 10013
+        }
+      },
+      {
+        "round": 300,
+        "gold": 110,
+        "report": {
+          "building": 10040,
+          "committed": true,
+          "phase": "return_with_voucher",
+          "reason": "delivery",
+          "route": {
+            "budget": 28,
+            "feasible": true,
+            "reason": "delivery",
+            "remaining_actions": 20,
+            "slack": 8
+          },
+          "team_trip_events": [],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 1,
+          "deadline": 328,
+          "issued_round": 273,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 299,
+          "level": 1,
+          "owner": 10012,
+          "phase": "acquire",
+          "target": 10040
+        }
+      },
+      {
+        "round": 320,
+        "gold": 110,
+        "report": {
+          "gold_available": 110,
+          "phase": "idle",
+          "reason": "trip_unreachable_full_or_too_late",
+          "shop_count": 1,
+          "team_trip_events": [
+            {
+              "event": "cancel",
+              "kind": "purchase",
+              "owner": 10012,
+              "reason": "returned_observed"
+            }
+          ],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 10041,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 328,
+          "issued_round": 273,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 319,
+          "level": 1,
+          "owner": 10012,
+          "phase": "return",
+          "target": 10040
+        }
+      },
+      {
+        "round": 328,
+        "gold": 110,
+        "report": {
+          "gold_available": 110,
+          "phase": "idle",
+          "reason": "return_before_night",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 10041,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 273,
+        "gold": 130,
+        "report": {
+          "building": 10040,
+          "gold_available": 130,
+          "phase": "to_shop",
+          "price": 100,
+          "reason": "to_shop",
+          "route": {
+            "budget": 55,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 47,
+            "slack": 8
+          },
+          "shop_count": 1,
+          "target": {
+            "x": 6,
+            "y": 25
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 10012
+            }
+          ],
+          "vendor_count": 1,
+          "voucher": "WeaponUpgradeVoucher1",
+          "weapon_reserve": {
+            "building": 10040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          },
+          "worker": 10012
+        },
+        "purchase": null
+      },
+      {
+        "round": 319,
+        "gold": 110,
+        "report": {
+          "building": 10040,
+          "committed": true,
+          "phase": "return_to_post",
+          "reason": "return",
+          "route": {
+            "budget": 9,
+            "feasible": true,
+            "reason": "return",
+            "remaining_actions": 1,
+            "slack": 8
+          },
+          "team_trip_events": [
+            {
+              "event": "return",
+              "kind": "purchase",
+              "owner": 10012,
+              "reason": "upgrade_confirmed_observed"
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 1,
+          "deadline": 328,
+          "issued_round": 273,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "use",
+          "last_round": 318,
+          "level": 1,
+          "owner": 10012,
+          "phase": "acquire",
+          "target": 10040
+        }
+      },
+      {
+        "round": 391,
+        "gold": 110,
+        "report": {
+          "building": 10013,
+          "operation": "stock",
+          "phase": "to_shop",
+          "price": 10,
+          "quantity": 2,
+          "reason": "prepare_night_repair_stock",
+          "route": {
+            "budget": 67,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 47,
+            "slack": 20
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 10012
+            }
+          ],
+          "voucher": "WallFixer",
+          "worker": 10012
+        },
+        "purchase": null
+      }
+    ],
+    "blocked_ranges": [
+      [
+        414,
+        460
+      ]
+    ],
+    "tasks": [
+      {
+        "accepted_round": 22,
+        "ended_round": 47,
+        "id": "reward-sensitivity-0",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 133,
+        "ended_round": 135,
+        "id": "reward-sensitivity-1",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 162,
+        "ended_round": 187,
+        "id": "reward-sensitivity-2",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 270,
+        "ended_round": 272,
+        "id": "reward-sensitivity-3",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 297,
+        "ended_round": 299,
+        "id": "reward-sensitivity-4",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 330,
+        "ended_round": 333,
+        "id": "reward-sensitivity-5",
+        "injected_failure": true,
+        "reason": "离开任务点范围",
+        "rewards": {}
+      }
+    ]
+  },
+  {
+    "case": "training-1-defender",
+    "source": "b53365553f3903efd610fb1e4e34de755fa43468",
+    "rounds": 1300,
+    "max_gold_first4days": 360,
+    "income_positive_deltas": 390,
+    "negative_deltas": 425,
+    "gold_at_460": 40,
+    "cash_deltas": [
+      {
+        "round": 2,
+        "delta": -25
+      },
+      {
+        "round": 4,
+        "delta": -25
+      },
+      {
+        "round": 6,
+        "delta": -25
+      },
+      {
+        "round": 52,
+        "delta": 80
+      },
+      {
+        "round": 135,
+        "delta": -15
+      },
+      {
+        "round": 136,
+        "delta": -15
+      },
+      {
+        "round": 174,
+        "delta": 80
+      },
+      {
+        "round": 186,
+        "delta": 150
+      },
+      {
+        "round": 199,
+        "delta": 80
+      },
+      {
+        "round": 275,
+        "delta": -100
+      },
+      {
+        "round": 305,
+        "delta": -100
+      },
+      {
+        "round": 406,
+        "delta": -20
+      },
+      {
+        "round": 439,
+        "delta": -100
+      }
+    ],
+    "economic": [
+      {
+        "round": 135,
+        "role": "20011",
+        "action": "buy",
+        "name": "AcientTablet"
+      },
+      {
+        "round": 136,
+        "role": "20011",
+        "action": "buy",
+        "name": "StarSand"
+      },
+      {
+        "round": 275,
+        "role": "20010",
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      },
+      {
+        "round": 289,
+        "role": "20010",
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 34,
+            "y": 7
+          }
+        ]
+      },
+      {
+        "round": 305,
+        "role": "20010",
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      },
+      {
+        "round": 320,
+        "role": "20010",
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 33,
+            "y": 7
+          }
+        ]
+      },
+      {
+        "round": 406,
+        "role": "20012",
+        "action": "buy",
+        "name": "WallFixer",
+        "num": 2
+      },
+      {
+        "round": 439,
+        "role": "20010",
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      },
+      {
+        "round": 454,
+        "role": "20010",
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 34,
+            "y": 5
+          }
+        ]
+      }
+    ],
+    "levels": [
+      {
+        "id": 20042,
+        "kind": "rocket",
+        "level": 2,
+        "pos": {
+          "x": 34,
+          "y": 5
+        }
+      },
+      {
+        "id": 20041,
+        "kind": "rocket",
+        "level": 2,
+        "pos": {
+          "x": 33,
+          "y": 7
+        }
+      },
+      {
+        "id": 20040,
+        "kind": "rocket",
+        "level": 2,
+        "pos": {
+          "x": 34,
+          "y": 7
+        }
+      }
+    ],
+    "daylight_reasons": {
+      "initial_weapons_first": 6,
+      "saving_for_weapon_upgrade": 105,
+      "return_before_night": 12,
+      "trip_unreachable_full_or_too_late": 32,
+      "to_shop": 3,
+      "procurement": 43,
+      "delivery": 44,
+      "return": 19,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 15
+    },
+    "funded_daylight_reasons": {
+      "trip_unreachable_full_or_too_late": 30,
+      "return_before_night": 6,
+      "to_shop": 3,
+      "procurement": 43,
+      "delivery": 29,
+      "return": 18,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 15
+    },
+    "samples": [
+      {
+        "round": 262,
+        "gold": 360,
+        "report": {
+          "building": 20040,
+          "committed": true,
+          "phase": "to_shop",
+          "reason": "procurement",
+          "route": {
+            "budget": 66,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 29,
+            "slack": 37
+          },
+          "team_trip_events": [],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20010
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 328,
+          "issued_round": 261,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 261,
+          "level": 1,
+          "owner": 20010,
+          "phase": "acquire",
+          "target": 20040
+        }
+      },
+      {
+        "round": 175,
+        "gold": 130,
+        "report": {
+          "gold_available": 130,
+          "phase": "idle",
+          "reason": "trip_unreachable_full_or_too_late",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 20040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 276,
+        "gold": 260,
+        "report": {
+          "building": 20040,
+          "committed": true,
+          "phase": "return_with_voucher",
+          "reason": "delivery",
+          "route": {
+            "budget": 52,
+            "feasible": true,
+            "reason": "delivery",
+            "remaining_actions": 15,
+            "slack": 37
+          },
+          "team_trip_events": [
+            {
+              "after": 1,
+              "before": 0,
+              "event": "inventory_observed",
+              "kind": "purchase",
+              "owner": 20010
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20010
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 328,
+          "issued_round": 261,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "buy",
+          "last_round": 275,
+          "level": 1,
+          "owner": 20010,
+          "phase": "acquire",
+          "target": 20040
+        }
+      },
+      {
+        "round": 290,
+        "gold": 260,
+        "report": {
+          "building": 20040,
+          "committed": true,
+          "phase": "return_to_post",
+          "reason": "return",
+          "route": {
+            "budget": 38,
+            "feasible": true,
+            "reason": "return",
+            "remaining_actions": 1,
+            "slack": 37
+          },
+          "team_trip_events": [
+            {
+              "event": "return",
+              "kind": "purchase",
+              "owner": 20010,
+              "reason": "upgrade_confirmed_observed"
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20010
+        },
+        "purchase": {
+          "count": 1,
+          "deadline": 328,
+          "issued_round": 261,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "use",
+          "last_round": 289,
+          "level": 1,
+          "owner": 20010,
+          "phase": "acquire",
+          "target": 20040
+        }
+      },
+      {
+        "round": 392,
+        "gold": 160,
+        "report": {
+          "building": 20013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "to_shop",
+          "quantity": 2,
+          "reason": "stock_procurement",
+          "route": {
+            "budget": 66,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 30,
+            "slack": 36
+          },
+          "team_trip_events": [],
+          "voucher": "WallFixer",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 391,
+          "level": 1,
+          "operation": "stock",
+          "owner": 20012,
+          "phase": "acquire",
+          "quantity": 2,
+          "target": 20013
+        }
+      },
+      {
+        "round": 198,
+        "gold": 280,
+        "report": {
+          "gold_available": 280,
+          "phase": "idle",
+          "reason": "return_before_night",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 20040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 261,
+        "gold": 360,
+        "report": {
+          "building": 20040,
+          "gold_available": 360,
+          "phase": "to_shop",
+          "price": 100,
+          "reason": "to_shop",
+          "route": {
+            "budget": 67,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 30,
+            "slack": 37
+          },
+          "shop_count": 1,
+          "target": {
+            "x": 34,
+            "y": 7
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 20010
+            }
+          ],
+          "vendor_count": 1,
+          "voucher": "WeaponUpgradeVoucher1",
+          "weapon_reserve": {
+            "building": 20040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          },
+          "worker": 20010
+        },
+        "purchase": null
+      },
+      {
+        "round": 391,
+        "gold": 160,
+        "report": {
+          "building": 20013,
+          "operation": "stock",
+          "phase": "to_shop",
+          "price": 10,
+          "quantity": 2,
+          "reason": "prepare_night_repair_stock",
+          "route": {
+            "budget": 67,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 31,
+            "slack": 36
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 20012
+            }
+          ],
+          "voucher": "WallFixer",
+          "worker": 20012
+        },
+        "purchase": null
+      }
+    ],
+    "blocked_ranges": [],
+    "tasks": [
+      {
+        "accepted_round": 19,
+        "ended_round": 44,
+        "id": "reward-sensitivity-0",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 50,
+        "ended_round": 52,
+        "id": "reward-sensitivity-1",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 141,
+        "ended_round": 166,
+        "id": "reward-sensitivity-2",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 172,
+        "ended_round": 174,
+        "id": "reward-sensitivity-3",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 197,
+        "ended_round": 199,
+        "id": "reward-sensitivity-4",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 266,
+        "ended_round": 291,
+        "id": "reward-sensitivity-5",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      }
+    ]
+  },
+  {
+    "case": "training-19-challenger",
+    "source": "b53365553f3903efd610fb1e4e34de755fa43468",
+    "rounds": 1300,
+    "max_gold_first4days": 240,
+    "income_positive_deltas": 240,
+    "negative_deltas": 195,
+    "gold_at_460": 120,
+    "cash_deltas": [
+      {
+        "round": 1,
+        "delta": -50
+      },
+      {
+        "round": 4,
+        "delta": -25
+      },
+      {
+        "round": 51,
+        "delta": 80
+      },
+      {
+        "round": 177,
+        "delta": 80
+      },
+      {
+        "round": 266,
+        "delta": 80
+      },
+      {
+        "round": 286,
+        "delta": -100
+      },
+      {
+        "round": 416,
+        "delta": -20
+      }
+    ],
+    "economic": [
+      {
+        "round": 286,
+        "role": "10010",
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      },
+      {
+        "round": 311,
+        "role": "10010",
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 4,
+            "y": 25
+          }
+        ]
+      },
+      {
+        "round": 416,
+        "role": "10012",
+        "action": "buy",
+        "name": "WallFixer",
+        "num": 2
+      }
+    ],
+    "levels": [
+      {
+        "id": 10040,
+        "kind": "rocket",
+        "level": 2,
+        "pos": {
+          "x": 4,
+          "y": 25
+        }
+      },
+      {
+        "id": 10041,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 4,
+          "y": 27
+        }
+      },
+      {
+        "id": 10042,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 5,
+          "y": 27
+        }
+      }
+    ],
+    "daylight_reasons": {
+      "initial_weapons_first": 4,
+      "saving_for_weapon_upgrade": 110,
+      "return_before_night": 9,
+      "trip_unreachable_full_or_too_late": 35,
+      "to_shop": 1,
+      "procurement": 25,
+      "delivery": 25,
+      "return": 2,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 25,
+      "return_blocked": 43
+    },
+    "funded_daylight_reasons": {
+      "trip_unreachable_full_or_too_late": 35,
+      "return_before_night": 6,
+      "to_shop": 1,
+      "procurement": 25,
+      "delivery": 25,
+      "return": 2,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 25,
+      "return_blocked": 43
+    },
+    "samples": [
+      {
+        "round": 418,
+        "gold": 120,
+        "report": {
+          "building": 10013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "return_wait",
+          "quantity": 2,
+          "reason": "return_blocked",
+          "route": {
+            "budget": 40,
+            "feasible": false,
+            "reason": "return_blocked",
+            "remaining_actions": null,
+            "slack": null
+          },
+          "team_trip_events": [],
+          "voucher": "WallFixer",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 2,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 417,
+          "level": 1,
+          "operation": "stock",
+          "owner": 10012,
+          "phase": "return",
+          "quantity": 2,
+          "target": 10013
+        }
+      },
+      {
+        "round": 178,
+        "gold": 160,
+        "report": {
+          "gold_available": 160,
+          "phase": "idle",
+          "reason": "trip_unreachable_full_or_too_late",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 10040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 262,
+        "gold": 160,
+        "report": {
+          "building": 10040,
+          "committed": true,
+          "phase": "to_shop",
+          "reason": "procurement",
+          "route": {
+            "budget": 66,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 51,
+            "slack": 15
+          },
+          "team_trip_events": [],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 10010
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 328,
+          "issued_round": 261,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 261,
+          "level": 1,
+          "owner": 10010,
+          "phase": "acquire",
+          "target": 10040
+        }
+      },
+      {
+        "round": 287,
+        "gold": 140,
+        "report": {
+          "building": 10040,
+          "committed": true,
+          "phase": "return_with_voucher",
+          "reason": "delivery",
+          "route": {
+            "budget": 41,
+            "feasible": true,
+            "reason": "delivery",
+            "remaining_actions": 26,
+            "slack": 15
+          },
+          "team_trip_events": [
+            {
+              "after": 1,
+              "before": 0,
+              "event": "inventory_observed",
+              "kind": "purchase",
+              "owner": 10010
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 10010
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 328,
+          "issued_round": 261,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "buy",
+          "last_round": 286,
+          "level": 1,
+          "owner": 10010,
+          "phase": "acquire",
+          "target": 10040
+        }
+      },
+      {
+        "round": 392,
+        "gold": 140,
+        "report": {
+          "building": 10013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "to_shop",
+          "quantity": 2,
+          "reason": "stock_procurement",
+          "route": {
+            "budget": 66,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 50,
+            "slack": 16
+          },
+          "team_trip_events": [],
+          "voucher": "WallFixer",
+          "worker": 10012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 391,
+          "level": 1,
+          "operation": "stock",
+          "owner": 10012,
+          "phase": "acquire",
+          "quantity": 2,
+          "target": 10013
+        }
+      },
+      {
+        "round": 198,
+        "gold": 160,
+        "report": {
+          "gold_available": 160,
+          "phase": "idle",
+          "reason": "return_before_night",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 10040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 312,
+        "gold": 140,
+        "report": {
+          "building": 10040,
+          "committed": true,
+          "phase": "return_to_post",
+          "reason": "return",
+          "route": {
+            "budget": 16,
+            "feasible": true,
+            "reason": "return",
+            "remaining_actions": 1,
+            "slack": 15
+          },
+          "team_trip_events": [
+            {
+              "event": "return",
+              "kind": "purchase",
+              "owner": 10010,
+              "reason": "upgrade_confirmed_observed"
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 10010
+        },
+        "purchase": {
+          "count": 1,
+          "deadline": 328,
+          "issued_round": 261,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "use",
+          "last_round": 311,
+          "level": 1,
+          "owner": 10010,
+          "phase": "acquire",
+          "target": 10040
+        }
+      },
+      {
+        "round": 261,
+        "gold": 160,
+        "report": {
+          "building": 10040,
+          "gold_available": 160,
+          "phase": "to_shop",
+          "price": 100,
+          "reason": "to_shop",
+          "route": {
+            "budget": 67,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 52,
+            "slack": 15
+          },
+          "shop_count": 1,
+          "target": {
+            "x": 4,
+            "y": 25
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 10010
+            }
+          ],
+          "vendor_count": 1,
+          "voucher": "WeaponUpgradeVoucher1",
+          "weapon_reserve": {
+            "building": 10040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          },
+          "worker": 10010
+        },
+        "purchase": null
+      },
+      {
+        "round": 391,
+        "gold": 140,
+        "report": {
+          "building": 10013,
+          "operation": "stock",
+          "phase": "to_shop",
+          "price": 10,
+          "quantity": 2,
+          "reason": "prepare_night_repair_stock",
+          "route": {
+            "budget": 67,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 51,
+            "slack": 16
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 10012
+            }
+          ],
+          "voucher": "WallFixer",
+          "worker": 10012
+        },
+        "purchase": null
+      }
+    ],
+    "blocked_ranges": [
+      [
+        418,
+        460
+      ]
+    ],
+    "tasks": [
+      {
+        "accepted_round": 6,
+        "ended_round": 31,
+        "id": "reward-sensitivity-0",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 49,
+        "ended_round": 51,
+        "id": "reward-sensitivity-1",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 70,
+        "ended_round": 88,
+        "id": "reward-sensitivity-2",
+        "injected_failure": true,
+        "reason": "离开任务点范围",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 132,
+        "ended_round": 157,
+        "id": "reward-sensitivity-3",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 175,
+        "ended_round": 177,
+        "id": "reward-sensitivity-4",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 264,
+        "ended_round": 266,
+        "id": "reward-sensitivity-5",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      }
+    ]
+  },
+  {
+    "case": "training-19-defender",
+    "source": "b53365553f3903efd610fb1e4e34de755fa43468",
+    "rounds": 1300,
+    "max_gold_first4days": 240,
+    "income_positive_deltas": 240,
+    "negative_deltas": 195,
+    "gold_at_460": 120,
+    "cash_deltas": [
+      {
+        "round": 2,
+        "delta": -25
+      },
+      {
+        "round": 4,
+        "delta": -25
+      },
+      {
+        "round": 6,
+        "delta": -25
+      },
+      {
+        "round": 58,
+        "delta": 80
+      },
+      {
+        "round": 267,
+        "delta": 80
+      },
+      {
+        "round": 282,
+        "delta": 80
+      },
+      {
+        "round": 406,
+        "delta": -20
+      },
+      {
+        "round": 440,
+        "delta": -100
+      }
+    ],
+    "economic": [
+      {
+        "round": 406,
+        "role": "20012",
+        "action": "buy",
+        "name": "WallFixer",
+        "num": 2
+      },
+      {
+        "round": 440,
+        "role": "20012",
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      }
+    ],
+    "levels": [
+      {
+        "id": 20042,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 36,
+          "y": 5
+        }
+      },
+      {
+        "id": 20041,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 35,
+          "y": 7
+        }
+      },
+      {
+        "id": 20040,
+        "kind": "rocket",
+        "level": 1,
+        "pos": {
+          "x": 36,
+          "y": 7
+        }
+      }
+    ],
+    "daylight_reasons": {
+      "initial_weapons_first": 6,
+      "saving_for_weapon_upgrade": 135,
+      "return_before_night": 11,
+      "trip_unreachable_full_or_too_late": 60,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 15,
+      "return": 17,
+      "to_shop": 1,
+      "procurement": 16,
+      "delivery": 8,
+      "return_blocked": 2,
+      "late_return": 8
+    },
+    "funded_daylight_reasons": {
+      "trip_unreachable_full_or_too_late": 60,
+      "return_before_night": 5,
+      "prepare_night_repair_stock": 1,
+      "stock_procurement": 15,
+      "return": 17,
+      "to_shop": 1,
+      "procurement": 16,
+      "delivery": 8,
+      "return_blocked": 2,
+      "late_return": 8
+    },
+    "samples": [
+      {
+        "round": 268,
+        "gold": 160,
+        "report": {
+          "gold_available": 160,
+          "phase": "idle",
+          "reason": "trip_unreachable_full_or_too_late",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 20040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 407,
+        "gold": 220,
+        "report": {
+          "building": 20013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "return_to_post",
+          "quantity": 2,
+          "reason": "return",
+          "route": {
+            "budget": 51,
+            "feasible": true,
+            "reason": "return",
+            "remaining_actions": 17,
+            "slack": 34
+          },
+          "team_trip_events": [
+            {
+              "event": "return",
+              "kind": "purchase",
+              "owner": 20012,
+              "reason": "stock_observed"
+            }
+          ],
+          "voucher": "WallFixer",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "buy",
+          "last_round": 406,
+          "level": 1,
+          "operation": "stock",
+          "owner": 20012,
+          "phase": "acquire",
+          "quantity": 2,
+          "target": 20013
+        }
+      },
+      {
+        "round": 425,
+        "gold": 220,
+        "report": {
+          "building": 20042,
+          "committed": true,
+          "phase": "to_shop",
+          "reason": "procurement",
+          "route": {
+            "budget": 33,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 33,
+            "slack": 0
+          },
+          "team_trip_events": [],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 424,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 424,
+          "level": 1,
+          "owner": 20012,
+          "phase": "acquire",
+          "target": 20042
+        }
+      },
+      {
+        "round": 392,
+        "gold": 240,
+        "report": {
+          "building": 20013,
+          "committed": true,
+          "operation": "stock",
+          "phase": "to_shop",
+          "quantity": 2,
+          "reason": "stock_procurement",
+          "route": {
+            "budget": 66,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 31,
+            "slack": 35
+          },
+          "team_trip_events": [],
+          "voucher": "WallFixer",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 391,
+          "level": 1,
+          "operation": "stock",
+          "owner": 20012,
+          "phase": "acquire",
+          "quantity": 2,
+          "target": 20013
+        }
+      },
+      {
+        "round": 441,
+        "gold": 120,
+        "report": {
+          "building": 20042,
+          "committed": true,
+          "phase": "return_with_voucher",
+          "reason": "delivery",
+          "route": {
+            "budget": 17,
+            "feasible": true,
+            "reason": "delivery",
+            "remaining_actions": 17,
+            "slack": 0
+          },
+          "team_trip_events": [
+            {
+              "after": 1,
+              "before": 0,
+              "event": "inventory_observed",
+              "kind": "purchase",
+              "owner": 20012
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 0,
+          "deadline": 458,
+          "issued_round": 424,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "buy",
+          "last_round": 440,
+          "level": 1,
+          "owner": 20012,
+          "phase": "acquire",
+          "target": 20042
+        }
+      },
+      {
+        "round": 451,
+        "gold": 120,
+        "report": {
+          "building": 20042,
+          "committed": true,
+          "phase": "return_to_post",
+          "reason": "late_return",
+          "route": {
+            "budget": 7,
+            "feasible": false,
+            "reason": "late_return",
+            "remaining_actions": 8,
+            "slack": -1
+          },
+          "team_trip_events": [],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 1,
+          "deadline": 458,
+          "issued_round": 424,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 450,
+          "level": 1,
+          "owner": 20012,
+          "phase": "return",
+          "target": 20042
+        }
+      },
+      {
+        "round": 328,
+        "gold": 240,
+        "report": {
+          "gold_available": 240,
+          "phase": "idle",
+          "reason": "return_before_night",
+          "shop_count": 1,
+          "team_trip_events": [],
+          "vendor_count": 1,
+          "weapon_reserve": {
+            "building": 20040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          }
+        },
+        "purchase": null
+      },
+      {
+        "round": 449,
+        "gold": 120,
+        "report": {
+          "building": 20042,
+          "committed": true,
+          "phase": "return_wait",
+          "reason": "return_blocked",
+          "route": {
+            "budget": 9,
+            "feasible": false,
+            "reason": "return_blocked",
+            "remaining_actions": null,
+            "slack": null
+          },
+          "team_trip_events": [
+            {
+              "event": "return",
+              "kind": "purchase",
+              "owner": 20012,
+              "reason": "route_unreachable"
+            },
+            {
+              "event": "priority_preserved",
+              "kind": "return",
+              "owner": 20010,
+              "reason": "gunner_dusk_staging"
+            }
+          ],
+          "voucher": "WeaponUpgradeVoucher1",
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 1,
+          "deadline": 458,
+          "issued_round": 424,
+          "item": "WeaponUpgradeVoucher1",
+          "last_action": "move",
+          "last_round": 448,
+          "level": 1,
+          "owner": 20012,
+          "phase": "acquire",
+          "target": 20042
+        }
+      },
+      {
+        "round": 391,
+        "gold": 240,
+        "report": {
+          "building": 20013,
+          "operation": "stock",
+          "phase": "to_shop",
+          "price": 10,
+          "quantity": 2,
+          "reason": "prepare_night_repair_stock",
+          "route": {
+            "budget": 67,
+            "feasible": true,
+            "reason": "stock_procurement",
+            "remaining_actions": 32,
+            "slack": 35
+          },
+          "team_trip_events": [
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 20012
+            }
+          ],
+          "voucher": "WallFixer",
+          "worker": 20012
+        },
+        "purchase": null
+      },
+      {
+        "round": 424,
+        "gold": 220,
+        "report": {
+          "building": 20042,
+          "gold_available": 220,
+          "phase": "to_shop",
+          "price": 100,
+          "reason": "to_shop",
+          "route": {
+            "budget": 34,
+            "feasible": true,
+            "reason": "procurement",
+            "remaining_actions": 34,
+            "slack": 0
+          },
+          "shop_count": 1,
+          "target": {
+            "x": 36,
+            "y": 5
+          },
+          "team_trip_events": [
+            {
+              "event": "cancel",
+              "kind": "purchase",
+              "owner": 20012,
+              "reason": "returned_observed"
+            },
+            {
+              "event": "issued",
+              "kind": "purchase",
+              "owner": 20012
+            }
+          ],
+          "vendor_count": 1,
+          "voucher": "WeaponUpgradeVoucher1",
+          "weapon_reserve": {
+            "building": 20040,
+            "gold": 100,
+            "level": 1,
+            "voucher": "WeaponUpgradeVoucher1"
+          },
+          "worker": 20012
+        },
+        "purchase": {
+          "count": 2,
+          "deadline": 458,
+          "issued_round": 391,
+          "item": "WallFixer",
+          "last_action": "move",
+          "last_round": 423,
+          "level": 1,
+          "operation": "stock",
+          "owner": 20012,
+          "phase": "return",
+          "quantity": 2,
+          "target": 20013
+        }
+      }
+    ],
+    "blocked_ranges": [
+      [
+        449,
+        450
+      ]
+    ],
+    "tasks": [
+      {
+        "accepted_round": 18,
+        "ended_round": 43,
+        "id": "reward-sensitivity-0",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 56,
+        "ended_round": 58,
+        "id": "reward-sensitivity-1",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 131,
+        "ended_round": 156,
+        "id": "reward-sensitivity-2",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 168,
+        "ended_round": 193,
+        "id": "reward-sensitivity-3",
+        "injected_failure": true,
+        "reason": "超时",
+        "rewards": {}
+      },
+      {
+        "accepted_round": 265,
+        "ended_round": 267,
+        "id": "reward-sensitivity-4",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      },
+      {
+        "accepted_round": 280,
+        "ended_round": 282,
+        "id": "reward-sensitivity-5",
+        "injected_failure": false,
+        "reason": "completed",
+        "rewards": {
+          "bestRate": 1.0,
+          "gold": 80,
+          "rate": 1.0,
+          "score": 112
+        }
+      }
+    ]
+  }
+]

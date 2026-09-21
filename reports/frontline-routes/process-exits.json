@@ -1,0 +1,33 @@
+{
+  "source_commit": "b53365553f3903efd610fb1e4e34de755fa43468",
+  "recorded_at": "2026-09-21T09:25:20.014111+00:00",
+  "source": "Actual unified exec/write_stdin completion responses inspected by Codex",
+  "processes": [
+    {
+      "task": "full_unittest",
+      "session_id": 21399,
+      "exit_code": 0
+    },
+    {
+      "task": "training_four_games",
+      "session_id": 89914,
+      "exit_code": 0
+    },
+    {
+      "task": "holdout_two_games",
+      "session_id": 45905,
+      "exit_code": 0
+    },
+    {
+      "task": "packaged_http",
+      "session_id": 32710,
+      "exit_code": 0
+    }
+  ],
+  "rejected_candidate": {
+    "source_commit": "ad5c7fd0369609cd999ba873c98cfa0da5d23564",
+    "session_id": 35491,
+    "exit_code": 1,
+    "failure": "AttributeError: frozenset has no attribute update in rocket_post._yield_idle_corridor; corrected in b533655, full validation repeated"
+  }
+}

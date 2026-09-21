@@ -1,0 +1,81 @@
+{
+  "scope": "Synthetic funded public-state progression; 450 gold and three level2 rockets supplied ONLY at initial round261. Accessible nearby shop; full existing wall ring; pioneer initially dead. No claim of earned income or official match PASS.",
+  "source": "b53365553f3903efd610fb1e4e34de755fa43468",
+  "initial_gold": 450,
+  "expected_upgrade_quantity": 3,
+  "expected_upgrade_cost": 450,
+  "first_all_three_level3_round": 278,
+  "rounds": 18,
+  "buys": [
+    [
+      263,
+      {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher2",
+        "num": 1
+      }
+    ],
+    [
+      269,
+      {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher2",
+        "num": 1
+      }
+    ],
+    [
+      275,
+      {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher2",
+        "num": 1
+      }
+    ]
+  ],
+  "uses": [
+    [
+      265,
+      {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher2",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 21
+          }
+        ]
+      }
+    ],
+    [
+      271,
+      {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher2",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 23
+          }
+        ]
+      }
+    ],
+    [
+      278,
+      {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher2",
+        "targetPos": [
+          {
+            "x": 9,
+            "y": 23
+          }
+        ]
+      }
+    ]
+  ],
+  "final_gold": 0,
+  "invalid_rounds": [],
+  "shots": 0,
+  "sources_unchanged": true,
+  "passed": true
+}

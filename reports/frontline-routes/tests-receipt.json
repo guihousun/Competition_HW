@@ -1,0 +1,12 @@
+{
+  "source_commit": "b53365553f3903efd610fb1e4e34de755fa43468",
+  "clone": "/root/.cache/codex-hw-validation/issue32-b53365553f-e67af54b",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "status": "completed",
+  "started": 1789982245.1859753,
+  "exit_code": 0,
+  "elapsed_seconds": 294.559936802,
+  "source_tracked_clean": true,
+  "test_count": 1273,
+  "log_sha256": "ba33efc320afef01660ba3409f163c65e2a091e6cef57aaf78c97da74678563b"
+}

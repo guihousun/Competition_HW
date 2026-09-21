@@ -1,0 +1,28 @@
+{
+  "commit": "b53365553f3903efd610fb1e4e34de755fa43468",
+  "profile": "competition-flat-v1",
+  "archive": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\frontline-competition-b533655\\CoreGeek.tar.gz",
+  "archive_sha256": "1b907ef683039654e3fb0f0cf52c729df7649edcf3e69948ecd49e420444a4e2",
+  "archive_bytes": 316136,
+  "dirty_working_tree": false,
+  "verification": {
+    "archive": "D:\\Research_vault\\work\\projects\\Code_HW\\.workflow\\frontline-competition-b533655\\CoreGeek.tar.gz",
+    "ok": true,
+    "problems": [],
+    "warnings": [],
+    "bytes": 316136,
+    "sha256": "1b907ef683039654e3fb0f0cf52c729df7649edcf3e69948ecd49e420444a4e2",
+    "container": "gzip",
+    "members": 85,
+    "roots": [
+      "CoreGeek"
+    ],
+    "directory_headers": 5,
+    "manifest_state": "present",
+    "commit": "b53365553f3903efd610fb1e4e34de755fa43468",
+    "source_digest_ok": true,
+    "files": 79,
+    "entry": "CoreGeek/main3.py",
+    "sidecar_ok": true
+  }
+}

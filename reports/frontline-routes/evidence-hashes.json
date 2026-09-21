@@ -1,0 +1,134 @@
+[
+  {
+    "path": ".gitattributes",
+    "sha256": "cdf470ef4d37e4e849026a4573e19f6a649ff475304f2be3cd7dd8119a4597ee"
+  },
+  {
+    "path": "analyze_economy.py",
+    "sha256": "1cb574855b3ffa2f68df2a2fab26dc27bfb47c74b2b54ca53676a79506274613"
+  },
+  {
+    "path": "economy-review-data.json",
+    "sha256": "339617d24dd225d3607e5f2af2edf15ae3f1c3224b483f1e56eb39abd53169eb"
+  },
+  {
+    "path": "economy-review.md",
+    "sha256": "5049fd5cfa4f2245ce10f0acae2939e6a23ae64ca90d5a9f6bf12d67cc175d41"
+  },
+  {
+    "path": "first-day-diagnosis.md",
+    "sha256": "5f8dfb06309e36ec6470c59021045ae086fe4a3d0663d2589a5f333da8570c19"
+  },
+  {
+    "path": "funded/from-level1/initial-public.json",
+    "sha256": "9b4a46fff04479c89692cd40dd6481e2d31438fd01af6479a2d1d0eb8669f39d"
+  },
+  {
+    "path": "funded/from-level1/result.json",
+    "sha256": "ae9ce69a7cd2a4c2a11927771abc53466c344eb62ae32362132b5d5a8266d2a9"
+  },
+  {
+    "path": "funded/from-level1/trace.json",
+    "sha256": "2446bb9e547851d5faeedbef82658e49077eb774e0a4196cabeb610fa0166555"
+  },
+  {
+    "path": "funded/initial-public.json",
+    "sha256": "5c11baf5c3bcb171c9e4a23b986422ea313a12ce83bda75a634507e49153716c"
+  },
+  {
+    "path": "funded/result.json",
+    "sha256": "758a3458b4c56ee415509496c078b96b4c696517ad8a6b2feaaae8434385bfa8"
+  },
+  {
+    "path": "funded/run.py",
+    "sha256": "ee07fb84a4e2107e439493bc8891aaf2a6d9cdde33a991cbb9a2caa76d146902"
+  },
+  {
+    "path": "funded/trace.json",
+    "sha256": "0c36042476213f75fcf2c19a6f298fc78b1702945dc99243f15a7a84359a7065"
+  },
+  {
+    "path": "holdout/config.json",
+    "sha256": "16a257e1837aa66be441311d36fb6b615ee334be0e1334eb4558cc0b12378f96"
+  },
+  {
+    "path": "holdout/local-trace-hashes.json",
+    "sha256": "5330949ea11ab37a3b257d536d796a4b72ed58459fb60df6abc513b3f22cbd40"
+  },
+  {
+    "path": "holdout/receipt.json",
+    "sha256": "7d4d578be9984379bcf6cef18b70e48c626e563e5088c17fc8cd807804a46f68"
+  },
+  {
+    "path": "holdout/summary.json",
+    "sha256": "e4d9726c3501edd3e81476e8cf4bae1259e61c17603e2dbeeee1b25287cb11da"
+  },
+  {
+    "path": "http-report.json",
+    "sha256": "d753412171a02d26b979caffe5b582301291b4229a5b0a328516246d1f9ba839"
+  },
+  {
+    "path": "package-build.json",
+    "sha256": "9fd738bd46a418eba3bb9b49c3c5bd9097ef39e6e56971a693b30ed139204de4"
+  },
+  {
+    "path": "PREREGISTRATION.md",
+    "sha256": "c6f581e8bed06b36d347ac5dbc55dbd81fe96eb86d3ee85dd8e01e3cd33bfb78"
+  },
+  {
+    "path": "process-exits.json",
+    "sha256": "02123f2fabd03247a30bba4a090e8ba09d95df47a8e992d610546ee7ed2937a1"
+  },
+  {
+    "path": "README.md",
+    "sha256": "ddeef832cd75be6e4fb2373e78c8f6d33727e6ea115d057f8cfa4b434a0e8df8"
+  },
+  {
+    "path": "runner/bench_support.py",
+    "sha256": "6487839b3c60637518c0b894718d1ce9e311dc07838f028487cc7d868dae3b9a"
+  },
+  {
+    "path": "runner/evaluate_issue32.py",
+    "sha256": "1cc28931a05ec73e314aeb5db9c7169ba9f9d4529a4fb1ec415953718aa35ba0"
+  },
+  {
+    "path": "runner/failure_profile.py",
+    "sha256": "344a5ebd643323df9225eca6988f3f39b7169ed8acd140cc35e8b58fba528415"
+  },
+  {
+    "path": "runner/frontline_metrics.py",
+    "sha256": "4e9391db710ac823f42c6bbc7200e511bcb8f3ea67b22486a0d2eacb76f28b12"
+  },
+  {
+    "path": "runner/phase_metrics.py",
+    "sha256": "53346b560fe4d7d8ead9a353aafaf734cc9a1f18076f37a398a135f3536a13ea"
+  },
+  {
+    "path": "runner/reward_profile.py",
+    "sha256": "0de1a5208eef6a1d6deed4820257c699e1f59331580f8adecab9cdcb466df5c2"
+  },
+  {
+    "path": "tests-receipt.json",
+    "sha256": "40b5bd4b02e1f6f6262cb4033f313fa86ee95d1aa5fd8ae3848b73b7f51c57b8"
+  },
+  {
+    "path": "tests.log",
+    "sha256": "ba33efc320afef01660ba3409f163c65e2a091e6cef57aaf78c97da74678563b"
+  },
+  {
+    "path": "training/config.json",
+    "sha256": "6cb90007662e4d0b55d86c32f6cff1ca936452c366c2b71c1965158a74b5891c"
+  },
+  {
+    "path": "training/local-trace-hashes.json",
+    "sha256": "dab64e0af1f5cd90328967cb55ad1a2ba1e958d7e2139d909fe03f4b94b1fcea"
+  },
+  {
+    "path": "training/receipt.json",
+    "sha256": "7df87b9f9bf7d6a0c29ad2457c81efb646ccf28e25c6405ac7e11a93156193ff"
+  },
+  {
+    "path": "training/summary.json",
+    "sha256": "461ded8d900a634fb9fd9e7c48ba6d7dac58a2a61b47c1aec1c7c6600a1acd0d"
+  }
+]

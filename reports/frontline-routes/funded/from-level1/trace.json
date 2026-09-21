@@ -1,0 +1,1758 @@
+[
+  {
+    "round": 261,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      1,
+      1,
+      1
+    ],
+    "gold": 750,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "to_shop",
+      "gold_available": 750,
+      "weapon_reserve": {
+        "building": 10101,
+        "voucher": "WeaponUpgradeVoucher1",
+        "gold": 100,
+        "level": 1
+      },
+      "shop_count": 1,
+      "vendor_count": 0,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 6,
+        "budget": 67,
+        "slack": 61,
+        "reason": "procurement"
+      },
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher1",
+      "target": {
+        "x": 8,
+        "y": 21
+      },
+      "price": 100,
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "issued",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 262,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      1,
+      1,
+      1
+    ],
+    "gold": 750,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (6, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 5,
+        "budget": 66,
+        "slack": 61,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 263,
+    "commands": {
+      "10010": {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      }
+    },
+    "levels": [
+      1,
+      1,
+      1
+    ],
+    "gold": 650,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 购买 WeaponUpgradeVoucher1×1，-100 金币"
+    ],
+    "upgrade": {
+      "phase": "buy",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 4,
+        "budget": 65,
+        "slack": 61,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 264,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      1,
+      1,
+      1
+    ],
+    "gold": 650,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 3,
+        "budget": 64,
+        "slack": 61,
+        "reason": "delivery"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "inventory_observed",
+          "owner": 10010,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    }
+  },
+  {
+    "round": 265,
+    "commands": {
+      "10010": {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      1,
+      1
+    ],
+    "gold": 650,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 使用 WeaponUpgradeVoucher1（rocket → Lv2，血量恢复至 1500）"
+    ],
+    "upgrade": {
+      "phase": "use",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 2,
+        "budget": 63,
+        "slack": 61,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 266,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      1,
+      1
+    ],
+    "gold": 650,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (8, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_to_post",
+      "reason": "return",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 1,
+        "budget": 62,
+        "slack": 61,
+        "reason": "return"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "return",
+          "reason": "upgrade_confirmed_observed",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 267,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      1,
+      1
+    ],
+    "gold": 650,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "to_shop",
+      "gold_available": 650,
+      "weapon_reserve": {
+        "building": 10102,
+        "voucher": "WeaponUpgradeVoucher1",
+        "gold": 100,
+        "level": 1
+      },
+      "shop_count": 1,
+      "vendor_count": 0,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 6,
+        "budget": 61,
+        "slack": 55,
+        "reason": "procurement"
+      },
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher1",
+      "target": {
+        "x": 8,
+        "y": 23
+      },
+      "price": 100,
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "cancel",
+          "reason": "returned_observed",
+          "owner": 10010
+        },
+        {
+          "kind": "purchase",
+          "event": "issued",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 268,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      1,
+      1
+    ],
+    "gold": 650,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (6, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 5,
+        "budget": 60,
+        "slack": 55,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 269,
+    "commands": {
+      "10010": {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      }
+    },
+    "levels": [
+      2,
+      1,
+      1
+    ],
+    "gold": 550,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 购买 WeaponUpgradeVoucher1×1，-100 金币"
+    ],
+    "upgrade": {
+      "phase": "buy",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 4,
+        "budget": 59,
+        "slack": 55,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 270,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      1,
+      1
+    ],
+    "gold": 550,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 3,
+        "budget": 58,
+        "slack": 55,
+        "reason": "delivery"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "inventory_observed",
+          "owner": 10010,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    }
+  },
+  {
+    "round": 271,
+    "commands": {
+      "10010": {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 23
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 550,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 使用 WeaponUpgradeVoucher1（rocket → Lv2，血量恢复至 1500）"
+    ],
+    "upgrade": {
+      "phase": "use",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 2,
+        "budget": 57,
+        "slack": 55,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 272,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 550,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (8, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_to_post",
+      "reason": "return",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 1,
+        "budget": 56,
+        "slack": 55,
+        "reason": "return"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "return",
+          "reason": "upgrade_confirmed_observed",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 273,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 550,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "to_shop",
+      "gold_available": 550,
+      "weapon_reserve": {
+        "building": 10103,
+        "voucher": "WeaponUpgradeVoucher1",
+        "gold": 100,
+        "level": 1
+      },
+      "shop_count": 1,
+      "vendor_count": 0,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 6,
+        "budget": 55,
+        "slack": 49,
+        "reason": "procurement"
+      },
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher1",
+      "target": {
+        "x": 9,
+        "y": 23
+      },
+      "price": 100,
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "cancel",
+          "reason": "returned_observed",
+          "owner": 10010
+        },
+        {
+          "kind": "purchase",
+          "event": "issued",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 274,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 550,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (6, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 5,
+        "budget": 54,
+        "slack": 49,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 275,
+    "commands": {
+      "10010": {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher1",
+        "num": 1
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 450,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 购买 WeaponUpgradeVoucher1×1，-100 金币"
+    ],
+    "upgrade": {
+      "phase": "buy",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 4,
+        "budget": 53,
+        "slack": 49,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 276,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 450,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 3,
+        "budget": 52,
+        "slack": 49,
+        "reason": "delivery"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "inventory_observed",
+          "owner": 10010,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    }
+  },
+  {
+    "round": 277,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      1
+    ],
+    "gold": 450,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (8, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 2,
+        "budget": 51,
+        "slack": 49,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 278,
+    "commands": {
+      "10010": {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher1",
+        "targetPos": [
+          {
+            "x": 9,
+            "y": 23
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      2
+    ],
+    "gold": 450,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 使用 WeaponUpgradeVoucher1（rocket → Lv2，血量恢复至 1500）"
+    ],
+    "upgrade": {
+      "phase": "use",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher1",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 1,
+        "budget": 50,
+        "slack": 49,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 279,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      2
+    ],
+    "gold": 450,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "to_shop",
+      "gold_available": 450,
+      "weapon_reserve": {
+        "building": 10101,
+        "voucher": "WeaponUpgradeVoucher2",
+        "gold": 150,
+        "level": 2
+      },
+      "shop_count": 1,
+      "vendor_count": 0,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 6,
+        "budget": 49,
+        "slack": 43,
+        "reason": "procurement"
+      },
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher2",
+      "target": {
+        "x": 8,
+        "y": 21
+      },
+      "price": 150,
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "return",
+          "reason": "upgrade_confirmed_observed",
+          "owner": 10010
+        },
+        {
+          "kind": "purchase",
+          "event": "cancel",
+          "reason": "returned_observed",
+          "owner": 10010
+        },
+        {
+          "kind": "purchase",
+          "event": "issued",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 280,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      2
+    ],
+    "gold": 450,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (6, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 5,
+        "budget": 48,
+        "slack": 43,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 281,
+    "commands": {
+      "10010": {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher2",
+        "num": 1
+      }
+    },
+    "levels": [
+      2,
+      2,
+      2
+    ],
+    "gold": 300,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 购买 WeaponUpgradeVoucher2×1，-150 金币"
+    ],
+    "upgrade": {
+      "phase": "buy",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 4,
+        "budget": 47,
+        "slack": 43,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 282,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      2,
+      2,
+      2
+    ],
+    "gold": 300,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 3,
+        "budget": 46,
+        "slack": 43,
+        "reason": "delivery"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "inventory_observed",
+          "owner": 10010,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    }
+  },
+  {
+    "round": 283,
+    "commands": {
+      "10010": {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher2",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      2,
+      2
+    ],
+    "gold": 300,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 使用 WeaponUpgradeVoucher2（rocket → Lv3，血量恢复至 2000）"
+    ],
+    "upgrade": {
+      "phase": "use",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 2,
+        "budget": 45,
+        "slack": 43,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 284,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      2,
+      2
+    ],
+    "gold": 300,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (8, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_to_post",
+      "reason": "return",
+      "worker": 10010,
+      "building": 10101,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 1,
+        "budget": 44,
+        "slack": 43,
+        "reason": "return"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "return",
+          "reason": "upgrade_confirmed_observed",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 285,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      2,
+      2
+    ],
+    "gold": 300,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "to_shop",
+      "gold_available": 300,
+      "weapon_reserve": {
+        "building": 10102,
+        "voucher": "WeaponUpgradeVoucher2",
+        "gold": 150,
+        "level": 2
+      },
+      "shop_count": 1,
+      "vendor_count": 0,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 6,
+        "budget": 43,
+        "slack": 37,
+        "reason": "procurement"
+      },
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher2",
+      "target": {
+        "x": 8,
+        "y": 23
+      },
+      "price": 150,
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "cancel",
+          "reason": "returned_observed",
+          "owner": 10010
+        },
+        {
+          "kind": "purchase",
+          "event": "issued",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 286,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      2,
+      2
+    ],
+    "gold": 300,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (6, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 5,
+        "budget": 42,
+        "slack": 37,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 287,
+    "commands": {
+      "10010": {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher2",
+        "num": 1
+      }
+    },
+    "levels": [
+      3,
+      2,
+      2
+    ],
+    "gold": 150,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 购买 WeaponUpgradeVoucher2×1，-150 金币"
+    ],
+    "upgrade": {
+      "phase": "buy",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 4,
+        "budget": 41,
+        "slack": 37,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 288,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      2,
+      2
+    ],
+    "gold": 150,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 3,
+        "budget": 40,
+        "slack": 37,
+        "reason": "delivery"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "inventory_observed",
+          "owner": 10010,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    }
+  },
+  {
+    "round": 289,
+    "commands": {
+      "10010": {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher2",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 23
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 150,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 使用 WeaponUpgradeVoucher2（rocket → Lv3，血量恢复至 2000）"
+    ],
+    "upgrade": {
+      "phase": "use",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 2,
+        "budget": 39,
+        "slack": 37,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 290,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 150,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (8, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_to_post",
+      "reason": "return",
+      "worker": 10010,
+      "building": 10102,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 1,
+        "budget": 38,
+        "slack": 37,
+        "reason": "return"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "return",
+          "reason": "upgrade_confirmed_observed",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 291,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 150,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "to_shop",
+      "gold_available": 150,
+      "weapon_reserve": {
+        "building": 10103,
+        "voucher": "WeaponUpgradeVoucher2",
+        "gold": 150,
+        "level": 2
+      },
+      "shop_count": 1,
+      "vendor_count": 0,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 6,
+        "budget": 37,
+        "slack": 31,
+        "reason": "procurement"
+      },
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher2",
+      "target": {
+        "x": 9,
+        "y": 23
+      },
+      "price": 150,
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "cancel",
+          "reason": "returned_observed",
+          "owner": 10010
+        },
+        {
+          "kind": "purchase",
+          "event": "issued",
+          "owner": 10010
+        }
+      ]
+    }
+  },
+  {
+    "round": 292,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 6,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 150,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (6, 21)"
+    ],
+    "upgrade": {
+      "phase": "to_shop",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 5,
+        "budget": 36,
+        "slack": 31,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 293,
+    "commands": {
+      "10010": {
+        "action": "buy",
+        "name": "WeaponUpgradeVoucher2",
+        "num": 1
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 0,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 购买 WeaponUpgradeVoucher2×1，-150 金币"
+    ],
+    "upgrade": {
+      "phase": "buy",
+      "reason": "procurement",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 4,
+        "budget": 35,
+        "slack": 31,
+        "reason": "procurement"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 294,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 7,
+            "y": 21
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 0,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (7, 21)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 3,
+        "budget": 34,
+        "slack": 31,
+        "reason": "delivery"
+      },
+      "team_trip_events": [
+        {
+          "kind": "purchase",
+          "event": "inventory_observed",
+          "owner": 10010,
+          "before": 0,
+          "after": 1
+        }
+      ]
+    }
+  },
+  {
+    "round": 295,
+    "commands": {
+      "10010": {
+        "action": "move",
+        "targetPos": [
+          {
+            "x": 8,
+            "y": 22
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      2
+    ],
+    "gold": 0,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 移动至 (8, 22)"
+    ],
+    "upgrade": {
+      "phase": "return_with_voucher",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 2,
+        "budget": 33,
+        "slack": 31,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  },
+  {
+    "round": 296,
+    "commands": {
+      "10010": {
+        "action": "use",
+        "name": "WeaponUpgradeVoucher2",
+        "targetPos": [
+          {
+            "x": 9,
+            "y": 23
+          }
+        ]
+      }
+    },
+    "levels": [
+      3,
+      3,
+      3
+    ],
+    "gold": 0,
+    "outcomes": {
+      "10010": true
+    },
+    "skipped": [],
+    "events": [
+      "10010 使用 WeaponUpgradeVoucher2（rocket → Lv3，血量恢复至 2000）"
+    ],
+    "upgrade": {
+      "phase": "use",
+      "reason": "delivery",
+      "worker": 10010,
+      "building": 10103,
+      "voucher": "WeaponUpgradeVoucher2",
+      "committed": true,
+      "route": {
+        "feasible": true,
+        "remaining_actions": 1,
+        "budget": 32,
+        "slack": 31,
+        "reason": "delivery"
+      },
+      "team_trip_events": []
+    }
+  }
+]

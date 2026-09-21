@@ -1,0 +1,3 @@
+* -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+runner/*.py -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+funded/*.py -text whitespace=blank-at-eol,space-before-tab,cr-at-eol,-blank-at-eof

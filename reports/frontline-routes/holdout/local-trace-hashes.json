@@ -1,0 +1,12 @@
+[
+  {
+    "case": "holdout-911-challenger",
+    "sha256": "441286257e80dc80e448be0c881f7a311a531addafbe1521f9dcb23a3a260412",
+    "bytes": 7628762
+  },
+  {
+    "case": "holdout-911-defender",
+    "sha256": "25e6a93ab311daa909c3da7ca58be5d0884af4e78d0d4e991b5a1b56e00e007a",
+    "bytes": 7734848
+  }
+]
