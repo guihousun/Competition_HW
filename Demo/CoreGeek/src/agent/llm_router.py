@@ -614,6 +614,24 @@ class LLMRouter:
             info["stale"] += 1
             info["quarantined"] += 1
             return
+        if pending.owner == 'task' and kind == 'cmd' and not pending.nonce:
+            # An already rejected old-task result cannot become evidence for a
+            # new command merely because it is now the single in-flight call.
+            # Do NOT globally deduplicate output: successful reads may repeat.
+            # Without an output nonce this match is ambiguous, so retain the
+            # pending request and its original deadline rather than guess.
+            previous_tasks = {r.request_id for r in self.history.values()
+                              if r.owner == 'task' and r.kind == 'cmd'
+                              and r.generation != pending.generation}
+            fingerprint = sha256_text(text)
+            if any(r.kind == 'cmd' and r.status == 'quarantined'
+                   and r.reason in ('stale_generation', 'task_no_longer_confirmed')
+                   and r.request_id in previous_tasks
+                   and r.round_no < pending.sent_round
+                   and r.text_sha256 == fingerprint for r in self.receipts.values()):
+                self._quarantine(pending, round_no, kind, 'ambiguous_prior_task_output', text)
+                info['quarantined'] += 1
+                return
         if pending.nonce:
             ok, source = self._correlate(text, pending)
             if not ok:

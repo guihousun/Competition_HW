@@ -88,3 +88,8 @@ HTTP响应后的后台摘要可能乱序到达。已知较早事件号记为 `la
 `stream` 是本地运行与队伍/地图/基地身份键，不是官方battle_id或half_id；不能仅因stream改变就认定换边。真换边需要原始teamOur.type与官方半场信息核对。
 
 裸 `./check` 的兼容工具回执新增 `path_source=sandbox_cwd`，代表路径在实际执行沙盒中解析。`absolute_path` 表示使用显式绝对路径；两者均不证明check已通过，仍需读真实exit_code及输出。
+# Issue #45：任务旧结果隔离与角色全空
+
+`ambiguous_prior_task_output` 表示无关联标记的工具输出匹配另一任务此前已被隔离的结果，不能直接用于当前题。程序保持原请求期限，等待可用新结果；它不把所有相同输出全局去重，也不能保证识别从未见过的迟到结果。
+
+摘要的 `our_roster_state` 区分 `observed_present`、`observed_empty`、`missing_or_invalid` 和 `invalid_entries`。当官方观测明确给出己方角色空列表且响应无动作时，`empty_reason=observed_empty_team_roster`；这只说明列表为空，不等于已确认基地HP=0。明确零血仍使用 `base_observed_dead`，无血量继续保持unknown。防止将终局后的空角色响应与有活人却未行动混在一起。

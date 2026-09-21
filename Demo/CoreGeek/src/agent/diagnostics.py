@@ -472,6 +472,11 @@ def _counts(request: Any) -> dict[str, Any]:
     if isinstance(team, dict):
         out["gold"] = _as_int(team.get("goldNum"))
         out["score"] = _as_int(team.get("totalScore"))
+    raw_roles = team.get('roles') if isinstance(team, dict) else None
+    out['our_roster_state'] = ('missing_or_invalid' if not isinstance(raw_roles, list)
+        else 'observed_empty' if not raw_roles
+        else 'invalid_entries' if any(not isinstance(r, dict) for r in raw_roles)
+        else 'observed_present')
     out.update(_errors(request))
     if ours is None:
         return out
@@ -765,6 +770,7 @@ def build_summary(request: Any, response: Any, *, plan_ms: float | None = None,
         "base_hp": counts["base_hp"],
         "base_level": counts["base_level"],
         "base_health_state": counts.get("base_health_state"),
+        "our_roster_state": counts.get("our_roster_state"),
         "workers_live": counts["workers_live"],
         "pioneers_live": counts["pioneers_live"],
         "weapons_live": counts["weapons_live"],
@@ -822,6 +828,8 @@ def classify_empty(counts: dict[str, Any], tally: tuple[Any, Any, Any],
     """
     if channel_only:
         return "channel_only"
+    if counts.get('our_roster_state') == 'observed_empty':
+        return 'observed_empty_team_roster'
     state = counts.get("base_health_state")
     if state == "observed_zero":
         return "base_observed_dead"

@@ -51,6 +51,19 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summary["empty_reason"], "unclassified",
                          "missing health must not be reported as death")
 
+    def test_empty_roster_is_distinct_from_missing_and_does_not_assert_base_death(self):
+        from copy import deepcopy
+        for raw, expected in (([], 'observed_empty'), (None, 'missing_or_invalid'),
+                              ([None], 'invalid_entries')):
+            request=observation([]); request['teamOur']['roles']=raw
+            before=deepcopy(request)
+            result=self.summary(request, {'roleCommandMap':{}})
+            self.assertEqual(result['our_roster_state'],expected)
+            self.assertIsNone(result['base_hp'])
+            self.assertNotEqual(result['empty_reason'],'base_observed_dead')
+            self.assertEqual(result['empty_reason']=='observed_empty_team_roster',raw==[])
+            self.assertEqual(request,before)
+
     def test_observed_zero_health_is_dead(self):
         roles = [role(10013, "station", 0), role(10010, "worker", 0), role(10011, "pioneer", 220)]
         summary = self.summary(observation(roles), {"roleCommandMap": {}})
