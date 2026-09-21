@@ -40,6 +40,7 @@ class PlannerState:
     team_trips: dict[str, Any] = field(default_factory=dict)
     maintenance_state: dict[str, Any] = field(default_factory=dict)
     traffic_state: dict[str, Any] = field(default_factory=dict)
+    cleared_night_state: dict[str, Any] = field(default_factory=dict)
     # Shared cognitive-channel scheduler and bounded task context (P0b).
     llm_router: "LLMRouter | None" = None
     task_context: "ContextStore | None" = None
@@ -127,6 +128,7 @@ class PlannerState:
             **({'teamTrips': deepcopy(self.team_trips)} if self.team_trips else {}),
             **({'maintenanceState': deepcopy(self.maintenance_state)} if self.maintenance_state else {}),
             **({'trafficState': deepcopy(self.traffic_state)} if self.traffic_state else {}),
+            **({'clearedNightState': deepcopy(self.cleared_night_state)} if self.cleared_night_state else {}),
             "schema": PLANNER_SCHEMA,
             "degraded": self.degraded,
             "lastRound": int(self.last_round),
@@ -227,6 +229,8 @@ class PlannerState:
         state.maintenance_state = sanitize_memory(dump.get('maintenanceState'))
         from .traffic import clean_memory as clean_traffic
         state.traffic_state = clean_traffic(dump.get('trafficState'))
+        from .cleared_night import clean as clean_clearance
+        state.cleared_night_state = clean_clearance(dump.get('clearedNightState'))
         tasks = dump.get("tasks") if isinstance(dump.get("tasks"), dict) else {}
         raw_cycle = tasks.get("cycle")
         cycle = None
@@ -317,6 +321,7 @@ class PlannerState:
             return  # delayed observation, not evidence of a new match
         if self.last_round and round_no == 1 < self.last_round:
             self.traffic_state = {}
+            self.cleared_night_state = {}
             self.tasks = {"cycle": None, "cooldown_until": 0, "solver_notes": {}}
             self.judge = JudgeState()
             self.llm_router = self.task_context = None

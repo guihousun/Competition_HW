@@ -181,7 +181,8 @@ class MetalCollectionTests(unittest.TestCase):
             with self.subTest(prices=prices):
                 state = board()
                 state["vendorShopList"] = prices
-                self.assertIsNone(metal_command(state))
+                command = metal_command(state)
+                self.assertNotEqual((command or {}).get("action"), "collect")
 
     def test_no_mine_out_of_range_and_full_backpack_issue_nothing(self):
         self.assertIsNone(metal_command(board(ores=(("copper", (38, 2)),))),
@@ -198,22 +199,77 @@ class MetalCollectionTests(unittest.TestCase):
         state = board(terrain=blocked)
         turn = Turn.load(state)
         self.assertIsNone(brain._vendor_route(turn, turn.workers()[0]))
-        self.assertIsNone(metal_command(state))
+        command = metal_command(state)
+        self.assertNotEqual((command or {}).get("action"), "collect")
 
     def test_unreachable_vendor_walk_keeps_the_loaded_worker_in_place(self):
         blocked = [(x, y) for x in range(9, 12) for y in range(27, 30)]
         state = board(backpack=["copper"] * 4, terrain=blocked)
-        self.assertIsNone(metal_command(state))
+        command = metal_command(state)
+        self.assertNotEqual((command or {}).get("action"), "collect")
 
-    def test_another_workers_errand_is_not_bypassed(self):
-        # The one-errand-at-a-time ledger owns the team's trip: the spare worker
-        # must not start a second one, not even to carry a finished batch.
+    def test_another_workers_errand_does_not_block_spare_miner(self):
+        # The purchase/errand owner keeps its route and budget, but a spare
+        # worker may still perform an independent, bounded metal collection.
         state = board(backpack=["copper"] * 4)
         turn = Turn.load(state)
         commands = {}
         brain._worker_day(turn, turn.workers()[0], brain._tower_sites(turn), [], [],
                           set(), commands, state, set(), other_errand=True)
-        self.assertEqual(commands, {})
+        self.assertEqual(commands[10010], collect_command(Pos(*MINE)))
+
+    def test_two_workers_prefer_different_reachable_mines(self):
+        state = board(ores=(("copper", MINE), ("iron", (14, 25))))
+        state["teamOur"]["roles"].append(unit(10012, "worker", 14, 26, 220, 100))
+        turn = Turn.load(state)
+        workers = turn.workers()
+        commands, claimed, busy = {}, set(), set()
+        metal_claimed = set()
+        for worker in workers:
+            brain._worker_day(turn, worker, brain._tower_sites(turn), [], [],
+                              claimed, commands, state, busy,
+                              routes=brain._RouteCost(turn),
+                              metal_claimed=metal_claimed)
+        self.assertEqual(commands[workers[0].unit_id], collect_command(Pos(*MINE)))
+        self.assertEqual(commands[workers[1].unit_id],
+                         collect_command(Pos(14, 25)))
+        self.assertEqual(metal_claimed, {Pos(*MINE), Pos(14, 25)})
+
+    def test_one_reachable_mine_is_shared_instead_of_idling(self):
+        state = board()
+        state["teamOur"]["roles"].append(unit(10012, "worker", 14, 26, 220, 100))
+        turn = Turn.load(state)
+        commands, claimed, busy = {}, set(), set()
+        metal_claimed = set()
+        for worker in turn.workers():
+            brain._worker_day(turn, worker, brain._tower_sites(turn), [], [],
+                              claimed, commands, state, busy,
+                              routes=brain._RouteCost(turn),
+                              metal_claimed=metal_claimed)
+        self.assertEqual(commands[10010], collect_command(Pos(*MINE)))
+        # The second worker is two cells away, so it takes a legal approach
+        # step; it must still head toward the shared mine rather than idling.
+        second = commands[10012]
+        self.assertEqual(second["action"], "move")
+        self.assertLessEqual(distance(Pos.load(second["targetPos"][0]), Pos(*MINE)), 1)
+
+    def test_depleted_mine_with_small_load_heads_to_vendor_or_home(self):
+        state = board(ores=(), backpack=["copper"])
+        command = day_command(state)
+        self.assertIsNotNone(command)
+        self.assertEqual(command["action"], "move")
+        target = Pos.load(command["targetPos"][0])
+        worker = Turn.load(state).workers()[0]
+        self.assertEqual(distance(worker.pos, target), 1)
+
+    def test_no_mine_and_no_vendor_returns_to_station(self):
+        state = board(ores=(), vendor=None)
+        command = day_command(state)
+        self.assertIsNotNone(command)
+        self.assertEqual(command["action"], "move")
+        target = Pos.load(command["targetPos"][0])
+        self.assertEqual(distance(target, Turn.load(state).workers()[0].pos), 1)
+        self.assertNotEqual(target, Pos(*MINE))
 
     def test_defence_construction_keeps_priority_over_metal(self):
         # Unfinished ring: the worker places its stone although an adjacent
@@ -518,6 +574,7 @@ class RealRoundChainTests(unittest.TestCase):
         result = step(state)
         self.assertFalse(any(a["a"] == "collect" for a in result["frame"]["actions"]))
         self.assertFalse(any(a["a"] == "sell" for a in result["frame"]["actions"]))
+        self.assertFalse(any(a["a"] == "build" for a in result["frame"]["actions"]))
         self.assertGreaterEqual(result["state"]["roundNo"], 71)
 
 

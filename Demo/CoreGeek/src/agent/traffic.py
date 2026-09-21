@@ -11,8 +11,9 @@ def neighbours(p):
 
 
 def path(turn, start, goals, blocked):
-    blocked=set(blocked)|{Pos(p.x+1,p.y) for p,k in turn.zones.items()
-                          if k in ('challengerTaskPoint2','defenderTaskPoint2')}
+    from .grid import policy_obstacles
+    blocked = set(blocked) | policy_obstacles(turn)
+    blocked = set(blocked) | set(turn.neutral_cells())
     parents, pending = {start:None}, deque([start])
     while pending:
         at = pending.popleft()

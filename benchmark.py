@@ -46,21 +46,24 @@ def _angle_between(first, second):
 
 
 def own_task_cells(payload):
-    """Cells a pioneer may accept from: the one-cell ring of our own points.
+    """Our occupied task cells; may_accept_from applies their one-cell ring.
 
-    Task point 2 spans two cells (任务书 §4.6.2), so its right neighbour counts too.
+    Task point 2 spans two cells (任务书 §4.6.2). An anchor needs its right
+    neighbour; an explicit pair already supplies both, regardless of row order.
+    This audit implementation is independent of the policy's footprint helper.
     """
     team = payload['teamOur']['type']
-    cells = []
+    grouped = {f'{team}TaskPoint1': set(), f'{team}TaskPoint2': set()}
     for zone in payload['mapInfo']['zones']:
         kind = zone['neutralType']
-        if not (kind.startswith(team) and 'TaskPoint' in kind):
-            continue
-        base = zone['pos']
-        cells.append(base)
-        if kind.endswith('TaskPoint2'):
-            cells.append({'x': base['x'] + 1, 'y': base['y']})
-    return cells
+        if kind in grouped:
+            grouped[kind].add((zone['pos']['x'], zone['pos']['y']))
+    second = grouped[f'{team}TaskPoint2']
+    if len(second) == 1:
+        x, y = next(iter(second))
+        second.add((x + 1, y))
+    cells = grouped[f'{team}TaskPoint1'] | second
+    return [{'x': x, 'y': y} for x, y in sorted(cells)]
 
 
 def may_accept_from(payload, pos):

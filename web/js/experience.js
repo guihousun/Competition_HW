@@ -21,6 +21,35 @@
     if (world.result().done) return { title: '本地对局已结束', text: '可以回到开头重新观看，或通过时间轴定位关键事件。这里的结果不是官方成绩。', countdown: '所有已录制回合都可回看', progress: 1 };
     const phase = world.phase;
     const left = phase.total - phase.inPhase + 1;
+    const state = world.state || {};
+    const planner = state._demo && state._demo.planner;
+    const clearance = planner && planner.tasks && planner.tasks.supervisor
+      && planner.tasks.supervisor.cleared_night;
+    // Stored diagnostics describe an actual planning pass, not a prediction.
+    // Never reuse a previous night's report after a seek or imported snapshot.
+    const recent = clearance && Number.isInteger(clearance.observed_round)
+      && clearance.observed_round <= state.roundNo
+      && clearance.observed_round >= state.roundNo - 1;
+    if (!phase.isDay && recent) {
+      const needed = clearance.required_rounds;
+      const count = clearance.safe_rounds;
+      const productive = clearance.phase === 'productive';
+      const confirming = !productive && count > 0;
+      const reasons = {
+        visible_threat: '发现威胁，回防并恢复炮位控制。',
+        observed_hp_loss_or_disappearance: '观察到我方受损或单位消失，回防并重新确认。',
+        incomplete_public_observation: '观测信息不足，继续防守。',
+        disabled: '清场后工作已在策略配置中关闭。',
+      };
+      return {
+        title: `第 ${phase.day} 天 · ${productive ? '清场后工作' : confirming ? '清场确认中' : '夜间防守'}`,
+        text: `第 ${clearance.observed_round} 回合决策：` + (productive
+          ? '已确认清场，工人恢复采矿、交易和备料，开拓者按可用目标行动；威胁重现立即回防。'
+          : reasons[clearance.reason] || `安全确认 ${count}/${needed} 轮；等待连续完整回合，页面刷新不增加计数。`),
+        countdown: `距离天亮还有 ${left} 轮（含当前轮）`,
+        progress: (phase.inPhase - 1) / phase.total,
+      };
+    }
     return { title: `第 ${phase.day} 天 · ${phase.isDay ? '白天建设' : '夜间防守'}`,
       text: phase.isDay ? '观察工人的采集与建造，以及开拓者的任务行动。入夜后，炮台需要角色在旁操控。'
         : `场上有 ${world.counts().robots} 个机器人。关注基地血量、炮台开火和角色是否到位。`,

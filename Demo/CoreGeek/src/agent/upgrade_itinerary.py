@@ -104,10 +104,10 @@ def purchase_allowed(turn, payload, item, commands):
     return available_gold(turn,payload,commands) - price >= budget
 
 
-def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, reserved_workers=()):
+def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, reserved_workers=(), night_prepare=False):
     if commitment is not None:
         from .team_trip import evaluate_trip
-        cost = evaluate_trip(turn,payload,commitment,commands=commands)
+        cost = evaluate_trip(turn,payload,commitment,commands=commands,night_prepare=night_prepare)
         worker = next((w for w in turn.workers() if w.unit_id==commitment['owner']),None)
         report = dict(phase='idle',reason=cost.reason,worker=commitment['owner'],
                       building=commitment['target'],voucher=commitment['item'],
@@ -126,7 +126,7 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     report={'phase':'idle','reason':None,'gold_available':gold,'weapon_reserve':weapon_reserve(turn,payload),'shop_count':len(shops),
             'vendor_count':sum(k=='vendor' for k in turn.zones.values())}
     def stop(reason):report['reason']=reason;return None,report
-    if not turn.is_day:return stop('night_defence')
+    if not turn.is_day and not night_prepare:return stop('night_defence')
     index=(turn.round_no-1)%130
     if index>=deadline:return stop('return_before_night')
     workers=[w for w in turn.workers() if w.unit_id not in commands and w.unit_id not in reserved_workers]
@@ -158,9 +158,9 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     def full_cost(worker,building,item):
         from .team_trip import evaluate_trip, deadline as absolute_deadline
         return evaluate_trip(turn,payload,dict(owner=worker.unit_id,target=building.unit_id,
-            item=item,deadline=absolute_deadline(turn,deadline)),commands=commands)
+            item=item,deadline=absolute_deadline(turn,deadline)),commands=commands,night_prepare=night_prepare)
     from .team_trip import threat
-    visible_danger=threat(turn)
+    visible_danger=threat(turn) and not night_prepare
     # Actual inventory has priority; no shop presence/quote is needed to use it.
     carried=False
     for building in buildings:
@@ -177,7 +177,7 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     if not shops:return stop('weapon_shop_not_observed')
     if index<start:return stop('before_shopping_window')
     if len(turn.workers())<2:return stop('keep_last_worker_home')
-    if any(r.health>0 for r in turn.robots):return stop('visible_robots_defend_first')
+    if not night_prepare and any(r.health>0 for r in turn.robots):return stop('visible_robots_defend_first')
     prices=shop_prices(payload)
     if not prices:return stop('no_shop_prices')
     held={item for unit in turn.ours if unit.health>0 for item in unit.backpack}

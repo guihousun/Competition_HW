@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 DAY_ROUNDS = 70
@@ -15,6 +15,7 @@ PIONEER = "pioneer"
 TOWER_TYPES = ("gatling", "railgun", "rocket")
 MATERIALS = ("stone", "iron", "copper")
 CONTROLLABLE_TYPES = (WORKER, PIONEER)
+TWO_CELL_TASK_TYPES = ('challengerTaskPoint2', 'defenderTaskPoint2')
 MAX_BUILDING_LEVEL = 3
 # Weapon cooldown after firing, per type (任务书 §4.5.1: only the rocket has one).
 WEAPON_COOLDOWN = {"gatling": 0, "railgun": 0, "rocket": 3}
@@ -120,6 +121,28 @@ class Turn:
     ours: tuple[Unit, ...]
     robots: tuple[Robot, ...]
     enemies: tuple[Unit, ...] = ()
+    _neutral_cells: frozenset[Pos] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        # R02/R07: a point-2 anchor occupies two horizontal cells. Some public
+        # snapshots explicitly list both; those cells are already the footprint,
+        # so expanding each entry would invent a third blocked cell.
+        cells = {pos for pos, kind in self.zones.items() if kind != LAND}
+        for kind in TWO_CELL_TASK_TYPES:
+            explicit = [pos for pos, value in self.zones.items() if value == kind]
+            explicit_pair = (len(explicit) == 2 and explicit[0].y == explicit[1].y
+                             and abs(explicit[0].x - explicit[1].x) == 1)
+            if not explicit_pair:
+                # An irregular/ambiguous group is not evidence that each anchor
+                # lost its second cell. Keep conservative occupancy for every
+                # reported anchor; do not silently turn possible obstacles into land.
+                cells.update(Pos(pos.x + 1, pos.y) for pos in explicit)
+        object.__setattr__(self, '_neutral_cells', frozenset(
+            pos for pos in cells if 0 <= pos.x < self.width and 0 <= pos.y < self.height))
+
+    def neutral_cells(self) -> frozenset[Pos]:
+        """Occupied neutral footprint; the original zone map stays unmodified."""
+        return self._neutral_cells
 
     @classmethod
     def load(cls, payload: dict[str, Any]) -> "Turn":
@@ -195,7 +218,7 @@ class Turn:
     def land(self, pos: Pos) -> bool:
         if not 0 <= pos.x < self.width or not 0 <= pos.y < self.height:
             return False
-        return self.zones.get(pos, LAND) == LAND
+        return pos not in self._neutral_cells
 
     def occupied_cells(self) -> frozenset[Pos]:
         cells: set[Pos] = set()
@@ -206,7 +229,7 @@ class Turn:
         return frozenset(cells)
 
     def blocked(self, moving: Unit) -> frozenset[Pos]:
-        cells = {pos for pos, kind in self.zones.items() if kind != LAND}
+        cells = set(self._neutral_cells)
         cells.update(self.occupied_cells())
         cells.discard(moving.pos)
         for robot in self.robots:
