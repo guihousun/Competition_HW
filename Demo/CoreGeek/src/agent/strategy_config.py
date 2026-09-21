@@ -20,7 +20,9 @@ DEFAULTS = {
     "maintenance": {"from_day": 4, "stock_target": 2,
                     "entry_fraction": 0.55, "exit_fraction": 0.85,
                     "emergency_fraction": 0.25, "base_emergency_fraction": 0.4},
-    "economy": {"return_day_index": 55, "upgrade_return_margin": 3,
+    "economy": {"dynamic_return": True, "return_margin_early": 4,
+                "return_margin_late": 6, "return_margin_damaged": 8,
+                "return_day_index": 55, "upgrade_return_margin": 3,
                 "stone_batch": 10, "metal_batch": 10, "ore_max_distance": 8},
     "nightwork": {"allow_after_clear": True, "quiet_rounds": 3},
     "navigation": {"enabled": True, "stall_rounds": 3,
@@ -88,6 +90,12 @@ def validate(config):
     for key, low, high in (("return_day_index", 0, 69), ("upgrade_return_margin", 0, 69),
                            ("stone_batch", 1, 100), ("metal_batch", 1, 100), ("ore_max_distance", 1, 40)):
         _integer(config["economy"][key], low, high, f"economy.{key}")
+    if type(config["economy"]["dynamic_return"]) is not bool:
+        raise ValueError("economy.dynamic_return: expected boolean")
+    for key in ("return_margin_early", "return_margin_late", "return_margin_damaged"):
+        _integer(config["economy"][key], 0, 20, f"economy.{key}")
+    if config["economy"]["return_margin_damaged"] < max(config["economy"]["return_margin_early"], config["economy"]["return_margin_late"]):
+        raise ValueError("damaged return margin must cover ordinary margins")
     if type(config["nightwork"]["allow_after_clear"]) is not bool:
         raise ValueError("nightwork.allow_after_clear: expected boolean")
     _integer(config['nightwork']['quiet_rounds'], 1, 20, 'nightwork.quiet_rounds')

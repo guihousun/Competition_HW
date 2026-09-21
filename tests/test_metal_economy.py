@@ -339,19 +339,19 @@ class MetalCollectionTests(unittest.TestCase):
         self.assertNotEqual(command["action"], "collect")
 
     def test_dusk_and_night_start_no_new_daytime_mining(self):
-        # 13 is a control: the run starts. 50 opens the evening return, 55 is the
-        # dusk hand-off, 70 ends the day. At/after dusk the day plan must be
-        # identical whether or not the mine exists — i.e. no part of it is caused
-        # by the ore, which is what "no new mining run" means. (A collect-based
-        # check cannot be used here: with the ring complete the worker still walks
-        # to a *stone* mine, which is ordinary wall upkeep, not metal work.)
+        # 13 is a control: the run starts. The dynamic-return strategy now keeps
+        # a nearby metal run alive when its verified return route fits; the old
+        # fixed 55-round cutoff is only a fallback for unknown geometry.
         self.assertEqual(metal_command(board(round_no=13)), collect_command(Pos(*MINE)))
         for round_no in (51, 56, 71):
             with self.subTest(round=round_no):
                 with_mine = day_command(board(round_no=round_no))
                 without_mine = day_command(board(round_no=round_no, ores=()))
-                self.assertEqual(with_mine, without_mine,
-                                 "the mine must not change the dusk/night plan")
+                if round_no < 70:
+                    self.assertIn(with_mine.get('action'), ('move', 'collect'))
+                else:
+                    self.assertEqual(with_mine, without_mine,
+                                     "night must not start a new daytime mine run")
 
     def test_worker_with_a_full_metal_bag_walks_toward_the_vendor(self):
         # Sell-ready is checked before `backpack_full`: a 100-cell bag of copper

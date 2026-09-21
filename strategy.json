@@ -48,7 +48,11 @@
     "upgrade_return_margin": 3,
     "stone_batch": 10,
     "metal_batch": 10,
-    "ore_max_distance": 8
+    "ore_max_distance": 8,
+    "dynamic_return": true,
+    "return_margin_early": 4,
+    "return_margin_late": 6,
+    "return_margin_damaged": 8
   },
   "nightwork": {
     "allow_after_clear": true,

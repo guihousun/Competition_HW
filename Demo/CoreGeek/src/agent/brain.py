@@ -7,7 +7,7 @@ import os
 
 from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
-from . import home_defense, strategy_config, phase_maintenance, traffic, frontline, night_gunner
+from . import home_defense, strategy_config, phase_maintenance, traffic, frontline, night_gunner, dusk_return
 _STRATEGY = strategy_config.get()
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -87,6 +87,13 @@ _TRIP_FRAME = ContextVar('competition_team_trip_frame',default=None)
 _PHASE_MAINTENANCE = ContextVar("phase_maintenance",default=None)
 _TRAFFIC = ContextVar('team_traffic',default=None)
 _WORLD_VIEW = ContextVar('competition_world_view', default=None)
+_DUSK_RETURN = ContextVar('competition_dusk_return', default=None)
+
+
+def _work_deadline(turn):
+    return dusk_return.deadline(turn)
+
+
 _CLEARED_NIGHT = ContextVar('competition_cleared_night', default=None)
 
 
@@ -208,6 +215,8 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
     """
     turn = Turn.load(payload)
     _TRIP_FRAME.set(None)
+    return_frame = dusk_return.Frame(turn)
+    _DUSK_RETURN.set(return_frame)
     _CLEARED_NIGHT.set(None)
     from . import grid
     grid.set_policy_obstacles(turn)
@@ -265,8 +274,13 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             and site and required and all(pioneer.backpack.count(item) >= required.count(item) for item in required)
             and turn.round_no + max(0, distance(pioneer.pos, Pos.load(site))-1) <= int(notes.get('closesAt') or 0))
     directive = policy_supervisor.evaluate(turn,payload,pioneer_tower,tower_pairs=tower_pairs,
-                                          committed_work=committed_work,dusk_index=RETURN_BEFORE_NIGHT,
+                                          committed_work=committed_work,dusk_index=_work_deadline(turn),
                                           cleared=_productive_night(turn))
+    if return_frame.active and pioneer is not None:
+        reserve = return_frame.required(pioneer)
+        directive = policy_supervisor.Directive('prepare' if reserve else 'work', reserve,
+            'dynamic_return_due' if reserve else 'dynamic_day_work', 0,
+            return_frame.routes(pioneer)[0].get(pioneer.pos, 0))
     if was_productive and not turn.is_day and not _productive_night(turn):
         directive = policy_supervisor.Directive('defend', True, 'clearance_revoked_return_now',
                                                 len(turn.robots), 0)
@@ -401,7 +415,10 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
                          rocket_post.reserve(turn, commands, protected=protected_posts,
                                             business_goals=traffic_frame.goals))
     traffic_frame.recover(commands,protected_posts)
-    commands = reconcile(turn, payload, commands, day_yield_deadline=RETURN_BEFORE_NIGHT)
+    commands = return_frame.apply(commands)
+    if pioneer_role is not None and pioneer_role.unit_id in return_frame.returning:
+        job = None
+    commands = reconcile(turn, payload, commands, day_yield_deadline=_work_deadline(turn))
     trip_frame = _TRIP_FRAME.get()
     if trip_frame is not None:
         shared_context = _SHARED_CONTROL.get()
@@ -409,7 +426,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
         staging_owner = ({shared['owner']} if turn.is_day and shared.get('single_operator')
                          and shared.get('phase') == 'moving_to_common_stand'
                          and (turn.round_no-1) % ROUNDS_PER_DAY >= RETURN_BEFORE_NIGHT else set())
-        commands = trip_frame.protect_final(commands, priority_return_moves=staging_owner)
+        commands = trip_frame.protect_final(commands, priority_return_moves=staging_owner | return_frame.returning)
         next_trips = trip_frame.finalize(commands)
         if commit:
             planner_state.team_trips = next_trips
@@ -477,6 +494,7 @@ def plan_for_state(payload: dict[str, Any], planner_state: Any, *,
             _DECISION_REPORT.get()['shared_rocket_control'] = deepcopy(context[1])
         _DECISION_REPORT.get()['pioneer_safety'] = {k:v for k,v in safety.items() if k != 'command'} if safety else None
         _DECISION_REPORT.get()['strategy_config'] = strategy_config.identity()
+        _DECISION_REPORT.get()['dusk_return'] = deepcopy(return_frame.rows)
         _DECISION_REPORT.get()['cleared_night'] = deepcopy(clearance)
         _DECISION_REPORT.get()['cleared_night']['observed_round'] = turn.round_no
         activities = {}
@@ -775,18 +793,18 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
          planner_state: Any = None) -> None:
     from . import team_trip
     frame = team_trip.TripFrame(turn,state,getattr(planner_state,'team_trips',{}),
-        purchase_deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,construction_deadline=RETURN_BEFORE_NIGHT)
+        purchase_deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),construction_deadline=_work_deadline(turn))
     _TRIP_FRAME.set(frame)
 
     def upgrade_plan():
         construction = frame.construction
         proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
-            deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,commitment=frame.purchase,
+            deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),commitment=frame.purchase,
             reserved_workers=({construction['owner']} if construction else ()))
         if frame.purchase and proposal is None and frame.purchase.get('phase')!='return':
             frame.cancel('purchase',report['reason'])
             proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
-                deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
+                deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),
                 reserved_workers=({construction['owner']} if construction else ()))
         if frame.purchase is None and _STRATEGY['enabled']:
             from . import phase_supply
@@ -797,7 +815,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
                                and not (b.kind==WALL and b.pos in _retired_rear_walls(turn)))
             if not held_voucher:
                 stock,stock_report=phase_supply.plan(turn,state,commands,
-                    deadline=DAY_ROUNDS-UPGRADE_RETURN_MARGIN,
+                    deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),
                     reserved_workers=({construction['owner']} if construction else ()))
                 if stock is not None:
                     proposal,report=stock,stock_report
@@ -806,7 +824,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
 
     _UPGRADE_REPORT.set({'phase':'idle','reason':'return_before_night'})
     # Return before night instead of waiting until robots arrive.
-    if (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
+    if not dusk_return.enabled() and (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
         # A priced upgrade trip uses its actual round-trip budget, not the
         # generic early-return cutoff that used to strand it before buying.
         upgrade, report = upgrade_plan()
@@ -910,7 +928,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
                    and (p not in occupied or p==role.pos)]
         guard = team_trip.RouteGuard(turn,state,frame.purchase,commands)
         trip = construction_trip.plan(turn,role,targets,claimed=landings,
-            deadline=RETURN_BEFORE_NIGHT,batch_limit=STONE_BATCH,
+            deadline=_work_deadline(turn),batch_limit=STONE_BATCH,
             mine_available=_mine_available(turn,'stone'),route_guard=guard)
         report = {'worker':role.unit_id,'phase':'hold','reason':'no_safe_complete_trip'}
         if trip:
@@ -932,6 +950,9 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
 
     for role in turn.workers():
         if role.unit_id in busy:
+            continue
+        return_frame = _DUSK_RETURN.get()
+        if return_frame is not None and return_frame.turn is turn and return_frame.required(role):
             continue
         if frame.construction and role.unit_id==frame.construction['owner']:
             construct(role)
@@ -1304,7 +1325,7 @@ def _prepare_treasure(turn, pioneer, commands, state, notes):
     stand, outbound = approach
     homes = _stand_cells(turn, pioneer, base.pos, set())
     homeward = min((cost(stand, cell) for cell in homes), default=10 ** 9)
-    remaining = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - (turn.round_no - 1) % 130
+    remaining = (130 if _productive_night(turn) else 0) + _work_deadline(turn) - (turn.round_no - 1) % 130
     if outbound + len(missing) + homeward + 2 > remaining:
         return False
     if _adjacent_zone(state, pioneer.pos, "weaponShop"):
@@ -1337,7 +1358,7 @@ def _economy_open(turn: Turn) -> bool:
     all ten days (R02) without hard-coding any day boundary.
     """
     index = (turn.round_no - 1) % 130
-    return _productive_night(turn) or ECONOMY_WINDOW_START <= index < RETURN_BEFORE_NIGHT
+    return _productive_night(turn) or ECONOMY_WINDOW_START <= index < _work_deadline(turn)
 
 
 def _is_return_phase(turn: Turn) -> bool:
@@ -1738,8 +1759,11 @@ def _metal_trip_fits(turn: Turn, role: Unit, mine: Pos, state: dict[str, Any],
     # slack. The budget is measured against the dusk hand-off: the trip must end
     # before the day's economy window does, so `_economy_open` and the evening
     # return keep working exactly as before.
-    budget = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
-    trip = to_mine + _metal_batch_needed(role, state) + cost_of(stand, home) + 1
+    budget = (130 if _productive_night(turn) else 0) + _work_deadline(turn) - ((turn.round_no - 1) % 130)
+    harvest = _metal_batch_needed(role, state)
+    if dusk_return.enabled():
+        harvest = min(harvest, max(0, budget-to_mine-cost_of(stand,home)-1))
+    trip = to_mine + harvest + cost_of(stand, home) + 1
     return approach if trip <= budget else None
 
 
@@ -1786,10 +1810,12 @@ def _metal_fallback(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
         if vendor is not None:
             stand, outward = vendor
             index = (turn.round_no - 1) % 130
-            remaining = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - index
+            remaining = (130 if _productive_night(turn) else 0) + _work_deadline(turn) - index
             # Leave one round to execute the eventual sale and one for a safe
             # hand-off.  If this no longer fits, prefer returning home below.
-            if outward + 1 <= remaining:
+            return_frame = dusk_return.Frame(turn)
+            homeward = return_frame.routes(role)[0].get(stand) if return_frame.active else 0
+            if homeward is not None and outward + 1 + homeward <= remaining:
                 return _walk_to_zone(turn, role, "vendor", commands)
     return _return_to_station(turn, role, commands, routes)
 
@@ -1911,7 +1937,7 @@ def _forecast_sale_trip_fits(turn: Turn, role: Unit) -> bool:
     if not homes:
         return False
     home_cost = min(cost(stand, home) for home in homes)
-    budget = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - ((turn.round_no - 1) % 130)
+    budget = (130 if _productive_night(turn) else 0) + _work_deadline(turn) - ((turn.round_no - 1) % 130)
     return outward + 1 + home_cost + 1 <= budget
 
 
@@ -1933,7 +1959,7 @@ def _should_buy(turn: Turn, state: dict[str, Any]) -> bool:
     reserve = WEAPON_BUILD_COST
     if turn.gold < reserve + min(prices.values()):
         return False
-    return (turn.round_no - 1) % 130 < RETURN_BEFORE_NIGHT
+    return (turn.round_no - 1) % 130 < _work_deadline(turn)
 
 
 def _walk_to_zone(turn: Turn, role: Unit, kind: str,
@@ -2092,7 +2118,7 @@ def _night_prepare(turn, commands, state, planner_state):
     decide whether maintenance still has work. Sunrise can continue a purchase.
     """
     from . import team_trip
-    deadline = 130 + RETURN_BEFORE_NIGHT
+    deadline = 130 + _work_deadline(turn)
     frame = team_trip.TripFrame(turn, state, getattr(planner_state, 'team_trips', {}),
                                purchase_deadline=deadline, night_prepare=True)
     _TRIP_FRAME.set(frame)
