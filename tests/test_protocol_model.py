@@ -259,6 +259,19 @@ class TaskParseTest(unittest.TestCase):
         """`isValid` 为 false = 冷却中或这个点的任务已做完（接口文档 L139）。"""
         self.assertEqual(self._load({**self.POINT, "isValid": False}).task_points, ())
 
+    def test_tasks_are_exhausted_when_no_point_can_ever_return(self):
+        """两个点都 `coldDownRounds == 0` 且 `isValid is False` ⇒ 任务没了（用户口径）。
+
+        这是"无任务模式"的开关（`planner` 据此换一套白天/夜里的分工）。
+        """
+        dead = {**self.POINT, "coldDownRounds": 0, "isValid": False}
+        self.assertTrue(self._load(dead, dict(dead)).tasks_exhausted)
+        self.assertFalse(self._load(self.POINT, dead).tasks_exhausted, "还有一个点活着")
+        self.assertFalse(
+            self._load({**dead, "coldDownRounds": 30}).tasks_exhausted, "还带冷却 ⇒ 会回来"
+        )
+        self.assertFalse(self._load().tasks_exhausted, "`playerTasks` 缺失/为空 = 未知，不算没有")
+
     def test_walls_carry_their_health_and_level(self):
         """墙是实体（`teamOur.roles` 里 roleType=="wall"，id 40000 系、带 health/level）——
         修墙线的判据来源。已毁（health==0）⇒ 丢：那是一格缺口，归 `_ring` 的候选表管（重建），

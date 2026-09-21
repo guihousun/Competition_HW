@@ -118,6 +118,10 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     ore_taken: set[Pos] = set()
     assigned: dict[Pos, int] = {}
 
+    if turn.tasks_exhausted:
+        _no_task_night(turn, q, taken, ore_taken, assigned)
+        return
+
     for role in turn.roles:
         # 服任务中的开拓者：钉死（离开任务点周围一格任务立即作废，夜里都不回炮位）；
         # 唯一例外是夜里人手不够（工人阵亡 ⇒ 有炮没人操），生存第一、弃任务
@@ -131,6 +135,36 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
             night.mine_ore(role, turn, q, ore_taken)
             continue
         night.defend(role, turn, q, taken, assigned)
+
+
+def _no_task_night(
+    turn: Turn, q: _Queue, taken: set[Pos], ore_taken: set[Pos], assigned: dict[Pos, int]
+) -> None:
+    """无任务模式的夜班分工（用户口径）：**火箭对 → 开拓者、加特林 → 一个工人、其余工人出门挖矿**。
+
+    ⚠️ 出门挖矿那一个的**前提是"两个武器位都站得人"**（用户原话）：炮位一共两组（火箭对共用
+    一个操作位），所以要有**第三个**角色才放得出手 —— 人手不足（有人阵亡）时全员上炮，缺的
+    那一组由 `defend` 的既有逻辑兜底（换组 / 退路）。
+
+    ⚠️ 挖矿的那个**不管清没清场都出门**（它不操炮，站着也是站着）—— 这一夜它按白天的规矩
+    采最值钱的矿（`night.mine_ore` 里那条排序与白天第 3 级同源）。"""
+    roles = list(turn.roles)
+    chief = next((r for r in roles if isinstance(r, Pioneer)), None)
+    workers = [r for r in roles if isinstance(r, Worker)]
+    # 上炮的排队：开拓者在前（它守火箭对），工人按名册顺序补（第一个守加特林）
+    gunners: list[BaseRole] = ([chief] if chief is not None else []) + workers
+    spare = {r.id for r in gunners[2:]}  # 两组炮最多两个人；余下的出门挖矿
+    rocket_id = gunners[0].id if gunners else None
+
+    for role in roles:
+        if role.id in spare:
+            night.mine_ore(role, turn, q, ore_taken)
+            continue
+        if night.upgrade_station(role, turn, q):
+            continue
+        night.defend(
+            role, turn, q, taken, assigned, kinds=("rocket",) if role.id == rocket_id else ("gatling",)
+        )
 
 
 def _walk_out(turn: Turn, q: _Queue) -> None:

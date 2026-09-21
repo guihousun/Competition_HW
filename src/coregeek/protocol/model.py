@@ -33,6 +33,7 @@ def load(payload: Any) -> Turn | None:
         weapons=_weapons(payload),
         robots=_robots(payload),
         task_points=_tasks(payload),
+        tasks_exhausted=_tasks_exhausted(payload),
         phase_task=_text(payload, "phaseTask"),
         llm_resp=_text(payload, "llmResp"),
         cmd_result=_text(payload, "lastCmdResult"),
@@ -231,6 +232,19 @@ def _tasks(payload: dict[str, Any]) -> tuple[Pos, ...]:
         if pos is not None and _int(node.get("coldDownRounds")) <= 0:
             out.append(pos)
     return tuple(out)
+
+
+def _tasks_exhausted(payload: dict[str, Any]) -> bool:
+    """任务点全都没戏了 —— `coldDownRounds == 0` **且** `isValid is False`（用户口径）。
+
+    任务书说任务点是**有限的**：`isValid: false` + 冷却 0 = 这个点再也不会给出任务 ⇒ 两个点都
+    这样 = 这一局没有任务可做了（`planner` 据此切到"无任务模式"）。⚠️ 只要有一个点还带冷却
+    （`coldDownRounds > 0`）或者还 `isValid`，就不算 —— `playerTasks` 缺失/为空同样不算（未知
+    ≠ 没有）。"""
+    nodes = [n for n in _items(payload, "teamOur", "playerTasks") if isinstance(n, dict)]
+    if not nodes:
+        return False
+    return all(_int(n.get("coldDownRounds")) == 0 and n.get("isValid") is False for n in nodes)
 
 
 def _vendor_prices(payload: dict[str, Any]) -> Mapping[str, int]:

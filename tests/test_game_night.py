@@ -705,6 +705,79 @@ class NightEconomyTest(unittest.TestCase):
         self.assertIn(cmd["action"], ("move", "collect"), cmd)
 
 
+class NoTaskNightTest(unittest.TestCase):
+    """无任务模式的夜班分工（第 126 步用户口径）：**火箭对 → 开拓者、加特林 → 一个工人、
+    其余工人出门挖矿**。
+
+    ⚠️ 出门挖矿那一个的前提是"两个武器位都站得人"（用户原话）：炮位两组（火箭对共用一个操作位），
+    要有第三个角色才放得出手；人手不足就全员上炮。⚠️ 挖矿的那个不管清没清场都出门（它不操炮）。
+    """
+
+    BASE = Pos(10, 24)
+    NIGHT = 85
+    ROCKET_A, ROCKET_B = Pos(12, 24), Pos(12, 25)
+    GATLING = Pos(12, 22)
+    MINE = Pos(20, 30)
+
+    def _turn(self, *roles: BaseRole, robots=(Robot(pos=Pos(14, 26), health=40),)) -> Turn:
+        weapons = (
+            Weapon(10020, "rocket", self.ROCKET_A, 10, 0),
+            Weapon(10021, "rocket", self.ROCKET_B, 10, 0),
+            Weapon(10022, "gatling", self.GATLING, 4, 0),
+        )
+        grid = _terrain(weapons, {self.BASE: "station"}, {self.MINE: "copper"})
+        grid |= {r.pos: r.type_name for r in roles}
+        return Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=0,
+            weapons=weapons,
+            robots=robots,
+            tasks_exhausted=True,
+            vendor_prices={"copper": 5},
+        )
+
+    def _by_controller(self, cmds: dict) -> dict[str, str]:
+        """`attack` 的 key 是武器 id ⇒ 按操控者摊平成 `{角色id: 动作}`（`move` 的 key 就是角色）。"""
+        out = {}
+        for key, cmd in cmds.items():
+            out[cmd.get("controllerId", key)] = cmd["action"]
+        return out
+
+    def test_the_pioneer_takes_the_rockets_and_a_worker_takes_the_gatling(self):
+        """三个角色 ⇒ 开拓者守火箭对、第一个工人守加特林、第二个工人出门挖矿。
+
+        ⚠️ 这一条同时钉住"**补位炮手那道门在无任务模式里让位**"：平时（工人数 ≥ 组数）开拓者
+        一个组都不认领，这里它必须上炮 —— 不然火箭对没人操。
+        """
+        cmds = plan(
+            self._turn(
+                Pioneer(1, Pos(11, 25)),  # 火箭对共用的操作位（站上去就贴着两座）
+                Worker(2, Pos(12, 23)),  # 贴着加特林
+                Worker(3, Pos(5, 24)),  # 远的那个 ⇒ 出门挖矿
+            )
+        )
+        actions = self._by_controller(cmds)
+        self.assertEqual(actions.get("1"), "attack", f"开拓者该守火箭对：{cmds}")
+        self.assertEqual(actions.get("2"), "attack", f"工人该守加特林：{cmds}")
+        self.assertIn(actions.get("3"), ("move", "collect"), f"另一个工人该出门挖矿：{cmds}")
+        mine_cmd = cmds["3"]
+        step = Pos(mine_cmd["targetPos"][0]["x"], mine_cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.MINE), Pos(5, 24).dist(self.MINE), "朝矿走")
+
+    def test_short_handed_means_everybody_mans_a_gun(self):
+        """两个角色（开拓者 + 一个工人）⇒ **没人出门挖矿**：两组炮正好占满两个人。
+
+        "只要保证两个武器位能够站人就出去挖" 的反面 —— 站不满就别放人走。
+        """
+        cmds = plan(self._turn(Pioneer(1, Pos(11, 25)), Worker(2, Pos(12, 23))))
+        self.assertEqual(len(cmds), 2, f"两个人两条开火指令：{cmds}")
+        self.assertEqual(
+            set(self._by_controller(cmds).values()), {"attack"}, f"都该在开火：{cmds}"
+        )
+
+
 class StationUpgradeTest(unittest.TestCase):
     """夜里的基地升级：持基地券 + 基地血量 < 满血 1/4 ⇒ 贴基地 `use`（升级 + 回满血一次到位，
     1500/3000/4500 是任务书表格实证）。就算有机器人在场也升 —— 基地要塌了这是救命的

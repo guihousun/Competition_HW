@@ -293,6 +293,9 @@ class VoucherLine(State):
     全部细则在 `voucher_errand`（工人与空闲的开拓者共用同一条差事）。"""
 
     def run(self, role: Worker, ctx: _Ctx) -> bool:
+        if ctx.turn.tasks_exhausted:
+            _sell_or_mine(role, ctx)  # 无任务模式：工人只管"矿 → 金币"，券归开拓者
+            return True
         voucher_errand(role, ctx)
         return True  # 链尾终态：全升满了也照样挖矿，不把这一回合让给谁
 
@@ -460,6 +463,35 @@ def _mine_stone(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
     if role.pos.dist(mine) <= 1:
         return _collect(q.cmds, role, mine)
     return q.step(role, mine, avoid=frozenset(ctx.sites), with_paths=True, reserve=True)
+
+
+def _sell_or_mine(role: Worker, ctx: _Ctx) -> bool:
+    """无任务模式里工人白天唯一的事：**攒够一趟的货**就背去卖，否则接着挖最贵的矿。
+
+    券的买与用在这个模式里全归开拓者（用户口径）⇒ 工人这边只剩"矿 → 金币"这条线。
+    "够一趟"用的是老够本门（用户口径）：货值 ≥ 2 × 到小贩的步数 —— 少了它，背一块石头也会
+    走十几步去卖 1 金币。已经贴着小贩 ⇒ 直接卖（这趟路早付过了）。"""
+    kind, num = _best_load(role, ctx.turn.vendor_prices)
+    if _worth_the_trip(role, ctx.turn, kind, num):
+        return _sell_cargo(role, ctx)
+    return _mine_ore(role, ctx)
+
+
+def _worth_the_trip(role: BaseRole, turn: Turn, kind: str, num: int) -> bool:
+    """这一趟卖矿值不值：**货值 ≥ 2 × 到小贩的 BFS 步数**（≈ 每回合至少换 1 金币）。
+
+    ⚠️ 「1 金币 ≈ 1 回合」是拍的（第 22 步的老旋钮，第 121 步删掉、第 126 步只在无任务模式的
+    卖矿上回来）。已经贴着小贩 ⇒ `True`；一个走得到的小贩都没有 ⇒ `False`。"""
+    if not kind:
+        return False
+    walk, size = _passable(turn), turn.map.size
+    hops = [d for d in (steps_between(role.pos, v, walk, size) for v in turn.map.vendors) if d >= 0]
+    if not hops:
+        return False
+    to_vendor = min(hops)
+    if to_vendor == 0:
+        return True
+    return turn.vendor_prices.get(kind, 0) * num >= 2 * to_vendor
 
 
 def _sell_cargo(role: BaseRole, ctx: _Ctx) -> bool:

@@ -99,6 +99,8 @@ def defend(
     q: _Queue,
     taken: set[Pos],
     assigned: dict[Pos, int],
+    *,
+    kinds: tuple[str, ...] | None = None,
 ) -> None:
     """夜里：认领一组还没被本回合别人认领的武器，走到操作位，开火。所有角色都走这里。
 
@@ -112,17 +114,26 @@ def defend(
     它占着、工人站不上去，再不打整组白丢一夜）。
 
     岗位去不了时不许整组无人可打：主岗位被非我方单位堵死 / 走不进那条一格宽的走廊 ⇒ 退到
-    `_near_spots` 的邻座格上，只打得了其中一座也照打。岗位被同事占着不在此列 —— 那组归他。"""
+    `_near_spots` 的邻座格上，只打得了其中一座也照打。岗位被同事占着不在此列 —— 那组归他。
+
+    `kinds` 给定时只看含这些种类的组（**无任务模式的固定分工**：开拓者守火箭对、工人守加特林）
+    —— 那是调用方定好的岗位，所以同时也**跳过"补位炮手"那道门**（开拓者这一夜就是炮手）。"""
     if turn.round_no < 0:
         return
-    # 工人够操满所有组 ⇒ 炮位留给工人，开拓者一个组都不认领（补位炮手）
+    # 工人够操满所有组 ⇒ 炮位留给工人，开拓者一个组都不认领（补位炮手）。
+    # `kinds` 给定时是"指定岗位"（无任务模式），这道门不适用。
     if (
-        isinstance(role, Pioneer)
+        kinds is None
+        and isinstance(role, Pioneer)
         and not _pioneer_mans_guns(turn)
         and not _stands_on_a_post(role, turn)
     ):
         return
-    groups = _weapon_groups(turn)
+    groups = tuple(
+        g
+        for g in _weapon_groups(turn)
+        if kinds is None or any(w.kind in kinds for w in g)
+    )
     blocked = _passable(turn)
     # 退路（贴着组内任意一座的格子）：主岗位一个都站不上时才用 —— 主岗位能站就先站
     # （多座组那格交替得起来，退路只守得了一座）

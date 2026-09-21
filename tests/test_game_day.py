@@ -1633,6 +1633,70 @@ class VoucherLineTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "use", f"该把手里那张用掉：{cmd}")
         self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), Pos(12, 24))
 
+class NoTaskModeTest(unittest.TestCase):
+    """无任务模式的白天（第 126 步用户口径）：**工人只挖矿卖矿，买卖券全归开拓者**。
+
+    开关是 `Turn.tasks_exhausted`（两个任务点都 `coldDownRounds == 0` 且 `isValid is False`
+    ⇒ 这一局再也接不到任务）。工人这条只剩"矿 → 金币"；券的买与用由空闲的开拓者全包
+    （`day.voucher_errand`，见 `VoucherLineTest` / `PioneerErrandTest`）。
+    """
+
+    BASE = Pos(10, 24)
+    WEAPONS = _records({Pos(12, 24): "rocket", Pos(12, 25): "rocket", Pos(12, 22): "gatling"})
+    SHOP = Pos(22, 18)
+    VENDOR = Pos(20, 16)
+    MINE = Pos(20, 30)
+    PRICES = {"stone": 1, "iron": 3, "copper": 5}
+    SHOP_PRICES = {"WeaponUpgradeVoucher1": 100}
+
+    def _turn(self, *, at: Pos, bag: dict[str, int], gold: int = 0, weapons=None) -> Turn:
+        weapons = self.WEAPONS if weapons is None else weapons
+        ring = {c: WALL for c in wall_cells(self.BASE, 41)}
+        grid = _terrain(
+            weapons, {self.BASE: "station"}, ring, {self.MINE: "copper"},
+            {self.SHOP: "weaponShop"}, {self.VENDOR: "vendor"},
+        )
+        grid[at] = "worker"
+        return Turn(
+            round_no=1,
+            map=Map((41, 32), grid),
+            roles=(Worker(10010, at, dict(bag)),),
+            gold=gold,
+            weapons=weapons,
+            tasks_exhausted=True,
+            vendor_prices=self.PRICES,
+            shop_prices=self.SHOP_PRICES,
+        )
+
+    def test_workers_never_buy_vouchers_here(self):
+        """钱管够、就站在商店旁边、场上还有一座升得动的炮 —— 工人也**不买券**（那是开拓者的活）。
+
+        没有这道分流的话，工人会拿着金币去商店买券、把挖矿卖矿晾在一边。
+        """
+        weapons = (Weapon(id=10020, kind="rocket", pos=Pos(12, 24), attack_range=10, cooldown=0, level=1),)
+        cmd = plan(self._turn(at=Pos(21, 17), bag={}, gold=900, weapons=weapons))["10010"]
+        self.assertNotEqual(cmd["action"], "buy", f"无任务模式里工人不买券：{cmd}")
+
+    def test_a_load_that_does_not_pay_for_the_trip_is_not_walked(self):
+        """够本门（用户口径）：货值 < 2 × 到小贩的步数 ⇒ 不跑这一趟，回去接着挖。
+
+        1 块铜 = 5 金、小贩在 8 格外（阈值 16）⇒ 背过去是白跑。
+        """
+        at = Pos(12, 16)  # 离小贩切比雪夫 8
+        cmd = plan(self._turn(at=at, bag={"copper": 1}))["10010"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.MINE), at.dist(self.MINE), "回去挖矿，不是走向小贩")
+
+    def test_a_load_worth_the_trip_is_walked_to_the_vendor(self):
+        """攒够了（4 块铜 = 20 ≥ 16）⇒ 背去卖。"""
+        at = Pos(12, 16)
+        cmd = plan(self._turn(at=at, bag={"copper": 4}))["10010"]
+        self.assertEqual(cmd["action"], "move", cmd)
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.VENDOR), at.dist(self.VENDOR), "朝小贩走")
+
+
 class PioneerErrandTest(unittest.TestCase):
     """空闲的开拓者也跑同一条买券差事（用户口径：开拓者做完任务就买券，且买完就用）。
 

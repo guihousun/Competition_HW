@@ -105,6 +105,10 @@ class Turn(NamedTuple):
     robots: tuple[Robot, ...] = ()
     #: 本回合可接取的己方任务点（冷却中 / 已做完的已在 `model._tasks` 滤掉）。
     task_points: tuple[Pos, ...] = ()
+    #: 任务点全都没戏了（`coldDownRounds == 0` 且 `isValid is False`）⇒ 切"无任务模式"：
+    #: 工人只挖矿卖矿、买卖券全归开拓者，夜里开拓者守火箭对、一个工人守加特林、其余出门挖。
+    #: 判据在 `model._tasks_exhausted`；每回合从 payload 现算（又出现可接的点就自然退出）。
+    tasks_exhausted: bool = False
     #: 当前已领取任务的原文描述。非空 = 开拓者手上有任务 —— 这是"任务进行中"的唯一判据
     #: （用载荷事实，而不是自己记"谁领了任务"）。
     phase_task: str = ""
