@@ -245,6 +245,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def _debug_post(self, path: str, payload: dict[str, Any]) -> None:
         try:
+            if path == '/debug/strategy':
+                if self.client_address[0] not in ('127.0.0.1', '::1'):
+                    self._json(403, {'error': '策略写入仅允许本机访问'})
+                    return
+                from . import strategy_config
+                config = payload.get('config', payload)
+                identity = strategy_config.save(config)
+                self._json(200, {'saved': True, 'restart_required': True, 'identity': identity,
+                                 'message': '策略已保存；请重启服务后让所有策略模块重新加载。'})
+                return
             if (path.startswith('/debug/llm') or (payload.get('_demo') or {}).get('llm_enabled') or (payload.get('_demo') or {}).get('llm_pending')) and self.client_address[0] not in ('127.0.0.1', '::1'):
                 self._json(403, {'error': '真实 LLM 调用仅允许本机访问'})
                 return

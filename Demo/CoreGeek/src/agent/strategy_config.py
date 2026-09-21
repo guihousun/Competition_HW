@@ -148,6 +148,22 @@ def public_view():
                           'note': '模拟器压力、地图档和波次档仅用于本地实验，不进入正式策略。'}}
 
 
+def save(config):
+    """Validate and atomically save a user strategy config for local debug UI."""
+    global _cache, _identity
+    validated = validate(config)
+    current = identity()
+    selected = Path(current['path']) if current.get('loaded') else next(
+        (path for path in _default_paths() if path.parent.exists()), _default_paths()[-1])
+    selected.parent.mkdir(parents=True, exist_ok=True)
+    temporary = selected.with_name(selected.name + '.tmp')
+    temporary.write_text(json.dumps(validated, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    os.replace(temporary, selected)
+    with _lock:
+        _cache, _identity = load(selected)
+    return identity()
+
+
 def _unique_object(pairs):
     result = {}
     for key, value in pairs:

@@ -48,6 +48,16 @@ class StrategyConfigTests(unittest.TestCase):
         self.assertNotIn('robot_attack_range', keys)
         self.assertGreaterEqual(len(view['immutable']), 3)
 
+    def test_save_validates_and_reloads_the_editable_file(self):
+        os.environ["COMPETITION_HW_STRATEGY_FILE"] = str(self.path)
+        sc._cache = sc._identity = None
+        edited = sc.validate(sc.DEFAULTS)
+        edited["economy"]["return_margin_early"] = 5
+        identity = sc.save(edited)
+        self.assertTrue(identity["loaded"])
+        self.assertEqual(sc.get()["economy"]["return_margin_early"], 5)
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["economy"]["return_margin_early"], 5)
+
     def test_unknown_and_missing_fields_are_errors(self):
         for section in (None, "defense", "upgrades", "maintenance", "economy", "nightwork", "navigation"):
             for missing in (False, True):

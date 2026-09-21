@@ -55,17 +55,33 @@
 <tr><td><code>navigation.stall_rounds</code></td><td>3</td><td>连续停滞几轮后触发路径恢复。</td></tr>
 </tbody></table><p class="small">唯一运行配置是仓库根目录 <code>strategy.json</code>。修改后需运行策略校验并重启服务。</p></section>
 
-<section><h2>七、从运行服务读取的完整配置</h2><div class="card"><p>下面内容由 <code>/debug/strategy</code> 实时读取，避免页面与策略文件分叉。标为“可调提示词”的字段可以由你修改；它们只能影响任务 Agent 的表达和上下文长度，不能改变官方动作、任务格式或额度。</p><div id="live-config" class="small">正在读取 strategy.json …</div></div></section>
+<section><h2>七、从运行服务读取的完整配置</h2><div class="card"><p>下面内容由 <code>/debug/strategy</code> 实时读取。你可以编辑 JSON 后保存；服务端会先完整校验，再原子写入根目录 <code>strategy.json</code>。保存后必须重启服务，策略模块才会全部重新加载。</p><textarea id="strategy-editor" spellcheck="false" style="width:100%;min-height:360px;background:#081522;color:#dff3ff;border:1px solid var(--line);border-radius:8px;padding:12px;font:13px/1.5 ui-monospace,Consolas,monospace"></textarea><div class="toolbar"><button id="save-strategy" type="button" style="border:1px solid #357565;border-radius:8px;padding:8px 14px;background:#12372f;color:var(--mint);cursor:pointer">校验并保存策略</button><span id="strategy-status" class="small"></span></div><div id="live-config" class="small">正在读取 strategy.json …</div></div></section>
 
 <section><h2>八、仍需官方/内网核对</h2><div class="grid"><article class="card"><h3><span class="badge assumption">本地假设</span> 已登记但未认证</h3><ul><li>固定刷怪列阵的精确坐标和红方镜像。</li><li>机器人在我方单位 3 格内的偏航边界及并列选敌。</li><li>完整地图地形、矿点刷新和波次第 8–10 天数量。</li></ul></article><article class="card"><h3><span class="badge gap">待内网证据</span> 不自动宣称通过</h3><ul><li>平台真实交易商品、效果和价格清单。</li><li>一人三炮公共操控位在官方地图上的可达性。</li><li>上传包在官方平台的启动、接口、完整对局和得分。</li></ul></article></div></section>
 <p class="footer">版本依据：当前 <code>codex/sgh</code> 分支。此页解释团队策略，不修改比赛规则；本地模拟结果不等于官方成绩。</p>
 </main>
 <script>
-fetch('/debug/strategy').then(r=>r.json()).then(data=>{
+let currentStrategy=null;
+function renderStrategy(data){
   const host=document.getElementById('live-config');
+  currentStrategy=data;
+  document.getElementById('strategy-editor').value=JSON.stringify(data.config,null,2);
   const rows=(data.parameters||[]).map(p=>`<tr><td><code>${p.key}</code></td><td>${JSON.stringify(p.value)}</td><td><span class="badge ${p.kind==='可调提示词'?'strategy':''}">${p.kind}</span> ${p.description}</td></tr>`).join('');
   host.innerHTML=`<table class="table"><thead><tr><th>字段</th><th>当前值</th><th>用途与边界</th></tr></thead><tbody>${rows}</tbody></table><p class="small"><b>不可调：</b>${(data.immutable||[]).join('；')}。<br><b>模拟器本地参数：</b>${data.simulator?.editable_via||''}。可调 seed、side、pressure、profile、map_layout；这些只改变本地实验，不会写入正式策略。</p>`;
-}).catch(e=>{document.getElementById('live-config').textContent='读取失败：请确认服务已启动；策略文件仍以仓库根目录 strategy.json 为准。';});
+}
+function loadStrategy(){fetch('/debug/strategy').then(r=>r.json()).then(renderStrategy).catch(e=>{document.getElementById('live-config').textContent='读取失败：请确认服务已启动；策略文件仍以仓库根目录 strategy.json 为准。';});}
+document.getElementById('save-strategy').addEventListener('click',()=>{
+  const status=document.getElementById('strategy-status');
+  try{
+    const config=JSON.parse(document.getElementById('strategy-editor').value);
+    status.textContent='正在校验并保存…';
+    fetch('/debug/strategy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({config})})
+      .then(async r=>{const body=await r.json();if(!r.ok)throw new Error(body.error||'保存失败');return body;})
+      .then(body=>{status.textContent=body.message||'已保存，请重启服务。';loadStrategy();})
+      .catch(e=>{status.textContent='保存失败：'+e.message;});
+  }catch(e){status.textContent='JSON 格式错误：'+e.message;}
+});
+loadStrategy();
 </script>
 </body>
 </html>

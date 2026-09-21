@@ -75,7 +75,7 @@
 
 ### LLM 和模拟器的可调边界
 
-网页 `/strategy.html` 的“从运行服务读取的完整配置”通过 `/debug/strategy` 展示当前生效值、说明和分类。你可以直接编辑根目录 `strategy.json` 中标记为“策略”或“可调提示词”的字段，然后运行校验并重启服务。LLM 提示词只改变任务 Agent 如何整理题文、工具回执和近期摘要；它不会增加官方 LLM 次数、改变 `prompt`/`executeCmd`/`submitAnswer` 合同，也不能把本地答案当成官方成功。
+网页 `/strategy.html` 的“从运行服务读取的完整配置”通过 `/debug/strategy` 展示当前生效值、说明和分类。现在也可以直接在页面编辑 JSON 并点击“校验并保存策略”；服务端会拒绝缺字段、未知字段、错误类型和越界值，并原子写入根目录 `strategy.json`。保存后必须重启服务，策略模块才会全部重新加载。LLM 提示词只改变任务 Agent 如何整理题文、工具回执和近期摘要；它不会增加官方 LLM 次数、改变 `prompt`/`executeCmd`/`submitAnswer` 合同，也不能把本地答案当成官方成功。
 
 模拟器参数不放进正式策略配置，以免参赛程序依赖本地扩展。调试接口支持显式选择 `seed`、`side`、`pressure`、`profile` 和 `map_layout`，例如 `/debug/scenario?seed=2029&side=defender&pressure=2&profile=observed-seven-days&map_layout=attack-map-observed-v1`。这些参数只改变本地压力实验；官方规则常量、动作字段、武器射程/价格、昼夜长度和计分不开放为策略调参项。
 
