@@ -4,7 +4,7 @@
 > 判据与代价、旋钮在哪 —— 外加"按天看"这一层（§0.2），供作分析战略的起点。
 >
 > **代码是唯一权威** —— 本文只做导读与"为什么"。数值与判据一律以代码为准，常量集中在
-> `game/states.py` 顶部（改一处就够）。逐步的迭代留痕、以及**仍生效的已知不确定性**见
+> `game/core.py` 顶部（改一处就够）。逐步的迭代留痕、以及**仍生效的已知不确定性**见
 > `docs/design/code-task.md`（文末那张表是未了结项的**唯一**出处）；规则来源与文档矛盾点的整理见
 > `docs/design/task-analysis.md`；用户给的方向性要求见 `docs/策略指导.md`。本文不复制那三份的内容。
 >
@@ -12,9 +12,9 @@
 >
 > ⚠️ **符号住址**（第 117 步按"处境"拆文件）：任务线 = `game/task.py`、白天 = `game/day.py`、
 > 夜里 = `game/night.py`、胶水（两段式组装 + `_intents` 那条判据链）= `game/planner.py`、
-> 两个时段共用的底座 = `game/states.py`。**下文的短名按这个归属读**（`_fire` / `_defend` /
+> 两个时段共用的底座 = `game/core.py`。**下文的短名按这个归属读**（`_fire` / `_defend` /
 > `_foe_robots` 在 `night`，`_slots` / `_rescue` / `Day...` 那条链在 `day`，`task_channel` 在 `task`，
-> `_economy` / `_sell_ore` / `_post_spots` / `_queue` 那一族在 `states`）—— 短名没跟着加前缀是
+> `_economy` / `_sell_ore` / `_post_spots` 那一族在 `core`）—— 短名没跟着加前缀是
 > 有意的：正文是"为什么"，加一遍前缀反而更难读。
 
 ---

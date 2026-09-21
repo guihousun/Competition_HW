@@ -2,7 +2,7 @@
 
 > **现状梳理**：三个角色（工人 / 开拓者 / 夜里全员操炮）在 `plan()` 里每回合怎么决策。
 > **代码是唯一权威**（`src/coregeek/game/`：胶水 = `planner.py`、白天 = `day.py`、夜里 =
-> `night.py`、任务线 = `task.py`、共用底座 = `game/states.py`，通用判定在 `game/utils.py`）；
+> `night.py`、任务线 = `task.py`、共用底座 = `game/core.py`，通用判定在 `game/utils.py`）；
 > 本文只讲"现在在跑什么"，
 > 不重抄推导 —— 为什么这样设计看 `strategy.md`，逐条实测悬置看 `code-task.md` 文末悬置表。
 > ⚠️ **状态机的权威在 `strategy.md` §1**（状态 / 闸门 / 转移）。本文是同一件事的"优先级阶梯"
@@ -306,7 +306,7 @@
 - **`assigned` 记账**：同回合先开的炮把估计伤害记上，后开的按剩余血算 ⇒ 不挤将死的目标。
 - 机器人 `health` 缺失按"还活着"算（打空处只是执行失败、不计异常；"一律不打"会让整晚哑火）。
 
-## 5. 常量与旋钮（大多在 `states.py` 顶部，改行为先改这里）
+## 5. 常量与旋钮（大多在 `core.py` 顶部，改行为先改这里）
 
 ⚠️ 三个例外按归属走（第 117 步）：`WEAPONS_BY_SITE` / `HOLE_MIN_LEFT` 在 `game/day.py` 顶部，
 `ROCKET_COOLDOWN` 在 `game/night.py` 顶部。

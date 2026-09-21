@@ -22,7 +22,7 @@ from ..agent.chat import (
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .roles import BaseRole, Pioneer
-from .states import _Queue, _emit
+from .core import _Queue, _emit
 from .world import Turn
 
 LOGGER = logging.getLogger(__name__)

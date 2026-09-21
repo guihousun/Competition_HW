@@ -2136,17 +2136,17 @@
 
 ## 第 117 步：策略代码按"处境"拆分（task / day / night + planner 只做胶水）
 
-**目标** 全部策略原本塞在两个文件里（`planner.py` 691 行 + `states.py` 903 行），而 `planner.py` 名义上是"胶水"、实际装着三件互不相干的事（LLM 任务线 / 夜里防守线 / 白天组装），真正的白天工人链却住在 `states.py` 里。按用户口径按**处境**拆：任务逻辑 → `task.py`、白天 → `day.py`、夜里 → `night.py`、`planner.py` 只做胶水。**纯搬运、零行为改动**。
+**目标** 全部策略原本塞在两个文件里（`planner.py` 691 行 + `states.py` 903 行），而 `planner.py` 名义上是"胶水"、实际装着三件互不相干的事（LLM 任务线 / 夜里防守线 / 白天组装），真正的白天工人链却住在 `states.py` 里（该文件第 118 步改名 `core.py`，下文的路径指它）。按用户口径按**处境**拆：任务逻辑 → `task.py`、白天 → `day.py`、夜里 → `night.py`、`planner.py` 只做胶水。**纯搬运、零行为改动**。
 
 **产出**（正文逐字保留，只有文件头与本步的改名/调用点前缀是新写的）
 - 新文件：`game/task.py`（148 行，`task_channel` + `take_task` + `answer_task`）、`game/day.py`（410 行，`DAY_CHAIN` 那组状态类 + `BACK_TO_POST` + `rescue` + `slots` + 墙线几何 `_outside_spots`/`_stones_to_mine`/`_aside_cell` + `_can_fund`）、`game/night.py`（309 行，`upgrade_station` / `is_cleared` / `defend` + 开火一族 + 基地券常量 + `_fired`）。
 - `game/planner.py` 691 → **172 行**：只剩 `plan` / `_intents` / `_walk_out` / `_reserve_path`。判据链的顺序与分支原样不动，只把调用点改成 `task.` / `day.` / `night.` 前缀。
-- `game/states.py` 903 → **633 行**：只留"两个时段都要问"的（常量整张表 / `_Move`/`_Queue`/`_emit` / `_Ctx` / `State` / 经济线 / 岗位几何）。⚠️ `_pick_ore` / `_weak_walls` / `_wall_item` 是**被迫**留下的（各有第二个调用者在经济线上）。
+- `game/core.py`（当时叫 `states.py`）903 → **633 行**：只留"两个时段都要问"的（常量整张表 / `_Move`/`_Queue`/`_emit` / `_Ctx` / `State` / 经济线 / 岗位几何）。⚠️ `_pick_ore` / `_weak_walls` / `_wall_item` 是**被迫**留下的（各有第二个调用者在经济线上）。
 - 改名（跨模块调用点要有名字）：`_slots`→`day.slots`、`_rescue`→`day.rescue`、`_defend`→`night.defend`、`_upgrade_station`→`night.upgrade_station`、`_take_task`/`_answer_task`→`task.take_task`/`task.answer_task`；新增一行谓词 `night.is_cleared`（= 原本内联在 `_intents` 里的 `not _alive(_foe_robots(turn))`）。**私有助手一律留在各自模块内**（`_fire`、`_beam_site`、`_outside_spots`…）。
-- 顺手删掉两处**死 import**：`states._sealed_back`（全文件零调用）、`planner._walled`（同上）。
+- 顺手删掉两处**死 import**：`core._sealed_back`（全文件零调用）、`planner._walled`（同上）。
 - 调用点跟改：`app.py` 的 `planner.task_channel` → `task.task_channel`（`planner.plan` 不变）；`agent/agent.py` / `agent/chat.py` / `game/grid.py` / `game/utils.py` / `game/world.py` 里那几处 docstring 指针跟改。
-- 依赖方向：`app → planner → {task, day, night} → states → utils`；**`states` 绝不 import 它们三个**（那是循环导入）。
-- 用例改名（**类名一字不改**）：`test_game_planner_wall.py`→`test_game_day.py`、`_night`→`test_game_night.py`、`_task`→`test_game_task.py`、`_economy`→`test_game_states.py`；用例体只动 import 与文件头 docstring。
+- 依赖方向：`app → planner → {task, day, night} → core → utils`；**`core` 绝不 import 它们三个**（那是循环导入）。
+- 用例改名（**类名一字不改**）：`test_game_planner_wall.py`→`test_game_day.py`、`_night`→`test_game_night.py`、`_task`→`test_game_task.py`、`_economy`→`test_game_core.py`（第 118 步跟改）；用例体只动 import 与文件头 docstring。
 - 文档：`CLAUDE.md`（`game/` 树重写成五支 + 依赖方向图 + 三十来处指针）、`strategy.md`（头部加"符号住址"一段 + 指针）、`worker.md`（头部 + §0–§5 指针 + §5 那三个常量搬家的例外）。
 
 **验证**
@@ -2155,9 +2155,27 @@
 3. **真服务**（`bash run.sh 18092` + `logs/e2e_step116.py`；起服务前 `netstat` 验端口为空）：首问 system 6718 字、清单版面、交答案三字段 —— 与拆分前逐字一致。解密 stdout：24 行、0 行失败。跑完杀监听者。
 
 **仍生效的已知不确定性**
-1. **`states.py` 的名字与内容自此对不上**（叫 states，装的却是"共用底座"，只剩经济链那三个状态类）——按拍板接受，不改名；代价是读代码时先要过一次"它现在住哪"的心理映射，回退 = 整体改名（tests/CLAUDE.md/两份设计文档的引用都要跟动）。
+1. ~~**`states.py` 的名字与内容自此对不上**~~ **已兑现**（第 118 步改名 `core.py`，不再生效）。
 2. **`planner._intents` 是三处（task/day/night）唯一的汇聚点**：往后再加一个处境，那条阶梯会继续变长；它按定义留在 `planner.py`（胶水的代价）。
-3. **符号住址没有机械守卫**：`from .states import _emit` 这类把名字**绑进取用方命名空间**的写法，让陈旧引用（文档、日志、以后的用例）不报错、静默解析到同一份实现 —— `grep "def _xxx" <file>` 才看得见真相。本步靠人工 grep 清了一遍，下一次搬家同样得靠人工。
+3. **符号住址没有机械守卫**：`from .core import _emit` 这类把名字**绑进取用方命名空间**的写法，让陈旧引用（文档、日志、以后的用例）不报错、静默解析到同一份实现 —— `grep "def _xxx" <file>` 才看得见真相。本步靠人工 grep 清了一遍，下一次搬家同样得靠人工。
+
+---
+
+## 第 118 步：`states.py` 改名 `core.py`（用户口径"改一个更符合业务名的"）
+
+**目标** 第 117 步把它收缩成"共用底座"之后，`states` 这个名字与内容对不上（那步按拍板先接受）。本步改名：拍板选定 `core.py`（"共用底座"的直接说法，与 `utils`/`grid`/`world` 同一层的中性命名）。
+
+**产出**（只有名字与 import 在动，一行逻辑都没碰）
+- `git mv src/coregeek/game/states.py src/coregeek/game/core.py`；`tests/test_game_states.py` → `tests/test_game_core.py`（**用例体一字未动，类名不变**，与第 38 步的先例一致）。
+- import 与指针跟改：`from .states import …` → `from .core import …`（`day` / `night` / `task` / `planner`）、`states._Queue` → `core._Queue`（`test_game_day`）、`game/states.py` → `game/core.py`（CLAUDE.md 的 `game/` 树那一支与依赖方向图 6 行、`strategy.md` 头部"符号住址"、`worker.md` 头部与 §5）。
+- 第 117 步那条"名字与内容对不上"的**仍是生效项就地划掉**（兑现即失效）。
+
+**验证**
+1. 用例 **494 条全绿**；`plan()` 黄金轨迹与拆分前**仍逐字相同**（3 天 390 回合）。
+2. **真服务**（`bash run.sh 18093` + `logs/e2e_step116.py`；起服务前 `netstat` 验端口为空）：首问 system 6718 字、清单版面、交答案三字段，与拆分前逐字一致；跑完杀监听者。
+
+**仍生效的已知不确定性**
+1. 第 117 步的 #2（`planner._intents` 是三处唯一的汇聚点）与 #3（符号住址没有机械守卫）**按用户口径先不改**，见那一节。
 
 ---
 

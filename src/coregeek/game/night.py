@@ -4,7 +4,7 @@
 `is_cleared`（没有还会打我方的活机器人）→ `defend`（其余角色回炮位开火）。**判据顺序就是
 夜里的策略**，改序先看 `strategy.md` §5。
 
-岗位几何在 `states`（`_post_spots` / `_operator_spots` / `_near_spots`）：白天收工闸门与
+岗位几何在 `core`（`_post_spots` / `_operator_spots` / `_near_spots`）：白天收工闸门与
 这里必须同一个口径，只改一处会让白天把人送进岗位、夜里又不认领，那格被占着、整组没人操。
 开火只经 `_emit`（`attack` 的 key 是武器 id，操控者在 `controllerId`）。
 
@@ -17,7 +17,7 @@ from typing import Any
 from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, base_cells
 from .roles import BaseRole, Pioneer
-from .states import _Queue, _emit, _near_spots, _operator_spots, _post_spots
+from .core import _Queue, _emit, _near_spots, _operator_spots, _post_spots
 from .utils import _passable, _pioneer_mans_guns, _weapon_groups
 from .world import Robot, Turn, Weapon
 

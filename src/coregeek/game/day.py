@@ -1,8 +1,8 @@
 """白天：工人的差事链（`DAY_CHAIN`）、收工闸门（`BACK_TO_POST`）、拆墙放人与建武器名额。
 
 `DAY_CHAIN` 就是那张状态机图（`docs/pic/白天工人状态机.png`，图上每个盒子一个类），
-**顺序即策略**；`run` 的契约两条写在 `states.State` 的 docstring 里。本模块只被 `planner`
-调用（单向）：底座在 `states`，通用判定在 `utils`。
+**顺序即策略**；`run` 的契约两条写在 `core.State` 的 docstring 里。本模块只被 `planner`
+调用（单向）：底座在 `core`，通用判定在 `utils`。
 
 只有一个调用者的控制流直接装进那个类的 `run`（`BuildWalls` / `RepairWalls` / `BackToPost`）；
 仍留模块级的助手各有第二个调用者：`slots`（`planner._intents` 要在角色循环之前先算武器缺口）。
@@ -18,7 +18,7 @@ from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, box_cells, wall_cells, weapon_sites
 from .path import step_outside, steps_between
 from .roles import BaseRole, Pioneer, Worker
-from .states import (
+from .core import (
     ECONOMY_CHAIN,
     POST_MARGIN,
     ROUNDS_PER_STONE,

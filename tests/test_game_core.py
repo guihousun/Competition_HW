@@ -1,4 +1,4 @@
-"""game/states.py 经济线的用例：采矿（可行矿筛选、顺路卖）/ 卖矿 / 升级券线。
+"""game/core.py 经济线的用例：采矿（可行矿筛选、顺路卖）/ 卖矿 / 升级券线。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -18,7 +18,7 @@ from coregeek.game.grid import Pos, wall_cells  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.path import step_toward  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
-from coregeek.game.states import TIME_MARGIN, WALL  # noqa: E402
+from coregeek.game.core import TIME_MARGIN, WALL  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Turn, Weapon  # noqa: E402
 

@@ -3,7 +3,7 @@
 `plan` = `_intents`（第一段，逐角色出"初步行为"：能直接干的当场落 `q.cmds`，要走路的只交
 意图）+ `_walk_out`（第二段，按同一顺序批量解走路意图 —— BFS 落一格、记落子账与路径预留账）。
 判据链本身按处境分派：任务线在 `task`、白天在 `day`、夜里在 `night`；两边都要问的通用判定在
-`game/utils.py`，共用底座在 `game/states.py`。
+`game/utils.py`，共用底座在 `game/core.py`。
 
 两个距离口径别混：回合预算（来不来得及来回）一律用 BFS 真实步数（`steps_between`，绕障，
 -1 = 走不到）；选点/贴着用切比雪夫 `Pos.dist`。射程与溅射也是切比雪夫 —— 那是规则。
@@ -19,7 +19,7 @@ from . import day, night, task
 from .grid import Pos, box_cells
 from .path import step_onto, step_outside, step_toward
 from .roles import BaseRole, Pioneer, Worker
-from .states import _Ctx, _Queue, _economy, _emit, _sell_ore, _upgrade_line
+from .core import _Ctx, _Queue, _economy, _emit, _sell_ore, _upgrade_line
 from .utils import _ring, _short_handed, _trapped
 from .world import Turn
 
