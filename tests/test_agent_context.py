@@ -153,40 +153,65 @@ class ContextTest(unittest.TestCase):
             {"role": "tool", "content": "【历史摘要】\n【总目标】交 token"},
         )
 
-    def test_the_window_keeps_the_last_two_rounds(self):
-        """渲染窗口：题目与摘要永远在，原始往来只留最近两轮（最后 `_WINDOW` 条
-        assistant 及其后全部 —— tool 结果、纠错、nudge 都跟着它们前面那条 assistant 走）。
-        更早的只活在摘要里 ⇒ prompt 从 O(全部历史) 变成 O(窗口)。"""
+    def test_nothing_is_dropped_before_a_summary_lands(self):
+        """**摘要没盖到的往来一条都不丢**（用户口径）：渲染只掐"上一次压缩请求盖住的那段"。
+
+        压缩请求是命令轮才发得出去的（回合末尾的闸门），中间可能连着好几轮轮不到 —— 按
+        "最近 N 轮"掐会把这中间的往来丢在摘要之外（旧 `_WINDOW`(2) 就是那样）。
+        """
         for i in (1, 2, 3):
             self.ctx.hear(f"回复{i}")
             self.ctx.feed(f"结果{i}", "")
-        self.ctx.summary = "旧账都在这里"
-        self.assertEqual(
-            [m["role"] for m in self.messages()],
-            ["system", "user", "tool", "assistant", "tool", "assistant", "tool"],
-        )
         contents = [m["content"] for m in self.messages()]
-        self.assertIn("回复2", contents)
-        self.assertIn("回复3", contents)
-        self.assertNotIn("回复1", contents, "第一轮的原文被窗口掐掉 —— 它只有摘要替它记着")
+        for i in (1, 2, 3):
+            self.assertIn(f"回复{i}", contents, "还没压缩过 ⇒ 全量都在")
+        self.assertNotIn("【历史摘要】", contents, "没有摘要就不占那一条")
 
-    def test_a_short_history_is_kept_in_full(self):
-        """assistant 不超过 `_WINDOW` 条 ⇒ 全量保留（窗口掐不着）—— 短任务
-        与压缩前逐字节同形，压缩只在长任务上才真正生效。"""
+    def test_only_what_the_summary_covers_drops_out(self):
+        """摘要回来 ⇒ 只有**它盖住的那段**（= 上次压缩请求发出去时的全部往来）不再逐条渲染。
+
+        覆盖点按"发请求时的快照"划，不按"摘要回来的时刻" —— 请求发出之后新添的往来
+        （工具产出、纠错、重问）还没进任何摘要，照旧全量跟着走。
+        """
+        for i in (1, 2, 3):
+            self.ctx.hear(f"回复{i}")
+            self.ctx.feed(f"结果{i}", "")
+        self.ctx.sent_for_compression()  # 压缩请求发出去（快照 = 现在这些往来）
+        self.ctx.hear("回复4")  # 请求发出之后又添的一条：它没进摘要
+        self.ctx.feed("结果4", "")
+        self.ctx.adopt_summary("旧账都在这里")
+        contents = [m["content"] for m in self.messages()]
+        text = "\n".join(contents)
+        self.assertIn("【历史摘要】\n旧账都在这里", contents)
+        for i in (1, 2, 3):
+            self.assertNotIn(f"回复{i}", text, f"第 {i} 轮已被摘要盖住 ⇒ 不再逐条渲染")
+        self.assertIn("回复4", text, "摘要之后新添的照旧全量")
+        self.assertIn("结果4", text)
+
+    def test_a_summary_without_a_pending_request_covers_nothing(self):
+        """凭空来的摘要（没发过压缩请求）⇒ 只记摘要、覆盖点不动 —— 绝不能因为"有摘要了"
+        就把旧往来当成已被它盖住。"""
         self.ctx.hear("回复1")
         self.ctx.feed("结果1", "")
-        self.ctx.hear("回复2")
-        self.assertEqual(
-            [m["role"] for m in self.messages()],
-            ["system", "user", "assistant", "tool", "assistant"],
-        )
+        self.ctx.adopt_summary("不知道盖到哪的摘要")
+        contents = [m["content"] for m in self.messages()]
+        self.assertIn("回复1", contents)
 
-    def test_a_tail_nudge_stays_in_the_window(self):
-        """尾巴上的 nudge 跟着最后一条 assistant 走 —— 窗口切的是"轮"，
-        不是"条数"，收尾那句话不会被单独掐掉。
+    def test_an_unanswered_compression_request_drops_nothing(self):
+        """压缩请求发了、判题器没答（没摘要回来）⇒ 那些往来照旧全量渲染。"""
+        self.ctx.hear("回复1")
+        self.ctx.feed("结果1", "")
+        self.ctx.sent_for_compression()
+        self.ctx.hear("回复2")
+        contents = [m["content"] for m in self.messages()]
+        self.assertIn("回复1", contents)
+        self.assertIn("回复2", contents)
+
+    def test_a_tail_nudge_rides_along(self):
+        """尾巴上的 nudge 照旧在最末（它本来就是最新那一条，与摘要无关）。
 
         收尾前再 `hear` 一条：尾巴上放着 `tool` 产出时 nudge 根本不落（第 111 步），
-        而这条用例要的是"落了之后还在不在窗口里"。
+        而这条用例要的是"落了之后它在不在尾巴上"。
         """
         for i in (1, 2, 3):
             self.ctx.hear(f"回复{i}")

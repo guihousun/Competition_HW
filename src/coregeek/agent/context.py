@@ -1,8 +1,10 @@
 """Context —— 一个任务的会话上下文，渲染成标准 messages JSON（判题器的 LLM 每回合只看到
 `prompt` 这一段字符串）。这里只管存储与渲染，建会话、每轮放什么由 `Agent` 编排。
 
-存储全量、渲染有窗：消息表逐字全量，`render()` 只输出题目 + 摘要 + 最近 `_WINDOW` 轮 ——
-prompt 是 O(窗口)，长任务的 64KB 沙盒回执堆不出来。摘要替被窗口掐掉的旧往来记账（`tool`）。
+存储全量、渲染**跟着摘要走**：消息表逐字全量；`render()` = 题目 + 【历史摘要】 + **摘要覆盖点
+之后的全部往来**。摘要没盖到的一句都不丢 —— 压缩是好几个回合才轮到一次的（命令轮才发压缩请求），
+按"最近 N 轮"掐会把这几轮之间的往来丢在摘要之外（用户口径："不能关死 2 回合的逻辑"）。
+还没有摘要 ⇒ 全量（首问与短任务逐字节同形）。
 `system` 不在消息表里，`Agent` 每次发送前刷新（SOP 与沙盒清单是活的）。只依赖标准库。
 """
 
@@ -27,11 +29,6 @@ _TOOL = "tool"
 #: 含糊指令，一句"请继续"把"该你了"说清楚。措辞是拍的、可调。
 NUDGE = "请继续。"
 
-#: 渲染窗口（拍的）：原始往来最多保留最近几"轮" —— 一条 assistant 及其后跟着的 tool 结果 /
-#: 纠错 / nudge 算一轮，更早的只有摘要替它记着。短任务（≤3 轮）掐不着。
-_WINDOW = 2
-
-
 class Context:
     """同一道题的会话上下文。建一个用一道题（`Agent.chat` 换题即换新）。"""
 
@@ -40,9 +37,16 @@ class Context:
         self.task = task
         #: system —— `Agent` 每次发送前刷新，SOP 是活的。
         self.system = ""
-        #: 执行摘要：压缩轮的 `<summary>` 内容（`Agent.adopt_summary` 记入），渲染成题目后面的
-        #: 一条 tool 消息、替被窗口掐掉的旧往来记账。
+        #: 执行摘要：压缩轮的 `<summary>` 内容（`adopt_summary` 记入），渲染成题目后面的
+        #: 一条 tool 消息、替它盖住的那段往来记账。
         self.summary = ""
+        #: 摘要盖到 `_messages` 的第几条（下标）：`render` 从这一条起往后全量输出。
+        #: 首元素是题目（单独渲染）⇒ 起点是 1 = "还没盖住任何往来"。
+        self._covered = 1
+        #: 上一次压缩请求发出去时的快照（`sent_for_compression`）。摘要回来时按它划覆盖点；
+        #: 请求发了而判题器没答 ⇒ 快照留着不动，那些往来照旧全量渲染（**绝不能因为"发过请求"
+        #: 就当它们已被摘要盖住** —— 那等于把没进摘要的往来丢掉）。
+        self._pending: int | None = None
         #: 构造即问：首条 user 消息就是题目原文（不加包装 —— 结构由 role 表达）。
         self._messages: list[Message] = [Message(_USER, task)]
 
@@ -85,7 +89,10 @@ class Context:
         return True
 
     def render(self) -> str:
-        """整份 prompt：system + 题目 + 摘要 + 最近 `_WINDOW` 轮（紧凑 JSON，正文逐字保留）。
+        """整份 prompt：system + 题目 + 摘要 + **摘要覆盖点之后的全部往来**（紧凑 JSON，正文逐字）。
+
+        ⚠️ 不是"最近 N 轮"：压缩请求只在命令轮发得出去（回合末尾的闸门），连着几轮没轮到时
+        中间那些往来必须全量带着走 —— 它们还没进任何摘要。
         """
         messages = [
             {"role": "system", "content": self.system},
@@ -93,17 +100,22 @@ class Context:
         ]
         if self.summary:
             messages.append({"role": _TOOL, "content": f"【历史摘要】\n{self.summary}"})
-        messages += [{"role": m.role, "content": m.text} for m in self._window()]
+        messages += [
+            {"role": m.role, "content": m.text} for m in self._messages[self._covered:]
+        ]
         return json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
 
-    def _window(self) -> list[Message]:
-        """最近 `_WINDOW` 轮：从最后 `_WINDOW` 条 assistant 里最早的那条起、其后全部保留
-        （tool 结果 / 纠错 / nudge 都跟着它们前面那条 assistant 走）；不足 ⇒ 全量。"""
-        body = self._messages[1:]
-        kept = [i for i, m in enumerate(body) if m.role == _ASSISTANT]
-        if len(kept) <= _WINDOW:
-            return body
-        return body[kept[-_WINDOW]:]
+    def sent_for_compression(self) -> None:
+        """记下"这一趟压缩原料盖到哪"（`Agent.compression_request` 发请求时调）。"""
+        self._pending = len(self._messages)
+
+    def adopt_summary(self, text: str) -> None:
+        """收下压缩轮的摘要：它盖住的是**上一次压缩请求**发出去时的全部往来。没有在途请求
+        （凭空来的摘要）⇒ 只记摘要、覆盖点不动。"""
+        self.summary = text
+        if self._pending is not None:
+            self._covered = self._pending
+            self._pending = None
 
     def material(self) -> str:
         """压缩原料：原始上下文全文（题目 + 全部往来，逐字）。压缩总从原文重来、不从旧摘要

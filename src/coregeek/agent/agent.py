@@ -291,7 +291,7 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
 
         `request` = 题目原文；同一道题续上旧会话、换题换新。首问 = 题目；回灌轮 = 结果/纠错
         （`feed`）；无新内容的重问轮补一句「请继续。」。system 每次现刷：SOP 与沙盒清单
-        是活的，下一轮就得看得见。"""
+        是活的，下一轮就得看得见。渲染 = 题目 + 摘要 + **摘要没盖到的全部往来**。"""
         fresh = self._context is None or self._context.task != request
         if fresh:
             # 换题 ⇒ 新会话。粘住的回执也照样 feed（照样回灌）。
@@ -332,16 +332,22 @@ SOP 中不要出现：<answer> </answer> 如果需要描述答案格式，应写
         return self._context.hear(reply)
 
     def adopt_summary(self, text: str) -> None:
-        """压缩轮的摘要记进会话上下文（裸 `<summary>` 回复的路由）；没开会话 ⇒ 忽略。"""
+        """压缩轮的摘要记进会话上下文（裸 `<summary>` 回复的路由）；没开会话 ⇒ 忽略。
+
+        摘要一到，`Context` 就把渲染起点推到上一次压缩请求的快照上 ⇒ 它盖住的那段不再逐条
+        渲染（避免与摘要双份）。"""
         if self._context is not None:
-            self._context.summary = text
+            self._context.adopt_summary(text)
 
     def compression_request(self) -> str:
         """压缩轮的 prompt：独立指令 + 原始上下文全文（`Context.material`）。没开会话 ⇒ `""`。
 
-        发送时机 = 回合末尾的压缩闸门（只剩命令轮）。"""
+        发送时机 = 回合末尾的压缩闸门（只剩命令轮）。这里顺手给上下文记一个快照
+        （`sent_for_compression`）：摘要回来时按它划渲染起点 —— 判题器不答的话快照不动，
+        那些往来照旧全量渲染。"""
         if self._context is None:
             return ""
+        self._context.sent_for_compression()
         return gen_compression_prompt(self._context.material())
 
     def read_sandbox_file(self, path: str) -> str:

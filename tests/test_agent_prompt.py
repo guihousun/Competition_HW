@@ -294,7 +294,7 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_flow_asks_for_the_reasoning_before_the_blocks(self):
         """先写推演、再给工具块或答案块（用户口径：COT 引导）。
 
-        推演是写给**下一回合的自己**看的：会话窗口只留最近两轮（`Context._WINDOW`），
+        推演是写给**下一回合的自己**看的：渲染只到「摘要盖住的那段」为止（`Context.render`），
         不写下来就只剩一个结果、没有"上一步为什么没成"。落点必须在块**前面** —— 写进
         `<answer>` 里会被当成答案的一部分交上去。
         第 116 步删掉【输出示例】后只剩两处落点：末段那句 COT 触发语，与【输出约定】里
@@ -379,7 +379,7 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
 
-        渲染窗口只留最近两轮（`Context._WINDOW`），试错一长，早先的尝试就掉出窗口 ——
+        渲染只带「摘要盖住的那段」之后的部分（`Context.render`），试错一长，早先的尝试就只剩摘要 ——
         摘要（压缩轮的产物）是唯一还记得"哪些路已经走死"的地方。不点破这一点，压缩器会
         只留成功经验，"反复试同一条死路"就是它漏记的直接后果。"""
         self.agent.chat("题目")
