@@ -90,13 +90,13 @@ class Frame:
         return costs,steps
 
     def required(self, role):
-        if not self.active: return False
+        if not self.active or not self.turn.weapons(): return False
         steps = self.routes(role)[0].get(role.pos)
         return self.emergency or (self.index >= strategy_config.get()['economy']['return_day_index']
                                   if steps is None else self.index+steps >= self.deadline)
 
     def apply(self, commands):
-        if not self.active: return dict(commands)
+        if not self.active or not self.turn.weapons(): return dict(commands)
         result = dict(commands)
         # Urgent/far roles select their return landing first. Stationary
         # teammates remain blocked; this never relies on an unobserved vacate.
@@ -114,7 +114,11 @@ class Frame:
             # Once safely at the post, use/sell/build beside it remains legal
             # through the final daytime round. There is no return leg to lose.
             stays_home = current_cost == 0 and after_cost == 0
-            keep = bool(current and (fits or stays_home) and not self.emergency)
+            atomic = bool(current and current.get('action') in {
+                'acceptTask','submitAnswer','buy','sell','use','drop','summonTreasure','collect'})
+            # A command already selected at a legal target is one atomic action;
+            # finish it, then arbitrate the return on the next observation.
+            keep = bool(current and (atomic or ((fits or stays_home) and not self.emergency)))
             if not keep and (self.required(role) or (current and not fits)):
                 result.pop(role.unit_id,None)
                 return_costs, return_steps = self.routes(role,result)

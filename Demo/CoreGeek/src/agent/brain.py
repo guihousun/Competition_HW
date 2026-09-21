@@ -94,6 +94,10 @@ def _work_deadline(turn):
     return dusk_return.deadline(turn)
 
 
+def _purchase_deadline(turn):
+    return _work_deadline(turn) if dusk_return.enabled() else DAY_ROUNDS - UPGRADE_RETURN_MARGIN
+
+
 _CLEARED_NIGHT = ContextVar('competition_cleared_night', default=None)
 
 
@@ -793,18 +797,18 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
          planner_state: Any = None) -> None:
     from . import team_trip
     frame = team_trip.TripFrame(turn,state,getattr(planner_state,'team_trips',{}),
-        purchase_deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),construction_deadline=_work_deadline(turn))
+        purchase_deadline=_purchase_deadline(turn),construction_deadline=_work_deadline(turn))
     _TRIP_FRAME.set(frame)
 
     def upgrade_plan():
         construction = frame.construction
         proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
-            deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),commitment=frame.purchase,
+            deadline=_purchase_deadline(turn),commitment=frame.purchase,
             reserved_workers=({construction['owner']} if construction else ()))
         if frame.purchase and proposal is None and frame.purchase.get('phase')!='return':
             frame.cancel('purchase',report['reason'])
             proposal,report = upgrade_itinerary.plan(turn,state,commands,start=0,
-                deadline=min(DAY_ROUNDS-UPGRADE_RETURN_MARGIN,_work_deadline(turn)),
+                deadline=_purchase_deadline(turn),
                 reserved_workers=({construction['owner']} if construction else ()))
         if frame.purchase is None and _STRATEGY['enabled']:
             from . import phase_supply
@@ -824,7 +828,17 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
 
     _UPGRADE_REPORT.set({'phase':'idle','reason':'return_before_night'})
     # Return before night instead of waiting until robots arrive.
-    if not dusk_return.enabled() and (turn.round_no - 1) % 130 >= RETURN_BEFORE_NIGHT and turn.weapons():
+    index = (turn.round_no - 1) % ROUNDS_PER_DAY
+    carried_upgrade = any(
+        can_upgrade(item, building.kind, building.level)
+        for worker in turn.workers() for item in worker.backpack
+        for building in turn.ours if building.health > 0)
+    dynamic_stage = (dusk_return.enabled() and turn.weapons()
+                     and any(_DUSK_RETURN.get() is not None
+                             and _DUSK_RETURN.get().required(worker)
+                             for worker in turn.workers()))
+    if ((not dusk_return.enabled() and index >= RETURN_BEFORE_NIGHT or dynamic_stage)
+            and turn.weapons() and not carried_upgrade):
         # A priced upgrade trip uses its actual round-trip budget, not the
         # generic early-return cutoff that used to strand it before buying.
         upgrade, report = upgrade_plan()
@@ -950,9 +964,6 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
 
     for role in turn.workers():
         if role.unit_id in busy:
-            continue
-        return_frame = _DUSK_RETURN.get()
-        if return_frame is not None and return_frame.turn is turn and return_frame.required(role):
             continue
         if frame.construction and role.unit_id==frame.construction['owner']:
             construct(role)
