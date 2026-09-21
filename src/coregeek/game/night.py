@@ -1,8 +1,8 @@
 """夜里：认领武器组、走到岗位、按最大伤害落点开火，外加基地升级与"清场没有"。
 
-三个入口（`planner._intents` 按这个顺序问）：`upgrade_station`（基地残血 + 持券）→
-`is_cleared`（没有还会打我方的活机器人）→ `defend`（其余角色回炮位开火）。**判据顺序就是
-夜里的策略**，改序先看 `strategy.md` §5。
+四个入口（`planner._night_intents` 按这个顺序问，那条链的代码在 `planner.py`）：`upgrade_station`
+（基地残血 + 持券）→ `is_cleared`（没有还会打我方的活机器人）→ `mine_ore`（清场后工人出门采矿）
+→ `defend`（其余角色回炮位开火）。**判据顺序就是夜里的策略**，改序先看 `strategy.md` §5。
 
 岗位几何在 `core`（`_post_spots` / `_operator_spots` / `_near_spots`）：白天收工闸门与
 这里必须同一个口径，只改一处会让白天把人送进岗位、夜里又不认领，那格被占着、整组没人操。

@@ -2207,6 +2207,28 @@
 
 ---
 
+## 第 120 步：`_intents` 按昼夜拆成 `_day_intents` / `_night_intents`（用户口径"降低耦合度"）
+
+**目标** 第 117 步把策略按处境拆成了文件，但**判据链本身还是一条**：`_intents` 里一个循环，白天与夜里的分支混在同一条阶梯上（`if turn.is_day and ...` / `if not turn.is_day:` 各一处），夜里的账还借白天那个 `_Ctx` 黑板。用户口径：**在 `_intents` 这一层就拆成 `_day_intents` 与 `_night_intents`，白天与夜里各走各的链，降低耦合度**。
+
+**产出**（行为零改动）
+- `planner._intents` 只剩三行：看一眼 `turn.is_day`，整个交给 `_day_intents` 或 `_night_intents`。
+- **`_day_intents`**：一个逐角色循环，装着 ① 开拓者被任务钉死 ② 被关住的人先迈出去 ③ `day.rescue` ④ `day.BACK_TO_POST` ⑤ 开拓者接任务/跑腿/卖矿 ⑥ 工人走 `day.DAY_CHAIN`；白天那本 `_Ctx` 黑板与环缺口切段都在这里。两处 `turn.is_day` 判断随之消失（这条链按定义就是白天）。
+- **`_night_intents`**：一个逐角色循环，装着 ① 被任务钉死的开拓者（人手够才钉得住）② `night.upgrade_station` ③ 清场后 `night.mine_ore` ④ `night.defend`。⚠️ **它不构造 `_Ctx`** —— 夜里的三本账（`taken` / `ore_taken` / `assigned`）就是本函数的**局部变量**，夜里从此不碰白天那个黑板。
+- 连带删掉一处**死参数**：`_walk_out(turn, q, sites)` 的 `sites` 在函数体里一次都没用过（`_intents` 把它从第一段带出来、第二段直接忽略）⇒ 去掉，`plan` 也跟着简化成 `q = _intents(turn); _walk_out(turn, q); return q.cmds`。
+- 指针跟改：`day.py` / `night.py` / `task.py` / `core.py`（`_Ctx` 的 docstring 与 `taken` 注释、经济线那一节的标题）与 CLAUDE.md / strategy.md / worker.md 里对 `_intents` 的引用；`test_game_day` 里直接调 `planner._walk_out(turn, q, set())` 的那条改成两个参数。
+
+**验证**
+1. 全量用例 **494 条全绿**（只改了一处调用签名）。
+2. **`plan()` 黄金轨迹逐字相同**：3 天 390 回合与**10 天 1300 回合**两份都与拆分前一致 —— 白天那条链一个字没动是证出来的。
+3. **真服务**（`run.sh 18096` + `logs/e2e_step119.py`）夜里两段（R85 / R129 清场）的输出与第 119 步**逐字相同**（夜里那条链搬了家但没变样）；跑完杀监听者。
+
+**仍生效的已知不确定性**
+1. **`core._Ctx` 现在只有白天用**（夜里那本改成局部变量了）⇒ 与第 119 步那条"经济线只有白天问"同源，它俩该一起搬去 `day.py`。本步没搬（避免与行为改动混在一起）。
+2. **两条链的公共前缀只有"被任务钉死的开拓者"这一支**（三段代码几乎一样，只有 `not _short_handed(turn)` 与 `turn.is_day` 之差）。**没有抽公共函数**是有意的：抽出来就得把"白天恒够、夜里看人手"这条判据塞进去，两条链又会重新缠在一起 —— 与这次拆分的目的相反。
+
+---
+
 ## 当前仍悬着的事
 
 跨步重复、或不归属某一步的未了结项。**已实现的下一步不在此列。**

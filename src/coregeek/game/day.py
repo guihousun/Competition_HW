@@ -5,7 +5,7 @@
 调用（单向）：底座在 `core`，通用判定在 `utils`。
 
 只有一个调用者的控制流直接装进那个类的 `run`（`BuildWalls` / `RepairWalls` / `BackToPost`）；
-仍留模块级的助手各有第二个调用者：`slots`（`planner._intents` 要在角色循环之前先算武器缺口）。
+仍留模块级的助手各有第二个调用者：`slots`（`planner._day_intents` 要在角色循环之前先算武器缺口）。
 
 `BACK_TO_POST` 挂在 `DAY_CHAIN` **之前**、且不在链里：补墙优先于收工，开拓者也走它
 （链上只跑工人）。它**只发 move** —— 到岗调 `night.defend` 会发 `attack`，白天发就是非法

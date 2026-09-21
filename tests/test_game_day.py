@@ -1287,7 +1287,7 @@ class PathReserveTest(unittest.TestCase):
         turn = Turn(round_no=1, map=Map((41, 32), grid), roles=(walker,), gold=0)
         q = core._Queue(turn)
         self.assertTrue(q.step(walker, Pos(9, 5), avoid={Pos(6, 5), Pos(7, 5), Pos(8, 5)}))
-        planner._walk_out(turn, q, set())
+        planner._walk_out(turn, q)
         self.assertEqual(
             q.cmds["1"],
             {"action": "move", "targetPos": [{"x": 6, "y": 5}]},

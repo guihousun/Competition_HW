@@ -153,7 +153,7 @@ class _Queue:
 
 
 class _Ctx:
-    """回合内的决策黑板：白天工人链与夜里经济线共用的那几本账。
+    """**白天**的决策黑板：工人链与开拓者那两支共用的那几本账。
 
     每本账都是同一个对象被各状态原地改 —— 后一个状态读到的必须是前一个刚写下的那一份。
     逐角色顺序累计，回合一过就没了。"""
@@ -175,7 +175,7 @@ class _Ctx:
         self.ore_taken = set() if ore_taken is None else ore_taken
         self.weapon_gap = weapon_gap  # 份额有缺的名额还在（建武器与升级线的开关）
         self.leaving = leaving  # `_trapped`：砌满墙就会被关在盒子里的人
-        self.taken: set[Pos] = set()  # 炮位（夜里一人一座；白天只有收工闸门读）
+        self.taken: set[Pos] = set()  # 收工闸门认领的岗位（夜里那本账在 `planner._night_intents` 里）
         self.repair_taken: set[Pos] = set()  # 待修墙格认领
         self.budget = turn.gold  # 金币预留：认领一座武器就扣一份，宁可少建不可超支
         self.slots = iter(()) if slots is None else slots  # 待建武器名额（一次性迭代器）
@@ -196,7 +196,7 @@ class State:
         raise NotImplementedError
 
 
-# ── 经济线：白天链尾与夜里清场后共用同一份实现 ──────────────────────
+# ── 经济线（白天专属）：`day.DAY_CHAIN` 的尾巴接的就是下面这三条 ────
 
 
 class SellCargo(State):

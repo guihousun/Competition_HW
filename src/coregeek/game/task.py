@@ -125,7 +125,7 @@ def take_task(
     """白天：走到最近一个能接的任务点旁边，贴着就 `acceptTask`。
 
     与 `build` / `collect` 同一条契约：任务点挡路，`step_toward` 天然停在贴着它的一格。
-    一个能接的点都没有 ⇒ 什么都不发，不去蹲守。领到之后本函数进不来了（`_intents`
+    一个能接的点都没有 ⇒ 什么都不发，不去蹲守。领到之后本函数进不来了（`planner._day_intents`
     最前面那道分支先一步接管）。"""
     if not turn.task_points:
         return

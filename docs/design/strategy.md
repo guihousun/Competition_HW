@@ -11,7 +11,7 @@
 > 旧版策略稿（根目录那份"按天梳理"，正文已并入本文、文件已删）见 `git show 08512da:strategy.md`。
 >
 > ⚠️ **符号住址**（第 117 步按"处境"拆文件）：任务线 = `game/task.py`、白天 = `game/day.py`、
-> 夜里 = `game/night.py`、胶水（两段式组装 + `_intents` 那条判据链）= `game/planner.py`、
+> 夜里 = `game/night.py`、胶水（两段式组装 + `_intents` 按昼夜分派）= `game/planner.py`、
 > 两个时段共用的底座 = `game/core.py`。**下文的短名按这个归属读**（`_fire` / `_defend` /
 > `_foe_robots` 在 `night`，`_slots` / `_rescue` / `Day...` 那条链在 `day`，`task_channel` 在 `task`，
 > `_sell_ore` / `_post_spots` 那一族在 `core`，夜里清场后的采矿在 `night.mine_ore`）—— 短名没跟着加前缀是
@@ -110,7 +110,7 @@ app.handle(payload)
 
 | 段 | 函数 | 产出 | 纪律 |
 |---|---|---|---|
-| 一 | `_intents` | **初步行为**：能当场干的 act 直接落 `q.cmds`；要**走**路的只交一个意图（`(角色, 目标)` 或 provider 型）。工人那一支走 `day.DAY_CHAIN` 那组状态类（第 93 步） | 黑板账全在这一段按角色顺序累计（`sites` / `taken` / `repair_taken` / `ore_taken` / `budget` 装在 `_Ctx` 里、`segments` 在本函数）—— **角色之间的协调发生在决策层** |
+| 一 | `_intents` → `_day_intents` / `_night_intents` | **初步行为**：能当场干的 act 直接落 `q.cmds`；要**走**路的只交一个意图（`(角色, 目标)` 或 provider 型）。**按昼夜分成两条独立的链**（第 120 步），工人那一支走 `day.DAY_CHAIN` 那组状态类（第 93 步） | 黑板账全在这一段按角色顺序累计 —— 白天那本在 `_Ctx` 里（`sites` / `taken` / `repair_taken` / `ore_taken` / `budget`）+ `segments` 在本函数；**夜里那本只是两个局部集合**（`taken` / `ore_taken` + `assigned`），**不碰 `_Ctx`** —— **角色之间的协调发生在决策层** |
 | 二 | `_walk_out` | 按**同一顺序**批量解走路意图：BFS 落一格 | 落子账 `claimed` 与路径预留账 `paths` 在这一段累计；后解的让开先落的（先落的子当硬障碍、已预留的路当**软避让**，绕不开就退回硬障碍照走，绝不原地卡死） |
 
 ⇒ 一个角色一回合最多一个动作，而"这个动作是什么"**在第一段就定了**，第二段只负责把它落到
@@ -200,9 +200,9 @@ W6 —— 这就是"墙砌完了去补血 / 干经济"的实现方式。
 
 ### 1.5 共用记账（都是"本回合"的局部变量，不跨回合）
 
-第 93 步起这些账装在 `_Ctx` 里（`_intents` 循环外构造一次、循环里所有角色共用；
+第 93 步起这些账装在 `_Ctx` 里（`_day_intents` 循环外构造一次、循环里所有角色共用；
 夜里也用同一个袋子）—— ⚠️ **一个回合只有一个 `_Ctx`**，谁把它挪进角色循环，黑板就散了
-（症状是两个工人抢同一格墙）。`segments` 留在 `_intents` 里，`target` / `remaining` 每进一个
+（症状是两个工人抢同一格墙）。`segments` 留在 `_day_intents` 里，`target` / `remaining` 每进一个
 工人时写进 `ctx`。
 
 - `claimed` —— 已被认领的**落脚格**（两人冲同一格会双双停住）；
