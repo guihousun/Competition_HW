@@ -4,6 +4,7 @@
 """
 
 import json
+import shlex
 import sys
 import unittest
 from pathlib import Path
@@ -426,9 +427,10 @@ class FailedCallFeedbackTest(unittest.TestCase):
 
 
 class ReadSandboxFileTest(unittest.TestCase):
-    """`readSandboxFile`：`path` 是**枚举值** —— 只有探明过的那几份（现挂在工具描述里的
-    那份清单）允许调用，写整条全路径、或只写它的文件名都行（文件名对上不止一份 ⇒ 不成立，
-    第 105 步）；命中就当回合把正文送进会话（省一回合），其余一律"调用不成立"、不发命令。
+    """`readSandboxFile` 的三条分支：**本地命中** ⇒ 正文当回合进会话、返 `""`（省一回合）；
+    **撞名**（文件名对上不止一份）⇒ 调用不成立、只回一条说明，本地明明有、是 `path` 没写全；
+    **本地没有** ⇒ 派一条按文件名去沙盒里找它的命令（正文下一回合随回执回来）。
+    整条全路径与只写它的文件名两种写法都收（第 105 步）。
 
     `_files` 住在 `cmd_explore` 的模块层 ⇒ 每个用例复位（既有先例，见那个文件）。
     """
@@ -481,69 +483,68 @@ class ReadSandboxFileTest(unittest.TestCase):
         self.assertIn("/home/task/a.md", note[0])
         self.assertFalse(any("甲" in c or "乙" in c for c in contents), "撞名时一份正文都不许交出去")
 
-    def test_an_unprobed_path_is_not_a_call(self):
-        """清单以外的路径 ⇒ 调用不成立（不产命令）＋回一条说明。说明**不重抄清单**（第 104
-        步）：清单就挂在 `readSandboxFile` 的描述里，与它会话里这条说明同处一份 prompt。
+    def test_a_local_miss_is_looked_up_in_the_sandbox(self):
+        """本地没有这份 ⇒ 派一条按**文件名**去沙盒里找它并打印的命令（正文随回执回来）。
 
-        ⚠️ 别退回"拼一条 `cat` 交给沙盒"（第 101 步删掉的旧支）：LLM 编出来的路径（比如
-        题目里只给了文件名、它自己拼了个目录）那趟必然报错，白烧一个沙盒往返还引它接着猜。
+        清单空着（探查还没跑完）与"清单里确实没这份"走同一条 —— "我们还没摸过"不等于
+        "沙盒里没有"，两种都值得去问沙盒一趟。说明里明写"已经派了一条查找命令"：不说的话
+        它会再自己发一条 executeCmd 找同一个文件（多烧一个往返）。
         """
-        cmd_explore._files["/opt/task/one.md"] = "正文"
-        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
-        self.assertEqual(
-            self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")]), ""
-        )
-        note = [c for c in (m["content"] for m in json.loads(self.agent.chat("题")))
-                if "不在可选清单里" in c]
-        self.assertEqual(len(note), 1, "未命中要在会话里留一条说明")
-        self.assertIn("/opt/task/none.md", note[0])    # 点明是哪一次调用
-        self.assertIn("描述里列出的那些", note[0])      # 指回枚举值的唯一出处
-        self.assertNotIn("- /opt/task/one.md", note[0])  # 清单不在这里重抄一份
+        for probed in (None, "/opt/task/one.md"):
+            with self.subTest(probed=probed):
+                cmd_explore.reset()
+                if probed:
+                    cmd_explore._files[probed] = "正文"
+                agent = Agent()
+                agent.chat("题")
+                agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
+                cmd = agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")])
+                self.assertIn("-name none.md", cmd, "按文件名找它")
+                self.assertIn("/opt/task/none.md", cmd, "找不到时那行要点名是它")
+                notes = [c for c in (m["content"] for m in json.loads(agent.chat("题")))
+                         if "本地没有" in c]
+                self.assertEqual(len(notes), 1, "派了命令要在会话里说一声")
+                self.assertIn("下一回合", notes[0])
 
-    def test_an_empty_inventory_points_at_execcmd(self):
-        """一份都没探明（探查还没跑完）⇒ 说明里让它自己用 executeCmd 读。
+    def test_only_the_file_name_enters_the_find(self):
+        """兜底命令的两处引号：`-name` 只拿**最后一段文件名**、整条路径进 `printf` 时过
+        `shlex.quote` —— LLM 写的那串字一个裸词都不许落地（旧兜底把整条路径塞进 `cat`，
+        第 101 步删掉它正是这个理由）。
 
-        "我们还没摸过"不等于"沙盒里没有"（与清单空着时连工具块一起缺席同一条）：这里回一句
-        "沙盒里就这些"，LLM 就不会再去读它本来需要的那份文件了。
+        ⚠️ 只认文件名也意味着它拼出来的目录不作数（题目里给的往往就是个裸文件名）。
         """
-        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
-        self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")])
-        note = [c for c in (m["content"] for m in json.loads(self.agent.chat("题")))
-                if "不在可选清单里" in c]
-        self.assertEqual(len(note), 1)
-        self.assertIn("executeCmd", note[0])
-
-    def test_a_path_never_becomes_a_command(self):
-        """LLM 给的字符串不再进任何命令（第 101 步）：带引号/分号的路径照样只是"不成立"。
-
-        旧支那句 `shlex.quote` 连同拼命令一起删了 ⇒ 命令注入面随之消失，留它一条守门。
-        """
-        path = "/opt/task/a b'; rm -rf /.md"
-        self.agent.hear("<tool><tool_name>readSandboxFile</tool_name></tool>")
-        self.assertEqual(self.agent.tool_call("readSandboxFile", [("path", path)]), "")
-        contents = [m["content"] for m in json.loads(self.agent.chat("题"))]
-        self.assertTrue(any(path in c for c in contents), contents)  # 原样带回去、没被转义
+        path = "/opt/task/x'; rm -rf *.md"
+        cmd = self.agent.tool_call("readSandboxFile", [("path", path)])
+        self.assertIn(f"-name {shlex.quote(cmd_explore.file_name(path))}", cmd)
+        self.assertIn(shlex.quote(path), cmd)
+        self.assertNotIn(path, cmd, "整条路径只能出现在引号里")
 
     def test_without_a_session_the_body_is_dropped(self):
         """还没开过会话（这道题一次都没问过）⇒ 只丢产出，绝不抛。"""
         cmd_explore._files["/opt/task/one.md"] = "正文"
         self.assertEqual(Agent().tool_call("readSandboxFile", [("path", "/opt/task/one.md")]), "")
+        # 本地没有那条路不依赖会话：说明丢了、命令照返回
+        self.assertNotEqual(Agent().tool_call("readSandboxFile", [("path", "/opt/none.md")]), "")
 
     def test_a_missing_or_blank_path_means_no_call(self):
         """声明的参数没给上 / 编的名字 ⇒ 不成立（既有闸门，这条钉的是真工具那一条）。"""
         self.assertEqual(self.agent.tool_call("readSandboxFile", []), "")
         self.assertEqual(self.agent.tool_call("readSandboxFile", [("文件", "/opt/task/one.md")]), "")
 
-    def test_both_branches_say_so_in_the_log(self):
-        """两条分支都留痕 —— 实盘上"LLM 用没用这个工具、命中过几次"只有这两行能回答。"""
+    def test_every_branch_says_so_in_the_log(self):
+        """三条分支各留一行（本地命中 / 本地没有去沙盒找 / 撞名不成立）—— 实盘上
+        "它用没用这个工具、为它跑过几趟沙盒"只有这三行能回答。"""
         with self.assertLogs(level="INFO") as caught:
             cmd_explore._files["/opt/task/one.md"] = "正文"
+            cmd_explore._files["/home/task/one.md"] = "副本"
             self.agent.tool_call("readSandboxFile", [("path", "/opt/task/one.md")])
             self.agent.tool_call("readSandboxFile", [("path", "/opt/task/none.md")])
+            self.agent.tool_call("readSandboxFile", [("path", "one.md")])
         hits = [line for line in caught.output if "【沙盒文件】" in line]
-        self.assertEqual(len(hits), 2)
-        self.assertTrue(any("/opt/task/one.md" in line for line in hits))
-        self.assertTrue(any("/opt/task/none.md" in line for line in hits))
+        self.assertEqual(len(hits), 3)
+        self.assertTrue(any("取回" in line and "/opt/task/one.md" in line for line in hits))
+        self.assertTrue(any("本地没有" in line and "/opt/task/none.md" in line for line in hits))
+        self.assertTrue(any("不成立" in line for line in hits))
 
 
 class AdoptSummaryTest(unittest.TestCase):

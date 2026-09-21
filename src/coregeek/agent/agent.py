@@ -44,24 +44,23 @@ def _call_text(params: list[tuple[str, str]]) -> str:
     return "，".join(parts) or "无参数"
 
 
-def _probed_note(path: str) -> str:
-    """未命中时回给 LLM 的说明。三种各说各话：清单空（还没摸过，不等于"沙盒里没有"）、
-    文件名撞了（要它改写全路径）、其余（照抄清单，或改用 executeCmd）。清单不在这里
-    重抄 —— 它挂在 `readSandboxFile` 的描述里，与这条说明同处一份 prompt。"""
-    if not cmd_explore.known_paths():
-        return (
-            f"{path} 不在可选清单里 —— 沙盒里还没有探明任何文件（探查可能还没跑完）。"
-            "要读文件请用 executeCmd 自己找、自己读。"
-        )
-    hits = cmd_explore.matches(path)
-    if len(hits) > 1:
-        return (
-            f"{path} 对上了不止一份已探明的文件：{'、'.join(hits)}。"
-            "`path` 请照抄完整路径 —— 只写文件名时它定不下是哪一份。"
-        )
+def _collision_note(path: str, hits: list[str]) -> str:
+    """文件名撞了时回给 LLM 的说明：只列撞上的那几份（"你指的是哪一份"），要它改写全路径。
+
+    清单不在这里重抄 —— 它挂在 `readSandboxFile` 的描述里，与这条说明同处一份 prompt。"""
     return (
-        f"{path} 不在可选清单里：`path` 只能取 `readSandboxFile` 描述里列出的那些完整路径"
-        "或文件名（照抄）；清单以外的文件请用 executeCmd 自己找、自己读。"
+        f"{path} 对上了不止一份已探明的文件：{'、'.join(hits)}。"
+        "`path` 请照抄完整路径 —— 只写文件名时它定不下是哪一份。"
+    )
+
+
+def _lookup_note(path: str) -> str:
+    """本地没有这份时回给 LLM 的说明：把"已经派了一条查找命令"说出来，省得它再发一条。
+
+    "我们还没摸过"与"沙盒里没有"在这里不必分开 —— 两种都走同一条查找命令。"""
+    return (
+        f"{path} 本地没有（清单里是已探明的那几份）⇒ 已让沙盒按文件名找它、找到就打印正文，"
+        "结果下一回合随命令回执回来。这一份不用再自己发命令去找。"
     )
 
 
@@ -99,9 +98,10 @@ class Agent:
             "readSandboxFile": (
                 self.read_sandbox_file,
                 """
-                读取已确认存在且路径明确的沙盒文件，只能从[路径清单]中选择参数（全路径或它的文件名）。未知路径请使用 executeCmd 探索。
+                读取沙盒文件：`path` 取[路径清单]里的全路径或它的文件名 —— 清单里的本地就有，正文当回合到手、不花回合。
+                清单里没有的文件名也收：会去沙盒里按这个文件名找一次（多花一个回合），找到就给正文、找不到会明说。
                 """,
-                (("path", "已探明文件的全路径、或它的文件名（只能取本工具描述里列出的那些）"),),
+                (("path", "文件的全路径、或它的文件名；清单外的名字会去沙盒里按文件名找一次"),),
             ),
             "python_exec": (
                 self.python_exec,
@@ -201,20 +201,29 @@ class Agent:
         return gen_compression_prompt(self._context.material())
 
     def read_sandbox_file(self, path: str) -> str:
-        """读一份已探明的文件：命中 ⇒ 正文当回合进会话；不在清单里 / 撞名 ⇒ 调用不成立
-        ＋ 说明回给 LLM（`_probed_note`），绝不替它往沙盒发 `cat`。返回值恒 `""`（不产命令）。"""
+        """读一份沙盒文件：本地探明过 ⇒ 正文当回合进会话、返 `""`（省一回合）；本地没有 ⇒
+        返一条"按**文件名**去沙盒里找它并打印"的命令（正文下一回合随回执回来）；文件名对上
+        不止一份 ⇒ 调用不成立，只回一条说明 —— 本地明明有，是 `path` 没写全。"""
         body = cmd_explore.body_of(path)
-        if not body:
-            # 对上几条决定它是"没这份"还是"文件名撞了"，回给 LLM 的话不同（`_probed_note`）
-            hits = cmd_explore.matches(path)
+        if body:
+            if self._context is not None:
+                self._context.tool_output(body, f"【沙盒文件 {path} 的正文（本地已探明）】")
+            LOGGER.info("【沙盒文件】：%s 本地取回 %d 字", path, len(body))
+            return ""
+        hits = cmd_explore.matches(path)
+        if len(hits) > 1:
             LOGGER.info("【沙盒文件】：%s 这次调用不成立（对上 %d 条探明的路径）", path, len(hits))
             if self._context is not None:
-                self._context.tool_output(_probed_note(path), "【沙盒文件：这次调用不成立】")
+                self._context.tool_output(
+                    _collision_note(path, hits), "【沙盒文件：这次调用不成立】"
+                )
             return ""
+        # 本地没有这份 ⇒ 兜底：派一条按文件名查找的命令（它拼出来的目录不作数，照那个路径
+        # `cat` 必然报错）
+        LOGGER.info("【沙盒文件】：%s 本地没有 ⇒ 派一条按文件名查找的命令", path)
         if self._context is not None:
-            self._context.tool_output(body, f"【沙盒文件 {path} 的正文（本地已探明）】")
-        LOGGER.info("【沙盒文件】：%s 本地取回 %d 字", path, len(body))
-        return ""
+            self._context.tool_output(_lookup_note(path), "【沙盒文件：本地没有，去沙盒找】")
+        return cmd_explore.lookup_command(path)
 
     def python_exec(self, code: str) -> str:
         """本地即时计算：产出当场记进会话、返回 `""`（不产命令）。比 `executeCmd` 省一整个

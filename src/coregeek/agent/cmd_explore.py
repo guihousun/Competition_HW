@@ -15,7 +15,9 @@
 
 回执不给任务线看：`observe` 认领自己的回执并返回 ""。正文进 `_files`（不落盘），路径经
 `known_paths()` 挂进 `readSandboxFile` 的描述（`path` 的取值表），正文由 `body_of` 按需取；
-文件名对上不止一份 ⇒ 调用不成立（`matches` 一处认两种写法）。
+文件名对上不止一份 ⇒ 调用不成立（`matches` 一处认两种写法）。本地没有那份时由
+`lookup_command` 兜底：一条 `find -name <文件名>`，回执走任务线的普通通道（不经 `observe`，
+正文也不进 `_files`）。
 
 状态在模块层：`_files` / `_task` / `_done` / `_waiting`（另有只给用例的 `_muted`）。
 """
@@ -23,6 +25,7 @@
 import json
 import logging
 import re
+import shlex
 
 LOGGER = logging.getLogger(__name__)
 
@@ -115,6 +118,22 @@ def body_of(path: str) -> str:
     """按全路径或文件名取正文；对不上、或撞名 ⇒ `""`。这张表就是 `readSandboxFile` 的枚举值。"""
     hits = matches(path)
     return _files[hits[0]] if len(hits) == 1 else ""
+
+
+def lookup_command(name: str) -> str:
+    """本地没有这份时的兜底：一条 shell 按**文件名**在沙盒里找它、找到就打印正文。
+
+    只认最后一段文件名 —— 它自己拼出来的目录不作数（照那个路径 `cat` 必然报错）；找到
+    第一份即打，路径自己也在 `@@@FILE` 那行里报出来。名字是 LLM 写的，两处都过
+    `shlex.quote`（不引就成注入面）。找不到 ⇒ 报 `[NOT FOUND]`。
+    """
+    quote = shlex.quote
+    skips = " ".join(f"-not -path {quote('/' + d + '/*')}" for d in _SKIP)
+    return (
+        f"f=$(find {_ROOT} -maxdepth {_MAXDEPTH} -type f -name {quote(file_name(name))} "
+        f"{skips} 2>/dev/null | head -n1); if [ -n \"$f\" ]; then echo \"@@@FILE $f@@@\"; "
+        f"cat -- \"$f\"; else printf '[NOT FOUND] %s\\n' {quote(name)}; fi"
+    )
 
 
 def observe(result: str) -> str:
