@@ -214,9 +214,9 @@
      */
     focusCell(pos, world, span) {
       const map = this.mapSize(world);
-      const s = span || 1;
-      this.camera.x = pos.x * BASE_TILE + (BASE_TILE * s) / 2;
-      this.camera.y = (map.height - pos.y - s) * BASE_TILE + (BASE_TILE * s) / 2;
+      const rect = HW.mapRect(pos, span, map.height, BASE_TILE);
+      this.camera.x = rect.cx;
+      this.camera.y = rect.cy;
     }
 
     fit(world, padding) {
@@ -238,9 +238,9 @@
      */
     cellToScreen(pos, world, span) {
       const map = this.mapSize(world);
-      const s = span || 1;
-      const px = (pos.x + s / 2) * BASE_TILE;
-      const py = (map.height - pos.y - s / 2) * BASE_TILE;
+      const rect = HW.mapRect(pos, span, map.height, BASE_TILE);
+      const px = rect.cx;
+      const py = rect.cy;
       return {
         x: (px - this.camera.x) * this.camera.scale + this.viewport.width / 2,
         y: (py - this.camera.y) * this.camera.scale + this.viewport.height / 2,
@@ -254,7 +254,7 @@
 
     centerOnActor(world, actor) {
       if (!actor) return;
-      this.focusCell(actor.pos, world, actor.size);
+      this.focusCell(actor.pos, world, actor.footprint || HW.footprint(actor.kind));
     }
 
     zoomAt(screenX, screenY, factor) {
@@ -305,14 +305,16 @@
     pick(world, sx, sy) {
       const candidates = [];
       for (const actor of world.actors) {
-        const center = this.cellToScreen(actor.pos, world, actor.size);
-        const half = (BASE_TILE * this.camera.scale * actor.size) / 2 + 3;
+        const center = this.cellToScreen(actor.pos, world, actor.footprint || HW.footprint(actor.kind));
+        const shape = actor.footprint || HW.footprint(actor.kind);
+        const halfX = BASE_TILE * this.camera.scale * shape.width / 2;
+        const halfY = BASE_TILE * this.camera.scale * shape.height / 2;
         const dx = Math.abs(sx - center.x);
         const dy = Math.abs(sy - center.y);
-        if (dx > half || dy > half + 4) continue;
+        if (dx > halfX || dy > halfY) continue;
         candidates.push({
           actor,
-          score: Math.max(dx, dy) / half,
+          score: Math.max(dx / halfX, dy / halfY),
           big: actor.size > 1 ? 1 : 0,
         });
       }
@@ -323,9 +325,9 @@
 
     zoneAt(world, cell) {
       return world.zones.find((zone) => {
-        const span = zone.size;
-        return cell.x >= zone.pos.x && cell.x < zone.pos.x + span
-          && cell.y >= zone.pos.y && cell.y < zone.pos.y + span;
+        const shape = zone.footprint || HW.footprint(zone.kind);
+        return cell.x >= zone.pos.x && cell.x < zone.pos.x + shape.width
+          && cell.y <= zone.pos.y && cell.y > zone.pos.y - shape.height;
       }) || null;
     }
 
@@ -423,15 +425,18 @@
       this.drawGrid(ctx, map, tile, phase);
 
       for (const zone of world.zones) {
-        const span = zone.size;
-        const topLeft = { x: zone.pos.x * tile, y: (map.height - zone.pos.y - span) * tile };
-        S.drawZone(ctx, topLeft.x + (tile * span) / 2, topLeft.y + (tile * span) / 2, tile, zone);
+        const rect = HW.mapRect(zone.pos, zone.footprint || HW.footprint(zone.kind), map.height, tile);
+        S.drawZone(ctx, rect.cx, rect.cy, tile, zone);
+        if (this.selectedZone && this.selectedZone.kind === zone.kind
+            && this.selectedZone.pos.x === zone.pos.x && this.selectedZone.pos.y === zone.pos.y) {
+          this.drawSelection(ctx, zone, rect.cx, rect.cy, tile, zone.size);
+        }
       }
 
       // Depth sort: buildings claim more space, so they sort by their far edge.
       const order = world.actors.slice().sort((a, b) => {
-        const da = a.pos.y * 4 + a.size;
-        const db = b.pos.y * 4 + b.size;
+        const da = a.pos.y - HW.footprint(a.kind).height + 1;
+        const db = b.pos.y - HW.footprint(b.kind).height + 1;
         if (da !== db) return db - da;
         return a.pos.x - b.pos.x;
       });
@@ -456,7 +461,7 @@
       const boxes = this.drawCrewLabels(ctx, world, ui);
       ctx.save(); ctx.font = '14px "Microsoft YaHei", sans-serif'; ctx.textAlign = 'center';
       for (const site of sites) {
-        const point = this.cellToScreen(site.pos, world, site.size);
+        const point = this.cellToScreen(site.pos, world, site.footprint || HW.footprint(site.kind));
         const width = ctx.measureText(site.label).width + 14;
         const x = point.x - width / 2, y = point.y + 14;
         if (x < 0 || x + width > this.viewport.width || y < 0 || y + 22 > this.viewport.height) continue;
@@ -491,7 +496,7 @@
         const walk = actor.anim && actor.anim.find((a) => a.type === 'walk');
         const t = walk && ui && ui.walkProgress != null ? U.easeOut(U.clamp(ui.walkProgress, 0, 1)) : 1;
         const pos = walk ? {x: U.lerp(walk.from.x, walk.to.x, t), y: U.lerp(walk.from.y, walk.to.y, t)} : actor.rpos;
-        const point = this.cellToScreen(pos, world, actor.size);
+        const point = this.cellToScreen(pos, world, actor.footprint || HW.footprint(actor.kind));
         if (point.x < 0 || point.x > this.viewport.width || point.y < 0 || point.y > this.viewport.height) continue;
         const style = CALLOUT_STYLE[actor.kind] || CALLOUT_STYLE.worker;
         const onTask = actor.kind === 'pioneer' && task.active;
@@ -519,7 +524,7 @@
         const overlaps = (a, b) => a.x < b.x + b.w + 6 && a.x + a.w + 6 > b.x && a.y < b.y + b.h + 6 && a.y + a.h + 6 > b.y;
         // Prefer empty map space instead of covering adjacent guns/walls/crew.
         const occupied = world.actors.map((unit) => {
-          const at = this.cellToScreen(unit.rpos || unit.pos, world, unit.size);
+          const at = this.cellToScreen(unit.rpos || unit.pos, world, unit.footprint || HW.footprint(unit.kind));
           const span = BASE_TILE * this.camera.scale * (unit.size || 1);
           return {x:at.x-span/2, y:at.y-span/2, w:span, h:span};
         });
@@ -636,9 +641,9 @@
         ry = U.lerp(walk.from.y, walk.to.y, t);
       }
       const span = actor.size;
-      const topLeft = { x: rx * tile, y: (map.height - ry - span) * tile };
-      const centerX = topLeft.x + (tile * span) / 2;
-      const centerY = topLeft.y + (tile * span) / 2;
+      const rect = HW.mapRect({x: rx, y: ry}, actor.footprint || HW.footprint(actor.kind), map.height, tile);
+      const centerX = rect.cx;
+      const centerY = rect.cy;
 
       ctx.save();
       // Soft halo: separates a unit from dark terrain without inventing detail.
@@ -727,23 +732,23 @@
 
     drawSelection(ctx, actor, x, y, tile, span) {
       const pulse = 0.6 + 0.4 * Math.sin(this._time / 220);
-      const radius = tile * (span === 2 ? 1.05 : 0.62);
+      const shape = actor.footprint || HW.footprint(actor.kind);
+      const halfX = tile * shape.width / 2;
+      const halfY = tile * shape.height / 2;
       ctx.save();
       ctx.strokeStyle = U.rgba(PALETTE.hot, 0.55 + pulse * 0.45);
       ctx.lineWidth = 2;
       ctx.setLineDash([6, 4]);
       ctx.lineDashOffset = -this._time / 60;
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeRect(x - halfX, y - halfY, halfX * 2, halfY * 2);
       ctx.setLineDash([]);
       ctx.lineWidth = 2.4;
-      const bracket = radius * 0.42;
+      const bracket = Math.min(halfX, halfY) * 0.42;
       for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
         ctx.beginPath();
-        ctx.moveTo(x + sx * radius, y + sy * radius - sy * bracket);
-        ctx.lineTo(x + sx * radius, y + sy * radius);
-        ctx.lineTo(x + sx * radius - sx * bracket, y + sy * radius);
+        ctx.moveTo(x + sx * halfX, y + sy * halfY - sy * bracket);
+        ctx.lineTo(x + sx * halfX, y + sy * halfY);
+        ctx.lineTo(x + sx * halfX - sx * bracket, y + sy * halfY);
         ctx.stroke();
       }
       ctx.restore();
@@ -777,8 +782,8 @@
           level: death.level || 1, anim: [], hitFlash: 0, size: 1, rpos: death.pos,
           maxHealth: 1, health: 1, backpack: [], capacity: 0,
         });
-        const x = death.pos.x * tile + tile / 2;
-        const y = (map.height - 1 - death.pos.y) * tile + tile / 2;
+        const rect = HW.mapRect(death.pos, HW.footprint(death.kind), map.height, tile);
+        const x = rect.cx, y = rect.cy;
         ctx.save();
         ctx.globalAlpha = U.clamp(1 - t / 0.85, 0, 1) * 0.75;
         S.paint(ctx, ghost, x, y, tile);
@@ -790,12 +795,11 @@
       const overlay = ui || {};
       if (overlay.hoverActor) {
         const actor = overlay.hoverActor;
-        const span = actor.size;
+        const rect = HW.mapRect(actor.pos, actor.footprint || HW.footprint(actor.kind), map.height, tile);
         ctx.save();
         ctx.strokeStyle = 'rgba(255, 243, 196, 0.55)';
         ctx.lineWidth = 1.4 / this.camera.scale + 0.6;
-        ctx.strokeRect(actor.pos.x * tile + 1, (map.height - actor.pos.y - span) * tile + 1,
-          tile * span - 2, tile * span - 2);
+        ctx.strokeRect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
         ctx.restore();
       }
       if (this.options.ranges) {
@@ -918,7 +922,7 @@
         ctx.globalCompositeOperation = 'lighter';
         for (const actor of world.actors) {
           if (actor.kind !== 'station' && !HW.OFFICIAL.towerTypes.includes(actor.kind)) continue;
-          const screen = this.cellCenterScreen(actor.pos, world, actor.size);
+          const screen = this.cellCenterScreen(actor.pos, world, actor.footprint || HW.footprint(actor.kind));
           const radius = (actor.kind === 'station' ? 5.2 : 2.6) * tile * this.camera.scale * (0.55 + d * 0.5);
           const light = ctx.createRadialGradient(screen.x, screen.y, 0, screen.x, screen.y, radius);
           const lightColor = actor.owner === 'enemy' ? '255, 150, 130' : '150, 235, 210';

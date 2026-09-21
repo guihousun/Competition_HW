@@ -61,10 +61,10 @@
       const now = performance.now();
       const phase = (fraction) => now + frameMs * fraction;
       const tile = opts.tile || 24;
-      const center = (pos, size) => ({
-        x: pos.x * tile + tile / 2 + (size === 2 ? tile / 2 : 0),
-        y: (opts.height - 1 - pos.y) * tile + tile / 2 - (size === 2 ? tile / 2 : 0),
-      });
+      const center = (pos, shape) => {
+        const rect = HW.mapRect(pos, shape, opts.height, tile);
+        return { x: rect.cx, y: rect.cy };
+      };
 
       // 1. Shots resolve before movement (official order, R02/R04).
       for (const action of frame.actions || []) {
@@ -159,7 +159,7 @@
         });
       }
       for (const death of frame.unitDeaths || []) {
-        const at = center(death.pos, 1);
+        const at = center(death.pos, HW.footprint(death.kind));
         this._push({
           type: 'explosion', at, born: phase(0.66), ttl: lifetime(820, frameMs),
           radius: tile * 1.5, color: death.kind === 'station' ? '#ff6b81' : '#ff9aa8',
@@ -184,7 +184,7 @@
             if (actor.owner !== owner || !before || before.roleType !== actor.kind
                 || !(Number(actor.level) > Number(before.level || 1))) continue;
             if (actor.kind !== 'wall' && !HW.OFFICIAL.towerTypes.includes(actor.kind) && actor.kind !== 'station') continue;
-            this._push({ type: 'float', at: center(actor.pos, actor.size),
+            this._push({ type: 'float', at: center(actor.pos, actor.footprint || HW.footprint(actor.kind)),
               text: `${U.kindName(actor.kind)} Lv.${before.level || 1} → ${actor.level}`,
               born: phase(0.4), ttl: lifetime(1200, frameMs), color: '#ffe08a' });
           }

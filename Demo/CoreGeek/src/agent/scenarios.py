@@ -3,7 +3,7 @@ import random
 from copy import deepcopy
 from .protocol import (TASK_ITEM_PRICE, TASK_ITEMS, Pos, Turn, distance,
                        station_footprint)
-from . import wave_data
+from . import wave_data, map_layout as layouts
 from .wave_data import DEFAULT_PROFILE
 
 ROBOT_STATS = {'smallRobot': (40, 5, 1), 'middleRobot': (60, 10, 2),
@@ -62,11 +62,13 @@ def observation(state):
 
 
 def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
-             profile=DEFAULT_PROFILE, market_layout=DEFAULT_MARKET_LAYOUT):
+             profile=DEFAULT_PROFILE, market_layout=DEFAULT_MARKET_LAYOUT,
+             map_layout=layouts.SEEDED):
     seed, pressure = int(seed), int(pressure)
     if side not in ('challenger', 'defender') or not 1 <= pressure <= 3:
         raise ValueError('side must be challenger/defender; pressure must be 1..3')
     profile = wave_data.validate_profile(profile)
+    map_layout = layouts.validate(map_layout, default=layouts.SEEDED)
     if market_layout not in (DEFAULT_MARKET_LAYOUT, LEGACY_MARKET_LAYOUT):
         raise ValueError('unknown market layout')
     rng = random.Random(seed)
@@ -110,14 +112,19 @@ def scenario(seed=1, side='challenger', pressure=1, *, spawn_points=None,
                        'kills': 0, 'finished': False, 'waves': 0, 'elapsed': 0,
                        'errands': {}}}
     # Exclude both build rings and every occupied cell from neutral placement.
-    available = free_cells(state, exclude_rings=True)
-    rng.shuffle(available)
-    for kind in ['vendor', 'weaponShop', 'challengerTaskPoint1', 'challengerTaskPoint2',
-                 'defenderTaskPoint1', 'defenderTaskPoint2'] + ['stone']*6 + ['iron']*3 + ['copper']*3:
-        p = available.pop()
-        state['mapInfo']['zones'].append({'pos': p.dump(), 'neutralType': kind})
-    if market_layout == DEFAULT_MARKET_LAYOUT:
-        _central_market(state)
+    if map_layout == layouts.OBSERVED:
+        layouts.install_observed(state, rng)
+        market_layout = DEFAULT_MARKET_LAYOUT
+    else:
+        available = free_cells(state, exclude_rings=True)
+        rng.shuffle(available)
+        for kind in ['vendor', 'weaponShop', 'challengerTaskPoint1', 'challengerTaskPoint2',
+                     'defenderTaskPoint1', 'defenderTaskPoint2'] + ['stone']*6 + ['iron']*3 + ['copper']*3:
+            p = available.pop()
+            state['mapInfo']['zones'].append({'pos': p.dump(), 'neutralType': kind})
+        if market_layout == DEFAULT_MARKET_LAYOUT:
+            _central_market(state)
+    state['_demo']['map_layout'] = layouts.metadata(map_layout, side)
     state['_demo']['market_layout'] = {
         'id': market_layout,
         'basis': 'user_report_and_request_sample' if market_layout == DEFAULT_MARKET_LAYOUT else 'historical_local_random',

@@ -313,7 +313,8 @@
         const zone = target.data;
         this._kv(body, '类型', `${zone.label}（${zone.kind}）`);
         this._kv(body, '坐标', U.cellLabel(zone.pos));
-        this._kv(body, '占格', zone.size === 2 ? '2 格（任务点二）' : '1 格');
+        const footprint = zone.footprint || HW.footprint(zone.kind);
+        this._kv(body, '占格', `${footprint.width} × ${footprint.height} 格`);
         this._kv(body, '数据来源', 'mapInfo.zones（官方观测字段）');
         if (!zone.known) {
           this._kv(body, '提示', '该中立类型未在本地美术表中建模，已按未知类型降级显示。');
@@ -325,7 +326,8 @@
       this._kv(body, '单位', `${actor.label}（${actor.kind}）`);
       this._kv(body, '归属', actor.owner === 'own' ? '我方' : (actor.owner === 'enemy' ? '敌方（可见单位）' : '机器人（第三方）'));
       this._kv(body, '角色 ID', String(actor.id));
-      this._kv(body, '坐标', `${U.cellLabel(actor.pos)} · 占格 ${actor.size}`);
+      const footprint = actor.footprint || HW.footprint(actor.kind);
+      this._kv(body, '坐标', `${U.cellLabel(actor.pos)} · 占格 ${footprint.width} × ${footprint.height}`);
       this._kv(body, '血量', `${actor.health} / ${actor.maxHealth}（${(ratio * 100).toFixed(0)}%）`);
       if (HW.OFFICIAL.towerTypes.includes(actor.kind)) {
         this._kv(body, '等级 / 射程', `Lv${actor.level} · 切比雪夫 ${HW.rangeOf(actor.kind, actor.level)}`);
@@ -617,7 +619,7 @@
       if (this.busy === next) return;
       this.busy = next;
       for (const id of ['newmatch', 'preset', 'record', 'recordfull', 'play', 'step',
-        'stepback', 'reset', 'speed', 'seed', 'side', 'pressure', 'profile', 'apply-json', 'decide-json',
+        'stepback', 'reset', 'speed', 'seed', 'side', 'pressure', 'profile', 'map-layout', 'apply-json', 'decide-json',
         'sample', 'import', 'import-replay', 'export', 'empty-new', 'empty-sample', 'scrub', 'seek-go']) {
         setDisabled($(id), next);
       }

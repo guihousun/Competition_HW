@@ -174,6 +174,7 @@
           seed: Number(document.getElementById('seed').value), side: document.getElementById('side').value,
           kind: document.getElementById('agent-demo-kind').value || 'mixed', backend,
           profile: this.selectedProfile(),
+          map_layout: this.selectedMapLayout(),
           pressure: Number(document.getElementById('pressure').value),
           max_calls: Number(document.getElementById('agent-api-limit').value || 20)});
         this.world = HW.World.fromScenario(payload);
@@ -200,12 +201,13 @@
       const pressure = Number(opts.pressure != null ? opts.pressure : document.getElementById('pressure').value);
       const profileSelect = document.getElementById('profile');
       const profile = opts.profile || (profileSelect ? profileSelect.value : 'observed-seven-days');
+      const mapLayout = opts.map_layout || this.selectedMapLayout();
       this.stop();
       this.panel.setBusy(true);
       this.panel.status('创建场景…');
       try {
         const started = performance.now();
-        const payload = await this.getJson(`/debug/scenario?seed=${encodeURIComponent(seed)}&side=${encodeURIComponent(side)}&pressure=${encodeURIComponent(pressure)}&profile=${encodeURIComponent(profile)}`);
+        const payload = await this.getJson(`/debug/scenario?seed=${encodeURIComponent(seed)}&side=${encodeURIComponent(side)}&pressure=${encodeURIComponent(pressure)}&profile=${encodeURIComponent(profile)}&map_layout=${encodeURIComponent(mapLayout)}`);
         this.timings.scenario = performance.now() - started;
         this.world = HW.World.fromScenario(payload);
         this.panel.empty(false);
@@ -214,6 +216,8 @@
         document.getElementById('side').value = side;
         document.getElementById('pressure').value = String(pressure);
         if (profileSelect) profileSelect.value = profile;
+        const mapSelect = document.getElementById('map-layout');
+        if (mapSelect) mapSelect.value = mapLayout;
         this.panel.setMode('live', `seed ${seed}`);
         this.panel.status('已就绪');
         const sourceLabel = profile === 'local-pressure' ? `旧压力实验 ${pressure} 档` : '前七夜实测，后3夜为本地假设';
@@ -251,7 +255,7 @@
         : `正在录制 ${limit} 回合本地对局，请稍候…`, null);
       try {
         const started = performance.now();
-        const job = await this.postJson('/debug/recording/start', { seed, side, pressure, profile, limit: limit || 1300 });
+        const job = await this.postJson('/debug/recording/start', { seed, side, pressure, profile, map_layout: this.selectedMapLayout(), limit: limit || 1300 });
         this.recordingId = job.id;
         try { sessionStorage.setItem('hw-recording', job.id); } catch (error) { void error; }
         this.timings.series = performance.now() - started;
@@ -362,6 +366,7 @@
       this.walkProgress = 1;
       this.selected = null;
       this.renderer.selected = null;
+      this.renderer.selectedZone = null;
       this.hover = null;
       this.previewCommands = {};
       this.executedCommands = {};
@@ -377,6 +382,16 @@
       this.refreshReplayTools();
       this.syncProfileControls();
       this.updateProfileNote();
+    }
+
+    selectedMapLayout() {
+      const select = document.getElementById('map-layout');
+      return (select && select.value) || 'attack-map-observed-v1';
+    }
+
+    updateMapLayoutNote() {
+      const note = document.getElementById('map-layout-note');
+      if (note && HW.mapSource) note.textContent = HW.mapSource.describe(this.world);
     }
 
     /** The wave source selected on the page; the default is the observed table. */
@@ -413,6 +428,7 @@
      * explicitly an unobserved local continuation — never presented as official.
      */
     updateProfileNote() {
+      this.updateMapLayoutNote();
       const note = document.getElementById('profile-note');
       if (!note) return;
       const profile = (this.world && this.world.profile) || 'observed-seven-days';
@@ -426,15 +442,7 @@
         note.textContent = '波次来源：前7天附件实测 · 第8–10天未观测，本地假设每夜多5只小型';
         note.className = 'pill local';
       }
-      const state = this.world && this.world.state;
-      const market = state && state._demo && state._demo.market_layout;
-      if (state) {
-        note.textContent += market && market.id === 'central-sample-v1'
-          ? ' · 商贩：中央样例布局（精确坐标待实机核验）'
-          : market && market.id === 'legacy-random-v0'
-            ? ' · 商贩：历史随机布局'
-            : ' · 商贩位置按当前快照保留';
-      }
+
     }
 
     /**
@@ -981,7 +989,7 @@
         if (zone) {
           tooltip.innerHTML = `<div class="row"><span>中立点</span><b>${escape(zone.label)}</b></div>`
             + `<div class="row"><span>坐标</span><span>${U.cellLabel(zone.pos)}</span></div>`
-            + `<div class="row"><span>占格</span><span>${zone.size}</span></div>`;
+            + `<div class="row"><span>占格</span><span>${zone.footprint.width} × ${zone.footprint.height}</span></div>`;
           tooltip.style.left = `${U.clamp(sx + 16, 6, stage.width - 250)}px`;
           tooltip.style.top = `${U.clamp(sy + 14, 6, stage.height - 110)}px`;
           tooltip.hidden = false;
@@ -998,12 +1006,14 @@
       if (actor) {
         this.selected = actor;
         this.renderer.selected = actor;
+        this.renderer.selectedZone = null;
         this.panel.inspect({ type: 'actor', data: actor });
         if (HW.experience) HW.experience.selection(actor);
         return;
       }
       const cell = this.renderer.screenToCell(sx, sy, world);
       const zone = this.renderer.zoneAt(world, cell);
+      this.renderer.selectedZone = zone;
       this.selected = null;
       this.renderer.selected = null;
       this.panel.inspect(zone ? { type: 'zone', data: zone } : null);
@@ -1145,6 +1155,9 @@
         world.positionsCache = [HW.viewModel.positionMap(parsed)];
         world.applyFrame(0, { instant: true });
         this.world = world;
+        this.renderer.selected = null;
+        this.renderer.selectedZone = null;
+        this.updateProfileNote();
         this.invalidateStep();
         this.effects.clear();
         this.effectsSpawnedFor = -1;

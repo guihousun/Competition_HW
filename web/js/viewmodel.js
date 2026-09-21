@@ -26,8 +26,8 @@
   const MAX_WALK_STEP = 2;
 
   function footprintOf(kind) {
-    if (kind === 'station') return 2;
-    return HW.ZONE_FOOTPRINT[kind] || 1;
+    const shape = HW.footprint(kind);
+    return Math.max(shape.width, shape.height);
   }
 
   function isUnmodelled(kind) {
@@ -61,6 +61,7 @@
       muzzle: 0,
     };
     actor.size = footprintOf(kind);
+    actor.footprint = HW.footprint(kind);
     actor.label = U.kindName(kind);
     actor.color = OWNER_COLORS[owner] || OWNER_COLORS.neutral;
     actor.unmodelled = isUnmodelled(kind);
@@ -72,13 +73,26 @@
   function buildZones(state) {
     const zones = [];
     const list = (state.mapInfo && state.mapInfo.zones) || [];
+    // Official samples can list both occupied cells of the same task point.
+    // Collapse exactly one explicit adjacent pair into its left anchor for
+    // display only. Do not modify state or enlarge the backend task range.
+    const covered = new Set();
+    for (const kind of Object.keys(HW.ZONE_FOOTPRINT)) {
+      const entries = list.filter((zone) => zone.neutralType === kind);
+      if (entries.length === 2 && entries[0].pos.y === entries[1].pos.y
+          && Math.abs(entries[0].pos.x - entries[1].pos.x) === 1) {
+        covered.add(entries[0].pos.x > entries[1].pos.x ? entries[0] : entries[1]);
+      }
+    }
     for (const zone of list) {
+      if (covered.has(zone)) continue;
       const kind = zone.neutralType;
       const style = ZONE_STYLE[kind];
       zones.push({
         kind,
         pos: { x: zone.pos.x, y: zone.pos.y },
         size: footprintOf(kind),
+        footprint: HW.footprint(kind),
         label: style ? style.label : kind,
         color: style ? style.color : PALETTE.neutral,
         accent: style ? style.accent : PALETTE.neutral,

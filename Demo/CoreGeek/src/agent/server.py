@@ -92,6 +92,7 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("side", ["challenger"])[0],
                     query.get("pressure", ["1"])[0],
                     query.get("profile", [None])[0],
+                    map_layout=query.get("map_layout", [None])[0],
                 ))
             except ValueError as error:
                 self._json(400, {"error": str(error)})
@@ -104,6 +105,7 @@ class Handler(BaseHTTPRequestHandler):
                     query.get("pressure", ["1"])[0],
                     query.get("limit", [None])[0],
                     profile=query.get("profile", [None])[0],
+                    map_layout=query.get("map_layout", [None])[0],
                 ))
             except ValueError as error:
                 self._json(400, {"error": str(error)})
@@ -245,13 +247,13 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/debug/llm/scenario':
                 self._json(200, debug.llm_scenario_payload(payload.get('seed', 1), payload.get('side', 'challenger'),
                     payload.get('kind', 'arithmetic'), payload.get('backend', 'openrouter'), payload.get('max_calls'),
-                    payload.get('profile'), payload.get('pressure', 1)))
+                    payload.get('profile'), payload.get('pressure', 1), payload.get('map_layout')))
                 return
             if path == '/debug/recording/start':
                 try:
                     self._json(202, recordings.JOBS.start(payload.get('seed', 1),
                         payload.get('side', 'challenger'), payload.get('pressure', 1),
-                        payload.get('limit', 1300), payload.get('profile')))
+                        payload.get('limit', 1300), payload.get('profile'), payload.get('map_layout')))
                 except RuntimeError as error:
                     self._json(409, {'error': str(error)})
                 return
@@ -268,6 +270,7 @@ class Handler(BaseHTTPRequestHandler):
                     payload.get("pressure", 1),
                     payload.get("limit"),
                     profile=payload.get("profile"),
+                    map_layout=payload.get("map_layout"),
                 ))
                 return
             if path == "/debug/screenshot":

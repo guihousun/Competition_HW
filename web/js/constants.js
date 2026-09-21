@@ -127,7 +127,22 @@
   };
 
   // Task point 2 occupies two cells (R07 / D06); used for the visual footprint.
-  const ZONE_FOOTPRINT = { challengerTaskPoint2: 2, defenderTaskPoint2: 2 };
+  const ZONE_FOOTPRINT = {
+    challengerTaskPoint2: { width: 2, height: 1 },
+    defenderTaskPoint2: { width: 2, height: 1 },
+  };
+  // Protocol positions anchor the upper-left occupied cell; y increases upwards.
+  function footprint(kind) {
+    return kind === 'station' ? { width: 2, height: 2 }
+      : (ZONE_FOOTPRINT[kind] || { width: 1, height: 1 });
+  }
+  function mapRect(pos, shape, height, tile) {
+    const f = typeof shape === 'number' ? { width: shape, height: shape }
+      : (shape || { width: 1, height: 1 });
+    const x = pos.x * tile, y = (height - 1 - pos.y) * tile;
+    const width = f.width * tile, rectHeight = f.height * tile;
+    return { x, y, width, height: rectHeight, cx: x + width / 2, cy: y + rectHeight / 2 };
+  }
 
   const OWNER_COLORS = {
     own: { main: PALETTE.own, deep: PALETTE.ownDeep, glow: PALETTE.ownGlow, label: '我方' },
@@ -208,6 +223,8 @@
   HW.PALETTE = PALETTE;
   HW.ZONE_STYLE = ZONE_STYLE;
   HW.ZONE_FOOTPRINT = ZONE_FOOTPRINT;
+  HW.footprint = footprint;
+  HW.mapRect = mapRect;
   HW.OWNER_COLORS = OWNER_COLORS;
   HW.KIND_NAMES = KIND_NAMES;
   HW.ACTION_NAMES = ACTION_NAMES;

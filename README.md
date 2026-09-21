@@ -30,7 +30,7 @@ LLM能力建设：[测试候选与回退开关](docs/AGENT_CANDIDATE.md) · [本
 python main.py 8080
 ```
 
-浏览器打开 http://localhost:8080/ ，选择种子、阵营、压力，点击「开始模拟」，再用
+浏览器打开 http://localhost:8080/ ，选择地图布局、种子、阵营和波次来源，点击「开始新对局」，再用
 `播放 / 暂停 / 单步 / 退一步 / 重置` 走完整条链路。画面是完整的俯视战场（基地、角色、
 炮台、围墙、矿区、商店、任务点、机器人、昼夜与战斗特效），左栏是控制台，右栏为主要游戏画面。
 
@@ -55,6 +55,7 @@ Linux 判题入口：`bash run.sh <port>`。官方请求使用根路径 POST，�
 - [变更记录](docs/CHANGES.md)（每次改动：类别、规则依据、行为例子、验证方式）
 - [后续开发规范与官方不可改规则](docs/DEVELOPMENT_RULES.md)
 - [Agent 开发合同](AGENTS.md)
+- [attack_map 布局对齐范围、坐标与待补资料](docs/ATTACK_MAP_ALIGNMENT.md)（默认已观测布局，可切回随机压力地图；本地重模拟不是官方回放）
 - [Demo 完整链路、运行与规则边界](docs/DEMO.md)
 - [官方任务书](docs/任务书.md)
 - [官方接口文档](docs/接口文档.md)

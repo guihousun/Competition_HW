@@ -487,11 +487,12 @@
   /* ----------------------------------------------------------- neutral map */
 
   function drawZone(ctx, x, y, s, zone) {
-    const size = s * zone.size;
-    const half = size / 2;
+    const shape = zone.footprint || HW.footprint(zone.kind);
+    const width = s * shape.width, height = s * shape.height;
+    const halfX = width / 2, halfY = height / 2;
     ctx.save();
     ctx.globalAlpha = 0.9;
-    roundRect(ctx, x - half + s * 0.06, y - half + s * 0.06, size - s * 0.12, size - s * 0.12, s * 0.16);
+    roundRect(ctx, x - halfX + s * 0.06, y - halfY + s * 0.06, width - s * 0.12, height - s * 0.12, s * 0.16);
     ctx.fillStyle = U.rgba(zone.color, 0.16);
     ctx.fill();
     ctx.strokeStyle = U.rgba(zone.color, 0.75);
@@ -555,11 +556,11 @@
     ctx.save();
     ctx.strokeStyle = U.rgba(zone.color, 0.95);
     ctx.lineWidth = Math.max(1.2, s * 0.06);
-    if (zone.size === 2) {
-      ctx.strokeRect(x - half + s * 0.1, y - half + s * 0.1, size - s * 0.2, size - s * 0.2);
+    if (shape.width === 2) {
+      ctx.strokeRect(x - halfX + s * 0.1, y - halfY + s * 0.1, width - s * 0.2, height - s * 0.2);
       ctx.beginPath();
-      ctx.moveTo(x - half + s * 0.1, y);
-      ctx.lineTo(x + half - s * 0.1, y);
+      ctx.moveTo(x, y - halfY + s * 0.1);
+      ctx.lineTo(x, y + halfY - s * 0.1);
       ctx.stroke();
     } else {
       ctx.beginPath();

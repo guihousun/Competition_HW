@@ -24,7 +24,7 @@ from .brain import decide
 from .protocol import TOWER_RANGE_BY_LEVEL, TOWER_TYPES
 from .scenarios import ROBOT_STATS, observation, scenario  # noqa: F401 (re-export)
 from .simulator import frame_view, step
-from . import wave_data
+from . import wave_data, map_layout as layouts
 
 MAX_ROUNDS = 1300
 SERIES_LIMIT = 6
@@ -54,6 +54,11 @@ ROBOT_SCORE = {k: v[2] for k, v in ROBOT_STATS.items()}
 # One row per behaviour a user could otherwise mistake for an official rule.
 # Sourced from docs/DEMO.md and docs/DEVELOPMENT_RULES.md; keep both in sync.
 RULE_ROWS: list[dict[str, str]] = [
+    {"id": "R02/Issue46", "item": "attack_map 已观测地图档 / 随机压力地图",
+     "status": "local", "note": "默认网页新建对齐 Issue46 五场 attack_map 已观测基地、市场、任务点；"
+                               "不是完整官方回放。23/24/25 数字类型仅登记，不推断为墙或矿；"
+                               "矿点、完整地形、defender 缺失角色、建造区与刷怪位置仍含本地假设。"
+                               "seeded-local-v1 保留旧随机压力布局；导入录像不移动坐标。"},
     {"id": "R01", "item": "HTTP POST / roleCommandMap / controllerId",
      "status": "official", "note": "与接口文档 v1.0 字段一致；调试端点与 _demo 不进入策略"},
     {"id": "R01", "item": "12 个官方动作码与字段契约",
@@ -144,13 +149,17 @@ def stats_payload() -> dict[str, Any]:
         "pressure": [1, 2, 3],
         "waveProfiles": list(wave_data.PROFILES),
         "waveProfileDefault": wave_data.DEFAULT_PROFILE,
+        "mapLayouts": list(layouts.LAYOUTS),
+        "mapLayoutDefault": layouts.DEFAULT,
     }
 
 
-def scenario_payload(seed: Any, side: Any, pressure: Any, profile: Any = None) -> dict[str, Any]:
-    state = scenario(seed, side, pressure, profile=wave_data.validate_profile(profile))
+def scenario_payload(seed: Any, side: Any, pressure: Any, profile: Any = None,
+                     map_layout: Any = None) -> dict[str, Any]:
+    state = scenario(seed, side, pressure, profile=wave_data.validate_profile(profile),
+                     map_layout=layouts.validate(map_layout))
     return {"state": _viewer_state(state), "view": frame_view(state),
-            "metadata": recording_metadata()}
+            "metadata": recording_metadata(state)}
 
 
 def step_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -187,7 +196,7 @@ def step_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='openrouter', max_calls=None,
-                         profile=None, pressure=1):
+                         profile=None, pressure=1, map_layout=None):
     """One explicit local LLM fixture; never used by ordinary benchmarks."""
     import uuid
     from copy import deepcopy
@@ -195,7 +204,7 @@ def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='
         raise ValueError('unknown Agent demo or backend')
     profile = wave_data.validate_profile(profile)
     from .protocol import Pos, distance
-    state = scenario(seed, side, pressure, profile=profile)
+    state = scenario(seed, side, pressure, profile=profile, map_layout=layouts.validate(map_layout))
     meta = state['_demo']
     meta.update(llm_enabled=backend == 'openrouter', llm_mode=backend,
                 llm_demo_kind=kind, llm_run_id=uuid.uuid4().hex)
@@ -226,7 +235,9 @@ def llm_scenario_payload(seed=1, side='challenger', kind='arithmetic', backend='
     spot = min(free_cells(state), key=lambda p: distance(p, Pos.load(point['pos'])))
     if kind in ('arithmetic', 'tasks', 'long'):
         pioneer['pos'] = spot.dump()
-    return {'state': _viewer_state(state), 'view': frame_view(state), 'metadata': recording_metadata()}
+        meta['map_layout']['llm_fixture_override'] = {
+            'pioneer_position': spot.dump(), 'basis': 'local_task_demo_shortcut'}
+    return {'state': _viewer_state(state), 'view': frame_view(state), 'metadata': recording_metadata(state)}
 
 
 def _viewer_state(state: dict[str, Any]) -> dict[str, Any]:
@@ -297,7 +308,8 @@ def _json_safe(value: Any, depth: int = 0) -> Any:
 
 
 def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
-                   *, profile: Any = None, progress=None, cancelled=None) -> dict[str, Any]:
+                   *, profile: Any = None, map_layout: Any = None,
+                   progress=None, cancelled=None) -> dict[str, Any]:
     """Record a full local match: initial state, per-round frames, final state.
 
     This is a replay source, not a second simulator: every frame comes from the
@@ -305,9 +317,10 @@ def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
     the live path starts from.
     """
     profile = wave_data.validate_profile(profile)
-    initial = scenario(seed, side, pressure, profile=profile)
+    map_layout = layouts.validate(map_layout)
+    initial = scenario(seed, side, pressure, profile=profile, map_layout=map_layout)
     key = json.dumps(
-        [initial['_demo']['seed'], side, str(pressure), profile, limit], sort_keys=True,
+        [initial['_demo']['seed'], side, str(pressure), profile, map_layout, limit], sort_keys=True,
         ensure_ascii=False,
     )
     with _LOCK:
@@ -319,7 +332,7 @@ def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
     frames: list[dict[str, Any]] = []
     states: list[dict[str, Any]] = [_viewer_state(initial)]
     done = False
-    metadata = recording_metadata()
+    metadata = recording_metadata(initial)
     while True:
         if cancelled is not None and cancelled():
             break
@@ -343,6 +356,7 @@ def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
         "side": initial['teamOur']['type'],
         "pressure": initial['_demo']['pressure'],
         "profile": initial['_demo'].get('profile', wave_data.DEFAULT_PROFILE),
+        "map_layout": map_layout,
         "initial": states[0],
         "frames": frames,
         "states": states,
@@ -360,7 +374,7 @@ def series_payload(seed: Any, side: Any, pressure: Any, limit: Any = None,
     return payload
 
 
-def recording_metadata() -> dict[str, Any]:
+def recording_metadata(state=None) -> dict[str, Any]:
     """Source evidence for local recordings; no claims of official certification."""
     root = Path(__file__).resolve().parents[4]
     files = sorted(Path(__file__).parent.glob('*.py'))
@@ -371,6 +385,7 @@ def recording_metadata() -> dict[str, Any]:
         digest.update(b'\0')
         digest.update(path.read_bytes())
     return {'sourceSha256': digest.hexdigest(), 'rulesBaseline': 'v1.0 / 2026-09-09',
+            'mapLayout': _json_safe((state or {}).get('_demo', {}).get('map_layout')),
             'local': True, 'scope': 'single-team-local',
             'limitations': ['单队本地结算，不是官方双队胜负', '建造区域、波次、任务夹具与弹道细节含本地假设']}
 
