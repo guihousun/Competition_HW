@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from _fixtures import _reset_ledgers  # noqa: E402
 from _fixtures import _terrain  # noqa: E402
 from coregeek.game import night  # noqa: E402
 from coregeek.game.grid import Pos, wall_cells  # noqa: E402
@@ -36,6 +37,7 @@ class NightWeaponTest(unittest.TestCase):
     GUN = 10020  # `_manned` 那座炮的 id —— `attack` 的 key 就是它
 
     def setUp(self) -> None:
+        _reset_ledgers()
         #: `_fired` 是 planner 的跨回合开火账（模块级），不清会跨用例串味
         #: （上一条用例打出去的那发，会把这一条的同一座炮判成冷却中）。
         night._fired.clear()
@@ -420,6 +422,7 @@ class NightPostTest(unittest.TestCase):
     ROBOT = Pos(15, 24)  # 射程 10 内的一台机器人
 
     def setUp(self) -> None:
+        _reset_ledgers()
         night._fired.clear()  # 跨回合开火账，不清会串味（见 `NightWeaponTest.setUp`）
 
     def _turn(
@@ -562,6 +565,9 @@ class NightEconomyTest(unittest.TestCase):
     SHOP = Pos(25, 20)    # 样例的武器商店位
     PRICES = {"stone": 1, "iron": 4, "copper": 5}
     SHOP_PRICES = {"WeaponUpgradeVoucher1": 100}
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(
         self,
@@ -706,6 +712,9 @@ class StationUpgradeTest(unittest.TestCase):
 
     BASE = Pos(10, 24)
     WEAPONS = (Weapon(200, "gatling", Pos(9, 23), 4, 0),)
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(self, worker: Worker, health: int, robots=()):
         grid = _terrain(self.WEAPONS, {self.BASE: "station"})

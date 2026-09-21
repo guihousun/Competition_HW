@@ -17,7 +17,7 @@ from typing import Any
 from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, base_cells
 from .roles import BaseRole, Pioneer, Worker
-from .core import _Queue, _emit, _near_spots, _operator_spots, _post_spots, _priciest_ore
+from .core import _Queue, _collect, _emit, _near_spots, _operator_spots, _post_spots, _priciest_ore
 from .utils import _passable, _pioneer_mans_guns, _weapon_groups
 from .world import Robot, Turn, Weapon
 
@@ -69,7 +69,7 @@ def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
         return
     ore_taken.add(mine)
     if role.pos.dist(mine) <= 1:
-        _emit(q.cmds, role, actions.Collect, mine)
+        _collect(q.cmds, role, mine)
         return
     q.step(role, mine, with_paths=True, reserve=True)
 

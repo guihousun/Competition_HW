@@ -31,6 +31,17 @@ LOGGER = logging.getLogger(__name__)
 WEAPON_COST = 25
 
 
+#: 一座矿的采集次数上限（任务书 L79："每个矿采集10次后会消失，下回合会随机刷新在地图的其他
+#: 区域"）。payload 不给"剩余数"（接口文档的 `zones` 只有 `neutralType`）⇒ 只能自己数。
+ORE_CHARGES = 10
+
+
+#: 本地采矿账（跨回合观测状态）：`{矿格: 我们已经采过几次}`。按坐标键控、只增不减；
+#: 矿采空后那格会空掉（新矿刷新在"地图的其他区域"）⇒ 旧账不会张冠李戴。**记错的代价**：
+#: 把还有料的矿当成采空的（少去一座矿）或反过来（多跑一趟）—— 只影响排序，不碰红线。
+_collected: dict[Pos, int] = {}
+
+
 #: 围墙的 `name` 与代价：石头×1，从建造者自己的背包扣（不是全队共享），拆了不返还。
 WALL = "wall"
 WALL_COST = 1
@@ -159,26 +170,58 @@ class State:
 
 
 def _priciest_ore(role: Worker, turn: Turn, ore_taken: set[Pos]) -> Pos | None:
-    """当前最值钱的那座矿（并列取近的、再取坐标序）；一座都不值钱 / 都走不到 ⇒ `None`。
+    """**实际单价**最高的那座矿（并列取近的、再取坐标序）；一座都不值钱 / 都走不到 ⇒ `None`。
 
-    只看 `turn.vendor_prices`（小贩收购价），**不读新闻修正**、也不看路程远近 —— 两个时段
-    都是这个口径：白天第 1/3 级与夜里清场后都按它挑。`ore_taken` 是本回合已被别人认领的
-    矿格（两个工人才不会都奔同一座）。卖不掉的矿（价 ≤ 0）不为它多走一步。"""
+    实际单价（用户口径）= `单价 × 剩余 / (剩余 + 去 + 回)` —— 一次把这座矿采空的平均收益，
+    回合都算进去：
+
+    - **单价** = `turn.vendor_prices[kind]`（小贩收购价；**不读新闻修正**）；
+    - **剩余** = 本地账 `_ore_left(pos)`（payload 不给这个数，任务书 L79 说每座矿采 10 次消失）；
+    - **去** = `role.pos → 矿`、**回** = `矿 → 最近的武器位`（没有武器就用基地）的 BFS 步数。
+
+    ⇒ 采空了的矿（剩余 0）、小贩不收的（价 ≤ 0）、走不到的（BFS -1）一律剔掉。
+    `ore_taken` 是本回合已被别人认领的矿格（两个工人才不会都奔同一座）。"""
     walk, size = _passable(turn), turn.map.size
-    best: tuple[int, int, Pos] | None = None
-    for pos, kind in turn.map.ores.items():
-        if pos in ore_taken:
-            continue
-        price = turn.vendor_prices.get(kind, 0)
-        if price <= 0:
-            continue
-        hops = steps_between(role.pos, pos, walk, size)
-        if hops < 0:
-            continue
-        key = (-price, hops, pos)
-        if best is None or key < best:
-            best = key
-    return best[2] if best else None
+    station = turn.map.station
+    posts = [w.pos for w in turn.weapons] or ([station] if station else [])
+
+    def pick(use_ledger: bool) -> Pos | None:
+        best: tuple[float, int, Pos] | None = None
+        for pos, kind in turn.map.ores.items():
+            if pos in ore_taken:
+                continue
+            price = turn.vendor_prices.get(kind, 0)
+            left = _ore_left(pos) if use_ledger else ORE_CHARGES
+            if price <= 0 or left <= 0:
+                continue
+            out = steps_between(role.pos, pos, walk, size)
+            back = min((steps_between(post, pos, walk, size) for post in posts), default=-1)
+            if out < 0 or back < 0:
+                continue
+            key = (-(price * left) / (left + out + back), out, pos)
+            if best is None or key < best:
+                best = key
+        return best[2] if best else None
+
+    # 账本把候选全清空了（记错 / 与判题器的口径不一致）⇒ **当没账本再挑一遍**。
+    # 一本本地账绝不能把整条挖矿线静默关掉 —— 那是"跨回合状态卡住"的老病，
+    # 退化成"偶尔白跑一趟"要好得多。
+    return pick(True) or pick(False)
+
+
+def _ore_left(pos: Pos) -> int:
+    """这座矿还剩几块（本地账：初值 `ORE_CHARGES`，我们每发一条 `collect` 减一块，最少 0）。"""
+    return max(0, ORE_CHARGES - _collected.get(pos, 0))
+
+
+def _collect(cmds: dict[str, dict[str, Any]], role: Worker, mine: Pos) -> bool:
+    """发一条采集指令，**并记一笔本地采矿账** —— 那本账是"这座矿还剩几块"的唯一来源。
+
+    采集动作在别处都不记（`_emit` 是通用的），所以只有这一个出口：谁要采谁走它。"""
+    if not _emit(cmds, role, actions.Collect, mine):
+        return False
+    _collected[mine] = _collected.get(mine, 0) + 1
+    return True
 
 
 # ── 岗位几何：白天收工闸门与夜里操炮同一个口径 ──────────────────────

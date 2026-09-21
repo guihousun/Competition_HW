@@ -14,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from _fixtures import _reset_ledgers  # noqa: E402
 from _fixtures import _records, _terrain  # noqa: E402
 from coregeek.agent import AGENT  # noqa: E402
 from coregeek.game.grid import STEPS, Pos, base_cells, box_cells, door_cells, wall_cells, weapon_cells, weapon_sites  # noqa: E402
@@ -40,6 +41,7 @@ class BuildWeaponTest(unittest.TestCase):
     MINE = Pos(4, 24)
 
     def setUp(self) -> None:
+        _reset_ledgers()
         self.gold = 75  # 开局：恰好买满三座（25×3）
         # 已建成的武器名册 —— 唯一真相，地形由它推（见 `_terrain`）。直接往 `entries`
         # 里塞一把 `"gatling"` 的话 `turn.weapons` 是空的、名额算成"还差三座"，而那一格
@@ -168,7 +170,11 @@ class WallRingTest(unittest.TestCase):
 
     BASE = Pos(10, 24)
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     @staticmethod
+
     def _ring20(base: Pos) -> set[Pos]:
         """完整的 20 格围墙环（实际只砌其中 14/16 格，背面整列不砌）—— 对照物。"""
         return {
@@ -314,6 +320,7 @@ class BuildWallTest(unittest.TestCase):
     WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
 
     def setUp(self) -> None:
+        _reset_ledgers()
         self.entries: dict[Pos, str] = _terrain(
             self.WEAPONS, {self.BASE: "station", self.MINE: "stone"}
         )
@@ -467,6 +474,9 @@ class DayEndGateTest(unittest.TestCase):
     SIZE = (41, 32)
     #: 收工窗口的宽度 = `day.RETURN_MARGIN`
     WINDOW = 5
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(
         self,
@@ -640,6 +650,9 @@ class TwoWallBuildersTest(unittest.TestCase):
     #: 触发死循环的局面：正面列已砌三格，两个工人卡在基地与正面列之间的夹缝里
     FRONT_BUILT = {Pos(13, 22): WALL, Pos(13, 23): WALL, Pos(13, 24): WALL}
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     def test_two_workers_keep_building_in_the_pocket(self):
         entries = _terrain(
             self.WEAPONS, {self.BASE: "station", self.MINE: "stone"}, self.FRONT_BUILT
@@ -700,6 +713,9 @@ class StandingOnTheTargetTest(unittest.TestCase):
     #: 已砌好的那些（正面列 6 + 顶行 4 + 底行头一格）—— 一个能触发卡死的中间状态
     BUILT = {c for c in wall_cells(BASE, 41) if c.y == 26 or c.x == 13} | {Pos(12, 21)}
     ON = Pos(11, 21)  # 工人站的那一格 —— 也是 `wall_cells` 里下一个该砌的
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(self, walls: Iterable[Pos], worker: Worker, round_no: int = 40) -> Turn:
         return Turn(
@@ -766,6 +782,9 @@ class LastCellFromOutsideTest(unittest.TestCase):
     WEAPONS = _records({Pos(9, 25): "rocket", Pos(12, 22): "rocket", Pos(12, 25): "gatling"})
     LAST = Pos(13, 24)  # 正面列中间那一格
     INSIDE = Pos(12, 24)  # 贴着 `LAST` 的盒内格 —— 旧口径就在这儿砌
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(self, built: set[Pos], worker: Worker, extra: dict[Pos, str] | None = None) -> Turn:
         return Turn(
@@ -850,6 +869,9 @@ class SegmentSplitTest(unittest.TestCase):
     BASE = Pos(10, 24)
     WEAPONS = _records({Pos(9, 23): "gatling", Pos(9, 24): "railgun", Pos(9, 22): "rocket"})
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     def _spot(self, cell: Pos, occupied: set[Pos]) -> Pos:
         """`cell` 的某个空邻格（站位即建造位 —— 贴着目标即可 `build`）。"""
         for d in STEPS:
@@ -923,6 +945,9 @@ class PathReserveTest(unittest.TestCase):
     B 选路时当 `avoid` 绕开；绕不开就退回硬障碍照走 —— 让路的代价不能是原地卡死
     （双双停住比擦肩而过更亏，§4.5.4 碰撞两败）。"""
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     def test_reserve_path_records_the_intermediate_cells(self):
         turn = Turn(round_no=1, map=Map((41, 32), {Pos(10, 24): "station"}), roles=(), gold=0)
         walker = Worker(1, Pos(5, 5), {})
@@ -964,6 +989,9 @@ class DemolishTest(unittest.TestCase):
     """
 
     BASE = Pos(10, 24)
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(self, weak: tuple[Wall, ...], *, stone: int, at: Pos, gaps: Iterable[Pos] = ()):
         ring = wall_cells(self.BASE, 41)
@@ -1043,6 +1071,7 @@ class WallPriorityTest(unittest.TestCase):
     BASE = Pos(10, 24)
 
     def setUp(self) -> None:
+        _reset_ledgers()
         AGENT.reset()  # `_mine_spare_ore` 读价格期望（跨回合状态），不清会跨用例串味
 
     def _turn(
@@ -1286,6 +1315,9 @@ class SellCargoTest(unittest.TestCase):
     SHOP_PRICES = {"WeaponUpgradeVoucher1": 100, "WeaponUpgradeVoucher2": 150}
     MINE = Pos(20, 30)
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     def _turn(self, *, at: Pos, bag: dict[str, int], gold: int = 0, vendor: bool = True, ring: bool = True) -> Turn:
         walls = {c: WALL for c in wall_cells(self.BASE, 41)} if ring else {}
         grid = _terrain(
@@ -1365,6 +1397,9 @@ class DetourSellTest(unittest.TestCase):
     FAR_VENDOR = Pos(30, 18)   # 绕远的小贩
     SHOP_PRICES = {"WeaponUpgradeVoucher1": 100}
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     def _turn(self, *, at: Pos, bag: dict[str, int], vendor: Pos) -> Turn:
         ring = {c: WALL for c in wall_cells(self.BASE, 41)}
         grid = _terrain(
@@ -1440,6 +1475,9 @@ class VoucherLineTest(unittest.TestCase):
         "WallUpgradeVoucher1": 20,
         "WallUpgradeVoucher2": 30,
     }
+
+    def setUp(self) -> None:
+        _reset_ledgers()
 
     def _turn(
         self,
@@ -1557,6 +1595,9 @@ class PioneerErrandTest(unittest.TestCase):
     BASE = Pos(10, 24)
     SHOP = Pos(22, 18)
 
+    def setUp(self) -> None:
+        _reset_ledgers()
+
     def _turn(
         self,
         pioneer: Pioneer,
@@ -1622,6 +1663,7 @@ class DayOneFinishTest(unittest.TestCase):
     MINE_CHARGES = 40
 
     def setUp(self) -> None:
+        _reset_ledgers()
         AGENT.reset()
         self.gold = 75  # 开局：恰好买满三座（25×3）
         self.ground: dict[Pos, str] = {

@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from coregeek.game import core  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.world import Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -43,3 +44,12 @@ def _terrain(weapons: tuple[Weapon, ...], *layers: dict[Pos, str]) -> dict[Pos, 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _reset_ledgers() -> None:
+    """把模块级的跨回合本地账清零（`core._collected`：我们采过每座矿几次）。
+
+    用例隔离用 —— 单实例/模块级状态在同一个测试进程里会跨用例串味（与 `planner._fired` 同一条
+    规矩）。加了新的模块级账就补在这里，别撒到各个用例类里去。
+    """
+    core._collected.clear()

@@ -21,6 +21,7 @@ from .core import (
     WEAPON_COST,
     State,
     _Ctx,
+    _collect,
     _emit,
     _post_spots,
     _priciest_ore,
@@ -420,7 +421,7 @@ def _mine_ore(role: Worker, ctx: _Ctx) -> bool:
     if _detour_sell(role, ctx, mine):
         return True
     if role.pos.dist(mine) <= 1:
-        return _emit(ctx.q.cmds, role, actions.Collect, mine)
+        return _collect(ctx.q.cmds, role, mine)
     return ctx.q.step(role, mine, avoid=frozenset(ctx.sites), with_paths=True, reserve=True)
 
 
@@ -448,7 +449,7 @@ def _mine_stone(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
     mine = best[1]
     ctx.ore_taken.add(mine)
     if role.pos.dist(mine) <= 1:
-        return _emit(q.cmds, role, actions.Collect, mine)
+        return _collect(q.cmds, role, mine)
     return q.step(role, mine, avoid=frozenset(ctx.sites), with_paths=True, reserve=True)
 
 
