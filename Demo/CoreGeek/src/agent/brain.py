@@ -7,7 +7,7 @@ import os
 
 from . import ballistics, defense_layout, planner, sandbox, tasks, treasure, nightwork, policy_supervisor, task_context, news_economy, upgrade_itinerary
 from .grid import _cost_to_goal, next_step
-from . import home_defense, strategy_config, phase_maintenance, traffic, frontline
+from . import home_defense, strategy_config, phase_maintenance, traffic, frontline, night_gunner
 _STRATEGY = strategy_config.get()
 from .coordination import available_gold, reconcile
 from .tasks import TaskPipeline
@@ -2066,7 +2066,24 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
         guards=turn.workers()
         operator=min((r.unit_id for r in guards),default=None)
         fixed=next((r for r in guards if r.unit_id==operator),None)
-        shared=_coordinate_rockets(turn,commands,claimed)
+        handover = None
+        # A completed pioneer task may take the common post, but only during
+        # ordinary combat defence. Day-four full defence deliberately reserves
+        # workers for the established gunner/repair policy. The helper preserves
+        # the worker's shot until a legal, covered handover exists.
+        if not home_defense.full_night(turn):
+            eligible, _ = night_gunner.pioneer_status(turn, state, planner_state)
+            if eligible:
+                handover = night_gunner.plan(turn, state, planner_state, commands,
+                                              claimed, _aim_points)
+        if handover and handover.get('owner') is not None:
+            operator = handover['owner']
+            fixed = next((r for r in turn.workers() + (turn.pioneer(),)
+                          if r is not None and r.unit_id == operator), None)
+            shared = dict(handover)
+            shared.setdefault('single_operator', True)
+        else:
+            shared=_coordinate_rockets(turn,commands,claimed)
         if shared is not None:
             _SHARED_CONTROL.set((turn,shared))
         # The common post may require the public rear opening during daylight.
