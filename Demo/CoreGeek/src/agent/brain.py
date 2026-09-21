@@ -812,6 +812,11 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     free_walls = [pos for pos in walls_missing if pos not in occupied]
 
     claimed: set[Pos] = set()
+    # Metal targets are coordinated separately from movement/build landing
+    # cells.  A worker reserves the observed mine it is actually pursuing for
+    # this planning pass, allowing the next worker to choose a different mine
+    # without treating the mine itself as a blocked movement cell.
+    metal_claimed: set[Pos] = set()
     busy: set[int] = set()
     # Roles the treasure itinerary has claimed for this round. The tower-post loop at
     # the end of `_day` must not overwrite them: it would replace the `buy` or
@@ -926,6 +931,7 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
         _worker_day(
             turn, role, sites, free_towers, free_walls, claimed, commands, state, busy,
             other_errand=bool(errand_owners - {role.unit_id}), routes=routes,
+            metal_claimed=metal_claimed,
         )
         proposed = commands.get(role.unit_id,{})
         if (not proposed and role.unit_id not in busy and role.unit_id not in errand_owners
@@ -1418,6 +1424,7 @@ def _worker_day(
     *,
     other_errand: bool = False,
     routes: Any = None,
+    metal_claimed: set[Pos] | None = None,
 ) -> None:
     # Strategy-retired rear targets must not consume a worker's construction turn.
     rear = _retired_rear_walls(turn)
@@ -1482,7 +1489,7 @@ def _worker_day(
     # the vendor (the errand ledger owns that leg when it is available);
     # otherwise it gathers the dearest ore the vendor actually buys.
     _mine_metal(turn, role, claimed, commands, state, other_errand=other_errand,
-                routes=routes)
+                routes=routes, mine_claimed=metal_claimed)
 
 
 def _sellable_metals(state: dict[str, Any]) -> dict[str, int]:
@@ -1629,7 +1636,8 @@ def _mine_approach(turn: Turn, role: Unit, mine: Pos,
 
 
 def _metal_target(turn: Turn, role: Unit, state: dict[str, Any],
-                  cost_of: Any = None) -> Pos | None:
+                  cost_of: Any = None,
+                  excluded: set[Pos] | None = None) -> Pos | None:
     """Closest reachable in-range mine of the dearest ore still worth mining.
 
     Returns None when no mine is usable, which is what keeps a worker from
@@ -1637,6 +1645,7 @@ def _metal_target(turn: Turn, role: Unit, state: dict[str, Any],
     """
     cost_of = cost_of if cost_of is not None else _RouteCost(turn, role)
     prices = _sellable_metals(state)
+    excluded = excluded or set()
     for material in sorted(prices, key=lambda kind: (-prices[kind], kind)):
         if not _mine_available(turn, material):
             continue
@@ -1644,7 +1653,8 @@ def _metal_target(turn: Turn, role: Unit, state: dict[str, Any],
             continue  # This ore already fills a run: sell it before mining more.
         mines = sorted(
             (pos for pos, kind in turn.zones.items()
-             if kind == material and distance(role.pos, pos) <= ORE_MAX_DISTANCE),
+             if kind == material and pos not in excluded
+             and distance(role.pos, pos) <= ORE_MAX_DISTANCE),
             key=lambda pos: (distance(role.pos, pos), pos.x, pos.y),
         )
         for mine in mines:
@@ -1703,24 +1713,78 @@ def _metal_trip_fits(turn: Turn, role: Unit, mine: Pos, state: dict[str, Any],
     return approach if trip <= budget else None
 
 
+def _return_to_station(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
+                       routes: Any = None) -> bool:
+    """Issue a bounded, legal step back to the station when work disappears.
+
+    This is a fallback for a worker whose public mine vanished or became too
+    expensive to finish.  It does not invent a task or walk through the base:
+    the destination is a free cell adjacent to the observed station and the
+    existing route planner still enforces occupancy, walls and dusk limits.
+    """
+    station = turn.station()
+    if station is None or home_defense.inside(turn, role.pos):
+        return False
+    routes = routes if routes is not None else _RouteCost(turn, role)
+    homes = [cell for cell in _stand_cells(turn, role, station.pos, set())
+             if _free_cell(turn, role, cell)]
+    homes = [cell for cell in homes if routes(role.pos, cell) < 10 ** 6]
+    if not homes:
+        return False
+    target = min(homes, key=lambda cell: (routes(role.pos, cell), cell.x, cell.y))
+    step = _step_toward(turn, role, target, set())
+    if step is None:
+        return False
+    commands[role.unit_id] = move_command(step)
+    return True
+
+
+def _metal_fallback(turn: Turn, role: Unit, commands: dict[int, dict[str, Any]],
+                    state: dict[str, Any], routes: Any = None) -> bool:
+    """Sell a stranded load or return home after a mine target disappears.
+
+    A small load is still worth selling when no next mine is available.  If
+    the vendor leg no longer fits before the normal hand-off, the safer action
+    is a station-adjacent return step rather than standing on a depleted mine.
+    """
+    if not _economy_open(turn):
+        return False
+    routes = routes if routes is not None else _RouteCost(turn, role)
+    carried = _metal_carried(role, state)
+    if carried:
+        vendor = _vendor_route(turn, role, routes)
+        if vendor is not None:
+            stand, outward = vendor
+            index = (turn.round_no - 1) % 130
+            remaining = (130 if _productive_night(turn) else 0) + RETURN_BEFORE_NIGHT - index
+            # Leave one round to execute the eventual sale and one for a safe
+            # hand-off.  If this no longer fits, prefer returning home below.
+            if outward + 1 <= remaining:
+                return _walk_to_zone(turn, role, "vendor", commands)
+    return _return_to_station(turn, role, commands, routes)
+
+
 def _mine_metal(turn: Turn, role: Unit, claimed: set[Pos],
                 commands: dict[int, dict[str, Any]], state: dict[str, Any],
-                *, other_errand: bool = False, routes: Any = None) -> bool:
+                *, other_errand: bool = False, routes: Any = None,
+                mine_claimed: set[Pos] | None = None) -> bool:
     """Gather a metal batch, or carry a finished one off to the vendor.
 
     Sell-ready comes first so a full backpack never blocks the sale. The trip is
     bounded by the day's economy window and by a route budget, so the worker is
     never still out at dusk: night defence keeps its crew (R02). While *another*
-    worker holds the team's one errand, this worker stays on the ordinary plan
-    instead of starting a second trip.
+    worker holds the team's one errand, this worker may still take an
+    independent, bounded mine/sale action.  The purchase owner's route and
+    budget remain protected by the surrounding TripFrame; this function only
+    avoids the old all-workers idle gate.
     """
-    if not _economy_open(turn) or other_errand:
+    if not _economy_open(turn):
         return False
     cost_of = routes.for_role(role) if routes is not None else _RouteCost(turn, role)
     if _vendor_route(turn, role, cost_of) is None:
-        # A vendor we cannot walk to makes ore worthless: never start mining
-        # that could not be sold (R06), and never walk at an unreachable target.
-        return False
+        # A vendor we cannot walk to makes *new* ore worthless (R06).  A worker
+        # already outside still gets the ordinary safe return fallback below.
+        return _metal_fallback(turn, role, commands, state, cost_of)
     carrying = _metal_carried(role, state)
     if carrying >= METAL_BATCH:
         # A full batch in hand and no errand ledger to carry it: walk it to the
@@ -1730,9 +1794,18 @@ def _mine_metal(turn: Turn, role: Unit, claimed: set[Pos],
         return _walk_to_zone(turn, role, "vendor", commands)
     if role.backpack_full:
         return False
-    target = _metal_target(turn, role, state, cost_of)
+    # Prefer a mine not already selected by another worker in this round.  If
+    # there is only one viable public mine, deliberately fall back to sharing
+    # it; refusing to work would be worse than the official shared collection
+    # rule and would recreate the old idle behaviour.
+    target = _metal_target(turn, role, state, cost_of,
+                           excluded=mine_claimed)
+    if target is None and mine_claimed:
+        target = _metal_target(turn, role, state, cost_of)
     if target is None:
-        return False
+        return _metal_fallback(turn, role, commands, state, cost_of)
+    if mine_claimed is not None:
+        mine_claimed.add(target)
     if role.pos != target and distance(role.pos, target) <= 1:
         commands[role.unit_id] = collect_command(target)
         claimed.add(target)
