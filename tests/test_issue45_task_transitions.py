@@ -110,9 +110,12 @@ class Issue45TaskTransitionsTests(unittest.TestCase):
                 # Delayed packets still cannot mutate task/channel history.
                 # The new clearance permission is deliberately revoked on a
                 # backwards observation; no old packet grants night work.
-                before.pop('clearedNightState',None)
+                before_without_clearance = dict(before)
+                before_without_clearance.pop('clearedNightState',None)
                 self.assertEqual(state.cleared_night_state,{})
-                self.assertEqual(state.dump(),before)
+                after_without_clearance = dict(state.dump())
+                after_without_clearance.pop('clearedNightState',None)
+                self.assertEqual(after_without_clearance,before_without_clearance)
 
     def test_old_tool_repeat_cannot_become_new_task_evidence(self):
         for side in ('challenger','defender'):
