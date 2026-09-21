@@ -47,7 +47,7 @@ def reserve(turn, commands, *, protected=(), business_goals=None):
         if current and landing in common and role.unit_id in (business_goals or {}):
             target,inside_only=business_goals[role.unit_id]
             from . import traffic
-            blocked=turn.blocked(role)|common
+            blocked=set(turn.blocked(role))|common
             if inside_only and not turn.is_day and home_defense.inside(turn,role.pos):
                 blocked |= {Pos(x,y) for x in range(turn.width) for y in range(turn.height)
                             if not home_defense.inside(turn,Pos(x,y))}
@@ -146,7 +146,7 @@ def _yield_idle_corridor(turn, commands, owner, common, inner, protected):
     role = next((idle[p] for p in route if p in idle), None)
     if role is None:
         return []
-    occupied = turn.blocked(role) | claimed
+    occupied = set(turn.blocked(role)) | claimed
     gunner_cmd = commands.get(owner, {})
     if gunner_cmd.get('action') == 'move':
         occupied.update(Pos.load(p) for p in gunner_cmd.get('targetPos', ()))

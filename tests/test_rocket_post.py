@@ -144,6 +144,18 @@ class RocketPostTests(unittest.TestCase):
             rocket_post.reserve(Turn.load(p),commands,protected=protected)
             self.assertEqual(commands,before)
 
+    def test_corridor_yield_reserves_an_already_moving_gunners_landing(self):
+        p=corridor_case();turn=Turn.load(p)
+        gunner_move=dict(action='move',targetPos=[dict(x=9,y=25)])
+        commands={2:deepcopy(gunner_move)}
+        self.assertIsInstance(turn.blocked(turn.workers()[0]),frozenset)
+        report=rocket_post.reserve(turn,commands)
+        self.assertEqual(commands[2],gunner_move)
+        # The only off-route bay is now reserved by the gunner: hold rather
+        # than move the blocker into a corridor with no reachable free bay.
+        self.assertEqual(report[-1]['reason'],'common_corridor_cannot_vacate_safely')
+        self.assertNotIn(4,commands)
+
     def test_actual_brain_idle_corridor_yields_and_gunner_reaches_common_before_night(self):
         p=corridor_case();state=planner.PlannerState();visited=[]
         with patch.object(brain,'_STRATEGY',self.config):
