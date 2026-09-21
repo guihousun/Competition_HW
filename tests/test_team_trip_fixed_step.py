@@ -1,6 +1,11 @@
-"""Auditor's hand-drawn P1 case: a different first step cannot be substituted."""
+"""Historical P1 corridor: a different first step cannot be substituted.
+
+The carried purchase contract upgrades the old rear wall. Keep this independent
+first-step oracle with the legacy strategy, not a retired default investment.
+"""
 from copy import deepcopy
 import unittest
+from legacy_strategy import LegacyStrategyCase
 
 from test_team_trip_return import corridor
 from test_coordination import unit
@@ -29,7 +34,7 @@ def hand_drawn(mirror=False):
     return p,c
 
 
-class FixedStepTests(unittest.TestCase):
+class FixedStepTests(LegacyStrategyCase):
     def test_active_trip_rejects_build_that_only_fits_a_different_first_step(self):
         for mirror in (False,True):
             p,c=hand_drawn(mirror);before=deepcopy(p);t=Turn.load(p)

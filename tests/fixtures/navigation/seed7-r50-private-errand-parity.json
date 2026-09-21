@@ -1,0 +1,839 @@
+{
+  "payload": {
+    "errors": [],
+    "lastCmdResult": "",
+    "lastRoundRoleActionResults": {
+      "10010": true,
+      "10011": true
+    },
+    "lastSummonTreasureResult": 0,
+    "llmResp": "",
+    "mapInfo": {
+      "height": 32,
+      "width": 41,
+      "zones": [
+        {
+          "neutralType": "vendor",
+          "pos": {
+            "x": 20,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "weaponShop",
+          "pos": {
+            "x": 25,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint1",
+          "pos": {
+            "x": 4,
+            "y": 20
+          }
+        },
+        {
+          "neutralType": "challengerTaskPoint2",
+          "pos": {
+            "x": 36,
+            "y": 17
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint1",
+          "pos": {
+            "x": 6,
+            "y": 0
+          }
+        },
+        {
+          "neutralType": "defenderTaskPoint2",
+          "pos": {
+            "x": 24,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 39,
+            "y": 17
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 34,
+            "y": 23
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 2,
+            "y": 12
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 5,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 29,
+            "y": 14
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 28,
+            "y": 2
+          }
+        },
+        {
+          "neutralType": "iron",
+          "pos": {
+            "x": 4,
+            "y": 15
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 16,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 5,
+            "y": 25
+          }
+        },
+        {
+          "neutralType": "copper",
+          "pos": {
+            "x": 37,
+            "y": 16
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 5,
+            "y": 28
+          }
+        },
+        {
+          "neutralType": "stone",
+          "pos": {
+            "x": 18,
+            "y": 8
+          }
+        }
+      ]
+    },
+    "phaseTask": "",
+    "robot": {
+      "roles": []
+    },
+    "roundNo": 50,
+    "teamEnemy": {
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 20013,
+          "level": 1,
+          "pos": {
+            "x": 29,
+            "y": 9
+          },
+          "roleType": "station"
+        }
+      ]
+    },
+    "teamOur": {
+      "goldNum": 30,
+      "playerTasks": [
+        {
+          "coldDownRounds": 0,
+          "goldReward": 30,
+          "isValid": true,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 4,
+            "y": 20
+          },
+          "taskType": "自进化类1",
+          "timeoutRounds": 25
+        },
+        {
+          "coldDownRounds": 28,
+          "goldReward": 30,
+          "isValid": false,
+          "scoreReward": 50,
+          "taskPosition": {
+            "x": 36,
+            "y": 17
+          },
+          "taskType": "自进化类2",
+          "timeoutRounds": 25
+        }
+      ],
+      "roles": [
+        {
+          "backPackCapability": 0,
+          "backpack": [],
+          "health": 1500,
+          "id": 10013,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 23
+          },
+          "roleType": "station"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone",
+            "stone",
+            "stone",
+            "stone",
+            "stone"
+          ],
+          "health": 220,
+          "id": 10010,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 21
+          },
+          "roleType": "worker"
+        },
+        {
+          "backPackCapability": 40,
+          "backpack": [
+            "IronWhistle",
+            "StarSand"
+          ],
+          "health": 200,
+          "id": 10011,
+          "level": 1,
+          "pos": {
+            "x": 33,
+            "y": 14
+          },
+          "roleType": "pioneer"
+        },
+        {
+          "backPackCapability": 100,
+          "backpack": [
+            "stone"
+          ],
+          "health": 220,
+          "id": 10012,
+          "level": 1,
+          "pos": {
+            "x": 8,
+            "y": 24
+          },
+          "roleType": "worker"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10040,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 22
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10041,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 24
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 10042,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 24
+          },
+          "roleType": "rocket"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40000,
+          "level": 1,
+          "pos": {
+            "x": 13,
+            "y": 22
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40001,
+          "level": 1,
+          "pos": {
+            "x": 13,
+            "y": 23
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40002,
+          "level": 1,
+          "pos": {
+            "x": 13,
+            "y": 24
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40003,
+          "level": 1,
+          "pos": {
+            "x": 13,
+            "y": 25
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40004,
+          "level": 1,
+          "pos": {
+            "x": 13,
+            "y": 20
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40005,
+          "level": 1,
+          "pos": {
+            "x": 13,
+            "y": 21
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40006,
+          "level": 1,
+          "pos": {
+            "x": 11,
+            "y": 25
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40007,
+          "level": 1,
+          "pos": {
+            "x": 11,
+            "y": 20
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40008,
+          "level": 1,
+          "pos": {
+            "x": 12,
+            "y": 20
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40009,
+          "level": 1,
+          "pos": {
+            "x": 12,
+            "y": 25
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40010,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 25
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40011,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 20
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40012,
+          "level": 1,
+          "pos": {
+            "x": 9,
+            "y": 25
+          },
+          "roleType": "wall"
+        },
+        {
+          "cooldown": 0,
+          "health": 1000,
+          "id": 40013,
+          "level": 1,
+          "pos": {
+            "x": 10,
+            "y": 20
+          },
+          "roleType": "wall"
+        }
+      ],
+      "totalScore": 224,
+      "type": "challenger"
+    },
+    "vendorShopList": [
+      {
+        "name": "stone",
+        "price": 1
+      },
+      {
+        "name": "iron",
+        "price": 3
+      },
+      {
+        "name": "copper",
+        "price": 5
+      }
+    ],
+    "weaponShopList": [
+      {
+        "name": "WeaponUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "WeaponUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallUpgradeVoucher1",
+        "price": 20
+      },
+      {
+        "name": "WallUpgradeVoucher2",
+        "price": 30
+      },
+      {
+        "name": "StationUpgradeVoucher1",
+        "price": 100
+      },
+      {
+        "name": "StationUpgradeVoucher2",
+        "price": 150
+      },
+      {
+        "name": "WallFixer",
+        "price": 10
+      },
+      {
+        "name": "Medicine",
+        "price": 10
+      },
+      {
+        "name": "DizzyWeapon",
+        "price": 100
+      },
+      {
+        "name": "Bomb",
+        "price": 100
+      },
+      {
+        "name": "SmallRobotSummonOrder",
+        "price": 20
+      },
+      {
+        "name": "MiddleRobotSummonOrder",
+        "price": 30
+      },
+      {
+        "name": "LargeRobotSummonOrder",
+        "price": 100
+      },
+      {
+        "name": "BossRobotSummonOrder",
+        "price": 200
+      },
+      {
+        "name": "AcientTablet",
+        "price": 15
+      },
+      {
+        "name": "StarSand",
+        "price": 15
+      },
+      {
+        "name": "FlameBreath",
+        "price": 15
+      },
+      {
+        "name": "FrostPotion",
+        "price": 15
+      },
+      {
+        "name": "ThornAmulet",
+        "price": 15
+      },
+      {
+        "name": "IronWhistle",
+        "price": 15
+      }
+    ],
+    "worldNews": {
+      "folkLegends": "民间传闻（本地夹具）：祭坛在 (21, 25) 附近，需献祭 IronWhistle、StarSand，第 200-240 回合有效",
+      "officialNews": ""
+    }
+  },
+  "planner": {
+    "commandsSent": 0,
+    "degraded": null,
+    "judge": {
+      "cmdFailures": 0,
+      "cmdRuns": 0,
+      "lastCommand": "",
+      "lastPrompt": "",
+      "lastResult": {
+        "exit_code": null,
+        "output": "",
+        "raw": "",
+        "status": "empty",
+        "truncated": false
+      },
+      "llmDay": 1,
+      "llmResponses": 0,
+      "llmUsedToday": 0,
+      "pendingCmd": null,
+      "pendingPrompt": null
+    },
+    "lastRound": 49,
+    "llmRouter": null,
+    "promptsSent": 0,
+    "schema": "competition-hw-planner/1",
+    "taskContext": null,
+    "tasks": {
+      "accept_retries": {},
+      "acceptance_status": {
+        "phase": "confirmed",
+        "point": {
+          "x": 36,
+          "y": 17
+        }
+      },
+      "cooldown_until": 78,
+      "cycle": null,
+      "last_error": "",
+      "last_note": "前往己方任务点",
+      "solver_notes": {},
+      "supervisor": {
+        "mode": "work",
+        "ready_workers": 2,
+        "reason": "preserve_committed_work",
+        "recommended_reserve": false,
+        "relevant_robots": 0,
+        "reserve_pioneer": false,
+        "return_steps_lower_bound": 23,
+        "visible_pressure_hp": 0
+      }
+    },
+    "teamAgent": null,
+    "teamTrips": {
+      "construction": {
+        "deadline": 56,
+        "issued_round": 48,
+        "last_round": 49,
+        "owner": 10010,
+        "phase": "work",
+        "walls": [
+          {
+            "x": 10,
+            "y": 20
+          }
+        ]
+      }
+    },
+    "trafficState": {
+      "board": [
+        41,
+        32,
+        10,
+        23
+      ],
+      "history": [
+        {
+          "roles": {
+            "10010": {
+              "action": null,
+              "goal": {
+                "x": 9,
+                "y": 20
+              },
+              "pos": {
+                "x": 11,
+                "y": 24
+              }
+            },
+            "10012": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 25
+              },
+              "pos": {
+                "x": 11,
+                "y": 21
+              }
+            }
+          },
+          "round": 42
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 20
+              },
+              "pos": {
+                "x": 11,
+                "y": 24
+              }
+            },
+            "10012": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 25
+              },
+              "pos": {
+                "x": 10,
+                "y": 20
+              }
+            }
+          },
+          "round": 43
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 20
+              },
+              "pos": {
+                "x": 12,
+                "y": 23
+              }
+            },
+            "10012": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 25
+              },
+              "pos": {
+                "x": 9,
+                "y": 21
+              }
+            }
+          },
+          "round": 44
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 20
+              },
+              "pos": {
+                "x": 12,
+                "y": 22
+              }
+            },
+            "10012": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 25
+              },
+              "pos": {
+                "x": 8,
+                "y": 22
+              }
+            }
+          },
+          "round": 45
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 20
+              },
+              "pos": {
+                "x": 11,
+                "y": 21
+              }
+            },
+            "10012": {
+              "action": "move",
+              "goal": {
+                "x": 9,
+                "y": 25
+              },
+              "pos": {
+                "x": 7,
+                "y": 23
+              }
+            }
+          },
+          "round": 46
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "build",
+              "goal": null,
+              "pos": {
+                "x": 10,
+                "y": 20
+              }
+            },
+            "10012": {
+              "action": "build",
+              "goal": null,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            }
+          },
+          "round": 47
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "move",
+              "goal": null,
+              "pos": {
+                "x": 10,
+                "y": 20
+              }
+            },
+            "10012": {
+              "action": null,
+              "goal": null,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            }
+          },
+          "round": 48
+        },
+        {
+          "roles": {
+            "10010": {
+              "action": "build",
+              "goal": null,
+              "pos": {
+                "x": 9,
+                "y": 21
+              }
+            },
+            "10012": {
+              "action": null,
+              "goal": null,
+              "pos": {
+                "x": 8,
+                "y": 24
+              }
+            }
+          },
+          "round": 49
+        }
+      ],
+      "last_round": 49,
+      "openings": [],
+      "walls": {
+        "10010": {
+          "pos": {
+            "x": 9,
+            "y": 20
+          },
+          "round": 47
+        },
+        "10012": {
+          "pos": {
+            "x": 9,
+            "y": 25
+          },
+          "round": 47
+        }
+      }
+    }
+  },
+  "scope": "Local simulator seed7 round50, NOT official/company capture"
+}

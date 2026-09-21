@@ -768,10 +768,12 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
     # `summonTreasure` command with a move, which is exactly how the pioneer ended
     # up strolling past the shop without ever purchasing anything.
     reserved: set[int] = set()
-    # A committed errand owns its worker across days: neutral points can be far
-    # from the base, so a one-day round trip is often impossible. The mission is
-    # abandoned as soon as returning before dusk is at risk.
-    errands = state.get("_demo", {}).get("errands") if isinstance(state.get("_demo"), dict) else None
+    # The old viewer-only _demo.errands ledger is not official input and is
+    # absent after observation() serialization. Reading it made identical public
+    # observations + PlannerState issue different commands (seed7, round50).
+    # Use the existing official path: actual purchase/construction commitments
+    # belong to TripFrame, and treasure plans derive from public news/items.
+    errands = None
     # The treasure itinerary is deliberately independent of that ledger: it is
     # derived each round from the published rumour, the pioneer's backpack and its
     # gold. Tying it to `_demo` (as the first version did) meant it never ran on

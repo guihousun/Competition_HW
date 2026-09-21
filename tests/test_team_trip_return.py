@@ -1,6 +1,12 @@
-"""Independent corridor: outside use costs1 and a legal return costs4."""
+"""Independent legacy corridor: outside use costs1 and a legal return costs4.
+
+The hand-drawn wall upgrade target is on the now-retired rear row. Preserve
+the original return/feedback oracle under the explicit historical strategy;
+default rear retirement is tested in test_rear_wall_build_policy.
+"""
 from copy import deepcopy
 import unittest
+from legacy_strategy import LegacyStrategyCase
 
 from test_team_trip import observed
 from test_coordination import unit
@@ -25,7 +31,7 @@ def corridor(round_no=63,inside=False):
     return p,c
 
 
-class ReturnContractTests(unittest.TestCase):
+class ReturnContractTests(LegacyStrategyCase):
     def test_new_purchase_conflict_defers_purchase_not_construction(self):
         p=observed(178);t=Turn.load(p)
         proposal,report=upgrade_itinerary.plan(t,p,{},start=0,deadline=67)
