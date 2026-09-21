@@ -1,0 +1,27 @@
+{
+  "package_sha256": "388582d9649c1253c0484414502562aae57b725f9b3c40b7e9822a2474fdac55",
+  "source_commit": "2296d9a16aa9a96df41225a785f0b313e12463f2",
+  "check_named_members": [],
+  "modules_match_package": {
+    "task_tools.py": true,
+    "task_agent.py": true
+  },
+  "command_probes": [
+    {
+      "command": "./check",
+      "preflight_check_wrapper": false,
+      "post_failure_check_only_proposal": false
+    },
+    {
+      "command": "cd /tmp/ws && ./check",
+      "preflight_check_wrapper": true,
+      "post_failure_check_only_proposal": false
+    },
+    {
+      "command": "cd /tmp/ws && mkdir -p logs && ./check",
+      "preflight_check_wrapper": false,
+      "post_failure_check_only_proposal": true
+    }
+  ],
+  "scope": "Current helper selection only, not actual official task replay or proof of full-game causation"
+}
