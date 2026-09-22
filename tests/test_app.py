@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import SAMPLE  # noqa: E402
 from coregeek.agent import AGENT, cmd_explore  # noqa: E402
+from coregeek.agent.prompt import SOP_REQUEST  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.app import LOG_PROMPT_MAX, _clip, handle  # noqa: E402
 from coregeek.protocol import actions, model  # noqa: E402
@@ -223,7 +224,7 @@ class HandleTest(unittest.TestCase):
         self.assertIn(f"【上一轮模型回复】：{reply}", task)
         deposit = json.loads(ask[len(ASK):])
         self.assertTrue(
-            deposit[0]["content"].startswith("# 【SOP 沉淀】"), "交卷轮：prompt = 沉淀请求"
+            deposit[0]["content"].startswith(SOP_REQUEST.strip()), "交卷轮：prompt = 沉淀请求"
         )
         self.assertIn("<sop>", deposit[0]["content"], "输出定义（含示例）只在沉淀请求里")
         self.assertNotIn("【上下文压缩】", ask)
@@ -475,7 +476,7 @@ class HandleTest(unittest.TestCase):
             {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
         )
         self.assertTrue(
-            json.loads(body["prompt"])[0]["content"].startswith("# 【SOP 沉淀】"),
+            json.loads(body["prompt"])[0]["content"].startswith(SOP_REQUEST.strip()),
             "答案轮不提问也不压缩（第 47 步）—— 那个槽归沉淀请求（第 141 步）",
         )
         self.assertEqual(body["executeCmd"], "")
@@ -487,7 +488,7 @@ class HandleTest(unittest.TestCase):
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
         self.assertTrue(
-            json.loads(body["prompt"])[0]["content"].startswith("# 【SOP 沉淀】"),
+            json.loads(body["prompt"])[0]["content"].startswith(SOP_REQUEST.strip()),
             "交卷轮：prompt 槽归沉淀请求",
         )
         self.assertEqual(body["executeCmd"], "")

@@ -179,16 +179,18 @@ class ChatPromptTest(unittest.TestCase):
         """正文固定四栏（第 143 步，用户口径"沉淀的SOP应该是结构化的"）：适用场景 / 做法 /
         实测结论 / 注意事项 —— 每栏回答一个问题，一条里有几栏没内容就写「无」。
 
-        四栏是**消费端**的需求，不只是排版：读到这条 SOP 的人先看【适用场景】判断这题跟
-        自己有没有关系，再照【做法】做、【实测结论】当权威、【注意事项】避坑。缺了适用场景
+        四栏是**消费端**的需求，不只是排版：读到这条 SOP 的人先看 [适用场景] 判断这题跟
+        自己有没有关系，再照 [做法] 做、[实测结论] 当权威、[注意事项] 避坑。缺了适用场景
         它就不知道该不该用（SOP 白存）；缺了实测结论，知识类的条目没有地方落。
         ⚠️ **"名字"不在这四栏里** —— 它就是块里那个 `<name>`（形状里已经写了），正文再写一遍
         就是第二份会漂移的真相；"同类任务怎么做"与"环境事实"合成一栏会让它把同一句话说两遍。
         四栏**只在这份指令里出现**，而且正好两处：规格一处 + 输出示例一处（第 144 步加的
-        few-shot）—— 第三处就是复述（旧参数表那种写法）。"""
+        few-shot）—— 第三处就是复述（旧参数表那种写法）。
+        栏名是**方括号**（用户口径：段头与四栏名都按这个格式走）—— 写成全角书名号就是另一份
+        不存在的规格。"""
         self.agent.chat("题目")
         rules = _deposit_rules(_deposit_system(self.agent))
-        for column in ("【适用场景】", "【做法】", "【实测结论】", "【注意事项】"):
+        for column in ("[适用场景]", "[做法]", "[实测结论]", "[注意事项]"):
             self.assertEqual(
                 rules.count(column), 2, f"这一栏没写、或有多余的一份：{column}"
             )
@@ -280,7 +282,7 @@ class ChatPromptTest(unittest.TestCase):
         第 133 步那串黑名单清单（token / 仅本次有效的参数值 / 一次性中间状态）压缩成
         一句"不要记录一次性答案、临时状态、临时文件/路径"；第 137 步把"临时文件/路径"
         收回成"本次任务自己产生的临时文件"（裸的"路径"与【工作原则】§2 打架 —— 接口真实
-        路径正是要收的环境知识），排除项改钉"只对本次成立的取值"。泛化要求由【做法】那行
+        路径正是要收的环境知识），排除项改钉"只对本次成立的取值"。泛化要求由 [做法] 那行
         "该类问题的通用解决流程"承担。"""
         self.agent.chat("题目")
         rules = _deposit_rules(_deposit_system(self.agent))
@@ -288,21 +290,23 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("不要记录只对本次成立的取值", rules)
 
     def test_the_deposit_rules_pin_the_timing(self):
-        """沉淀的时机：**已实际验证** + **每次都要产出一条**（新建或改写已有那条）。
+        """沉淀的时机：**已实际验证** + **每次都要落到一条上**（新建 / 改写已有那条 / 核对最相关那条）。
 
         门槛第 137 步翻回正面（表 #66：实盘上一条都不沉淀 ⇒ 太紧）：第 133 步那版只剩
         "已实际验证、且具有复用价值"一道纯闸门，"什么时候该存"没有任何正面触发语。
-        第 143 步按用户口径把"无需沉淀"这个出口删掉 —— 每次都要落到一条上（真没新经验
-        就把最相关的那条按这次的执行结果核对/改准）；「已实际验证」照旧管闸门。"""
+        第 143 步按用户口径把"无需沉淀"这个出口删掉 —— 每次都要落到一条上；「已实际验证」
+        照旧管闸门。三分支（新建 / 重写同类那条 / 真没新东西就核对最相关那条）在正文里
+        就是那三行，两条断言各钉一头：第一行钉"还没这类经验"，第三行钉"没有新东西也不许
+        什么都不产"。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         deposit = _deposit_system(self.agent)
         self.assertIn("已实际验证", deposit)
-        self.assertIn("每次都要产出一条", deposit)
+        self.assertIn("也要挑最相关的那一条按这次的执行结果核对一遍", deposit)
         self.assertIn("【沉淀的SOP】里还没有这次这类经验 ⇒ 新建一条", deposit)
         self.assertNotIn("无需沉淀", deposit)
         # 时机第 141 步改由系统安排（交卷之后单独问一轮）⇒ 任务 system 里那句"与答案并列"
         # 连同它的形状一起删掉，触发语搬进沉淀请求
-        self.assertIn("任务已交卷", deposit)
+        self.assertIn("当前任务已完成", deposit)
         self.assertNotIn("当要沉淀且同回合要交答案时", system)
 
     def test_the_tool_shape_is_shown_verbatim(self):
@@ -344,7 +348,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertNotIn("[特殊混合模式]", system)
         self.assertNotIn("允许并列", system)
         deposit = _deposit_system(self.agent)
-        self.assertIn("任务已交卷", deposit)
+        self.assertIn("当前任务已完成", deposit)
         self.assertIn("<sop>", deposit)
 
     def test_the_answer_round_submits_through_the_tool(self):
@@ -660,7 +664,7 @@ class ChatPromptTest(unittest.TestCase):
         self.agent.chat("题目")
         self.agent.hear("回复1")
         req = self.agent.sop_request()
-        self.assertIn("任务已交卷", req)
+        self.assertIn("当前任务已完成", req)
         self.assertIn("<sop>", req)
         self.assertIn("回复1", req)
         self.assertIn("题目", req)

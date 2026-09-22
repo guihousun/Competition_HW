@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from _fixtures import _reset_ledgers, _terrain  # noqa: E402
 from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
 from coregeek.agent.agent import COMPRESS_AFTER_TOOLS  # noqa: E402
+from coregeek.agent.prompt import SOP_REQUEST  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.game import core  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
@@ -411,7 +412,7 @@ class TaskChannelTest(unittest.TestCase):
         prompt, execute = task_channel(self._turn(self.TASK, self.ANSWER_REPLY))
         self.assertEqual(execute, "")
         self.assertTrue(
-            json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
+            json.loads(prompt)[0]["content"].startswith(SOP_REQUEST.strip()),
             "交卷轮：prompt 槽 = 沉淀请求",
         )
         self.assertNotIn("【上下文压缩】", prompt, "交卷轮不压缩（第 47 步）")
@@ -438,7 +439,7 @@ class TaskChannelTest(unittest.TestCase):
                 )
                 self.assertEqual(execute, "")
                 self.assertTrue(
-                    json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
+                    json.loads(prompt)[0]["content"].startswith(SOP_REQUEST.strip()),
                     "交卷 ⇒ 沉淀请求当轮发出",
                 )
 
@@ -597,7 +598,7 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, "", "两个通道都不产命令")
         self.assertEqual(AGENT.pre_sop, {"找文件": "先找文件"}, "沉淀照样落地（进暂存表）")
         self.assertTrue(
-            json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
+            json.loads(prompt)[0]["content"].startswith(SOP_REQUEST.strip()),
             "不再是重问：交卷 ⇒ 链尾那道沉淀闸门接管 prompt 槽（第 141 步）",
         )
         self.assertEqual(
@@ -1007,7 +1008,7 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertEqual(execute, "")
         self.assertTrue(
-            json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"), "交卷轮 ⇒ 沉淀请求"
+            json.loads(prompt)[0]["content"].startswith(SOP_REQUEST.strip()), "交卷轮 ⇒ 沉淀请求"
         )
         body = self._body(prompt)
         self.assertIn("[exitCode:0]\n晴", body, "回执照样进会话")
@@ -1162,7 +1163,7 @@ class TaskChannelTest(unittest.TestCase):
                 )
                 self.assertEqual(execute, "")
                 self.assertTrue(
-                    json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
+                    json.loads(prompt)[0]["content"].startswith(SOP_REQUEST.strip()),
                     "非 2 的码不重问：prompt 槽归沉淀闸门",
                 )
                 self.assertNotIn(self.RETRY_MARK, self._body(prompt), "非 2 的码不纠错")
