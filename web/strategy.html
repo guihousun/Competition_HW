@@ -8,17 +8,21 @@
 :root{color-scheme:dark;--bg:#07111d;--panel:#0e1d2c;--panel2:#12283a;--line:#29465c;--text:#e7f1fb;--muted:#9eb2c8;--mint:#59e2b5;--amber:#ffd166;--red:#ff7d8f;--blue:#79b9ff}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(1000px 500px at 50% -10%,#193b50 0,#07111d 62%);color:var(--text);font:15px/1.65 system-ui,"Microsoft YaHei",sans-serif}main{max-width:1180px;margin:auto;padding:30px 22px 70px}a{color:var(--mint)}header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}h1{margin:0;font-size:30px;letter-spacing:.5px}h2{margin:0 0 12px;font-size:20px;color:var(--mint)}h3{margin:0 0 7px;color:#d9ebfb;font-size:16px}.subtitle{margin:5px 0;color:var(--muted)}.stamp{white-space:nowrap;border:1px solid #357565;border-radius:999px;padding:5px 11px;color:var(--mint);font-size:12px;background:#0b2b27}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 25px}.toolbar a{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:7px 12px;text-decoration:none;background:#102335}.notice{border-left:4px solid var(--amber);background:#241f13;padding:12px 15px;border-radius:8px;color:#ffe6ac;margin:15px 0 24px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:14px 0 26px}.card{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:17px 18px;box-shadow:0 8px 25px #0003}.card p{margin:6px 0;color:#c4d5e5}.card ul{margin:7px 0 0;padding-left:21px}.card li{margin:4px 0}.badge{font-size:11px;border:1px solid #36617a;border-radius:999px;padding:2px 7px;color:var(--blue);white-space:nowrap}.badge.strategy{color:var(--mint);border-color:#357565}.badge.assumption{color:var(--amber);border-color:#80652d}.badge.gap{color:var(--red);border-color:#783b4b}.timeline{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:16px 0 28px}.period{position:relative;background:var(--panel);border:1px solid var(--line);padding:15px 14px;min-height:155px}.period:first-child{border-radius:10px 0 0 10px}.period:last-child{border-radius:0 10px 10px 0}.period:not(:last-child)::after{content:"›";position:absolute;right:-10px;top:47px;z-index:2;color:var(--amber);font-size:27px;background:var(--bg);line-height:1}.period .when{font-size:12px;color:var(--amber);font-weight:700}.period strong{display:block;color:#fff;margin:5px 0}.period p{font-size:13px;color:var(--muted);margin:3px 0}.role{display:grid;grid-template-columns:100px 1fr;gap:12px;padding:10px 0;border-bottom:1px solid #223b50}.role:last-child{border-bottom:0}.role-name{color:var(--mint);font-weight:700}.flow{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:10px}.flow span{padding:6px 9px;border:1px solid #356078;border-radius:7px;background:#102535;font-size:13px}.flow i{color:var(--amber);font-style:normal}.table{width:100%;border-collapse:collapse;margin-top:7px}.table th,.table td{text-align:left;vertical-align:top;padding:8px 9px;border-bottom:1px solid #274257}.table th{color:var(--amber);font-size:13px}.table td{color:#c5d7e8;font-size:13px}.small{color:var(--muted);font-size:13px}.footer{margin-top:28px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:14px}@media(max-width:800px){main{padding:22px 14px}.grid,.timeline{grid-template-columns:1fr}.period,.period:first-child,.period:last-child{border-radius:10px}.period:not(:last-child)::after{content:"↓";right:50%;top:auto;bottom:-17px}.role{grid-template-columns:1fr;gap:2px}header{display:block}.stamp{display:inline-block;margin-top:10px}}
 </style>
+<style>
+.role-detail{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}.role-detail article{background:#0a1a29;border:1px solid #2a4b60;border-radius:10px;padding:14px}.role-detail h4{margin:0 0 8px;color:var(--mint);font-size:17px}.role-detail h4 span{color:var(--muted);font-size:12px;font-weight:400}.role-detail ul{margin:6px 0 0;padding-left:18px}.role-detail li{margin:5px 0;color:#c7d8e8;font-size:13px}.logic-strip{margin-top:14px;padding:12px 14px;background:#0a1826;border:1px dashed #37627a;border-radius:9px;color:#c7d8e8;font-size:13px}.logic-strip b{color:var(--amber)}
+@media(max-width:800px){.role-detail{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <main>
-<header><div><h1>未来战争 · 当前策略总览</h1><p class="subtitle">把“白天发展、夜晚防守、清场后恢复工作”串成一条可复盘的决策链。</p></div><span class="stamp">user_phase_v1 · 2026-09-21</span></header>
-<div class="toolbar"><a href="/">返回模拟器</a><a href="#params">查看可调参数</a><a href="/debug/rules">查看规则边界 JSON</a></div>
+<header><div><h1>未来战争 · 当前策略总览</h1><p class="subtitle">把“白天发展、夜晚防守、清场后恢复工作”串成一条可复盘的决策链。</p></div><span class="stamp">user_phase_v1 · 2026-09-22</span></header>
+<div class="toolbar"><a href="/">返回模拟器</a><a href="#roles">工1 / 工2 / 拓的职责</a><a href="#params">查看可调参数</a><a href="/debug/rules">查看规则边界 JSON</a></div>
 <div class="notice"><b>先看边界：</b>官方协议、射程、价格、昼夜长度、动作额度和计分不改；下面是我们的策略选择。地图全图、刷怪几何和机器人寻敌细节仍有本地假设，不能把本地分数当成官方成绩。</div>
 
 <section><h2>一、总策略</h2><div class="grid">
 <article class="card"><h3>防守核心 <span class="badge strategy">策略</span></h3><ul><li>默认三座武器都是 <b>rocket</b>，尽量由一个角色站在三炮公共操控位轮换开火。</li><li>工人先保证炮台有人操作；开拓者完成任务且没有在途回执时，前 3 天夜间可以安全接管炮位。</li><li>第 4 天起，夜间全员防守；工人负责炮台、维修和回防，开拓者不再为了普通任务离开防区。</li></ul></article>
 <article class="card"><h3>基地与墙 <span class="badge strategy">策略</span></h3><ul><li>墙按迎敌方向动态计算，左右阵营不写死蓝方坐标。</li><li>前六堵墙优先：正中央两堵 → 前方两侧 → 前方拐角两堵。</li><li>最后一排墙不新建、不追加常规升级；已有墙不会为了布局自动拆除。</li></ul></article>
-<article class="card"><h3>经济目标 <span class="badge strategy">策略</span></h3><ul><li>从第 1 天就允许三炮朝 <b>3/3/3</b> 升级；有钱时先补齐低等级，再冲三级。</li><li>白天工人采矿、卖矿、买升级券和维修包，统一保留基地与炮台的必要预算。</li><li>第 4 天以后维修储备和基地安全优先级高于非必要升级。</li></ul></article>
+<article class="card"><h3>经济目标 <span class="badge strategy">策略</span></h3><ul><li>从第 1 天就允许三炮朝 <b>3/3/3</b> 升级；有钱时先补齐低等级，再冲三级。</li><li>白天工人采矿、卖矿、买升级券和维修包，统一保留基地与炮台的必要预算。</li><li>第 <span data-cfg="maintenance.survival_reserve_from_day">3</span> 天起先为维修包和关键墙券预留资金，再考虑炮台升级；侧墙默认保持一级。</li></ul></article>
 <article class="card"><h3>信息与Agent <span class="badge strategy">分层</span></h3><ul><li>常规移动、采矿、建造、操炮、维修由确定性策略执行。</li><li>LLM/Agent只处理任务题、新闻解释、宝藏线索和需要沙盒的认知工作。</li><li>模型调用有上下文和日额度管理，不参与每一轮普通防守。</li></ul></article>
 </div></section>
 
@@ -29,16 +33,22 @@
 <div class="period"><span class="when">第 4 天以后</span><strong>夜间全员防守</strong><p>白天仍然采矿、交易、升级和备料。</p><p>夜晚工人守炮/修墙，开拓者回防；基地或前墙危险时立即救援。</p><p>只在确认清场后释放非战斗工作。</p></div>
 </div></section>
 
-<section><h2>三、角色分工</h2><div class="card">
-<div class="role"><div class="role-name">工人 A<br><span class="badge strategy">炮手</span></div><div>优先占据三炮公共操控位。交接前旧炮手继续开火；找不到安全换位时不强行换人。夜间也负责根据墙体危险程度维修。</div></div>
-<div class="role"><div class="role-name">工人 B<br><span class="badge strategy">经济/维修</span></div><div>白天优先选择与工人 A 不同的矿点；可卖矿、买升级券、备维修包。夜间根据基地、前六墙和炮台状态补位。</div></div>
-<div class="role"><div class="role-name">开拓者<br><span class="badge strategy">任务/炮位</span></div><div>白天领取和提交任务、处理公开宝藏线索。前 3 天夜间任务已完成且无模型/沙盒回执时，优先安全接管三炮；第 4 天起夜间默认回防。</div></div>
+<section id="roles"><h2>三、工1、工2、拓：当前职责与行为逻辑</h2><div class="card">
+<div class="role"><div class="role-name">工1<br><span class="badge strategy">默认主工人</span></div><div>“工1/工2”按己方工人 ID 排序显示，页面保留初始及死亡成员，工1死亡不会把工2改名。白天两人共用建设和经济逻辑；夜间默认优先由最小存活 ID 的工人操炮，实际岗位还取决于位置和动作占用。</div></div>
+<div class="role"><div class="role-name">工2<br><span class="badge strategy">默认副工人</span></div><div>白天同样参与补炮、采石、建墙和交易，不是固定只挖矿。夜间未担任炮手的工人可以携带维修包维护城墙；具体岗位以本轮分配为准。</div></div>
+<div class="role"><div class="role-name">拓<br><span class="badge strategy">任务/接管</span></div><div>唯一可以领取和提交任务的角色。任务完成且没有模型/沙盒回执时，前 3 天夜间可接管公共炮位；第 4 天起夜间默认回防。</div></div>
+<div class="role-detail">
+<article><h4>工1｜炮位与主建设 <span>岗位可交接，名字不随岗位变</span></h4><ul><li><b>白天：</b>优先补建三炮、前六墙和中央墙；若防线允许，采矿、卖矿、买券。</li><li><b>夜晚：</b>优先站三炮公共操控位，负责持续开火；不因炮台冷却被临时派去远处。</li><li><b>异常：</b>任一存活工人生命值 ≤55，或已无存活工人时，会尝试让空闲拓接管；仍需满足任务已结束、无在途回执、路线和站位合法，不能保证当轮完成。</li></ul></article>
+<article><h4>工2｜经济与维修 <span>同样可以建设和操炮</span></h4><ul><li><b>白天：</b>也先补缺炮、采石建墙；防线具备后尽量与工1选择不同矿点。达到采矿批量目标、装载或时间条件时卖矿；可用金币与剩余路程允许才采购。</li><li><b>夜晚：</b>交战期间留在防区。第 <span data-cfg="maintenance.from_day">3</span> 天起，非炮手携维修包、目标可达时修墙：≤<span data-pct="maintenance.entry_fraction">55</span>% 开始，≥<span data-pct="maintenance.exit_fraction">85</span>% 或包用尽后返回原站位；紧急墙优先，其次中央两墙、其余前墙。</li><li><b>空闲：</b>白天未分配动作且背包未满时，再尝试可达资源；交战夜间没有合法维修或开火机会可以等待。清场确认后才释放外勤；当前仍可能因无路、缺钱或缺物品而等待。</li></ul></article>
+<article><h4>拓｜任务与炮位接管 <span>唯一任务角色</span></h4><ul><li><b>白天：</b>领取任务、自动探查任务文档、调用沙盒查询、根据反馈修正并提交答案；也可处理有证据的宝藏流程。</li><li><b>夜晚：</b>有进行中的任务或回执时保留任务上下文；任务完成后，前 3 天可安全接三炮。</li><li><b>第 4 天起：</b>交战夜间默认回防；紧急接管也必须先确认任务结束且无在途回执。清场确认后可恢复工作。两类自进化任务各3次机会耗尽后，不再尝试已失效的任务点，可参与防守和具备条件的宝藏流程。</li></ul></article>
+</div>
+<div class="logic-strip"><b>共同约束：</b>白天按到岗位的路径长度和入夜余量动态回防；两工人共用金币预留与落点协调，不是各花一份钱。交战夜间先保操炮，再安排非炮手修墙；连续 <span data-cfg="nightwork.quiet_rounds">3</span> 个完整安全回合确认清场后，三人重新评估可做的工作。拓不能采矿、建造或拆墙；工人不能领取和提交自进化任务。炮台冷却、等待任务回执、维修物品不足、无合法路径都可能表现为不移动，应结合控制台原因判断。</div>
 </div></section>
 
 <section><h2>四、关键工作流</h2><div class="grid">
 <article class="card"><h3>采矿与交易</h3><div class="flow"><span>观察可达矿点</span><i>→</i><span>两工人分开占点</span><i>→</i><span>背包接近目标</span><i>→</i><span>小贩卖矿</span><i>→</i><span>武器商店买券/道具</span></div><p class="small">一个矿点耗尽、不可达或路线来不及时，会切换目标或回到安全站位，避免白天空转。</p></article>
-<article class="card"><h3>升级与维修</h3><div class="flow"><span>预算预留</span><i>→</i><span>三炮 333</span><i>→</i><span>中央两墙</span><i>→</i><span>前六墙</span><i>→</i><span>维修包按阈值使用</span></div><p class="small">当前维修默认低于 55% 开始考虑，修到 85% 退出；低于 25% 进入紧急维修判断。</p></article>
-<article class="card"><h3>任务与长题</h3><div class="flow"><span>收到题目</span><i>→</i><span>LLM 判断要读什么</span><i>→</i><span>沙盒查询</span><i>→</i><span>记忆压缩</span><i>→</i><span>提交答案</span></div><p class="small">任务上下文与普通防守状态分开保存；每次请求仍只输出官方允许的动作。</p></article>
+<article class="card"><h3>升级与维修</h3><div class="flow"><span>预算预留</span><i>→</i><span>生存储备 / 紧急墙</span><i>→</i><span>三炮 333 目标</span><i>→</i><span>中央两墙</span><i>→</i><span>前六墙</span><i>→</i><span>维修包按阈值使用</span></div><p class="small">当前维修默认低于 55% 开始考虑，修到 85% 退出；低于 25% 进入紧急维修判断。</p></article>
+<article class="card"><h3>任务与长题</h3><div class="flow"><span>收到题目</span><i>→</i><span>有界定位并读文档</span><i>→</i><span>LLM / 沙盒查询</span><i>→</i><span>回执核对与证据记忆</span><i>→</i><span>提交答案</span></div><p class="small">任务上下文与普通防守状态分开保存；每次请求仍只输出官方允许的动作。</p></article>
 <article class="card"><h3>路径冲突恢复</h3><div class="flow"><span>多格任务点 footprint</span><i>→</i><span>同轮落点协调</span><i>→</i><span>连续 3 轮停滞诊断</span><i>→</i><span>让路/绕行</span></div><p class="small">允许时可拆除非前六墙开通道路，最多保留 2 个通路；不拆前六墙。</p></article>
 </div></section>
 
@@ -57,7 +67,7 @@
 
 <section><h2>七、从运行服务读取的完整配置</h2><div class="card"><p>下面内容由 <code>/debug/strategy</code> 实时读取。你可以编辑 JSON 后保存；服务端会先完整校验，再原子写入根目录 <code>strategy.json</code>。保存后必须重启服务，策略模块才会全部重新加载。</p><textarea id="strategy-editor" spellcheck="false" style="width:100%;min-height:360px;background:#081522;color:#dff3ff;border:1px solid var(--line);border-radius:8px;padding:12px;font:13px/1.5 ui-monospace,Consolas,monospace"></textarea><div class="toolbar"><button id="save-strategy" type="button" style="border:1px solid #357565;border-radius:8px;padding:8px 14px;background:#12372f;color:var(--mint);cursor:pointer">校验并保存策略</button><span id="strategy-status" class="small"></span></div><div id="live-config" class="small">正在读取 strategy.json …</div></div></section>
 
-<section><h2>八、仍需官方/内网核对</h2><div class="grid"><article class="card"><h3><span class="badge assumption">本地假设</span> 已登记但未认证</h3><ul><li>固定刷怪列阵的精确坐标和红方镜像。</li><li>机器人在我方单位 3 格内的偏航边界及并列选敌。</li><li>完整地图地形、矿点刷新和波次第 8–10 天数量。</li></ul></article><article class="card"><h3><span class="badge gap">待内网证据</span> 不自动宣称通过</h3><ul><li>平台真实交易商品、效果和价格清单。</li><li>一人三炮公共操控位在官方地图上的可达性。</li><li>上传包在官方平台的启动、接口、完整对局和得分。</li></ul></article></div></section>
+<section><h2>八、仍需官方/内网核对</h2><div class="grid"><article class="card"><h3><span class="badge assumption">本地假设</span> 已登记但未认证</h3><ul><li>固定刷怪列阵的精确坐标和红方镜像。</li><li>3格寻敌、近战和同格叠加按用户补充实现；并列选敌和结算时序仍待核验。</li><li>完整地图地形、矿点刷新和波次第 8–10 天数量。</li></ul></article><article class="card"><h3><span class="badge gap">待内网证据</span> 不自动宣称通过</h3><ul><li>平台真实交易商品、效果和价格清单。</li><li>一人三炮公共操控位在官方地图上的可达性。</li><li>上传包在官方平台的启动、接口、完整对局和得分。</li></ul></article></div></section>
 <p class="footer">版本依据：当前 <code>codex/sgh</code> 分支。此页解释团队策略，不修改比赛规则；本地模拟结果不等于官方成绩。</p>
 </main>
 <script>
@@ -65,6 +75,8 @@ let currentStrategy=null;
 function renderStrategy(data){
   const host=document.getElementById('live-config');
   currentStrategy=data;
+  const valueAt=key=>key.split(".").reduce((obj,k)=>obj?.[k],data.config);
+  document.querySelectorAll("[data-cfg], [data-pct]").forEach(node=>{const percent=node.hasAttribute("data-pct");const value=valueAt(node.dataset[percent?"pct":"cfg"]);if(value!==undefined)node.textContent=percent?Math.round(value*100):String(value);});
   document.getElementById('strategy-editor').value=JSON.stringify(data.config,null,2);
   const rows=(data.parameters||[]).map(p=>`<tr><td><code>${p.key}</code></td><td>${JSON.stringify(p.value)}</td><td><span class="badge ${p.kind==='可调提示词'?'strategy':''}">${p.kind}</span> ${p.description}</td></tr>`).join('');
   host.innerHTML=`<table class="table"><thead><tr><th>字段</th><th>当前值</th><th>用途与边界</th></tr></thead><tbody>${rows}</tbody></table><p class="small"><b>不可调：</b>${(data.immutable||[]).join('；')}。<br><b>模拟器本地参数：</b>${data.simulator?.editable_via||''}。可调 seed、side、pressure、profile、map_layout；这些只改变本地实验，不会写入正式策略。</p>`;
