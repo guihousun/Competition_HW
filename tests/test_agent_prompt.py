@@ -148,6 +148,23 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("接口", rules)
         self.assertIn("## ToolName - SOP2Prompt", deposit)
 
+    def test_the_deposit_body_keeps_its_four_columns(self):
+        """正文固定四栏（第 143 步，用户口径"沉淀的SOP应该是结构化的"）：适用场景 / 做法 /
+        实测结论 / 注意事项 —— 每栏回答一个问题，一条里有几栏没内容就写「无」。
+
+        四栏是**消费端**的需求，不只是排版：读到这条 SOP 的人先看【适用场景】判断这题跟
+        自己有没有关系，再照【做法】做、【实测结论】当权威、【注意事项】避坑。缺了适用场景
+        它就不知道该不该用（SOP 白存）；缺了实测结论，知识类的条目没有地方落。
+        ⚠️ **"名字"不在这四栏里** —— 它就是 `name` 参数（块头上还写着），正文再写一遍就是
+        第二份会漂移的真相；"同类任务怎么做"与"环境事实"合成一栏会让它把同一句话说两遍。
+        四栏**只在描述里列一次**（`sop` 参数那行不重抄）—— 同一条规则只写一处。"""
+        self.agent.chat("题目")
+        rules = _sop_tool_block(_deposit_system(self.agent))
+        for column in ("【适用场景】", "【做法】", "【实测结论】", "【注意事项】"):
+            self.assertEqual(rules.count(column), 1, f"这一栏没写、或写了两遍：{column}")
+        self.assertIn("固定写四栏", rules)
+        self.assertIn("写「无」", rules)
+
     def test_the_sop_section_tells_it_to_look_here_first(self):
         """【沉淀的SOP】段要教"先查这里、命中就直接照做、不必重新探索"。
 
@@ -225,19 +242,21 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("不要记录只对本次成立的取值", rules)
 
     def test_the_deposit_rules_pin_the_timing(self):
-        """沉淀的时机：**已实际验证** + **还没出现在【沉淀的SOP】里就存一条**。
+        """沉淀的时机：**已实际验证** + **每次都要产出一条**（新建或改写已有那条）。
 
         门槛第 137 步翻回正面（表 #66：实盘上一条都不沉淀 ⇒ 太紧）：第 133 步那版只剩
         "已实际验证、且具有复用价值"一道纯闸门，"什么时候该存"没有任何正面触发语。
-        现在两半都在：「还没出现在【沉淀的SOP】里」管触发、「已实际验证」管闸门。"""
+        第 143 步按用户口径把"无需沉淀"这个出口删掉 —— 每次都要落到一条上（真没新经验
+        就把最相关的那条按这次的执行结果核对/改准）；「已实际验证」照旧管闸门。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(_deposit_system(self.agent))
-        self.assertIn("已实际验证", rules)
-        self.assertIn("还没出现在【沉淀的SOP】里", rules)
-        self.assertIn("用同一个 name 更新它", rules)
+        deposit = _deposit_system(self.agent)
+        self.assertIn("已实际验证", deposit)
+        self.assertIn("每次都要产出一条", deposit)
+        self.assertIn("【沉淀的SOP】里还没有这次这类经验 ⇒ 新建一条", deposit)
+        self.assertNotIn("无需沉淀", deposit)
         # 时机第 141 步改由系统安排（交卷之后单独问一轮）⇒ 任务 system 里那句"与答案并列"
         # 连同它的形状一起删掉，触发语搬进沉淀请求
-        self.assertIn("任务已交卷", _deposit_system(self.agent))
+        self.assertIn("任务已交卷", deposit)
         self.assertNotIn("当要沉淀且同回合要交答案时", system)
 
     def test_the_tool_shape_is_shown_verbatim(self):
@@ -423,17 +442,20 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("冲突时以实测为准", _section(system, "# 【ROLE定位】"))
 
     def test_the_deposit_rules_say_how_a_stale_entry_gets_replaced(self):
-        """复用条目而实测与它不一致时，用**同名覆盖**更新那一条 —— 而不是机械重复、
+        """复用条目而实测与它不一致时，用**同名覆盖**改那一条 —— 而不是机械重复、
         也不是以旧条目为准。
 
         旧条目错了而没人改，它就会一直被照做；新起一条同样名字的又会把旧的挤掉或并存。
         同名覆盖是 `tools/sop.py` 已有的存储规则，这里只是把它讲给 LLM 听。
-        "同名会覆盖旧条目"这句机制说明没有回来 —— 判据落在"用同一个 name 更新它"
-        与它前面那半句"已经沉淀过的不要重复存"上。"""
+        第 143 步起判据是"改写已有那条"这件事本身：**逐字照抄它原来的 name**（差别一个字
+        就是另存了一条），改出来的正文要**写全**而不是只写差异。"""
         self.agent.chat("题目")
-        rules = _sop_tool_block(_deposit_system(self.agent))
-        self.assertIn("已经沉淀过的不要重复存", rules)
-        self.assertIn("用同一个 name 更新它", rules)
+        deposit = _deposit_system(self.agent)
+        rules = _sop_tool_block(deposit)
+        self.assertIn("逐字照抄它原来的 name", rules)
+        self.assertIn("换个写法就是又存了一条", rules)
+        self.assertIn("用原来那个 name 重写它", deposit)
+        self.assertIn("不是只写改了哪儿", deposit)
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))
