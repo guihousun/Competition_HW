@@ -210,6 +210,21 @@ class ContextTest(unittest.TestCase):
         self.assertIn("回复1", contents)
         self.assertIn("回复2", contents)
 
+    def test_the_uncompressed_tool_count_follows_both_bases(self):
+        """压缩闸门的判据：还没被摘要（或在途请求）盖住的 `tool` 条数 —— 两个基准取靠后的那个。
+
+        请求在途 ⇒ 从请求那一刻起算（判题器不答也不会每轮重问）；摘要落地 ⇒ 改从覆盖点起算，
+        而覆盖点只到请求那一刻 ⇒ 那之后新添的往来照旧算"没盖住"（`render` 也一样全量带它们）。
+        """
+        self.ctx.feed("结果1", "")
+        self.ctx.tool_output("输出2", "【本地执行】")
+        self.assertEqual(self.ctx.uncompressed_tools(), 2)
+        self.ctx.sent_for_compression()
+        self.ctx.feed("结果3", "")
+        self.assertEqual(self.ctx.uncompressed_tools(), 1, "请求在途 ⇒ 基准是请求那一刻")
+        self.ctx.adopt_summary("【总目标】交 token")
+        self.assertEqual(self.ctx.uncompressed_tools(), 1, "摘要只盖到请求那一刻")
+
     def test_a_tail_nudge_rides_along(self):
         """尾巴上的 nudge 照旧在最末（它本来就是最新那一条，与摘要无关）。
 

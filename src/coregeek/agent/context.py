@@ -117,6 +117,15 @@ class Context:
             self._covered = self._pending
             self._pending = None
 
+    def uncompressed_tools(self) -> int:
+        """摘要（或在途的压缩请求）还没盖到的工具往来条数 —— 压缩闸门的判据。
+
+        起点：在途请求优先（`_pending` 只可能更靠后）⇒ 每条工具往来最多把压缩推进一次，
+        判题器不答也不会每轮重问。数的是 `tool` 角色的消息：沙盒回执与本地工具产出都算。
+        """
+        base = self._covered if self._pending is None else self._pending
+        return sum(1 for m in self._messages[base:] if m.role == _TOOL)
+
     def material(self) -> str:
         """压缩原料：原始上下文全文（题目 + 全部往来，逐字）。压缩总从原文重来、不从旧摘要
         叠；`render` 给任务 LLM 的是压缩后的，这里给压缩器的是原文。

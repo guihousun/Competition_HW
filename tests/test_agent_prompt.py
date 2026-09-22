@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import Agent, cmd_explore  # noqa: E402
+from coregeek.agent.agent import COMPRESS_AFTER_TOOLS  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 
 #: system 的段头，按 `prompt.gen_system_prompt` 那份列表的顺序 —— 段名只在这里写一次，
@@ -46,6 +47,16 @@ def _deposit_rules(system: str) -> str:
     由 `chat.sops_of` 解）；段之后是现存的流程表，那是判"这条是不是已经有了"的原料。
     """
     return system.split("# 【沉淀的SOP】", 1)[0]
+
+
+def _grow_tools(agent: Agent, tools: int) -> None:
+    """攒够工具往来：压缩闸门按"还没被摘要盖住的 `tool` 条数"判（`COMPRESS_AFTER_TOOLS`）。
+
+    走 `python_exec` 这条真口子（本地即时执行、产出当场进会话）。**必须在 `chat()` 之后调**
+    —— 没开会话时产出直接丢。
+    """
+    for i in range(tools):
+        agent.tool_call("python_exec", [("code", f"print({i})")])
 
 
 def _section(system: str, header: str) -> str:
@@ -455,6 +466,7 @@ class ChatPromptTest(unittest.TestCase):
         摘要（压缩轮的产物）是唯一还记得"哪些路已经走死"的地方。不点破这一点，压缩器会
         只留成功经验，"反复试同一条死路"就是它漏记的直接后果。"""
         self.agent.chat("题目")
+        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS + 1)  # 上下文够大才有请求（第 145 步）
         req = self.agent.compression_request()
         self.assertIn("试过并且失败", req)
         self.assertIn("反复试同一条死路", req)
@@ -604,12 +616,35 @@ class ChatPromptTest(unittest.TestCase):
         给任务 LLM 的才是压缩后的。"""
         self.agent.chat("题目")
         self.agent.hear("回复1")
+        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS + 1)  # 上下文够大才有请求（第 145 步）
         req = self.agent.compression_request()
         self.assertIn("【上下文压缩】", req)
         self.assertIn("【总目标】", req)
         self.assertIn("【关键数据】", req)
         self.assertIn("回复1", req)
         self.assertIn("题目", req)
+
+    def test_the_compression_waits_until_the_context_is_big(self):
+        """上下文小了不压（第 145 步用户口径：超过 5 次 tool 才压一次）。
+
+        摘要一落地，`render` 就把那些往来整段换成摘要（原始信息当场没了）—— 所以只有
+        未覆盖的工具往来多到阈值之上才值得开口。阈值两侧各钉一次。"""
+        self.agent.chat("题目")
+        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS)
+        self.assertEqual(self.agent.compression_request(), "", "刚好到阈值还不压")
+        _grow_tools(self.agent, 1)
+        self.assertTrue(self.agent.compression_request(), "多一条工具往来才发请求")
+
+    def test_an_unanswered_request_is_not_asked_again_every_round(self):
+        """判题器不答 ⇒ 在途请求本身也是基准：再攒到阈值之内不会重问。
+
+        不这么算的话，上下文一大就每个命令轮都在讨摘要 —— 白扔 prompt 槽（而且它一旦
+        真答了，那一整段原始往来当场被替掉）。"""
+        self.agent.chat("题目")
+        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS + 1)
+        self.assertTrue(self.agent.compression_request())
+        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS)
+        self.assertEqual(self.agent.compression_request(), "", "在途请求之后重新起算")
 
     def test_the_sop_request_carries_the_instruction_the_sop_and_the_material(self):
         """沉淀请求 = 指令（形状 + 该产什么）+ 现在的 SOP + 本题完整记录 + 末尾那道格式。

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _terrain  # noqa: E402
 from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
+from coregeek.agent.agent import COMPRESS_AFTER_TOOLS  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
@@ -841,9 +842,11 @@ class TaskChannelTest(unittest.TestCase):
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
         task_channel(self._turn(self.TASK))  # ⑥ 首问（会话从这道题开始）
-        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令（prompt=压缩请求）
+        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令（prompt 槽空着）
         self.assertEqual(execute, "ls")
-        self.assertIn("【上下文压缩】", prompt, "命令轮的 prompt 槽捎上压缩请求（第 41 步）")
+        self.assertEqual(
+            prompt, "", "上下文还小 ⇒ 压缩闸门不发（第 145 步：>5 条工具往来才压一次）"
+        )
         prompt, execute = task_channel(
             self._turn(self.TASK, call, cmd_result="[exitCode:0]\n2")  # ② 回灌（llmResp 粘住）
         )
@@ -858,17 +861,17 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_the_compression_material_is_the_original_context(self):
-        """压缩原料 = 原始上下文全文：窗口外的旧回合原文仍在压缩请求里
-        —— 压缩总从原文重来、不从旧摘要叠（避免多次压缩的失真累积）。给任务 LLM 的
-        才是压缩后的（摘要 + 窗口）。"""
+        """压缩原料 = 原始上下文全文：给任务 LLM 的渲染可以只剩摘要之后那段，原料永远是原文
+        —— 压缩总从原文重来、不从旧摘要叠（避免多次压缩的失真累积）。"""
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
         task_channel(self._turn(self.TASK))  # ⑥ 首问
         task_channel(self._turn(self.TASK, call))  # ③ 命令轮 a1
         task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ② 回灌
-        task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ③ a2（粘住）
-        task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ② 回灌
+        # 攒够工具往来（第 145 步起闸门才发请求）；回执同轮到达 ⇒ 判据 ③ 照发命令、回执进会话
+        for _ in range(COMPRESS_AFTER_TOOLS):
+            task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))
         prompt, execute = task_channel(
             self._turn(
                 self.TASK,
@@ -879,8 +882,8 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(execute, "pwd")
         self.assertIn("【上下文压缩】", prompt)
         self.assertIn("pwd", prompt, "最近一条工具调用在原料里")
-        # 此刻窗口只盖最近 2 轮 assistant —— 但原料是原文，更早的往来照样在
-        self.assertIn("ls", prompt, "窗口外的旧回合原文仍在压缩原料里（原文永久保留）")
+        # 渲染可以只带摘要之后那段，但原料是原文 ⇒ 更早的往来一条都不少
+        self.assertIn("ls", prompt, "早先的往来原文仍在压缩原料里（原文永久保留）")
 
     def test_a_bare_summary_reply_is_routed_not_heard(self):
         """裸 `<summary>` 回复 = 压缩轮的产物：进 `Context.summary`、不进会话表

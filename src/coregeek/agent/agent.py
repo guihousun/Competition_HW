@@ -31,6 +31,11 @@ LOGGER = logging.getLogger(__name__)
 #: 【工具调用】那行里每个参数值截到多少字（拍的；原文在任务行的「上一轮模型回复」里）。
 ARGS_LOG_MAX = 1000
 
+#: 压缩闸门：摘要与在途请求都没盖到的工具往来超过这个条数，才发一次压缩请求。
+#: 用户口径「有大量上下文时（超过 5 次 tool）才压缩一次」—— 压早了那些原始往来当场
+#: 被摘要替掉。调到很大即等于关掉压缩。
+COMPRESS_AFTER_TOOLS = 5
+
 
 def _call_text(params: list[tuple[str, str]]) -> str:
     """`[(参数名, 原文), …]` 打成一行的 `名=值`，没有参数打「无参数」；超限截断留痕。"""
@@ -186,12 +191,15 @@ class Agent:
             self._context.adopt_summary(text)
 
     def compression_request(self) -> str:
-        """压缩轮的 prompt：独立指令 + 原始上下文全文（`Context.material`）。没开会话 ⇒ `""`。
+        """压缩轮的 prompt：独立指令 + 原始上下文全文（`Context.material`）。没开会话、
+        或还没攒够上下文（未覆盖的工具往来 ≤ `COMPRESS_AFTER_TOOLS`）⇒ `""`。
 
         发送时机 = 回合末尾的压缩闸门（只剩命令轮）。这里顺手给上下文记一个快照
         （`sent_for_compression`）：摘要回来时按它划渲染起点 —— 判题器不答的话快照不动，
-        那些往来照旧全量渲染。"""
+        那些往来照旧全量渲染，也照旧算在"还没攒够"那一侧。"""
         if self._context is None:
+            return ""
+        if self._context.uncompressed_tools() <= COMPRESS_AFTER_TOOLS:
             return ""
         self._context.sent_for_compression()
         return gen_compression_prompt(self._context.material())
