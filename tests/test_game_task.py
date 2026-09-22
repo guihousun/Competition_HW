@@ -236,6 +236,11 @@ class TaskChannelTest(unittest.TestCase):
     ANSWER = "晴 26 度"
     #: 交卷的那条回复（答案经 `submitAnswer` 的参数进来）—— `ANSWER` 是它里面的值
     ANSWER_REPLY = _submit(ANSWER)
+    #: 沉淀请求的回复（`SOP2Prompt` 调用）—— 交卷轮的下一轮落进暂存表
+    SOP_REPLY = (
+        "<tool><tool_name>SOP2Prompt</tool_name>"
+        "<tool_param><name>找任务书</name><sop>先看目录</sop></tool_param></tool>"
+    )
     #: 回灌那两段的分界符，用来断言"该出现 / 不该出现"。拿分界符而不是某句话当判据：模板
     #: 正文里也有"沙盒的执行结果原文"这种普通词、会把自己绊倒；而 `【` 整个模板里一个都没有，
     #: 只属于注入的两段 —— 沙盒输出与 LLM 回复都是任意文本，没分界符就分不清哪段是题目。
@@ -270,8 +275,16 @@ class TaskChannelTest(unittest.TestCase):
         task_channel(turn)
         return plan(turn)
 
+    def _body(self, prompt: str) -> str:
+        """沉淀请求的原料（= 会话全文）解回明文，用来判"某段话在不在会话里"。
+
+        交卷轮的 prompt 槽归沉淀请求 ⇒ 回执/纠错这些话都在它的原料里，而原料是
+        `json.dumps` 出来的一层 ⇒ 直接查原文会被转义过的换行绊倒（`\\n`）。
+        """
+        return "\n".join(m["content"] for m in json.loads(json.loads(prompt)[-1]["content"]))
+
     def test_the_question_carries_the_task_text(self):
-        """第一次提问 = 段模板（prompt.py 七段）+ 题目原文，不带任何回灌。
+        """第一次提问 = 段模板（prompt.py 六段）+ 题目原文，不带任何回灌。
 
         断言用 `assertNotIn` 而不是"等于生成函数的返回值"：后者是同义反复
         （模板与断言一起改，永远过得去），而"第一次问不该有任何回灌"才是真要求。
@@ -286,7 +299,7 @@ class TaskChannelTest(unittest.TestCase):
             "# 【工作原则】",
             "# 【工具描述】",
             "# 【沉淀的SOP】",
-            "# 【输出约定】",
+            "# 【注意事项】",
         ):
             self.assertIn(header, prompt)
 
@@ -377,6 +390,32 @@ class TaskChannelTest(unittest.TestCase):
             "交卷轮：prompt 槽 = 沉淀请求",
         )
         self.assertNotIn("【上下文压缩】", prompt, "交卷轮不压缩（第 47 步）")
+
+    def test_the_deposit_rides_every_submission(self):
+        """沉淀的触发条件只有"这一轮调了 `submitAnswer`"：回执到没到、判题器报没报错，都不
+        影响它当轮发出去（用户口径：不能在收到回执的时候才进行沉淀 —— 那要把它推到后面
+        某一轮，白占一个 LLM 回合）。
+
+        反向验证：给这道闸门加回"判题器没报错"那个条件，最后两格必挂。
+        """
+        cases = (
+            ("", ()),  # 干净的交卷轮
+            ("[exitCode:0]\nok", ()),  # 回执同轮到达
+            ("[exitCode:0]\nok", (Error(2, "答案不正确"),)),  # 回执与判错一起来
+            ("", (Error(2, "答案不正确"),)),
+        )
+        for i, (result, errors) in enumerate(cases):
+            with self.subTest(i=i):
+                AGENT.reset()  # 每格独立会话：上一格的纠错段别串进下一格的原料里
+                task_channel(self._turn(self.TASK))  # ⑥ 首问
+                prompt, execute = task_channel(
+                    self._turn(self.TASK, self.ANSWER_REPLY, cmd_result=result, errors=errors)
+                )
+                self.assertEqual(execute, "")
+                self.assertTrue(
+                    json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
+                    "交卷 ⇒ 沉淀请求当轮发出",
+                )
 
     def test_the_deposit_reply_lands_even_after_the_task_ended(self):
         """沉淀回复回来时任务往往已经结束（答对了 ⇒ 下一轮 `phaseTask` 空了）——
@@ -508,11 +547,11 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_tool_that_yields_no_command_is_asked_again(self):
         """③′：工具调用成了、但工具不产出命令 ⇒ 重问（既不提交、也不发命令）。
 
-        `SOP2Prompt` 最典型：它当回合没有别的回执，下一轮 prompt 里那段「沉淀的 SOP」就是
-        "调用成功了"的凭证（它自己看得见）。它只沉淀、没作答 ⇒ SOP 照样落库（`assertEqual(AGENT.sop, …)`
-        那一行就是那件事），丢的只是那一回合。这条路径不会活锁：任务期间 prompt 不限量不计数
-        （接口文档 L198），出口有"LLM 改口 / 纠错段 / 它看见 SOP 段"三条；"沉淀 + 同轮作答"
-        见 `test_sinking_the_sop_rides_along_with_the_answer`。
+        `SOP2Prompt` 最典型：它当回合没有别的回执。它只沉淀、没作答 ⇒ 沉淀照样进暂存表
+        （`assertEqual(AGENT.pre_sop, …)` 那一行就是那件事），丢的只是那一回合。这条路径不会
+        活锁：任务期间 prompt 不限量不计数（接口文档 L198），出口有"LLM 改口 / 纠错段"两条 ——
+        暂存的沉淀不进 prompt（用户口径），"它看见自己刚写的 SOP 段"因此不再算一条出口。
+        "沉淀 + 同轮作答"见 `test_sinking_the_sop_rides_along_with_the_answer`。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -523,8 +562,7 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertEqual(execute, "")
         self.assertIn(self.TASK, prompt, "没作答 ⇒ 这一回合还得问")
-        self.assertIn("先看目录", prompt, "沉淀不许因为没作答就作废")
-        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"})
+        self.assertEqual(AGENT.pre_sop, {"找任务书": "先看目录"})
 
     def test_sinking_the_sop_rides_along_with_the_answer(self):
         """一条回复里并列了沉淀与交卷 ⇒ 两个都不丢：走判据 ⑤、答案当回合就交上去。
@@ -542,7 +580,7 @@ class TaskChannelTest(unittest.TestCase):
         task_channel(self._turn(self.TASK))  # ⑥ 首问（会话开着才测得到"该不该重问"）
         prompt, execute = task_channel(self._turn(self.TASK, reply))
         self.assertEqual(execute, "", "并列的两个都不产命令")
-        self.assertEqual(AGENT.sop, {"找文件": "先找文件"}, "沉淀照样生效")
+        self.assertEqual(AGENT.pre_sop, {"找文件": "先找文件"}, "沉淀照样落地（进暂存表）")
         self.assertTrue(
             json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
             "不再是重问：交卷 ⇒ 链尾那道沉淀闸门接管 prompt 槽（第 141 步）",
@@ -571,7 +609,7 @@ class TaskChannelTest(unittest.TestCase):
         _, execute = task_channel(self._turn(self.TASK, reply))
         self.assertEqual(execute, "")
         self.assertEqual(
-            AGENT.sop, {"答题格式": "答案要写成 <answer>假答案</answer> 的形状"}, "逐字入库"
+            AGENT.pre_sop, {"答题格式": "答案要写成 <answer>假答案</answer> 的形状"}, "逐字入库"
         )
         self.assertEqual(
             plan(self._turn(self.TASK, reply)).get("10011"),
@@ -580,32 +618,35 @@ class TaskChannelTest(unittest.TestCase):
         )
 
     def test_the_stored_sop_rides_along_in_every_later_prompt(self):
-        """自进化的可观测证据：存过一条流程之后，后面每一份 prompt 都带着它 ——
-        包括"回灌沙盒结果"与"带纠错重问"这两条分支。"""
-        AGENT.SOP2Prompt("找文件", "先 ls 再算")
+        """自进化的可观测证据：转正之后，后面每一份 prompt 都带着它 ——
+        包括"回灌沙盒结果"与"带纠错重问"这两条分支。
+
+        走完整的三回合（首问 → 交卷 → 沉淀回复 + 干净判决）才转正：交卷轮那一份 prompt 是
+        沉淀请求，不算"后来的提问"。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))  # ⑤ 交卷 + 链尾发沉淀请求
+        task_channel(self._turn(self.TASK, self.SOP_REPLY))  # 沉淀落地 + 判决干净 ⇒ 转正
+        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"}, "回执干净 ⇒ 转正")
         for turn in (
             self._turn(self.TASK),
             self._turn(self.TASK, cmd_result="[exitCode:0]\nok"),
             self._turn(self.TASK, errors=(Error(2, "x"),), llm_resp=self.ANSWER_REPLY),
         ):
             with self.subTest(turn=turn):
-                self.assertIn("先 ls 再算", task_channel(turn)[0])
+                self.assertIn("先看目录", task_channel(turn)[0])
 
     def test_the_singleton_carries_the_sop_across_turns(self):
-        """单实例的接线证据：这一回合存下的 SOP，下一回合的提问里带着。
+        """单实例的接线证据：这道题转正的 SOP，换一道题之后还在 prompt 里带着。
 
         两回合之间没有任何东西被传过去（上一回合的 `llm_resp` 没进 payload、也没有返回值被
         接收 —— `task_channel` 的返回值由 `app` 直接拼进报文），能接起来的只有"两次调用用的是
         同一个 `AGENT`"。所以它是 `from ..agent import AGENT` 那个注入点的守门员：改回"每次新建
         一个 `Agent()`"这里立刻挂（实盘症状 = 永远学不会，而日志上看不出来：SOP 每回合都是空的）。
         """
-        task_channel(
-            self._turn(
-                self.TASK,
-                "<tool><tool_name>SOP2Prompt</tool_name>"
-                "<tool_param><name>找任务书</name><sop>先看目录</sop></tool_param></tool>",
-            )
-        )
+        task_channel(self._turn(self.TASK))
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))
+        task_channel(self._turn(self.TASK, self.SOP_REPLY))  # 转正
         prompt, execute = task_channel(self._turn("另一道题"))
         self.assertEqual(execute, "")
         self.assertIn("先看目录", prompt)
@@ -651,7 +692,45 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, cmd_explore._command())
-        self.assertEqual(AGENT.sop, {"读题": "先读题"}, "沉淀照样落库")
+        self.assertEqual(AGENT.pre_sop, {"读题": "先读题"}, "沉淀照样落进暂存表")
+
+    def test_the_deposit_is_staged_until_the_verdict_clears(self):
+        """沉淀先进暂存表、判题器没报错才转正（用户口径）：交卷的下一轮判决干净 ⇒ 当场转正；
+        带 `code 2` ⇒ 压着，等下一次交卷之后没报错的那一轮；换题 ⇒ 压着的作废。
+
+        只看 system（`json.loads(prompt)[0]`）：会话往来里带着 LLM 自己写的那段沉淀原文，
+        整份 prompt 查分不出"SOP 段里有没有它"。
+        反向验证：把 `settle_deposit` 的判据放宽成"交了卷就转正"，第二段必挂。
+        """
+        # 主路径：交卷 → 沉淀回复（判决干净）⇒ 落地即转正
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))  # ⑤ 交卷 + 链尾发沉淀请求
+        task_channel(self._turn(self.TASK, self.SOP_REPLY))  # 沉淀落地 + 判决干净
+        self.assertEqual(AGENT.pre_sop, {}, "转正后暂存清空")
+        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"})
+        system = json.loads(task_channel(self._turn(self.TASK))[0])[0]["content"]
+        self.assertIn("## SopName - 找任务书\n先看目录", system, "转正之后任务 prompt 里看得见")
+
+        # 判错 ⇒ 落地那一轮压着，不进 SOP 段
+        AGENT.reset()
+        task_channel(self._turn(self.TASK))
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))
+        prompt, _ = task_channel(self._turn(self.TASK, self.SOP_REPLY, errors=(Error(2, "x"),)))
+        self.assertEqual(AGENT.pre_sop, {"找任务书": "先看目录"}, "没转正 ⇒ 留在暂存表")
+        self.assertEqual(AGENT.sop, {})
+        self.assertNotIn("先看目录", json.loads(prompt)[0]["content"], "暂存的进不了 SOP 段")
+
+        # 再交一次卷、下一轮判题器没报错 ⇒ 压着的那条照样转正（不会永远压着）
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))
+        task_channel(self._turn(self.TASK))
+        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"}, "干净回执一到就结账")
+        self.assertEqual(AGENT.pre_sop, {})
+
+        # 换题 ⇒ 没转正的作废（转正过的照旧在）
+        AGENT.SOP2Prompt("另一条", "只在暂存")
+        task_channel(self._turn("另一道题"))
+        self.assertEqual(AGENT.pre_sop, {}, "没转正的沉淀不跨题")
+        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"})
 
     def test_an_unusable_call_keeps_the_slot_from_the_probe(self):
         """LLM 点名调了 `executeCmd` 却发不出命令（参数没给全 / 值是空白）⇒ 槽空着也不给探查占。
@@ -875,6 +954,9 @@ class TaskChannelTest(unittest.TestCase):
         `errors` 说的是本轮产生的错误，与我们上轮发了什么并不同步：第 R 轮发命令（那轮没有
         `prompt`）⇒ 第 R+1 轮 `cmd_result` 非空，而 `code 2` 说的是更早那次 `submitAnswer` 的
         判决 —— 两者同时命中是真实可达的。把纠错做成独立分支就会把它整段吞掉，所以它是修饰符。
+
+        第 142 步起这一轮的 prompt 槽归沉淀请求（调了 `submitAnswer` 就发）⇒ 结局是"两样都
+        落进会话"，断言因此下移到沉淀请求的原料（`Context.material` = 会话全文）上。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -885,11 +967,13 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, "")
-        messages = json.loads(prompt)
-        self.assertIn("[exitCode:0]\n晴", messages[-2]["content"])
-        users = [m["content"] for m in messages if m["role"] == "user"]
-        self.assertIn(self.ANSWER, users[-1])
-        self.assertIn(self.RETRY_MARK, users[-1])
+        self.assertTrue(
+            json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"), "交卷轮 ⇒ 沉淀请求"
+        )
+        body = self._body(prompt)
+        self.assertIn("[exitCode:0]\n晴", body, "回执照样进会话")
+        self.assertIn(self.ANSWER, body)
+        self.assertIn(self.RETRY_MARK, body, "纠错块也进会话")
 
     def test_a_rejection_blames_even_when_the_answer_is_not_in_hand(self):
         """判据 ④ 不要求手上真有那个答案：判题器给了错误提示就要装进提示词，绝不落「请继续。」
@@ -927,6 +1011,9 @@ class TaskChannelTest(unittest.TestCase):
         交的是参数里的 `晴 26 度`、骂的却是整个 `<tool>…</tool>` 块的话，LLM 会以为
         自己交了一堆标签、去改一个并不存在的问题。两处（`answer_task` 提交、判据 ④ 回灌）
         读的是同一个答卷变量就是为了这件事，这条用例把它钉死：骂的 = 交的。
+
+        第 142 步起这一轮（交卷 + 判错）的 prompt 槽归沉淀请求 ⇒ 纠错段整段原文在会话里、
+        随原料交出去，断言的落点跟着下移一格。
         """
         prompt, execute = task_channel(
             self._turn(
@@ -936,10 +1023,9 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, "")
-        self.assertIn(self.RETRY_MARK, prompt)
-        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
+        material = json.loads(prompt)[-1]["content"]
         self.assertEqual(
-            users[-1],
+            json.loads(material)[-1]["content"],
             f"【你上一次提交的答案被判定为不正确】\n{self.ANSWER}"
             "\n【判题器反馈】：答案不正确\n请重新作答。",
             "纠错段整段原文：骂的就是 `answer` 参数里那一份",
@@ -992,11 +1078,10 @@ class TaskChannelTest(unittest.TestCase):
                     )[0]
                     # 钉纠错块整块原文：会话里可以有原来那条工具调用的 assistant 消息（那是它
                     # 真说过的话），但骂的必须是交上去的那一份（`answer` 参数的值），后面挂着判题器原话。
-                    users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
                     self.assertIn(
                         f"【你上一次提交的答案被判定为不正确】\n{expected}"
                         "\n【判题器反馈】：答案不正确\n请重新作答。",
-                        users[-1],
+                        self._body(prompt),
                     )
 
     def test_the_verdict_rides_back_verbatim(self):
@@ -1004,6 +1089,8 @@ class TaskChannelTest(unittest.TestCase):
 
         只回灌"我们自己上次交的答案"的话，LLM 知道错了、不知道错在哪，只能把同一份答案再交
         一遍。那句话是黑盒里最接近"哪一项不对"的信息，只进日志不进 prompt 就等于白拿。
+        这一轮（交卷 + 判错）的 prompt 槽归沉淀请求（第 142 步）⇒ 原话落在会话里、随原料
+        交出去 —— 落点与 `test_the_retry_blames_exactly_what_we_submitted` 同一条。
         """
         prompt, _ = task_channel(
             self._turn(
@@ -1012,33 +1099,37 @@ class TaskChannelTest(unittest.TestCase):
                 errors=(Error(2, "第 3 项应为整数"),),
             )
         )
-        users = [m["content"] for m in json.loads(prompt) if m["role"] == "user"]
-        self.assertIn(self.ANSWER, users[-1])
-        self.assertIn("【判题器反馈】：第 3 项应为整数", users[-1])
+        material = json.loads(prompt)[-1]["content"]
+        self.assertIn(self.ANSWER, material)
+        self.assertIn("【判题器反馈】：第 3 项应为整数", material)
 
     def test_only_the_answer_error_triggers_the_retry(self):
         """只有 `code 2`（答案不正确）才重问。1 与 5 是终局、3/4 重问也救不回来。
 
-        非 2 的码时回复仍是交卷 ⇒ 判据 ⑤ 只交答案：交出去的还是那份答案，prompt 槽由链尾那道
-        沉淀闸门填（第 141 步）。判据看 **system 以哪个段头开头** —— 纠错重问那一支走的是任务
-        system（`# 【ROLE定位】` 开头），沉淀请求是 `# 【SOP 沉淀】`。别拿纠错段的字面当判据：
-        它会留在会话里被沉淀请求当原料带上（全量原文），那不是"重问"。
+        交卷轮的 prompt 槽归链尾那道沉淀闸门（判据 ⑤ 只交答案）⇒ 判"重问没重问"看**会话里
+        有没有那段纠错**（`feed` 出来的 user 消息，随沉淀请求的原料交出去），而不是查整份
+        prompt —— 原料是会话全文，整份查的话非 2 的码也会被上一轮的残留带出假阳性。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问：会话从这道题开始
         prompt, execute = task_channel(
             self._turn(self.TASK, llm_resp=self.ANSWER_REPLY, errors=(Error(2, "x"),))
         )
-        self.assertIn(self.RETRY_MARK, prompt)
+        self.assertEqual(execute, "")
+        self.assertIn(self.RETRY_MARK, self._body(prompt), "code 2 才纠错")
         for code in (0, 1, 3, 4, 5):
             with self.subTest(code=code):
+                # 每格独立会话：纠错段留在会话里，下一格会被原料带出来（假阳性）
+                AGENT.reset()
+                task_channel(self._turn(self.TASK))
                 prompt, execute = task_channel(
                     self._turn(self.TASK, llm_resp=self.ANSWER_REPLY, errors=(Error(code, "x"),))
                 )
                 self.assertEqual(execute, "")
                 self.assertTrue(
                     json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
-                    "非 2 的码不重问：走的是链尾那道沉淀闸门",
+                    "非 2 的码不重问：prompt 槽归沉淀闸门",
                 )
+                self.assertNotIn(self.RETRY_MARK, self._body(prompt), "非 2 的码不纠错")
 
     def test_the_error_feedback_enters_the_prompt_even_without_the_answer(self):
         """答案轮之后判题器报 `code 2`、而这轮回复里拿不到答案原文 ⇒ 错误反馈照样装进提示词，

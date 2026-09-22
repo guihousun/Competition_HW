@@ -25,7 +25,6 @@ SECTIONS = (
     "# 【工作原则】",
     "# 【工具描述】",
     "# 【沉淀的SOP】",
-    "# 【输出约定】",
     "# 【注意事项】",
 )
 
@@ -83,7 +82,7 @@ class ChatPromptTest(unittest.TestCase):
             self.assertNotIn(leftover, prompt)
 
     def test_the_sections_appear_once_each_and_in_the_declared_order(self):
-        """带段头的七段按声明的顺序出现、每段头只出现一次（末段的 COT 触发语没有段头）。
+        """带段头的五段按声明的顺序出现、每段头只出现一次（末段的 COT 触发语没有段头）。
 
         段序就是四层的落地（决策 → 工具 → 知识 → 输出）；「只一次」是"同一条规则只写
         一处"的机械保证 —— 重复的规则会稀释注意力，而这件事在实盘上测不出来。
@@ -241,11 +240,13 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("任务已交卷", _deposit_system(self.agent))
         self.assertNotIn("当要沉淀且同回合要交答案时", system)
 
-    def test_both_output_shapes_are_shown_verbatim(self):
-        """两个形状（工具调用 / `submitAnswer` 交卷）逐字出现在模板里。
+    def test_the_tool_shape_is_shown_verbatim(self):
+        """工具调用的形状逐字出现在模板里（【工具描述】那一份）—— 这是唯一能提高"LLM 照抄
+        概率"的杠杆：描述得含糊一点，它就自己发明第三种形状，而那种失败本地测不出来
+        （我们的解析自洽，判题器认不认只有实盘知道）。
 
-        这是唯一能提高"LLM 照抄概率"的杠杆：描述得含糊一点，它就自己发明第三种形状，
-        而那种失败本地测不出来（我们的解析自洽，判题器认不认只有实盘知道）。
+        第 142 步删掉【输出约定】后，交卷不再单独举例：答案走 `submitAnswer` 这个工具，
+        形状与其他工具同源，名字与参数名都在工具表里。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn(
@@ -260,11 +261,9 @@ class ChatPromptTest(unittest.TestCase):
             "        <cmd> cat /tmp/a.txt </cmd>\n    </tool_param>\n</tool>",
             system,
         )
-        self.assertIn(
-            "    <tool>\n        <tool_name>submitAnswer</tool_name>\n        <tool_param>\n"
-            "            <answer> 答案本身 </answer>\n        </tool_param>\n    </tool>",
-            system,
-        )
+        tools = _section(system, "# 【工具描述】")
+        self.assertIn("## ToolName - submitAnswer", tools)
+        self.assertIn("    - answer: 要提交的最终答案原文", tools)
 
     def test_the_deposit_round_comes_after_the_answer(self):
         """沉淀不再与交卷抢同一条回复：任务阶段一个字都不提它，交卷之后由系统单独问一轮。
@@ -289,19 +288,15 @@ class ChatPromptTest(unittest.TestCase):
 
         裸文本（"答案是：3"、一段解释后跟个数字）在新通道下**什么都交不出去**（旧通道的
         "原文即答案"兜底已删）—— 结构性堵死 vs 靠措辞。措辞仍然有用：`answer` 参数里只许放
-        最终结果（判题器按字段算通过率，多写的字直接扣分），【输出约定】的"只写一个这个块"
-        与【工作原则】第 5 条的"其他的任务结果提交方式均被禁止"是同一件事的两处落点。
+        最终结果（判题器按字段算通过率，多写的字直接扣分），三个落点各说一遍：【工作原则】
+        第 5 条、`submitAnswer` 的描述、【注意事项】第 1 条。第 142 步删掉【输出约定】后
+        形状不再单独举例（它与别的工具同源），但"答案不许走别的路"这句闸门一个字没松。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        output = _section(system, "# 【输出约定】")
-        self.assertIn("2. [任务答案提交格式]调用 submitAnswer 工具", output)
-        self.assertIn("整条回复里只写一个这个块", output)
         self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
-        # 【注意事项】第 1 条指的是同一个形状。它是"答案不许走别的路"的最后一道措辞闸门
-        # —— 别让它指向 `[工具调用格式]`（那是把答案指向 <tool> 块），也别留下已经拆掉的
-        # `[特殊混合模式]`（第 141 步）。
+        self.assertIn("只放最终结果本身", _section(system, "# 【工具描述】"))
         self.assertIn(
-            "1. 任务的答案必须用 [任务答案提交格式]，其他的提交方式都不允许。",
+            "1. 任务的答案必须用 submitAnswer 工具提交，其他的提交方式都不允许。",
             _section(system, "# 【注意事项】"),
         )
 
@@ -311,9 +306,10 @@ class ChatPromptTest(unittest.TestCase):
         推演是写给**下一回合的自己**看的：渲染只到「摘要盖住的那段」为止（`Context.render`），
         不写下来就只剩一个结果、没有"上一步为什么没成"。落点必须在块**前面** —— 写进
         `<answer>` 里会被当成答案的一部分交上去。
-        第 116 步删掉【输出示例】后只剩两处落点：末段那句 COT 触发语，与【输出约定】里
-        "开头那段推演不算，它是写给你自己看的"。第 133 步用户把触发语从"让我们一步步推理"
-        换成"先判断信息缺口与行动价值"—— 落点与次序不变，仍钉"它收在整份 system 最后"。
+        第 116 步删掉【输出示例】、第 142 步删掉【输出约定】之后，只剩两处落点：末段那句
+        COT 触发语，与 `submitAnswer` 描述里的"不要带推导过程"。第 133 步用户把触发语从
+        "让我们一步步推理"换成"先判断信息缺口与行动价值"—— 落点与次序不变，仍钉"它收在
+        整份 system 最后"。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn("每次行动前判断信息缺口和行动价值", system)
@@ -321,7 +317,7 @@ class ChatPromptTest(unittest.TestCase):
             system.rstrip().endswith("只执行能推进任务的最小必要动作。"),
             "COT 触发语收在整份 system 最后",
         )
-        self.assertIn("开头那段推演不算，它是写给你自己看的", _section(system, "# 【输出约定】"))
+        self.assertIn("不要带推导过程", _section(system, "# 【工具描述】"))
 
     def test_the_flow_numbered_steps_start_at_one(self):
         """【工作原则】把执行循环与任务理解都编了号，从 (1) / 1. 起。
@@ -454,14 +450,22 @@ class ChatPromptTest(unittest.TestCase):
         with_retry = json.loads(self.agent.chat("题目", retry="晴 26 度"))
         self.assertIn("【你上一次提交的答案被判定为不正确】\n晴 26 度", with_retry[-1]["content"])
 
+    def _promote(self, name: str, text: str) -> None:
+        """存一条流程并推它转正（交卷 → 下一轮判题器没报错那两轮，见 `Agent.settle_deposit`）。
+        只有正式表进 system ⇒ 钉渲染的用例都得先过那道闸门。"""
+        self.agent.SOP2Prompt(name, text)
+        self.agent.settle_deposit(True, True)
+        self.agent.settle_deposit(False, True)
+
     def test_a_stored_flow_renders_with_its_name(self):
-        """存过一条流程之后，后面每一份 prompt 都带着 `## SopName - 流程名` + 正文；
+        """转正过的流程在**后面每一份** prompt 里都带着 `## SopName - 流程名` + 正文；
         空表打占位 —— 段头永远都在，那个槽是 LLM 自己写的目标，看不见槽就不会去用它。
         跨回合那条更强的证据在
-        `TaskChannelTest.test_the_singleton_carries_the_sop_across_turns`。
+        `TaskChannelTest.test_the_singleton_carries_the_sop_across_turns`；暂存的不进
+        system 由 `test_agent_sop` 与 `test_game_task` 那两条钉着。
         """
         self.assertIn("（暂无沉淀）", json.loads(self.agent.chat("题目"))[0]["content"])
-        self.agent.SOP2Prompt("找任务书", "先看目录再动手")
+        self._promote("找任务书", "先看目录再动手")
         system = json.loads(self.agent.chat("另一道题"))[0]["content"]
         self.assertIn("## SopName - 找任务书\n先看目录再动手", system)
         self.assertNotIn("（暂无沉淀）", system)
@@ -509,10 +513,10 @@ class ChatPromptTest(unittest.TestCase):
         )
 
     def test_the_system_is_refreshed_every_round(self):
-        """system（段模板）每轮现刷：同一道题进行中沉淀的流程，下一轮就看得见
-        —— 这是 ③′（`SOP2Prompt` 不产出命令）"调用成功"的回执，冻在构造时就没了。"""
+        """system（段模板）每轮现刷：表在这个进程里变了（这里是转正），下一轮就看得见
+        —— 冻在构造时就没有（`prompt_tools()` 那份清单同理，两者都在 system 里）。"""
         first = self.agent.chat("题")
-        self.agent.SOP2Prompt("找文件", "先 ls")
+        self._promote("找文件", "先 ls")
         second = self.agent.chat("题")
         self.assertNotIn("先 ls", first)
         self.assertIn("先 ls", second)
@@ -522,7 +526,7 @@ class ChatPromptTest(unittest.TestCase):
 
         题目原文、沙盒输出与流程正文都是任意文本，`{}` 太常见；二次扫描会在 `chat` 里
         直接抛 `KeyError`/`IndexError` ⇒ 整回合退化成空指令。三处一起钉。"""
-        self.agent.SOP2Prompt("带花括号", "SOP 里有 {sop} 和 {0}")
+        self._promote("带花括号", "SOP 里有 {sop} 和 {0}")
         messages = json.loads(self.agent.chat("题目 {task} {0} {}", result="{'a': 1}"))
         contents = [m["content"] for m in messages]
         self.assertIn("题目 {task} {0} {}", contents)

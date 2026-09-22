@@ -92,7 +92,7 @@ class AgentToolCallTest(unittest.TestCase):
                 self.assertEqual(self.agent.tool_call("executeCmd", [("cmd", cmd)]), cmd)
 
     def test_sop2prompt_stores_the_flow_and_yields_no_command(self):
-        """`SOP2Prompt` 存下一条流程、返回空串（它不产出命令）。
+        """`SOP2Prompt` 存下一条流程（落暂存表）、返回空串（它不产出命令）。
 
         返回值直接进响应顶层的 `executeCmd` ⇒ 返回非空就是往沙盒丢一条不存在的命令。
         顺带钉闸门的位置：空白参数在 `tool_call` 就被挡下 ⇒ 清不掉已存的流程
@@ -104,21 +104,21 @@ class AgentToolCallTest(unittest.TestCase):
             ),
             "",
         )
-        self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls"})
+        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls"})
         self.assertEqual(
             self.agent.tool_call("SOP2Prompt", [("name", "找任务书"), ("sop", "  ")]), ""
         )
-        self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls"}, "空白参数清不掉流程 —— 闸门在工具之前")
+        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls"}, "空白参数清不掉流程 —— 闸门在工具之前")
         # 不认识的参数名不参与闸门：name/sop 都在就放行
         self.assertEqual(
             self.agent.tool_call("SOP2Prompt", [("name", "读题"), ("sop", "第二步"), ("答案", "x")]),
             "",
         )
-        self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
+        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
         # 声明的参数缺一个（这里是 `name`）⇒ 整次调用作废，流程表一个字节都别动
         self.assertEqual(self.agent.tool_call("SOP2Prompt", [("sop", "第三步")]), "")
         self.assertEqual(self.agent.tool_call("SOP2Prompt", []), "")
-        self.assertEqual(self.agent.sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
+        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
 
     def test_an_unknown_tool_yields_no_command_and_no_exception(self):
         """未知工具 ⇒ 空串，绝不抛。
@@ -305,7 +305,7 @@ class ParallelToolTest(unittest.TestCase):
         )
         with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
             self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
-        self.assertEqual(self.agent.sop, {"方法": "先找文件"}, "沉淀照落库")
+        self.assertEqual(self.agent.pre_sop, {"方法": "先找文件"}, "沉淀照落库")
         self.assertEqual(len(caught.records), 2, "两条调用各留一行")
 
     def test_a_second_command_tool_voids_the_whole_round(self):
@@ -322,7 +322,7 @@ class ParallelToolTest(unittest.TestCase):
             caught.records[0].getMessage(),
             "【工具调用】：executeCmd、SOP2Prompt ⇒ 整轮不成立（这几个不能并列）",
         )
-        self.assertEqual(self.agent.sop, {}, "作废那一轮连 SOP 也不落库")
+        self.assertEqual(self.agent.pre_sop, {}, "作废那一轮连 SOP 也不落库")
         (note,) = self._notes()
         self.assertIn("并列", note)
         self.assertIn("executeCmd", note)

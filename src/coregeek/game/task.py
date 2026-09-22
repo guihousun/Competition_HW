@@ -69,6 +69,10 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     command = AGENT.tool_calls(calls) if calls else ""  # 工具调度：副作用只发生在这一行
     # 任务答案 = 上面那一行写的（调了 submitAnswer 才有）——**必须压在调度之后**读
     answer = AGENT.answer
+    # 结沉淀的账：上一回合交的卷 + 这一轮判题器没报错 ⇒ 那题算成、暂存的沉淀转正。
+    # 压在调度之后（`SOP2Prompt` 的回复就是这一行刚落进暂存表的）、早返回之前（答对了的那
+    # 一轮题目已经空了，转正照样得发生）
+    AGENT.settle_deposit(answer, not turn.errors)
 
     # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）；命令一律丢弃（沙盒仅任务期间可用）
     if not turn.phase_task:
@@ -105,10 +109,10 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         # 首问：把题目问出去
         prompt, cmd = AGENT.chat(turn.phase_task), ""
 
-    # 链尾沉淀闸门：交了答卷且判题器没报"答错了" ⇒ prompt 槽给沉淀请求（上面各支的 `chat()`
-    # 已经把回执/纠错喂进会话，下一轮渲染带着它们）。放链尾不放判据 ⑤ 里：⑤ 只在回执/纠错
-    # 全空时才命中，而"发命令 → 看回执 → 照着回执作答"这条主链上，交卷那条回复总落在 ② 那一轮
-    if answer and not rejected:
+    # 链尾沉淀闸门：这一轮调了 `submitAnswer`（答卷变量非空）⇒ 沉淀请求当轮就发出去，
+    # 不问回执 —— 等判决才开口会白占一个 LLM 回合（判决只决定它转不转正：`settle_deposit`）。
+    # 放链尾是让上面各支的 `chat()` 先跑：回执与纠错 feed 进会话，沉淀请求的原料带着它们
+    if answer:
         prompt = AGENT.sop_request()
     # 链尾压缩闸门：交卷轮不压缩（压缩会占住下一轮的回复槽），只剩命令轮会填上
     if not answer and prompt == "":

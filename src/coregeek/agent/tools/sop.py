@@ -1,7 +1,8 @@
 """`SOP2Prompt` 的存储规则：同名覆盖、异名追加、条数上限、单条截断、内容没变就静默。
 
-状态不在这里（流程表住在 `Agent._sop` 上）：`store` 是纯的，给旧表返回新表。`LOGGER`
-留在这里是有意的 —— logger 名 `coregeek.agent.tools.sop` 是日志侧认的名字。
+状态不在这里（两张流程表住在 `Agent` 上：`_pre_sop` 暂存 / `_sop` 正式）：`store` 是纯的，
+给旧表返回新表。`LOGGER` 留在这里是有意的 —— logger 名 `coregeek.agent.tools.sop` 是日志侧
+认的名字。
 """
 
 import logging
@@ -17,9 +18,12 @@ SOP_MAX = 1000
 SOP_FLOWS_MAX = 5
 
 
-def store(current: dict[str, str], name: str, sop: str) -> dict[str, str]:
+def store(current: dict[str, str], name: str, sop: str, *, where: str) -> dict[str, str]:
     """存/改一条流程，返回新表（入参不动）。空文本 = 删掉那条；内容没变 ⇒ 原样返回旧表、
     一个字都不打。
+
+    `where` = 落哪个表（暂存 / 正式），只进日志：同一段正文会先落暂存、后来转正时再落一次
+    （`Agent._promote`），日志不带落点就分不出"沉淀了"与"转正了"。
 
     同名覆盖（位置不动）＝ LLM 用重写同名流程表达"上一版不对"；异名追加；超
     `SOP_FLOWS_MAX` 条丢最旧、丢了谁进日志 —— 静默丢流程会让"怎么少了一条"无从查起。
@@ -31,7 +35,7 @@ def store(current: dict[str, str], name: str, sop: str) -> dict[str, str]:
     text = raw[:SOP_MAX]
     if not text:
         if key in current:
-            LOGGER.info("【SOP 更新】：删流程「%s」", key)
+            LOGGER.info("【SOP 更新】：从%s表删流程「%s」", where, key)
             fresh = dict(current)
             del fresh[key]
             return fresh
@@ -45,14 +49,14 @@ def store(current: dict[str, str], name: str, sop: str) -> dict[str, str]:
         oldest = next(iter(fresh))
         evicted.append(oldest)
         del fresh[oldest]
-    message = describe(key, raw, text)
+    message = describe(key, raw, text, where)
     if evicted:
         message += f"（超 {SOP_FLOWS_MAX} 条，丢最旧：「{'」、「'.join(evicted)}」）"
     LOGGER.info("【SOP 更新】：%s", message)
     return fresh
 
 
-def describe(name: str, received: str, stored: str) -> str:
+def describe(name: str, received: str, stored: str, where: str) -> str:
     """一条流程更新的日志正文 —— 一行，且截断必须留痕。
 
     超上限时同报"收到多少 / 存了多少"；`\r` 与 `\n` 都转义成字面量（Windows 上模型回
@@ -63,4 +67,4 @@ def describe(name: str, received: str, stored: str) -> str:
     if len(received) > len(stored):
         notes.append(f"收到 {len(received)} 字，超上限截断")
     note = f"（{'；'.join(notes)}）" if notes else ""
-    return f"流程「{name}」存 {len(stored)} 字{note}｜ 前 80 字：{head}"
+    return f"流程「{name}」进{where}表 存 {len(stored)} 字{note}｜ 前 80 字：{head}"

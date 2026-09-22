@@ -208,7 +208,7 @@ class HandleTest(unittest.TestCase):
             "# 【工具描述】",
             "## ToolName - submitAnswer",
             "# 【沉淀的SOP】",
-            "# 【输出约定】",
+            "# 【注意事项】",
         ):
             self.assertIn(piece, messages[0]["content"])
         # 沉淀那个工具只在沉淀请求里露面（第 141 步：任务阶段只做任务）
@@ -477,12 +477,31 @@ class HandleTest(unittest.TestCase):
         )
         self.assertEqual(body["executeCmd"], "")
 
-        # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，同时照旧提交（两条通道独立；
-        #    接口文档 L140 取"通过率最高"，重交零成本）。会话里两份"它说过的话"各归各的：
-        #    assistant 消息收整段原文（它真说过的话），纠错块收的必须是交上去的那一份
-        #    （`answer` 参数的值）—— 给错前者，LLM 会去改一个并不存在的问题。
+        # ⑤ 判题器说答错了 ⇒ 纠错段进会话、这一轮照旧提交（两条通道独立；接口文档 L140 取
+        #    "通过率最高"，重交零成本）。它这轮又交了一次卷 ⇒ prompt 槽还是沉淀请求（沉淀
+        #    请求只看"这轮交没交卷"、不看判决）—— 那一轮的渲染被丢掉，纠错只晚一回合可见，
+        #    下一轮的渲染里验它。
         raw["errors"] = [{"errorCode": 2, "description": "答案不正确"}]
         body = ask()
+        self.assertTrue(
+            json.loads(body["prompt"])[0]["content"].startswith("# 【SOP 沉淀】"),
+            "交卷轮：prompt 槽归沉淀请求",
+        )
+        self.assertEqual(body["executeCmd"], "")
+        self.assertEqual(
+            body["roleCommandMap"]["10011"]["action"], "submitAnswer", "提交不该被提问挤掉"
+        )
+
+        # ⑥ 落回裸文本 ⇒ 什么都交不出去（旧通道的"原文即答案"兜底已删）⇒ 落 ⑥ 重问。
+        #    这条纪律现在只有一条路：LLM 必须调 `submitAnswer`（判题器报错时它看得见纠错段）。
+        #    会话里两份"它说过的话"各归各的：assistant 消息收整段原文（它真说过的话），
+        #    纠错块收的必须是交上去的那一份（`answer` 参数的值）—— 给错前者，LLM 会去改
+        #    一个并不存在的问题。
+        raw["llmResp"] = "晴 26 度"
+        body = ask()
+        self.assertNotIn("10011", body["roleCommandMap"], "裸文本不是答案")
+        self.assertEqual(body["executeCmd"], "")
+        self.assertNotEqual(body["prompt"], "", "落 ⑥ 重问（纠错段还在）")
         messages = json.loads(body["prompt"])
         self.assertIn(
             _submit("晴 26 度"),
@@ -493,18 +512,6 @@ class HandleTest(unittest.TestCase):
             "\n【判题器反馈】：答案不正确\n请重新作答。",
             [m["content"] for m in messages if m["role"] == "user"],
         )
-        self.assertEqual(body["executeCmd"], "")
-        self.assertEqual(
-            body["roleCommandMap"]["10011"]["action"], "submitAnswer", "提交不该被提问挤掉"
-        )
-
-        # ⑥ 落回裸文本 ⇒ 什么都交不出去（旧通道的"原文即答案"兜底已删）⇒ 落 ⑥ 重问。
-        #    这条纪律现在只有一条路：LLM 必须调 `submitAnswer`（判题器报错时它看得见纠错段）。
-        raw["llmResp"] = "晴 26 度"
-        body = ask()
-        self.assertNotIn("10011", body["roleCommandMap"], "裸文本不是答案")
-        self.assertEqual(body["executeCmd"], "")
-        self.assertNotEqual(body["prompt"], "", "落 ⑥ 重问（纠错段还在）")
 
     def test_the_sandbox_line_only_appears_with_a_result(self):
         """沙盒行只在真有回执时出现 —— "没发命令就一定是空串"是文档写死的（接口文档 L33），

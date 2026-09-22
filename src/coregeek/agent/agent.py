@@ -1,11 +1,14 @@
 """`Agent` —— 单实例的解题智能体：一个进程一个，跨回合状态全在实例上。
 
-`_sop`（流程表，整场）、`_news_digest` / `_price_hints`（新闻指纹与价格期望）、`_context`
-（任务内会话，题目变了即换新）。状态丢了只影响 prompt 内容、不碰红线；判题器逐回合同步
-请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
+两张流程表：`_sop`（正式，整场）、`_pre_sop`（暂存，任务内 —— `SOP2Prompt` 先落这里，
+判题器没报错的那一轮才由 `settle_deposit` 转正）。另有 `_news_digest` / `_price_hints`
+（新闻指纹与价格期望）、`_context`（任务内会话，题目变了即换新）。状态丢了只影响 prompt
+内容、不碰红线；判题器逐回合同步请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
 
-`_answer` 是同一条链上的短命那一个：`submitAnswer` 写、`task_channel` 读、`answer_task`
-取走，**只活一回合**（每回合开头由 `task_channel` 清一次）—— 它是回合内的一次交接，不是记忆。
+`_answer` 与 `_submitted` 是短命的那两个：前者由 `submitAnswer` 写、`task_channel` 读、
+`answer_task` 取走，**只活一回合**（每回合开头由 `task_channel` 清一次）—— 它是回合内的
+一次交接，不是记忆；后者是"上一回合交过卷、判决还没到"，每回合由 `settle_deposit` 重新
+赋值（赋值 ⇒ 卡不住）。
 """
 
 import logging
@@ -77,6 +80,11 @@ class Agent:
     def __init__(self) -> None:
         #: 沉淀的 SOP —— 流程表 `{流程名: 正文}`（同名覆盖、异名追加、条数上限）。
         self._sop: dict[str, str] = {}
+        #: 本题暂存的沉淀（规则同 `_sop`）：`SOP2Prompt` 先落这里，判题器没报错的那一轮才
+        #: 转正；换题即作废 —— 没被验证过的经验不进「沉淀的SOP」段。见 `settle_deposit`。
+        self._pre_sop: dict[str, str] = {}
+        #: 上一回合交过卷、判决还没到（`settle_deposit` 每回合重新赋值 ⇒ 卡不住）。
+        self._submitted = False
         #: 价格期望与新闻指纹。丢了只影响采矿偏好 / 白问一次新闻，不碰红线。
         self._news_digest = ""
         self._price_hints: dict[str, float] = {}
@@ -150,6 +158,10 @@ class Agent:
         是活的，下一轮就得看得见。渲染 = 题目 + 摘要 + **摘要没盖到的全部往来**。"""
         fresh = self._context is None or self._context.task != request
         if fresh:
+            # 换题 ⇒ 上一道题没转正的沉淀作废：没被验证过的经验不跨题。"这个进程还没开过
+            # 会话"不算换题（那是本题第一次开口，这道题刚沉淀的不能就此被自己清掉）。
+            if self._context is not None:
+                self._pre_sop = {}
             # 换题 ⇒ 新会话。粘住的回执也照样 feed（照样回灌）。
             self._context = Context(request)
         if result or retry:
@@ -213,9 +225,10 @@ class Agent:
         """沉淀轮的 prompt：沉淀指令 + 现在的 SOP + `SOP2Prompt` 块 + 本题的完整记录。
         没开会话 ⇒ `""`。
 
-        发送时机 = 交卷那一轮（判据链尾的沉淀闸门）：那个 `prompt` 槽本来空着，判题器在任务
-        期间不计数。它的回复下一轮随 `llmResp` 回来、由 `tool_calls` 派发 —— 派发压在
-        "没任务"早返回之前，所以"答对了、任务已经结束"的那一轮也收得到。"""
+        发送时机 = 交卷那一轮（判据链尾的沉淀闸门）：这一轮调了 `submitAnswer` 就发，
+        不问回执 —— 等判决才开口会白占一个 LLM 回合。判题器在任务期间不计数，这次开口
+        不吃额度。它的回复下一轮随 `llmResp` 回来、由 `tool_calls` 派发（落暂存表）——
+        派发压在"没任务"早返回之前，所以"答对了、任务已经结束"的那一轮也收得到。"""
         if self._context is None:
             return ""
         _, desc, params = self._tools["SOP2Prompt"]
@@ -396,20 +409,45 @@ class Agent:
     def SOP2Prompt(self, name: str, sop: str) -> str:
         """沉淀一条条目（`name` = 这类问题的名字、`sop` = 做法与环境知识），返回 `""`。
 
-        存储规则（同名覆盖、条数上限、截断留痕）在 `tools/sop.py`。条目有两类：流程与
-        知识（类型由 `name` 约定区分）。空文本 = 删掉那条。"""
-        self._sop = store(self._sop, name, sop)
+        落**暂存表**（`settle_deposit` 转正之后才进「沉淀的SOP」段）。存储规则（同名覆盖、
+        条数上限、截断留痕）在 `tools/sop.py`。条目有两类：流程与知识（类型由 `name` 约定
+        区分）。空文本 = 删掉那条。"""
+        self._pre_sop = store(self._pre_sop, name, sop, where="暂存")
         return ""
+
+    def settle_deposit(self, submitted: bool, accepted: bool) -> None:
+        """结沉淀的账（`task.task_channel` 每回合调一次，压在工具调度之后）。
+
+        `submitted` = 这一轮调了 `submitAnswer`；`accepted` = 这一轮判题器没报任何错。
+        **上一回合交过卷、这一轮又没报错 ⇒ 这题算成**，暂存的沉淀整批转正 —— 判题器只在
+        出错时吭声，"没报错"就是它的成功回执（没有更硬的判据，未实测）。
+        压在调度之后：沉淀请求的回复（`SOP2Prompt`）就是这一轮才落进暂存表的。"""
+        if self._submitted and accepted:
+            self._promote()
+        self._submitted = submitted
+
+    def _promote(self) -> None:
+        """暂存表整批并进正式表（同名覆盖），并清空暂存 —— 每条的日志由 `store` 打（带落点）。"""
+        for name, text in self._pre_sop.items():
+            self._sop = store(self._sop, name, text, where="正式")
+        self._pre_sop = {}
 
     @property
     def sop(self) -> dict[str, str]:
-        """现在的流程表 —— 「沉淀的SOP」段的填充值。没沉淀过 ⇒ 空 dict。"""
+        """正式流程表 —— 「沉淀的SOP」段的填充值。没沉淀过 ⇒ 空 dict。"""
         return self._sop
 
+    @property
+    def pre_sop(self) -> dict[str, str]:
+        """暂存流程表 —— 已沉淀、还没转正的那些（不进 prompt）。"""
+        return self._pre_sop
+
     def reset(self) -> None:
-        """清空全部跨回合状态（流程表、新闻指纹、价格期望、会话、答卷）。只给用例用 ——
+        """清空全部跨回合状态（两张流程表、新闻指纹、价格期望、会话、答卷）。只给用例用 ——
         单实例是模块级的，会跨用例串味。"""
         self._sop = {}
+        self._pre_sop = {}
+        self._submitted = False
         self._news_digest = ""
         self._price_hints = {}
         self._context = None
