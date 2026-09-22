@@ -89,8 +89,8 @@ for (const scale of [.3,1]) {
   widths = boxes.map(b=>b.w);
 }
 // Worker labels are plain text and no longer reserve a plate or cover the map.
-assert.ok(text.some(t=>t.s==='蓝一' && t.font.startsWith('bold 14px')));
-assert.ok(text.some(t=>t.s==='蓝二' && t.font.startsWith('bold 14px')));
+assert.ok(text.some(t=>t.s==='工1' && t.font.startsWith('bold 14px')));
+assert.ok(text.some(t=>t.s==='工2' && t.font.startsWith('bold 14px')));
 assert.ok(!text.some(t=>/HP|生命|背包/.test(t.s)));
 renderer.selected=world.actors[0];
 renderer.drawCrewLabels(ctx,world,{});
@@ -103,47 +103,28 @@ renderer.drawCrewLabels(ctx,world,{walkProgress:0});
 assert.equal(anchors.length,0);
 """)
 
-    def test_active_task_adds_a_short_countdown_and_thin_bar(self):
+    def test_pioneer_stays_plain_text_during_tasks_and_hover(self):
         self.run_js("""
-const fills = [], text = [];
+const text = [], painted = [];
 const ctx = new Proxy({}, {get(target, prop){
   if(prop === 'measureText') return s => metrics(target.font)(s);
-  if(prop === 'fillText') return (s,x,y) => text.push({s,y,font:target.font,size:parseFloat(target.font)});
-  if(prop === 'fillRect') return (x,y,w,h) => fills.push({x,y,w,h});
+  if(prop === 'fillText') return s => text.push(s);
+  if(['fillRect','strokeRect','fill','stroke'].includes(prop)) return () => painted.push(prop);
   return prop in target ? target[prop] : ()=>{};
 }});
 const renderer = Object.create(HW.Renderer.prototype);
 renderer.viewport = {width:900,height:600};
 renderer.camera = {x:902,y:704,scale:.5};
-const active = {description:'current task', accepted:10, timeout:25, deadline:35};
-const pioneer = {id:10011,kind:'pioneer',label:'开拓者',owner:'own',health:200,maxHealth:200,
-  pos:{x:20,y:16},rpos:{x:20,y:16},size:1,backpack:[],capacity:40,anim:[]};
-const world = {state:{roundNo:15,phaseTask:'current task',teamOur:{type:'challenger'},
-  _demo:{task_world:{points:{challengerTaskPoint1:{active}}}}}, actors:[pioneer], zones:[]};
-const [compact] = renderer.drawCrewLabels(ctx,world,{});
-assert.equal(compact.w,84);assert.equal(compact.h,28);
-assert.ok(!text.some(t=>t.s==='剩余 20 / 25 轮'));
-fills.length=0;text.length=0;
-const [box] = renderer.drawCrewLabels(ctx,world,{hoverActor:pioneer});
-// Two short lines plus a countdown line and a thin bar, still far below a card.
-assert.ok(box.h>=42 && box.h<=68, `task callout stays short (got ${box.h})`);
-assert.ok(box.w>=140 && box.w<=155, `task callout stays narrow (got ${box.w})`);
-const countdown = text.find(t=>t.s==='剩余 20 / 25 轮');
-assert.ok(countdown, 'short remaining-round countdown');
-const bar = fills.filter(f=>f.h===3);
-assert.ok(bar.length===2, 'the thin bar has a track and a filled portion');
-const track = bar[0];
-assert.ok(track.w<=box.w-16, 'the bar stays inside the callout');
-assert.ok(track.y>=box.y, 'the bar starts inside the callout');
-assert.ok(track.y+track.h<=box.y+box.h, 'the bar ends inside the callout');
-// No overlap: the bar starts below the countdown's text line.
-assert.ok(track.y >= countdown.y, `bar (${track.y}) must not overlap the countdown baseline (${countdown.y})`);
-assert.ok(track.y-(countdown.y) >= 4, 'safe gap between text and bar');
-const value = bar[1];
-assert.ok(Math.abs(value.w/track.w-.8)<1e-6, 'bar ratio is remaining / total');
-// Without an active task the same callout drops back to the compact two lines.
+const pioneer = {id:10011,kind:'pioneer',owner:'own',
+  pos:{x:20,y:16},rpos:{x:20,y:16},size:1,anim:[]};
+const world = {state:{roundNo:15,phaseTask:'current task',teamOur:{type:'challenger'}},
+  actors:[pioneer],zones:[]};
+for(const ui of [{},{hoverActor:pioneer}]) {
+  assert.deepEqual(renderer.drawCrewLabels(ctx,world,ui),[]);
+}
+renderer.selected = pioneer;
 world.state.phaseTask = '';
-const [plain] = renderer.drawCrewLabels(ctx,world,{});
-assert.equal(plain.h, 22);
-assert.equal(plain.w, 84);
+renderer.drawCrewLabels(ctx,world,{});
+assert.deepEqual(text,['拓','拓','拓']);
+assert.deepEqual(painted,[], 'crew names have no background or border, including on hover');
 """)

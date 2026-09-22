@@ -132,20 +132,6 @@
     return { index, ...TERRAIN_PALETTES[index] };
   }
 
-  // Default: one small identity label. Details expand only on selection/hover.
-  const CALLOUT = {
-    width: 152, compactWidth: 84, compactHeight: 22, compactTaskHeight: 28,
-    height: 46, taskHeight: 66, pad: 8,
-    titleFont: 'bold 14px "Microsoft YaHei", sans-serif',
-    infoFont: '12px "Microsoft YaHei", sans-serif',
-    taskFont: '12px "Microsoft YaHei", sans-serif',
-    titleBaseline: 19, lineAdvance: 15, barHeight: 3, barGap: 2,
-    anchorOffset: 16, boxGap: 8,
-  };
-  const CALLOUT_STYLE = {
-    worker: { title: '#a6ffe7', accent: '#72edd0', health: '#edf5ff', low: '#ff9da9', info: '#bcd6e4' },
-    pioneer: { title: '#ffe09a', accent: '#f4cf70', health: '#edf5ff', low: '#ff9da9', info: '#cbd6e1' },
-  };
 
   class Renderer {
     constructor(canvas) {
@@ -475,30 +461,14 @@
       ctx.restore();
     }
 
-    /**
-     * Compact nameplates for the controllable crew: identity + ID on line 1,
-     * health and backpack count on line 2, plus a short task countdown and thin
-     * bar while a task is active. They stay in screen space so the text keeps a
-     * readable CSS-pixel size at every zoom, and their anchors use the same
-     * committed walk interpolation as the sprites.
-     *
-     * Exact current/max health and the itemised backpack stay in the console
-     * cards; this overlay only carries what has to be visible next to the unit.
-     */
+    /** Plain screen-space crew names; details stay in the console. */
     drawCrewLabels(ctx, world, ui) {
-      const boxes = [];
-      const crew = world.actors.filter((a) => (['own', 'enemy'].includes(a.owner) && a.kind === 'worker')
-          || (a.owner === 'own' && a.kind === 'pioneer'))
-        .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      const crew = world.actors.filter((a) => ['own', 'enemy'].includes(a.owner)
+        && ['worker', 'pioneer'].includes(a.kind));
       const workerNames = new Map();
       for (const owner of ['own', 'enemy']) {
         const field = owner === 'own' ? 'teamOur' : 'teamEnemy';
-        const team = (world.state || {})[field] || {};
-        const ourSide = ((world.state || {}).teamOur || {}).type || world.side || 'challenger';
-        const side = team.type || (owner === 'own' ? ourSide
-          : ourSide === 'challenger' ? 'defender' : 'challenger');
-        // Include dead/initial roster members so the surviving second worker
-        // does not get renamed as the first. IDs identify roles, not teams.
+        // Keep initial/dead roster members so worker 2 stays worker 2.
         const ids = new Set();
         for (const state of [world.states && world.states[0], world.state]) {
           for (const role of ((state || {})[field] || {}).roles || []) {
@@ -507,126 +477,32 @@
         }
         for (const actor of crew) if (actor.owner === owner && actor.kind === 'worker') ids.add(String(actor.id));
         [...ids].sort((a, b) => a.localeCompare(b, undefined, {numeric: true})).forEach((id, i) => {
-          workerNames.set(`${owner}:${id}`, `${side === 'challenger' ? '蓝' : '红'}${['一', '二'][i] || i + 1}`);
+          workerNames.set(`${owner}:${id}`, `工${i + 1}`);
         });
       }
-      const task = HW.viewModel.taskStatus(world);
       ctx.save();
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
+      ctx.font = 'bold 14px "Microsoft YaHei", sans-serif';
       for (const actor of crew) {
         const walk = actor.anim && actor.anim.find((a) => a.type === 'walk');
         const t = walk && ui && ui.walkProgress != null ? U.easeOut(U.clamp(ui.walkProgress, 0, 1)) : 1;
         const pos = walk ? {x: U.lerp(walk.from.x, walk.to.x, t), y: U.lerp(walk.from.y, walk.to.y, t)} : actor.rpos;
         const point = this.cellToScreen(pos, world, actor.footprint || HW.footprint(actor.kind));
         if (point.x < 0 || point.x > this.viewport.width || point.y < 0 || point.y > this.viewport.height) continue;
-        if (actor.kind === 'worker') {
-          const title = workerNames.get(`${actor.owner}:${actor.id}`);
-          ctx.font = 'bold 14px "Microsoft YaHei", sans-serif';
-          ctx.fillStyle = title.startsWith('蓝') ? '#2389ee' : '#ed5265';
-          const width = ctx.measureText(title).width;
-          const x = U.clamp(point.x - width / 2, 4, Math.max(4, this.viewport.width - width - 4));
-          const y = Math.max(18, point.y - BASE_TILE * this.camera.scale / 2 - 4);
-          ctx.fillText(title, x, y);
-          continue; // Plain text only; details remain in the console.
-        }
-        const style = CALLOUT_STYLE[actor.kind] || CALLOUT_STYLE.worker;
-        const onTask = actor.kind === 'pioneer' && task.active;
-        const maxHealth = Number(actor.maxHealth) || 1;
-        const ratio = U.clamp((Number(actor.health) || 0) / maxHealth, 0, 1);
-        const same = (other) => other && other.id === actor.id && other.owner === actor.owner;
-        const detailed = actor.selected || same(this.selected) || same(ui && ui.hoverActor);
-        const title = '拓';
-
-        ctx.font = CALLOUT.titleFont;
-        // Compact by default; only the focused role gets a full plate.
-        const w = detailed ? CALLOUT.width : CALLOUT.compactWidth;
-        const h = detailed ? (onTask ? CALLOUT.taskHeight : CALLOUT.height) : (onTask ? CALLOUT.compactTaskHeight : CALLOUT.compactHeight);
-        const pad = 6;
-        const clampBox = (x, y) => ({x: U.clamp(x, pad, Math.max(pad, this.viewport.width - w - pad)),
-          y: U.clamp(y, 58, Math.max(58, this.viewport.height - h - 40)), w, h});
-        const candidates = [];
-        for (let row = 0; row < 5; row += 1) {
-          for (const x of [point.x + CALLOUT.anchorOffset, point.x - w - CALLOUT.anchorOffset]) {
-            candidates.push(clampBox(x, point.y - h - CALLOUT.anchorOffset - row * (h + CALLOUT.boxGap)));
-            candidates.push(clampBox(x, point.y + CALLOUT.anchorOffset + row * (h + CALLOUT.boxGap)));
-          }
-        }
-        const overlaps = (a, b) => a.x < b.x + b.w + 6 && a.x + a.w + 6 > b.x && a.y < b.y + b.h + 6 && a.y + a.h + 6 > b.y;
-        // Prefer empty map space instead of covering adjacent guns/walls/crew.
-        const occupied = world.actors.map((unit) => {
-          const at = this.cellToScreen(unit.rpos || unit.pos, world, unit.footprint || HW.footprint(unit.kind));
-          const span = BASE_TILE * this.camera.scale * (unit.size || 1);
-          return {x:at.x-span/2, y:at.y-span/2, w:span, h:span};
-        });
-        const candidatesFree = candidates.filter(c => !boxes.some(b => overlaps(c,b)));
-        const choices = candidatesFree.length ? candidatesFree : candidates;
-        const box = choices.find(c => !occupied.some(b => overlaps(c,b))) || choices[0];
-        boxes.push(box);
-        const {x, y} = box;
-        ctx.strokeStyle = style.accent;
-        ctx.lineWidth = 1.5;
-        if (detailed) {
-          ctx.beginPath(); ctx.moveTo(point.x, point.y);
-          ctx.lineTo(U.clamp(point.x, x, x + w), U.clamp(point.y, y, y + h)); ctx.stroke();
-        }
-        ctx.fillStyle = '#081725f2';
-        P.roundRect(ctx, x, y, w, h, 7); ctx.fill(); ctx.stroke();
-
-        if (!detailed) {
-          ctx.font = 'bold 12px "Microsoft YaHei", sans-serif';
-          ctx.fillStyle = ratio <= 0.25 ? style.low : style.title;
-          ctx.fillText(this.truncate(ctx, title, w - 12), x + 6, y + 15);
-          ctx.fillStyle = '#324358'; ctx.fillRect(x + 4, y + 19, w - 8, 2);
-          ctx.fillStyle = ratio <= 0.25 ? style.low : style.accent;
-          ctx.fillRect(x + 4, y + 19, (w - 8) * ratio, 2);
-          if (onTask) {
-            ctx.fillStyle = '#324358'; ctx.fillRect(x + 4, y + 24, w - 8, 3);
-            if (task.ratio != null) {
-              ctx.fillStyle = '#f4cf70'; ctx.fillRect(x + 4, y + 24, (w - 8) * task.ratio, 3);
-            }
-          }
-          continue;
-        }
-        const budget = w - CALLOUT.pad * 2;
-        const barY = y + h - CALLOUT.barGap - CALLOUT.barHeight;
-        let cursorY = y + CALLOUT.titleBaseline;
-        ctx.font = CALLOUT.titleFont;
-        ctx.fillStyle = style.title;
-        ctx.fillText(this.truncate(ctx, title, budget), x + CALLOUT.pad, cursorY);
-        cursorY += CALLOUT.lineAdvance;
-        ctx.font = CALLOUT.infoFont;
-        ctx.fillStyle = ratio > 0.25 ? style.health : style.low;
-        const hp = `${actor.health}/${actor.maxHealth}`;
-        const bag = `${actor.backpack.length}/${actor.capacity || '—'}`;
-        // Concise line, full numbers: "HP 220/220 | 包 2/100". The space around
-        // the separator is dropped before anything else, and the long health
-        // label only shrinks if a very large capacity still would not fit;
-        // itemised contents stay in the console crew card.
-        const forms = [`生命 ${hp} | 背包 ${bag}`, `HP ${hp} | 背包 ${bag}`,
-          `HP ${hp} |包 ${bag}`, `HP ${hp}|包 ${bag}`];
-        let info = forms[0];
-        for (const form of forms) {
-          info = form;
-          if (ctx.measureText(form).width <= budget) break;
-        }
-        ctx.fillText(info, x + CALLOUT.pad, cursorY);
-        if (onTask) {
-          cursorY += CALLOUT.lineAdvance;
-          ctx.font = CALLOUT.taskFont;
-          ctx.fillStyle = '#ffe09a';
-          ctx.fillText(this.truncate(ctx, task.meter, budget), x + CALLOUT.pad, cursorY);
-          // The thin bar sits just under the last text baseline and inside the plate.
-          ctx.fillStyle = '#324358';
-          ctx.fillRect(x + CALLOUT.pad, barY, budget, CALLOUT.barHeight);
-          if (task.ratio != null) {
-            ctx.fillStyle = '#f4cf70';
-            ctx.fillRect(x + CALLOUT.pad, barY, budget * U.clamp(task.ratio, 0, 1), CALLOUT.barHeight);
-          }
-        }
+        const title = actor.kind === 'pioneer' ? '拓' : workerNames.get(`${actor.owner}:${actor.id}`);
+        const ourSide = ((world.state || {}).teamOur || {}).type || world.side || 'challenger';
+        const team = (world.state || {})[actor.owner === 'own' ? 'teamOur' : 'teamEnemy'] || {};
+        const side = team.type || (actor.owner === 'own' ? ourSide
+          : ourSide === 'challenger' ? 'defender' : 'challenger');
+        ctx.fillStyle = side === 'challenger' ? '#2389ee' : '#ed5265';
+        const width = ctx.measureText(title).width;
+        const x = U.clamp(point.x - width / 2, 4, Math.max(4, this.viewport.width - width - 4));
+        const y = Math.max(18, point.y - BASE_TILE * this.camera.scale / 2 - 4);
+        ctx.fillText(title, x, y);
       }
       ctx.restore();
-      return boxes;
+      return [];
     }
 
     /** Trim a string with an ellipsis so it fits `width` in the current font. */
