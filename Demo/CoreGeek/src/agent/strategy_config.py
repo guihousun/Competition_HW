@@ -87,7 +87,7 @@ def validate(config):
     _integer(maintenance["from_day"], 1, 10, "maintenance.from_day")
     _integer(maintenance["survival_reserve_from_day"], 1, 10, "maintenance.survival_reserve_from_day")
     _integer(maintenance["stock_target"], 0, 10, "maintenance.stock_target")
-    _integer(maintenance["repair_stock_max"], maintenance["stock_target"], 10, "maintenance.repair_stock_max")
+    _integer(maintenance["repair_stock_max"], 0, 10, "maintenance.repair_stock_max")
     _integer(maintenance["wall_upgrade_reserve"], 0, 2, "maintenance.wall_upgrade_reserve")
     _integer(maintenance["side_wall_max_level"], 1, 3, "maintenance.side_wall_max_level")
     for key in ("entry_fraction", "exit_fraction", "emergency_fraction", "base_emergency_fraction"):
