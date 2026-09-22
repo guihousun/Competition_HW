@@ -60,7 +60,9 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
     """白天那条链，逐角色跑、先命中先定夺：
 
     ① 开拓者被任务钉死（白天人手恒够，`_short_handed` 恒假）→ ② `day.BACK_TO_POST` 收工门
-    （到点就回岗位）→ ③ 开拓者走 `_pioneer_errand` → ④ 工人走 `day.DAY_CHAIN` 那四级。
+    （到点就回岗位）→ ②′ 这一夜的修墙工（`night.repairer`）走 `night.hold_the_wall`：到点先
+    回正面墙后方的待命位（天黑才发现人还在盒外就晚了）→ ③ 开拓者走 `_pioneer_errand` →
+    ④ 工人走 `day.DAY_CHAIN` 那几级。
 
     黑板装在 `_Ctx` 里逐角色顺序累计、不跨回合；环缺口按在场工人数切段也在这里。"""
     cmds = q.cmds
@@ -74,6 +76,8 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
         sites_pending=pending,
         build_plan=day.assign_sites(turn, pending),
     )
+    # 这一夜要修墙的那个人（第 4 夜起 + 手里有包）：天黑前得先回正面墙后方的待命位
+    repairer = night.repairer(turn, _night_gunner(turn))
 
     # 环缺口按在场工人数切段（A 领前段、B 领后段；一个工人 ⇒ 整段）
     workers_no = [r for r in turn.roles if isinstance(r, Worker)]
@@ -90,6 +94,10 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
 
         # 第 0 级：到收工窗口就回岗位（判据只看还剩多少回合）
         if day.BACK_TO_POST.run(role, ctx):
+            continue
+
+        # 修墙工的先手：到点先往正面墙后方的待命位挪（与收工门同一个思路，几何共用 `core._wall_post`）
+        if role.id == repairer and night.hold_the_wall(role, turn, q):
             continue
 
         if isinstance(role, Pioneer):
@@ -117,7 +125,7 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     ① 被任务钉死的开拓者 —— **人手够才钉得住**（工人阵亡 ⇒ 弃任务回炮位，生存第一）→
     ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **清场了 ⇒ 整夜改走白天那两条线**
     （`night.is_cleared`：工人 `day.sell_or_mine`、开拓者 `_pioneer_errand`）→
-    ④ 没清场：炮手 `night.defend`、其余工人 `night.mine_ore`。
+    ④ 没清场：炮手 `night.defend`、持包的工人 `night.repair_wall`、其余工人 `night.mine_ore`。
 
     两本账是**本函数的局部变量** —— 夜里不碰白天那个 `_Ctx` 黑板：炮位认领 `taken`
     （一人一组，组内任一座被认领 = 整组被认领）与矿格认领 `ore_taken`（清场那支自己
@@ -129,6 +137,8 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     # 否则名册第一个工人顶上；其余角色整夜挖矿。
     gunner = _night_gunner(turn)
     cleared = night.is_cleared(turn)
+    # 这一夜谁去修墙（第 4 夜起 + 手里有包的非炮手工人）；没人持包 ⇒ `None`、工人照旧挖矿
+    repairer = night.repairer(turn, gunner)
     # 清场后走白天那两条线 ⇒ 它们收的是 `_Ctx`（矿格认领那本账与挖矿共用同一份）
     ctx = _Ctx(turn, q, ore_taken=ore_taken)
 
@@ -150,6 +160,9 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
             continue
         if role.id == gunner:
             night.defend(role, turn, q, taken)
+            continue
+        if role.id == repairer:
+            night.repair_wall(role, turn, q, ore_taken)
             continue
         if isinstance(role, Worker):
             night.mine_ore(role, turn, q, ore_taken)

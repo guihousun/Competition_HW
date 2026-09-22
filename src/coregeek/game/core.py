@@ -18,11 +18,11 @@ from collections.abc import Callable, Mapping, Set
 from typing import Any, NamedTuple
 
 from ..protocol import actions  # 指令只能经 Action 产出
-from .grid import STEPS, Pos
+from .grid import STEPS, Pos, wall_cells
 from .path import steps_between
 from .roles import BaseRole, Worker
 from .utils import _passable
-from .world import Turn, Weapon
+from .world import Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -47,6 +47,34 @@ WALL = "wall"
 WALL_COST = 1
 
 
+#: 收工门的容错余量（回合）：`回到岗位的步数 + POST_MARGIN >= 本段剩余回合` 就动身。
+#: 3 是拍的（用户口径"3 回合余量"；"固定 5 回合、不看距离"那一版没有容错，用户报"问题很大"）。
+#: 白天两处共用：`day.BackToPost`（夜里上炮的那个人回岗位）与 `night.hold_the_wall`（修墙工回待命位）。
+POST_MARGIN = 3
+
+
+#: 围墙该处理了的血量（绝对值）。两条线共用这一个判据：白天 `day._weak_l1` 对 L1 拆了重砌，
+#: 夜里 `night.repair_wall` 用修复包回满（不分等级）。
+#: 为什么是绝对值、为什么是 200：机器人伤害（5/10/20/40）不吃墙的等级，而机器人的攻击距离是 3
+#: ⇒ 同一格正面墙会被它身后一列里的多台同时啃 ⇒ "能不能在被打死之前修上"只由**绝对剩余血量**
+#: 决定。阈值要盖过"越过阈值到修复包落地"之间挨掉的伤害：待命位到最远那格 3 步 ⇒ 其间挨 2 次
+#: 结算伤害（伤害在回合末统一结算、包落地当回合的伤害在包之后）⇒ `T > 2 × 单格单回合伤害`；
+#: 最坏单格 80/回合（BOSS + 两座大型）⇒ `T > 160`，取 200（余量够到 100/回合）。再往上只多
+#: 撑一回合，却让"够格修"的格子同时变多 —— 一个工人一回合只修一格，会排队。
+WALL_REPAIR_HP = 200
+
+
+#: 围墙修复包（武器商店消耗品，10 金）：站在待修复围墙一格范围内 ⇒ 目标那一格回满血。
+WALL_FIXER = "WallFixer"
+
+
+def needs_repair(wall: Wall) -> bool:
+    """这面墙该处理了吗：血量已知（`>= 0`）且低于 `WALL_REPAIR_HP`。
+
+    L1/L2/L3 一个口径 —— 动不动它只由绝对血量决定。血量缺失（-1）⇒ 不碰（不知道就别动）。"""
+    return 0 <= wall.health < WALL_REPAIR_HP
+
+
 #: 升级券的商品名（`weaponShopList.name` 那套词；价目逐回合从载荷读，样例实证 100/150）。
 VOUCHER = {2: "WeaponUpgradeVoucher1", 3: "WeaponUpgradeVoucher2"}
 
@@ -57,20 +85,66 @@ WALL_VOUCHER = {2: "WallUpgradeVoucher1", 3: "WallUpgradeVoucher2"}
 
 #: 买券/升级的优先级（用户口径）：`(券名, 目标组, 目标等级)`，从上往下先命中先用。
 #: 它是**目标清单**（取第一个"还有东西可升"的步骤去攒钱），不是"哪张便宜买哪张"。
-#: ⚠️ 武器二级券出现两次（第 1 步管非角上两座、第 4 步管角上那座）⇒ 目标组必须一起带着走。
-#: 目标组只有三种：`weapon-side` = 非角上的两座火箭、`weapon-corner` = 角上那座、
-#: `wall-front` = 面向敌人的一列墙（`wall_cells` 前 `FRONT_WALLS` 格）。
+#: ⚠️ 武器二级券出现两次（第 1 步管非角上两座、第 3 步管角上那座）⇒ 目标组必须一起带着走。
+#: **只有武器券**：围墙券走 `WALL_CHAIN`，归修墙工那条差事（见下）。
 VOUCHER_CHAIN = (
     (VOUCHER[2], "weapon-side", 2),
     (VOUCHER[3], "weapon-side", 3),
-    (WALL_VOUCHER[2], "wall-front", 2),
     (VOUCHER[2], "weapon-corner", 2),
+)
+
+#: 围墙券的优先级：正面列那一列墙 L1→2 → L2→3。**归修墙工**（第 2.5 级那条差事），不在券链里：
+#: 券链是开拓者与工人共用的，而开拓者买到的墙券在炮位上花不掉（`day._use_voucher_here` 只管武器券）、
+#: 还会把他从岗位拽去墙边；修墙工本来就守那一列，买、用、修走同一趟路。
+WALL_CHAIN = (
+    (WALL_VOUCHER[2], "wall-front", 2),
     (WALL_VOUCHER[3], "wall-front", 3),
 )
 
-#: 链上出现过的券名（按优先级去重）—— 扫"手里有没有券"用它（`VOUCHER_CHAIN` 是步骤表，
+#: 两条链上出现过的券名（按优先级去重）—— 扫"手里有没有券"用它（链是步骤表，
 #: 逐条取 `step[0]` 会把整条元组当键，一张券都认不出来）。
 VOUCHER_NAMES = tuple(dict.fromkeys(step[0] for step in VOUCHER_CHAIN))
+WALL_VOUCHER_NAMES = tuple(dict.fromkeys(step[0] for step in WALL_CHAIN))
+
+
+#: 正面列（面向机器人的那一竖排）有几格 = `wall_cells` 的前几格（正面列排第一位）。
+FRONT_WALLS = 6
+
+
+def front_wall_cells(turn: Turn) -> tuple[Pos, ...]:
+    """正面列那 6 格 —— 券链给它们升级、夜里守着它们修。基地没了 ⇒ 空元组。"""
+    station = turn.map.station
+    if station is None:
+        return ()
+    return wall_cells(station, turn.map.size[0])[:FRONT_WALLS]
+
+
+def _wall_post(turn: Turn, role: BaseRole) -> Pos | None:
+    """正面墙**靠基地那一列**里的待命位：夜里修墙工守着的格，也是白天回待命位的目标。
+
+    取"到最远那格最近 → 邻接最多 → 坐标序"（左半基地 ⇒ `(12,23)`：中段一格零步够着 3 格正面墙，
+    两个角格要 1–3 步）。候选全被占 / 出图 ⇒ `None`。⚠️ 判据要**把自己脚下那格除外**
+    （`blocked` 里混着我方角色）：不除外就会把自己站着的格子判成"不可站"，每回合往旁边挪一格、
+    永远来回晃。每回合现算，不带跨回合状态。"""
+    front = front_wall_cells(turn)
+    station = turn.map.station
+    if not front or station is None:
+        return None
+    # 靠基地那一列：正面列在基地的哪一侧，就往回退一格
+    back = front[0].x - (1 if front[0].x > station.x else -1)
+    width, height = turn.map.size
+    blocked = turn.map.blocked - {role.pos}
+    cells = {
+        Pos(back, y)
+        for y in range(min(f.y for f in front) - 1, max(f.y for f in front) + 2)
+        if 0 <= back < width and 0 <= y < height and Pos(back, y) not in blocked
+    }
+    if not cells:
+        return None
+    return min(
+        cells,
+        key=lambda p: (max(p.dist(f) for f in front), -sum(1 for f in front if p.dist(f) <= 1), p),
+    )
 
 
 class _Move(NamedTuple):

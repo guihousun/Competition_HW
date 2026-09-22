@@ -56,11 +56,11 @@ class Weapon(NamedTuple):
 
 
 class Wall(NamedTuple):
-    """我方一座围墙实体，拆墙与升级两条线的判据来源。
+    """我方一座围墙实体，修墙 / 拆墙 / 升级三条线的判据来源。
 
-    `health` 是拆墙判据（`day._weak_l1`：L1 且 < `WEAK_WALL_HP` ⇒ 拆了重砌）；`level` 是升级
-    判据（券只能打在低一级的墙上）。已毁（health == 0）的在 `model._walls` 就丢掉 ——
-    那是一格缺口，归 `_ring` 管。"""
+    `health` 是"动不动它"的判据（`core.needs_repair`：血 < `WALL_REPAIR_HP` ⇒ 白天拆了重砌、
+    夜里用修复包回满）；`level` 是升级判据（券只能打在低一级的墙上）。已毁（health == 0）的在
+    `model._walls` 就丢掉 —— 那是一格缺口，归 `_ring` 管。"""
 
     id: int
     pos: Pos
