@@ -3,6 +3,7 @@ from collections import deque
 from copy import deepcopy
 
 from . import frontline, strategy_config
+from .home_defense import inside as home_inside
 from .protocol import Pos, distance, move_command
 
 
@@ -111,16 +112,21 @@ class Frame:
         if len(recent)<need or any(r is None for r in recent):return False
         goal=self.goals.get(role.unit_id)
         if goal is None or any(r.get('goal')!=goal[0].dump() for r in recent):return False
-        if any((r['round']-1)//130!=(self.turn.round_no-1)//130 or (r['round']-1)%130>=70 for r in rows[-need:]):return False
+        current_night = (self.turn.round_no - 1) % 130 >= 70
+        if any((r['round'] - 1) // 130 != (self.turn.round_no - 1) // 130
+               or (((r['round'] - 1) % 130 >= 70) != current_night)
+               for r in rows[-need:]):
+            return False
         if any(r['action'] not in (None,'move') for r in recent):return False
         positions=[Pos.load(r['pos']) for r in recent]+[role.pos]
         return len(set(positions))==1 or (len(positions)>=4 and len(set(positions))==2 and positions[-1]==positions[-3])
 
     def recover(self,commands,protected=()):
         turn=self.turn
-        if (not self.enabled or not turn.is_day or (turn.round_no-1)%130+5>=self.deadline
-                or any(r.health>0 for r in turn.robots)
-                or any(u.health>0 and u.kind in ('worker','pioneer','rocket','railgun','gatling') for u in turn.enemies)):
+        if (not self.enabled or turn.station() is None
+                or (turn.is_day and (turn.round_no-1)%130+5>=self.deadline)
+                or (turn.is_day and any(r.health>0 for r in turn.robots))
+                or (turn.is_day and any(u.health>0 and u.kind in ('worker','pioneer','rocket','railgun','gatling') for u in turn.enemies))):
             return
         for role in turn.workers():
             request=self.goals.get(role.unit_id)
@@ -128,6 +134,11 @@ class Frame:
                     or commands.get(role.unit_id,{}).get('action') not in (None,'move')):continue
             target,inside_only=request
             if inside_only:continue
+            # Night recovery is only for a worker that is outside and has
+            # repeatedly failed to advance toward the base. It may open a
+            # removable flank wall; front-six protection below still applies.
+            if not turn.is_day and home_inside(turn, role.pos):
+                continue
             blocked=turn.blocked(role)
             from . import rocket_post
             reserved_post=rocket_post.common_cells(turn)[0] if self.single and role.unit_id!=turn.workers()[0].unit_id else set()
@@ -172,7 +183,12 @@ class Frame:
                 opened=blocked-{wall.pos}
                 after_goals={p for p in neighbours(target) if turn.land(p) and p not in opened and p not in claimed}
                 route=path(turn,role.pos,after_goals,opened|claimed)
-                if route and len(route)>1 and len(route)+1<=self.deadline-(turn.round_no-1)%130:
+                # A night escape is an emergency action: the worker is already
+                # outside the ring, so the daytime return deadline must not
+                # suppress opening a safe flank. Daytime recovery keeps the
+                # configured deadline guard.
+                budget = 10 ** 6 if not turn.is_day else self.deadline - (turn.round_no - 1) % 130
+                if route and len(route)>1 and len(route)+1<=budget:
                     options.append((wall.level,wall.health,len(route),wall.unit_id,wall.pos))
             if options:
                 at=min(options)[-1]

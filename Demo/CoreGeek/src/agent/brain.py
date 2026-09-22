@@ -2277,6 +2277,9 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
             continue
         if (confine and turn.station() is not None and not home_defense.inside(turn, worker.pos)
                 and worker.unit_id not in extra_work and worker.unit_id not in commands):
+            traffic_frame = _TRAFFIC.get()
+            if traffic_frame is not None and traffic_frame.turn is turn:
+                traffic_frame.goal(worker, turn.station().pos, False)
             outside_workers.add(worker.unit_id)
             step = home_defense.step_inside(turn, worker, claimed=claimed)
             if step is not None:

@@ -8,7 +8,7 @@ from copy import deepcopy
 from test_coordination import unit
 from test_defense_layout import board, REPORTED, MIRROR
 from test_nightwork import board as quiet_board
-from agent import brain, defense_layout, home_defense, nightwork, upgrade_itinerary
+from agent import brain, defense_layout, home_defense, nightwork, upgrade_itinerary, traffic, strategy_config
 from agent.protocol import Turn, Pos, Unit, distance
 
 
@@ -22,6 +22,31 @@ def battle():
 
 
 class FrontWallTests(LegacyStrategyCase):
+    def test_night_stalled_worker_opens_a_nonfront_wall(self):
+        p = board(towers=[], walls=[(7, 22)], round_no=204)
+        worker = next(u for u in p['teamOur']['roles'] if u['roleType'] == 'worker')
+        worker['pos'] = {'x': 6, 'y': 22}
+        turn = Turn.load(p)
+        role = turn.workers()[0]
+        memory = {'last_round': 203,
+                  'board': [turn.width, turn.height, turn.station().pos.x, turn.station().pos.y],
+                  'openings': [], 'walls': {},
+                  'history': [{'round': n, 'roles': {str(role.unit_id): {
+                      'pos': {'x': 6, 'y': 22}, 'goal': {'x': 9, 'y': 22}, 'action': 'move'}}}
+                              for n in (201, 202, 203)]}
+        config = deepcopy(strategy_config.DEFAULTS)
+        config['enabled'] = True
+        with patch.object(strategy_config, 'get', return_value=config):
+            frame = traffic.Frame(turn, memory)
+            frame.goal(role, turn.station().pos, False)
+            commands = {}
+            with patch('agent.traffic.path', side_effect=lambda _t, start, goals, blocked:
+                       None if Pos(7, 22) in blocked else [start, next(iter(goals))]):
+                frame.recover(commands)
+        self.assertEqual(commands[role.unit_id]['action'], 'remove')
+        self.assertEqual(commands[role.unit_id]['targetPos'], [{'x': 7, 'y': 22}])
+        self.assertEqual(frame.events[-1]['reason'], 'open_nonfront_route')
+
     def test_both_forward_halves_before_rear_halves_mirrored(self):
         for base in (REPORTED, MIRROR):
             turn = Turn.load(board(base=base))
