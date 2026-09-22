@@ -1,5 +1,5 @@
 {
-  "commit": "46494b0bf84781dccd5caadf36056a1e9e357ca8",
+  "commit": "6b098f212add0564a5cbfc0c2ea4ac203a0d2433",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -296,9 +296,9 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 12507,
+      "bytes": 12481,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/strategy_config.py",
-      "sha256": "54d46ecd611b79d6d996e3c389c28ce62a6025b32c68ba93c86442188f2c17b3",
+      "sha256": "01486f587bd1cfaf77113b6c1cd905d95eedbbf89092a9082bed315d72f4966e",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -843,10 +843,10 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 12507,
+      "bytes": 12481,
       "generated": true,
       "path": "CoreGeek/src/agent/strategy_config.py",
-      "sha256": "54d46ecd611b79d6d996e3c389c28ce62a6025b32c68ba93c86442188f2c17b3",
+      "sha256": "01486f587bd1cfaf77113b6c1cd905d95eedbbf89092a9082bed315d72f4966e",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -1137,5 +1137,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "d4b3493e0d008adfe2a814856cf3eafe7b9cdbc08f20bf9954089c1267b1f904"
+  "source_digest": "2d9890fd05f229e9123702cbef1844defc5f8b5c9b33000343f2c24c190b835c"
 }
