@@ -273,28 +273,43 @@ class NightWeaponTest(unittest.TestCase):
         cmd = self._only_cmd(self._manned(Robot(Pos(12, 27), 40), kind="railgun", level=3))
         self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 27}])
 
-    def test_a_level_two_gun_is_worth_twice_the_damage(self):
-        """升级后伤害翻倍（每级 +10），挑目标要按新伤害算。
+    def test_a_level_two_gun_splits_its_two_shots(self):
+        """等级放的是**子弹数**（每颗 10 点，不是"一发 20 点"）⇒ L2 把两颗分给两台。
 
-        例：(13,25) 15 血（距 1）与 (15,25) 40 血（距 3）都够得着 —— L1 各值 10 点、并列取近，
-        打残血的；L2 前者仍只值 15 点、后者值满 20 点，转打满血的。
+        例：(13,25) 15 血（距 1）与 (14,26) 40 血（距 2、**不在同一条弹道上**）都够得着 ——
+        L1 一颗、各值 10 点、并列取近 ⇒ 打残血的；L2 第一颗仍打残血的（打成 5 血），第二颗
+        它只吸收得下 5 点、满血那台吸收得下 10 点 ⇒ 转打满血的。
+        ⚠️ 同一直线上的两台不能这么算：子弹被前面那台吃掉（`_first_on_line`）。
         """
-        near, far = Robot(Pos(13, 25), 15), Robot(Pos(15, 25), 40)
+        near, far = Robot(Pos(13, 25), 15), Robot(Pos(14, 26), 40)
         self.assertEqual(
             self._only_cmd(self._manned(near, far))["targetPos"], [{"x": 13, "y": 25}], "L1：并列取近"
         )
         self.assertEqual(
             self._only_cmd(self._manned(near, far, level=2))["targetPos"],
-            [{"x": 15, "y": 25}, {"x": 15, "y": 25}],
-            "L2：15 血那只吸收不完 20 点伤害",
+            [{"x": 13, "y": 25}, {"x": 14, "y": 26}],
+            "L2：第一颗补残血、第二颗转满血那台",
         )
 
-    def test_a_level_two_rocket_is_worth_twice_the_splash(self):
-        """火箭的导弹数 = 等级 ⇒ 中心/溅射都按等级翻倍（L2 两枚 = 40/20），评分跟着变。
+    def test_a_bullet_is_eaten_by_the_nearest_robot_on_its_line(self):
+        """子弹沿弹道飞、命中**最近**那台即消耗（任务书 L250）⇒ 同一直线上，后面那台打不到。
 
-        例：(13,25) 15 血与 (13,26) 15 血挨在一起（L1 吃 15+10=25 分），另一台 40 血在 (9,22)
-        （L1 只值 20 分）⇒ L1 打那簇残血的；L2 时那簇被血量封顶只值 30 分、满血那台值满 40 分
-        ⇒ 转打满血的（两枚都砸它 = 一炮带走）。
+        (13,25) 与 (15,25) 都在炮位 (12,25) 的横线上：两颗子弹都只能落在那条线上，
+        挨着的 (13,25) 先吃 —— 第二颗也只值 5 分（它只剩 5 血），不会去够后面那台。
+        """
+        near, far = Robot(Pos(13, 25), 15), Robot(Pos(15, 25), 40)
+        self.assertEqual(
+            self._only_cmd(self._manned(near, far, level=2))["targetPos"],
+            [{"x": 13, "y": 25}, {"x": 13, "y": 25}],
+            "挡在前面的那台没死之前，后面那台一颗都吃不到",
+        )
+
+    def test_a_level_two_rocket_finishes_the_cluster_then_moves_on(self):
+        """火箭的等级放的是**导弹枚数**（每枚中心 20 / 溅射 10）⇒ 逐枚重算，不把两枚砸在同一个点上。
+
+        例：(13,25) 15 血与 (13,26) 15 血挨在一起（一枚 L1 吃 15+10=25 分），另一台 40 血在 (9,22)
+        （只值 20 分）⇒ L1 打那簇残血的；L2 第一枚把 (13,25) 打死、(13,26) 只剩 5 血，第二枚
+        打它只值 5 分、打满血那台值 20 分 ⇒ 第二枚转打满血的。
         """
         cluster = (Robot(Pos(13, 25), 15), Robot(Pos(13, 26), 15))
         lone = Robot(Pos(9, 22), 40)  # 簇离它切比雪夫 4 ⇒ 没有落点能同时吃到两边
@@ -307,9 +322,100 @@ class NightWeaponTest(unittest.TestCase):
         night._fired.clear()
         self.assertEqual(
             self._only_cmd(self._manned(*cluster, lone, kind="rocket", level=2))["targetPos"],
-            [{"x": 9, "y": 22}, {"x": 9, "y": 22}],
-            "L2：满血那台吸收得完 40 点",
+            [{"x": 13, "y": 25}, {"x": 9, "y": 22}],
+            "L2：第一枚收掉那簇，第二枚别再砸在只剩 5 血的那台上",
         )
+
+    def test_the_lowest_tier_is_worth_the_most(self):
+        """低级优先（用户口径"优先攻击最低级的机器人"）：有效伤害并列时挑最低级的 —— 即使它更远。
+
+        (13,25) 是 BOSS（更近、距 1），(14,26) 是小型（距 2）：一颗子弹各值 10 点，权重 4 : 1
+        ⇒ 打小型。没有权重表时这里会按"并列取近"打 BOSS。
+        """
+        boss = Robot(Pos(13, 25), 800, kind="bossRobot")
+        small = Robot(Pos(14, 26), 40, kind="smallRobot")
+        cmd = self._only_cmd(self._manned(boss, small))
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}], "并列时挑最低级的")
+
+    def test_a_robot_without_a_kind_is_still_shot_at(self):
+        """`roleType` 缺失 ⇒ 当最低级（照打，不静默少打）：并列时挑那台没种类的。"""
+        boss = Robot(Pos(13, 25), 800, kind="bossRobot")
+        unknown = Robot(Pos(14, 26), 40)
+        cmd = self._only_cmd(self._manned(boss, unknown))
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}])
+
+    def test_the_three_missiles_spread_over_three_finishable_targets(self):
+        """一枚一枚地挑：三只 20 血小型各挨一枚就死 ⇒ 三枚分点 = 60 点有效伤害；
+        同点砸一只只有 20 点（另两枚打空）。这就是 `targetPos` 多格的价值。"""
+        gun = Weapon(
+            id=self.GUN, kind="rocket", pos=Pos(13, 23), attack_range=99, cooldown=-1, level=3
+        )
+        robots = tuple(Robot(Pos(20, y), 20, kind="smallRobot") for y in (15, 23, 31))
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(13, 22)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(
+            cmd["targetPos"], [{"x": 20, "y": 15}, {"x": 20, "y": 23}, {"x": 20, "y": 31}]
+        )
+
+    def test_the_two_missiles_focus_when_that_damages_more(self):
+        """该集火时集火：两只 40 血小型挨得近（溅射互相吃到）⇒ 两枚砸同一格（20+20 中心 +
+        溅射）比各打一枚更值。逐枚贪心两种都出得来，不是"无脑摊开"。"""
+        gun = Weapon(
+            id=self.GUN, kind="rocket", pos=Pos(13, 23), attack_range=99, cooldown=-1, level=2
+        )
+        robots = (Robot(Pos(20, 23), 40, kind="smallRobot"), Robot(Pos(20, 24), 40, kind="smallRobot"))
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(13, 22)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["targetPos"], [{"x": 20, "y": 23}, {"x": 20, "y": 23}], "簇里叠加")
+
+    def test_opposite_targets_collapse_to_one_cell(self):
+        """两台在炮位两侧（夹角 180°）⇒ 第二颗**不许**另开一格：整次攻击非法比少打一发严重得多。
+
+        （任务书 L250：任意两个目标相对加特林的夹角 > 90° ⇒ 整次攻击非法。）
+        第二颗本来更想打右边那台满血的（10 分 > 左边只剩 5 分的 5 分），但那样就出了锥形
+        ⇒ 退回同格（`targetPos` 的个数仍等于等级）。
+        """
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=2
+        )
+        robots = (Robot(Pos(11, 25), 15, kind="smallRobot"), Robot(Pos(14, 25), 40, kind="smallRobot"))
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["targetPos"], [{"x": 11, "y": 25}, {"x": 11, "y": 25}], "退回同格补齐")
+
+    def test_every_volley_stays_inside_the_cone(self):
+        """产出的任何一波都过锥形自查（≤45°，比任务书的 90° 更严）—— 这是红线边上那一条。"""
+        boards = [
+            (Pos(12, 25), (Robot(Pos(15, 24), 40), Robot(Pos(15, 26), 40))),
+            (Pos(12, 25), (Robot(Pos(11, 25), 40), Robot(Pos(13, 25), 40))),
+            (
+                Pos(12, 25),
+                (Robot(Pos(14, 26), 10), Robot(Pos(15, 25), 10), Robot(Pos(13, 27), 10)),
+            ),
+        ]
+        for pos, robots in boards:
+            gun = Weapon(id=self.GUN, kind="gatling", pos=pos, attack_range=9, cooldown=-1, level=3)
+            targets = night._volley(gun, robots, (41, 32))
+            self.assertTrue(night._in_cone(pos, targets), f"{pos} {robots} ⇒ {targets} 出了锥形")
+        self.assertTrue(night._in_cone(Pos(12, 25), (Pos(15, 24), Pos(15, 26))), "同侧约 37°")
+        self.assertFalse(night._in_cone(Pos(12, 25), (Pos(13, 25), Pos(11, 25))), "两侧 180°")
+        self.assertFalse(night._in_cone(Pos(12, 25), (Pos(13, 25), Pos(12, 26))), "正好 90° 也不赌")
+
+    def test_the_railgun_aims_through_a_line_of_targets(self):
+        """电磁沿弹道穿透（任务书 L252）：能量够时打**穿**一串比只打前排值 ⇒ 瞄线的远端。
+
+        三台里两台 10 血小型在横线上、一台 BOSS 在竖线上（L3 能量 30）：瞄 (16,25) 吃到
+        10+10 两台的伤害（80 分），瞄 (15,25) 只吃到它自己（40 分），瞄 BOSS 是 30 点 ×1（30 分）。
+        """
+        gun = Weapon(
+            id=self.GUN, kind="railgun", pos=Pos(12, 25), attack_range=10, cooldown=-1, level=3
+        )
+        robots = (
+            Robot(Pos(15, 25), 10, kind="smallRobot"),
+            Robot(Pos(16, 25), 10, kind="smallRobot"),
+            Robot(Pos(12, 20), 800, kind="bossRobot"),
+        )
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["targetPos"], [{"x": 16, "y": 25}], "瞄线的远端，把两台都穿上")
 
     def test_a_cooling_rocket_holds_fire(self):
         """火箭发射台发射后有 3 回合空窗（`cooldown`）⇒ 冷却中一炮不发，

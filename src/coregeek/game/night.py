@@ -42,13 +42,22 @@ from .utils import _passable
 from .world import ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon
 
 
-#: 三种武器的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；电磁能量 10（沿弹道
-#: 穿透、逐台扣减）；火箭中心 20、落点周围 8 格溅射 10。每升一级多发一份（个数 = 等级，见
-#: `_fire`；电磁恒 1 个目标但能量翻倍）。机器人血量 40+ 全都 ≥ 20 ⇒ 一发不过量。
+#: 三种武器**每发/每枚**的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；火箭中心 20、
+#: 落点周围 8 格溅射 10；电磁能量 10（沿弹道穿透、逐台扣减）。等级放的是**发数/枚数** ——
+#: `targetPos` 的个数 = 等级（接口文档 L218），多发可以打**不同**的格子（任务书 §4.5.1 L250–254），
+#: 挑谁见 `_volley`；电磁是唯一单发武器，等级翻的是能量（10/20/30）。
 GATLING_SHOT = 10
 RAILGUN_ENERGY = 10
 ROCKET_CENTER = 20
 ROCKET_SPLASH = 10
+
+
+#: 打谁更值钱的权重（用户口径"优先攻击最低级的机器人"）：低级机器人每点伤害更值钱 ——
+#: 小型 40 血/5 攻击、中型 60/10、大型 500/20、BOSS 800/40（任务书 §4.7.2）⇒ 打死小型的
+#: 性价比最高。**只影响挑目标，不影响报文形状**；`kind` 缺失（空串）⇒ 当最低级（照打）。
+#: ⚠️ 4/3/2/1 是拍的（见 `code-task.md` 本步的不确定性）。
+TIER_VALUE = {"smallRobot": 4, "middleRobot": 3, "largeRobot": 2, "bossRobot": 1}
+UNKNOWN_VALUE = 4
 
 
 #: 本地开火账（跨回合观测状态）：{武器 id: 发出 attack 的回合号}。判题器不发 cooldown 字段
@@ -352,89 +361,200 @@ def _foe_robots(turn: Turn) -> tuple[Robot, ...]:
 
 
 def _fire(role: BaseRole, weapon: Weapon, turn: Turn, cmds: dict[str, dict[str, Any]]) -> bool:
-    """贴着炮了：按最大伤害落点开火。打不了就什么都不发。
+    """贴着炮了：算出这一炮的 `targetPos` 列表开火。打不了就什么都不发。
 
     `targetPos` 的个数必须等于武器等级（接口文档 L218，多一个少一个都是指令非法）：电磁恒 1、
-    加特林/火箭 = 等级数，多发全指同一个最优落点。火箭（`_rocket_site`）落点任选、中心 +
-    溅射全场算账；加特林/电磁（`_beam_site`）落点打在某台身上（终点必在弹道 ⇒ 必命中），
-    取有效伤害最高的、并列打近的。只打打我方的（`_foe_robots`）。一个炮手一回合只发一座
-    ⇒ 没有"同回合两座挤同一个将死者"这回事，不需要跨炮的伤害记账。"""
+    加特林/火箭 = 等级数。**多发可以打不同的格子**（任务书 §4.5.1 L250–254：每颗子弹沿自身
+    落点的弹道、每枚导弹各自算中心与溅射）⇒ 由 `_volley` 逐发挑目标，该分点分点、该叠加叠加。
+    只打打我方的（`_foe_robots`）。一个炮手一回合只发一座 ⇒ 没有"同回合两座挤同一个将死者"
+    这回事，不需要跨炮的伤害记账。"""
     if _cooling(weapon, turn.round_no):
         return False
     foes = _foe_robots(turn)
     if not foes:
         return False
-    if weapon.kind == "rocket":
-        target = _rocket_site(weapon, foes, turn.map.size)
-        if target is None:
-            return False
-    else:
-        victim = _beam_site(weapon, foes)
-        if victim is None:
-            return False
-        target = victim.pos
-    count = 1 if weapon.kind == "railgun" else weapon.level
+    targets = _volley(weapon, foes, turn.map.size)
+    if not targets:
+        return False
     # key 是武器 id，操控角色在报文的 `controllerId` 里
-    fired = _emit(
-        cmds, role, actions.Attack, str(role.id), (target,) * count, key=str(weapon.id)
-    )
+    fired = _emit(cmds, role, actions.Attack, str(role.id), targets, key=str(weapon.id))
     if fired and weapon.kind == "rocket":
         _fired[weapon.id] = turn.round_no  # 判题器不发 cooldown ⇒ 发出的那发自己记
     return fired
 
 
-def _beam_damage(weapon: Weapon) -> int:
-    """加特林/电磁这一炮打在一个落点上的总伤害：每级 +10（份数 = 等级）。只用来挑目标与
-    记账，实际命中由判题器算。"""
-    base = GATLING_SHOT if weapon.kind == "gatling" else RAILGUN_ENERGY
-    return base * weapon.level
+def _value(robot: Robot) -> int:
+    """这台机器人值多少（`TIER_VALUE`）：等级越低越优先。种类缺失 ⇒ 当最低级。"""
+    return TIER_VALUE.get(robot.kind, UNKNOWN_VALUE)
 
 
-def _rocket_damage(weapon: Weapon) -> tuple[int, int]:
-    """火箭这一炮的 `(中心, 溅射)` 伤害：导弹数 = 等级、同落点叠加 ⇒ 每级 +20 / +10。"""
-    return ROCKET_CENTER * weapon.level, ROCKET_SPLASH * weapon.level
+def _score(hits: list[tuple[Robot, int]]) -> int:
+    """一组命中值多少分：`min(伤害, 剩余血) × 权重` 之和（过量伤害不计分）。"""
+    return sum(damage * _value(robot) for robot, damage in hits)
 
 
-def _beam_site(weapon: Weapon, robots: tuple[Robot, ...]) -> Robot | None:
-    """加特林/电磁的目标：有效伤害最高的那台（并列打近的、再并列按坐标序）。
-
-    "有效伤害" = min(伤害, 剩余血)：差别只在将死者 —— 别把整发浪费在已被打得差不多的人
-    身上。够得着的目标全是将死的（有效 ≤ 0）⇒ 不打。"""
-    shot = _beam_damage(weapon)
-
-    def effective(r: Robot) -> int:
-        return min(shot, max(0, r.health))
-
-    reach = [r for r in _alive(robots) if weapon.pos.dist(r.pos) <= weapon.attack_range]
-    best = max(reach, key=lambda r: (effective(r), -weapon.pos.dist(r.pos), r.pos), default=None)
-    return best if best is not None and effective(best) > 0 else None
+def _volley(weapon: Weapon, robots: tuple[Robot, ...], size: tuple[int, int]) -> tuple[Pos, ...]:
+    """这一炮的 `targetPos`（个数 = 等级；电磁恒 1）。一个目标都够不着 ⇒ 空元组（不打）。"""
+    if weapon.kind == "rocket":
+        return _rocket_volley(weapon, robots, size)
+    if weapon.kind == "gatling":
+        return _gatling_volley(weapon, robots)
+    return _railgun_volley(weapon, robots)
 
 
-def _rocket_site(
+def _blast(cell: Pos, robots: tuple[Robot, ...], hp: dict[Pos, int]) -> list[tuple[Robot, int]]:
+    """这一枚导弹落在 `cell` 上打中谁、各扣多少（中心 20、8 邻格溅射 10；按剩余血封顶）。"""
+    out = []
+    for r in robots:
+        damage = ROCKET_CENTER if cell == r.pos else ROCKET_SPLASH if cell.dist(r.pos) == 1 else 0
+        hit = min(damage, hp[r.pos])
+        if hit > 0:
+            out.append((r, hit))
+    return out
+
+
+def _rocket_volley(
     weapon: Weapon, robots: tuple[Robot, ...], size: tuple[int, int]
-) -> Pos | None:
-    """火箭的最大伤害落点：候选 = 机器人占的格及其 8 邻格（别的格子摸不到伤害），且落点
-    须在射程内 —— 溅射可以够到射程之外的机器人。评分 = Σ min(伤害, 剩余血)，并列取坐标
-    序最小（可复现）。越界格不进候选（越界落点 = 指令非法）。"""
+) -> tuple[Pos, ...]:
+    """火箭：**逐枚**挑"剩余有效伤害 × 权重"最大的落点，扣掉血再挑下一枚 —— 簇里叠加、
+    散开分点，两种都对（现在的多发同点只是前者的特例）。
+
+    候选 = 机器人格及其 8 邻格（别的格子摸不到伤害）∩ 射程内 ∩ 图内；越界落点 = 指令非法。
+    并列取坐标序最小（可复现）。全场都被这轮打死 ⇒ 后面几枚接着打第一枚那个点（个数必须补齐）。"""
     alive = _alive(robots)
-    center, splash = _rocket_damage(weapon)
     width, height = size
-    cands = {
-        cell
-        for r in alive
-        for cell in (r.pos, *(Pos(r.pos.x + d.x, r.pos.y + d.y) for d in STEPS))
-        if 0 <= cell.x < width and 0 <= cell.y < height
-    }
-
-    def score(cell: Pos) -> int:
-        return sum(
-            min(
-                center if cell == r.pos else splash if cell.dist(r.pos) == 1 else 0,
-                max(0, r.health),
-            )
+    cands = sorted(
+        {
+            cell
             for r in alive
-        )
+            for cell in (r.pos, *(Pos(r.pos.x + d.x, r.pos.y + d.y) for d in STEPS))
+            if 0 <= cell.x < width and 0 <= cell.y < height
+            and weapon.pos.dist(cell) <= weapon.attack_range
+        }
+    )
+    if not cands:
+        return ()
+    hp = {r.pos: max(0, r.health) for r in alive}
+    targets: list[Pos] = []
+    for _ in range(max(1, weapon.level)):
+        hits = {cell: _blast(cell, alive, hp) for cell in cands}
+        cell = min(cands, key=lambda c: (-_score(hits[c]), c))
+        if not _score(hits[cell]) and targets:
+            targets.append(targets[0])  # 都打死了 ⇒ 接着打第一枚那个点，别换空落点
+            continue
+        for robot, hit in hits[cell]:
+            hp[robot.pos] -= hit
+        targets.append(cell)
+    return tuple(targets)
 
-    in_range = [cell for cell in cands if weapon.pos.dist(cell) <= weapon.attack_range]
-    return min(in_range, key=lambda cell: (-score(cell), cell), default=None)
+
+def _gatling_volley(weapon: Weapon, robots: tuple[Robot, ...]) -> tuple[Pos, ...]:
+    """加特林：**逐颗**挑最值的目标格（子弹沿弹道飞，命中的是弹道上**最近**的那台）。
+
+    ⚠️ 多个落点必须落在**同一个 90° 锥形**内，否则**整次攻击非法**（任务书 L250）⇒ 自查按
+    **≤45°** 卡（`_in_cone`，整数判据）：任务书说 > 90° 才非法，取一半余量。加不进新目标就
+    用第一格补齐（同格夹角 0）—— 凑不满等级数也是非法。够得着的目标全是将死的（有效 ≤ 0）
+    ⇒ 不打。"""
+    level = max(1, weapon.level)
+    reach = [r for r in _alive(robots) if weapon.pos.dist(r.pos) <= weapon.attack_range]
+    if not reach:
+        return ()
+    hp = {r.pos: max(0, r.health) for r in reach}
+    targets: list[Pos] = []
+    for _ in range(level):
+        best: tuple[tuple[int, int, Pos], Pos, Robot] | None = None
+        for r in reach:
+            if hp[r.pos] <= 0:
+                continue  # 这一轮之前就被打死了
+            victim = _first_on_line(weapon.pos, r.pos, reach)
+            if victim is None:
+                continue
+            hit = min(GATLING_SHOT, hp[victim.pos])
+            if hit <= 0:
+                continue
+            if targets and not _in_cone(weapon.pos, (*targets, r.pos)):
+                continue
+            key = (-hit * _value(victim), weapon.pos.dist(r.pos), r.pos)
+            if best is None or key < best[0]:
+                best = (key, r.pos, victim)
+        if best is None:
+            targets.append(targets[0] if targets else reach[0].pos)
+            continue
+        _key, cell, victim = best
+        hp[victim.pos] -= min(GATLING_SHOT, hp[victim.pos])
+        targets.append(cell)
+    return tuple(targets)
+
+
+def _railgun_volley(weapon: Weapon, robots: tuple[Robot, ...]) -> tuple[Pos, ...]:
+    """电磁：单目标（恒 1 格），挑"**沿弹道穿透**总和最值"的那一格 —— 等级翻的是能量
+    （10/20/30），能量沿弹道逐台扣减（任务书 L252），所以打穿一串比只打前排值。"""
+    energy = RAILGUN_ENERGY * max(1, weapon.level)
+    alive = _alive(robots)
+    aims = [r.pos for r in alive if weapon.pos.dist(r.pos) <= weapon.attack_range]
+    best = max(
+        aims,
+        key=lambda aim: (_score(_pierce(weapon.pos, aim, alive, energy)), Pos(-aim.x, -aim.y)),
+        default=None,
+    )
+    if best is None or _score(_pierce(weapon.pos, best, alive, energy)) <= 0:
+        return ()
+    return (best,)
+
+
+def _pierce(origin: Pos, aim: Pos, robots: tuple[Robot, ...], energy: int) -> list[tuple[Robot, int]]:
+    """能量沿 `origin`→`aim` 穿透：共线的那几台按距离排队，各吃 `min(剩余能量, 血)`。
+    已毁 / 血量未知（吸收 0）的照旧穿过去、不耗能量。"""
+    line = sorted(
+        (r for r in robots if _collinear(origin, aim, r.pos)),
+        key=lambda r: (r.pos.x - origin.x) ** 2 + (r.pos.y - origin.y) ** 2,
+    )
+    out: list[tuple[Robot, int]] = []
+    left = energy
+    for robot in line:
+        hit = min(left, max(0, robot.health))
+        if hit <= 0:
+            continue
+        out.append((robot, hit))
+        left -= hit
+        if left <= 0:
+            break
+    return out
+
+
+def _first_on_line(origin: Pos, aim: Pos, robots: tuple[Robot, ...]) -> Robot | None:
+    """从 `origin` 射向 `aim` 的弹道上**最近**的那台机器人（子弹命中它即消耗）。
+
+    只认格心**共线**的那些：判题器怎么栅格化这条线没有文档 ⇒ 只算"保证在线上"的，少算不多算
+    （算漏的后果只是这发打在了一台没预料到的机器人身上，仍然合法）。"""
+    return min(
+        (r for r in robots if _collinear(origin, aim, r.pos)),
+        key=lambda r: (r.pos.x - origin.x) ** 2 + (r.pos.y - origin.y) ** 2,
+        default=None,
+    )
+
+
+def _collinear(a: Pos, b: Pos, p: Pos) -> bool:
+    """`p` 的格心是否落在 `a`→`b` 这条**线段**上（含端点）：整数叉积为 0 且在包围盒内。"""
+    if (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) != 0:
+        return False
+    return min(a.x, b.x) <= p.x <= max(a.x, b.x) and min(a.y, b.y) <= p.y <= max(a.y, b.y)
+
+
+def _in_cone(origin: Pos, cells: tuple[Pos, ...]) -> bool:
+    """这些落点相对炮位是否都落在同一个 90° 锥形内（任务书 L250）。
+
+    ⚠️ 按 **≤45°** 自查：整数判据 `dot > 0` 且 `2·dot² ≥ |a|²·|b|²`（等价于 `0 < cos²` 且
+    `cos² ≥ 1/2`）—— 少了 `dot > 0` 那半边，135°–180° 的钝角会因为 cos² 很大被放过。
+    不用浮点、与坐标轴方向无关（镜像不改变夹角）。同格（模长 0）视为夹角 0，恒合法。"""
+    for i, a in enumerate(cells):
+        for b in cells[i + 1 :]:
+            va, vb = (a.x - origin.x, a.y - origin.y), (b.x - origin.x, b.y - origin.y)
+            na, nb = va[0] ** 2 + va[1] ** 2, vb[0] ** 2 + vb[1] ** 2
+            if na == 0 or nb == 0:
+                continue
+            dot = va[0] * vb[0] + va[1] * vb[1]
+            if dot <= 0 or 2 * dot * dot < na * nb:
+                return False
+    return True
 

@@ -27,6 +27,9 @@ SUMMARY_MAX_ITEMS = 8
 #: 射程大到这个数就打成 `∞`（地图对角线约 52，比它大就是"够得着全图"）。
 UNLIMITED_RANGE = 100
 
+#: 摘要里机器人种类的缩写（`roleType` 太长；掉血之后血量认不出是哪一档，而"打谁"按档排）。
+ROBOT_TAG = {"smallRobot": "s", "middleRobot": "m", "largeRobot": "L", "bossRobot": "B"}
+
 
 def _listed(items: tuple[Any, ...], fmt: Callable[[Any], str], sep: str = " ") -> str:
     """逐项 `fmt` 后用 `sep` 连起来，超过 `SUMMARY_MAX_ITEMS` 只报个数。
@@ -83,14 +86,17 @@ class Error(NamedTuple):
 
 
 class Robot(NamedTuple):
-    """一台机器人。只留用得上的字段：打谁只看血量 + 是否打我方。
+    """一台机器人。只留用得上的字段：打谁看**种类（等级）**+ 血量 + 是否打我方。
 
+    `kind` = `roleType`（`smallRobot` / `middleRobot` / `largeRobot` / `bossRobot`）—— 打谁先打谁
+    按它排（低级优先，权重表在 `night.TIER_VALUE`）；字段缺失给空串 ⇒ 当成最低级（照打）。
     `target_team` = 该机器人打哪一队，用于过滤不打我们的机器人 —— 火箭射程远，打对方的
     机器人既浪费火力、又帮对方减轻基地压力。字段缺失给空串 ⇒ 当成打我们的（安全降级）。"""
 
     pos: Pos
     health: int
     target_team: str = ""
+    kind: str = ""
 
 
 class Turn(NamedTuple):
@@ -202,7 +208,8 @@ class Turn(NamedTuple):
             )
 
         def robot(b: Robot) -> str:
-            return f"({b.pos.x},{b.pos.y})h{b.health}"
+            # 种类也打（一个字母）：机器人掉血之后 `h` 认不出它是哪一档，而"打谁"正是按档排的
+            return f"({b.pos.x},{b.pos.y}){ROBOT_TAG.get(b.kind, '?')}h{b.health}"
 
         def point(p: Pos) -> str:
             return f"({p.x},{p.y})"

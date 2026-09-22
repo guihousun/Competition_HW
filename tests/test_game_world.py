@@ -60,7 +60,10 @@ class TurnSummaryTest(unittest.TestCase):
                 # 火箭刚打完一发，样例里没有 `cooldown` 字段 ⇒ 这一条只能合成
                 Weapon(10040, "rocket", Pos(9, 25), 2**31 - 1, 3),
             ),
-            robots=(Robot(Pos(4, 4), 40), Robot(Pos(5, 5), 800)),
+            robots=(
+                Robot(Pos(4, 4), 40, kind="smallRobot"),
+                Robot(Pos(5, 5), 800, kind="bossRobot"),
+            ),
             task_points=(Pos(14, 14), Pos(17, 17)),
         )
         lines = _blocks(turn.summary())
@@ -75,7 +78,7 @@ class TurnSummaryTest(unittest.TestCase):
             "【我方】 10010 worker(5,23)石1铁0铜0 ｜ 10012 worker(10,16)石1铁0铜0"
             " ｜ 10011 pioneer(10,12)石0铁0铜0",
         )
-        self.assertEqual(lines[2], "【机器】 2 台：(4,4)h40 (5,5)h800")
+        self.assertEqual(lines[2], "【机器】 2 台：(4,4)sh40 (5,5)Bh800")
         self.assertEqual(lines[3], "【可接任务点】 (14,14) (17,17)")
 
     def test_an_empty_turn_still_prints_every_block(self):
