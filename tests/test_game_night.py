@@ -947,6 +947,26 @@ class WallRepairTest(unittest.TestCase):
         high = plan(self._night(worker, damaged={self.FRONT: (260, 3)}))
         self.assertNotIn("use", self._actions(high))
 
+    def test_a_wall_voucher_repairs_better_than_a_pack(self):
+        """手里有打得上的墙券 ⇒ 先打券（升级顺带回满血，比修复包更值）。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 2, "WallUpgradeVoucher1": 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}))
+        self.assertEqual(cmds["2"]["action"], "use")
+        self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1", f"有券先打券：{cmds}")
+
+    def test_the_pack_is_used_when_the_voucher_does_not_fit(self):
+        """券打不上这一档（L1 墙遇上二级券）⇒ 照旧用修复包，别把券白花掉。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 2, "WallUpgradeVoucher2": 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}))
+        self.assertEqual(cmds["2"]["action"], "use")
+        self.assertEqual(cmds["2"]["name"], WALL_FIXER, f"券打不上 ⇒ 用包：{cmds}")
+
+    def test_a_level_three_wall_never_spends_a_voucher(self):
+        """L3 到顶 ⇒ 没有"再升一级"的券可用，老老实实用包。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 2, "WallUpgradeVoucher2": 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (150, 3)}))
+        self.assertEqual(cmds["2"]["name"], WALL_FIXER, f"到顶了 ⇒ 用包：{cmds}")
+
     def test_the_lowest_wall_goes_first(self):
         """两格都够格：先修血最少的那格（并列才比坐标）。"""
         worker = Worker(2, self.POST, {WALL_FIXER: 1})
