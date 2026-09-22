@@ -411,7 +411,7 @@ class ChatPromptTest(unittest.TestCase):
         都没有，只是分数低（日志上数 `executeCmd` 的条数才看得出来）。
 
         第 133 步用户把两段描述压成散文：条目符号与标题没了，四条性质逐条改钉新措辞。
-        第 169 步把整段按题目重排成五段（用途 / 成本 / 回执纪律 / Python 与 shell / 边界）——
+        第 173 步把整段按题目重排成五段（用途 / 成本 / 回执纪律 / Python 与 shell / 边界）——
         逐句追加了几轮之后段落已经分不清彼此，措辞随之微调，钉点同步换。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         tools = _section(system, "# 【工具描述】")
@@ -430,7 +430,7 @@ class ChatPromptTest(unittest.TestCase):
 
         沙盒那条通道我们控不住（命令是 LLM 写的、跑在判题器里）：回执照旧只有退出码与它
         自己打出来的那些字 —— 不点破这件事，它会把每条回执当成二元的"成 / 不成"，然后
-        换一个参数把同一条命令重写一遍（每次两个回合）。四条落点（第 169 步重排后分住两段：
+        换一个参数把同一条命令重写一遍（每次两个回合）。四条落点（第 173 步重排后分住两段：
         回执纪律 / Python 与 shell）：成败都要看得见、失败要打全原因（错误原文、出错的文件与
         行号）、Python 必须 try/except + 调用栈、**结果本来就会回到回执里 ⇒ 不计算就别套
         Python**（套一层只是多一道丢信息的关口 —— 要计算时才用它，且那份原始输出一并打出来）。
@@ -553,7 +553,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("不是只写改了哪儿", deposit)
 
     def test_the_deposit_rules_say_when_a_task_is_the_same_kind(self):
-        """判"同类"的判据（第 171 步，用户口径）：最终目标 / 核心流程 / 关键工具与环境 /
+        """判"同类"的判据（第 174 步，用户口径）：最终目标 / 核心流程 / 关键工具与环境 /
         要解决的核心问题 —— 而输入、对象、日期、ID、文件名、本次答案、某一步的参数值
         换一道题就会变，**不**该因此另起一条。
 
@@ -567,7 +567,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("不要因为多了点细节就另起一条", rules)
 
     def test_the_deposit_rules_split_what_generalizes_from_what_does_not(self):
-        """泛化 = 一张保留清单 + 一张删掉清单（第 171 步，用户口径）：正文写的是"以后遇到
+        """泛化 = 一张保留清单 + 一张删掉清单（第 174 步，用户口径）：正文写的是"以后遇到
         这一类任务该怎么解决"，不是"这一次我是怎么做的"。
 
         排除那一半收在"只对本次成立的取值 / 迁不到别的任务上的细节"上：裸的"路径 / 参数名"
@@ -581,7 +581,7 @@ class ChatPromptTest(unittest.TestCase):
             self.assertIn(drop, rules, f"删掉清单少了这条：{drop}")
 
     def test_the_deposit_rules_rank_the_sources_of_truth(self):
-        """信息五级（第 171 步，用户口径）：本次实测 > 已有 SOP 的历史验证 > 任务给的明确
+        """信息五级（第 174 步，用户口径）：本次实测 > 已有 SOP 的历史验证 > 任务给的明确
         事实 > 文档 > 推测 —— 只有前四类能进，推测一律不写。
 
         末位那条是整套排行的意义所在：不给它排序，"文档说 destination、实测是 from"这种
@@ -598,7 +598,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("以实测为准、把那一条完整重写", rules)
 
     def test_the_deposit_rules_carry_a_self_check(self):
-        """输出前自检（第 171 步，用户口径）：指令最后那一段，把"写之前再过一遍"压成几句
+        """输出前自检（第 174 步，用户口径）：指令最后那一段，把"写之前再过一遍"压成几句
         问话 —— 前四段的规则在这里各有一问，落笔那一刻再看一眼。
 
         自检里**不复述四栏栏名**：那会让栏名在同一份指令里出现第三、四处（规格一处 +

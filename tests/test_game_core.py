@@ -22,7 +22,7 @@ from coregeek.game.core import _collect, _expected_price, _priciest_ore  # noqa:
 from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.roles import Worker  # noqa: E402
-from coregeek.game.world import DAYS, ROUNDS_PER_DAY, Turn  # noqa: E402
+from coregeek.game.world import DAYS, ROUNDS_PER_DAY, Turn, Wall  # noqa: E402
 
 
 class PriciestOreTest(unittest.TestCase):
@@ -227,6 +227,50 @@ class NewsPriceTableTest(unittest.TestCase):
         with self.assertNoLogs("coregeek.game.core", level="INFO"):
             core.record_news(events, turn)
 
+
+class WallThresholdTest(unittest.TestCase):
+    """修墙 / 拆墙共用的那道血量线**随天数抬**（用户口径"机器人的进攻更猛了"）：
+
+    第 1–4 天 `WALL_REPAIR_HP`(200)，第 5 天起每天 +`WALL_REPAIR_HP_STEP`(50) ⇒ 第 5 天 250、
+    第 10 天 500。一个阈值两条线（白天 `day._weak_l1` 拆了重砌、夜里 `night.repair_wall` 用包
+    回满）⇒ 抬它会同时抬高两边。
+    """
+
+    BASE = Pos(10, 24)
+
+    def _turn(self, round_no: int) -> Turn:
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), {self.BASE: "station"}),
+            roles=(),
+            gold=0,
+            weapons=(),
+            robots=(),
+        )
+
+    def test_the_threshold_stands_still_for_the_first_four_days(self):
+        for day in (1, 4):
+            turn = self._turn((day - 1) * ROUNDS_PER_DAY + 1)
+            self.assertEqual(turn.day_no, day, "夹具的回合号该对得上第几天")
+            self.assertEqual(core.wall_repair_hp(turn), core.WALL_REPAIR_HP)
+
+    def test_the_threshold_climbs_from_the_fifth_day(self):
+        for day in (5, 6, 10):
+            turn = self._turn((day - 1) * ROUNDS_PER_DAY + 1)
+            self.assertEqual(turn.day_no, day)
+            self.assertEqual(
+                core.wall_repair_hp(turn),
+                core.WALL_REPAIR_HP + core.WALL_REPAIR_HP_STEP * (day - core.WALL_REPAIR_HP_FROM_DAY + 1),
+                f"第 {day} 天",
+            )
+
+    def test_needs_repair_follows_the_day(self):
+        """同一面 240 血的墙：第 4 天不碰、第 6 天该动（240 < 300）。血量未知（-1）永远不碰。"""
+        wall = Wall(40000, Pos(13, 23), 240, 1)
+        self.assertFalse(core.needs_repair(wall, self._turn(4 * ROUNDS_PER_DAY)), "第 4 天 240 > 200")
+        self.assertTrue(core.needs_repair(wall, self._turn(6 * ROUNDS_PER_DAY)), "第 6 天 240 < 300")
+        unknown = Wall(40001, Pos(13, 23), -1, 1)
+        self.assertFalse(core.needs_repair(unknown, self._turn(6 * ROUNDS_PER_DAY)))
 
 if __name__ == "__main__":
     unittest.main()
