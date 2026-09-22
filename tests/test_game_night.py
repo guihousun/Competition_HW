@@ -393,7 +393,8 @@ class NightWeaponTest(unittest.TestCase):
         ]
         for pos, robots in boards:
             gun = Weapon(id=self.GUN, kind="gatling", pos=pos, attack_range=9, cooldown=-1, level=3)
-            targets = night._volley(gun, robots, (41, 32))
+            turn = self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots)
+            targets = night._volley(gun, turn, robots)
             self.assertTrue(night._in_cone(pos, targets), f"{pos} {robots} ⇒ {targets} 出了锥形")
         self.assertTrue(night._in_cone(Pos(12, 25), (Pos(15, 24), Pos(15, 26))), "同侧约 37°")
         self.assertFalse(night._in_cone(Pos(12, 25), (Pos(13, 25), Pos(11, 25))), "两侧 180°")
@@ -416,6 +417,71 @@ class NightWeaponTest(unittest.TestCase):
         cmd = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots))
         self.assertEqual(cmd["action"], "attack")
         self.assertEqual(cmd["targetPos"], [{"x": 16, "y": 25}], "瞄线的远端，把两台都穿上")
+
+    def test_a_robot_that_is_chewing_the_wall_gets_the_fire(self):
+        """贴墙加成（用户口径甲）：正在啃墙的更急 —— 墙塌了就没得修。
+
+        正面墙列 x=13，其中 (13,23) 被打到 150 血（残墙档 ×2）。两台：
+        **中型**贴在墙外 (14,23)（权重 3×20 = 60）、**小型**在远处 (20,23)（4×10 = 40）
+        ⇒ 打贴墙那台；**没有加成**时是 30 vs 40 ⇒ 会去打远处那只小型（这条用例就是钉这个差别的）。
+        """
+        from _fixtures import _terrain  # noqa: PLC0415  （本用例自带一小块地形）
+
+        wall = Pos(13, 23)
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=1
+        )
+        near = Robot(Pos(14, 23), 60, kind="middleRobot")
+        far = Robot(Pos(20, 23), 40, kind="smallRobot")
+        grid = _terrain((gun,), {wall: "wall"}, {self.BASE: "station"})
+        for cell in (near.pos, far.pos):
+            grid[cell] = "robot"
+        turn = Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=(Worker(1, Pos(12, 24)),),
+            gold=0,
+            weapons=(gun,),
+            robots=(near, far),
+            walls=(Wall(40000, wall, 150, 1),),
+        )
+        cmd = self._only_cmd(turn)
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 23}], "先打啃墙那台")
+
+    def test_the_wall_bonus_does_not_apply_from_two_cells_away(self):
+        """加成只在**贴着**墙（切比雪夫 ≤1）时生效：隔着两格的不算"正在啃"。"""
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=1
+        )
+        # 墙列 x=13；中型在 (15,23)（离墙 2 格，够不着墙）与远处的小型 (20,23)
+        wall = Pos(13, 23)
+        mid = Robot(Pos(15, 23), 60, kind="middleRobot")
+        small = Robot(Pos(20, 23), 40, kind="smallRobot")
+        grid = _terrain((gun,), {wall: "wall"}, {self.BASE: "station"})
+        for cell in (mid.pos, small.pos):
+            grid[cell] = "robot"
+        turn = Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=(Worker(1, Pos(12, 24)),),
+            gold=0,
+            weapons=(gun,),
+            robots=(mid, small),
+            walls=(Wall(40000, wall, 150, 1),),
+        )
+        self.assertEqual(self._only_cmd(turn)["targetPos"], [{"x": 20, "y": 23}], "低级优先照旧")
+
+    def test_without_walls_the_fire_is_unchanged(self):
+        """没有墙（或都够不着）⇒ 权重只剩种类那一档：贴墙加成不许改掉原有取舍。"""
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=1
+        )
+        # 与 `test_the_lowest_tier_is_worth_the_most` 同一块棋盘：BOSS 更近、小型更远
+        boss = Robot(Pos(13, 25), 800, kind="bossRobot")
+        small = Robot(Pos(14, 26), 40, kind="smallRobot")
+        plain = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=(boss, small)))
+        self.assertEqual(plain["targetPos"], [{"x": 14, "y": 26}], "仍是低级优先")
 
     def test_a_cooling_rocket_holds_fire(self):
         """火箭发射台发射后有 3 回合空窗（`cooldown`）⇒ 冷却中一炮不发，

@@ -60,6 +60,15 @@ TIER_VALUE = {"smallRobot": 4, "middleRobot": 3, "largeRobot": 2, "bossRobot": 1
 UNKNOWN_VALUE = 4
 
 
+#: "正在啃墙"的火力加成（用在 `_weight` 里，十分之一为单位）：与我方**任意一格围墙**切比雪夫 ≤1 的
+#: 目标更急，啃的又是一格残墙（`needs_repair`）的最急。×1.5 / ×2 写成整数 15 / 20 ⇒ 全整数比较、
+#: 判据可复现，不用浮点。⚠️ 1.5/2 是拍的：温和档，只改"本来差不多"的取舍，不动"低级优先"的大方向。
+WALL_THREAT_NEAR = 15
+WALL_THREAT_HURT = 20
+#: 没有贴墙加成时的那一档（十分之一，即 ×1）。
+WALL_THREAT_NONE = 10
+
+
 #: 本地开火账（跨回合观测状态）：{武器 id: 发出 attack 的回合号}。判题器不发 cooldown 字段
 #: ⇒ 火箭冷却只能自己记：发出那回合记下，`ROCKET_COOLDOWN` 回合内不选它。按 id 键控、期满
 #: 自动过期 ⇒ 武器换 id 旧账自愈，卡住的最坏代价 = 某座火箭少打 ≤3 回合。
@@ -373,7 +382,7 @@ def _fire(role: BaseRole, weapon: Weapon, turn: Turn, cmds: dict[str, dict[str, 
     foes = _foe_robots(turn)
     if not foes:
         return False
-    targets = _volley(weapon, foes, turn.map.size)
+    targets = _volley(weapon, turn, foes)
     if not targets:
         return False
     # key 是武器 id，操控角色在报文的 `controllerId` 里
@@ -388,18 +397,37 @@ def _value(robot: Robot) -> int:
     return TIER_VALUE.get(robot.kind, UNKNOWN_VALUE)
 
 
-def _score(hits: list[tuple[Robot, int]]) -> int:
+def _weight(robot: Robot, walls: tuple[Pos, ...], hurt: frozenset[Pos]) -> int:
+    """这一台的火力权重 = 种类权重 × 贴墙加成（`WALL_THREAT_*`，十分之一为单位）。
+
+    正在啃我方围墙的更急（≤1 格），啃的又是一格残墙的最急 —— 墙塌了就没得修了。"""
+    value = _value(robot)
+    near = [c for c in walls if robot.pos.dist(c) <= 1]
+    if not near:
+        return value * WALL_THREAT_NONE
+    return value * (WALL_THREAT_HURT if any(c in hurt for c in near) else WALL_THREAT_NEAR)
+
+
+def _weights(turn: Turn, robots: tuple[Robot, ...]) -> dict[Pos, int]:
+    """候选机器人格的权重表（墙环最多 20 格 ⇒ 一炮算一次的开销可以忽略）。"""
+    walls = tuple(w.pos for w in turn.walls)
+    hurt = frozenset(w.pos for w in turn.walls if needs_repair(w))
+    return {r.pos: _weight(r, walls, hurt) for r in robots}
+
+
+def _score(hits: list[tuple[Robot, int]], weights: dict[Pos, int]) -> int:
     """一组命中值多少分：`min(伤害, 剩余血) × 权重` 之和（过量伤害不计分）。"""
-    return sum(damage * _value(robot) for robot, damage in hits)
+    return sum(damage * weights[robot.pos] for robot, damage in hits)
 
 
-def _volley(weapon: Weapon, robots: tuple[Robot, ...], size: tuple[int, int]) -> tuple[Pos, ...]:
+def _volley(weapon: Weapon, turn: Turn, robots: tuple[Robot, ...]) -> tuple[Pos, ...]:
     """这一炮的 `targetPos`（个数 = 等级；电磁恒 1）。一个目标都够不着 ⇒ 空元组（不打）。"""
+    weights = _weights(turn, robots)
     if weapon.kind == "rocket":
-        return _rocket_volley(weapon, robots, size)
+        return _rocket_volley(weapon, robots, turn.map.size, weights)
     if weapon.kind == "gatling":
-        return _gatling_volley(weapon, robots)
-    return _railgun_volley(weapon, robots)
+        return _gatling_volley(weapon, robots, weights)
+    return _railgun_volley(weapon, robots, weights)
 
 
 def _blast(cell: Pos, robots: tuple[Robot, ...], hp: dict[Pos, int]) -> list[tuple[Robot, int]]:
@@ -414,7 +442,7 @@ def _blast(cell: Pos, robots: tuple[Robot, ...], hp: dict[Pos, int]) -> list[tup
 
 
 def _rocket_volley(
-    weapon: Weapon, robots: tuple[Robot, ...], size: tuple[int, int]
+    weapon: Weapon, robots: tuple[Robot, ...], size: tuple[int, int], weights: dict[Pos, int]
 ) -> tuple[Pos, ...]:
     """火箭：**逐枚**挑"剩余有效伤害 × 权重"最大的落点，扣掉血再挑下一枚 —— 簇里叠加、
     散开分点，两种都对（现在的多发同点只是前者的特例）。
@@ -438,8 +466,8 @@ def _rocket_volley(
     targets: list[Pos] = []
     for _ in range(max(1, weapon.level)):
         hits = {cell: _blast(cell, alive, hp) for cell in cands}
-        cell = min(cands, key=lambda c: (-_score(hits[c]), c))
-        if not _score(hits[cell]) and targets:
+        cell = min(cands, key=lambda c: (-_score(hits[c], weights), c))
+        if not _score(hits[cell], weights) and targets:
             targets.append(targets[0])  # 都打死了 ⇒ 接着打第一枚那个点，别换空落点
             continue
         for robot, hit in hits[cell]:
@@ -448,7 +476,9 @@ def _rocket_volley(
     return tuple(targets)
 
 
-def _gatling_volley(weapon: Weapon, robots: tuple[Robot, ...]) -> tuple[Pos, ...]:
+def _gatling_volley(
+    weapon: Weapon, robots: tuple[Robot, ...], weights: dict[Pos, int]
+) -> tuple[Pos, ...]:
     """加特林：**逐颗**挑最值的目标格（子弹沿弹道飞，命中的是弹道上**最近**的那台）。
 
     ⚠️ 多个落点必须落在**同一个 90° 锥形**内，否则**整次攻击非法**（任务书 L250）⇒ 自查按
@@ -474,7 +504,7 @@ def _gatling_volley(weapon: Weapon, robots: tuple[Robot, ...]) -> tuple[Pos, ...
                 continue
             if targets and not _in_cone(weapon.pos, (*targets, r.pos)):
                 continue
-            key = (-hit * _value(victim), weapon.pos.dist(r.pos), r.pos)
+            key = (-hit * weights[victim.pos], weapon.pos.dist(r.pos), r.pos)
             if best is None or key < best[0]:
                 best = (key, r.pos, victim)
         if best is None:
@@ -486,18 +516,20 @@ def _gatling_volley(weapon: Weapon, robots: tuple[Robot, ...]) -> tuple[Pos, ...
     return tuple(targets)
 
 
-def _railgun_volley(weapon: Weapon, robots: tuple[Robot, ...]) -> tuple[Pos, ...]:
+def _railgun_volley(
+    weapon: Weapon, robots: tuple[Robot, ...], weights: dict[Pos, int]
+) -> tuple[Pos, ...]:
     """电磁：单目标（恒 1 格），挑"**沿弹道穿透**总和最值"的那一格 —— 等级翻的是能量
     （10/20/30），能量沿弹道逐台扣减（任务书 L252），所以打穿一串比只打前排值。"""
     energy = RAILGUN_ENERGY * max(1, weapon.level)
     alive = _alive(robots)
     aims = [r.pos for r in alive if weapon.pos.dist(r.pos) <= weapon.attack_range]
-    best = max(
+    best = min(
         aims,
-        key=lambda aim: (_score(_pierce(weapon.pos, aim, alive, energy)), Pos(-aim.x, -aim.y)),
+        key=lambda aim: (-_score(_pierce(weapon.pos, aim, alive, energy), weights), aim),
         default=None,
     )
-    if best is None or _score(_pierce(weapon.pos, best, alive, energy)) <= 0:
+    if best is None or _score(_pierce(weapon.pos, best, alive, energy), weights) <= 0:
         return ()
     return (best,)
 
