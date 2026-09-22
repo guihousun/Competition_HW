@@ -987,6 +987,87 @@ class NightTrajectoryTest(unittest.TestCase):
         self.assertEqual(cmds["2"]["targetPos"], [{"x": 12, "y": 25}], f"缺石 ⇒ 顺手采石：{cmds}")
 
 
+class UpgradeBeforeFireTest(unittest.TestCase):
+    """夜里的炮手手里有武器券 ⇒ **先升级再开火**（用户报的症状：买了券却在夜里一直开火）。
+
+    两处修：① 同一张券在链上出现两次（非角两座 / 角上那座）⇒ `use_voucher_here` 要**逐个步骤**
+    找贴着手边的目标（站在角座旁边、券的第一志愿是非角那两座时，原来会判成"没得用"⇒ 整夜开火、
+    券花不掉）；② 目标只差 `day.UPGRADE_WALK_MAX`(3) 步 ⇒ 先走过去升（升级永久、还回满血，
+    几炮就回本），**别急着一炮**；再远就不追（那一回合的火力更值）。
+    """
+
+    BASE = Pos(10, 24)
+    NIGHT = 85
+    SITES = weapon_sites(BASE, 41)          # (10,25) 非角 / (9,23) 非角 / (9,25) 角上
+    POST = Pos(9, 24)                        # 三座共用的操作位
+    BESIDE_CORNER = Pos(8, 25)               # 只贴着角上那座
+    BESIDE_SIDE = Pos(9, 22)                 # 只贴着非角那座 (9,23)
+    FOE = Pos(14, 24)
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+        night._fired.clear()
+
+    def _turn(
+        self,
+        pos: Pos,
+        voucher: str,
+        levels: tuple[int, int, int] = (1, 1, 1),
+        sites: tuple[Pos, ...] | None = None,
+    ) -> Turn:
+        sites = self.SITES if sites is None else sites
+        guns = tuple(
+            Weapon(id=10040 + i, kind="rocket", pos=c, attack_range=2**31 - 1, cooldown=-1, level=lv)
+            for i, (c, lv) in enumerate(zip(sites, levels))
+        )
+        foe = Robot(self.FOE, 40, kind="smallRobot")
+        grid = _terrain(guns, {self.BASE: "station"}, {foe.pos: "robot:x"}) | {pos: "pioneer"}
+        return Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=(Pioneer(1, pos, {voucher: 1}),),
+            gold=0,
+            weapons=guns,
+            robots=(foe,),
+        )
+
+    def _cmd(self, turn: Turn) -> dict:
+        cmds = plan(turn)
+        self.assertEqual(len(cmds), 1, f"应当恰好一条指令：{cmds}")
+        return next(iter(cmds.values()))
+
+    def test_the_gunner_upgrades_the_weapon_next_to_him(self):
+        """只贴着**角上那座**（券的第一志愿是非角那两座、又够不着）⇒ 仍要升角上那座，不许开火。"""
+        cmd = self._cmd(self._turn(self.BESIDE_CORNER, "WeaponUpgradeVoucher1"))
+        self.assertEqual(cmd["action"], "use", f"该升级而不是开火：{cmd}")
+        self.assertEqual(cmd["targetPos"], [{"x": 9, "y": 25}], "升贴着他的那座（角上）")
+
+    def test_the_gunner_walks_to_the_upgradable_weapon_instead_of_firing(self):
+        """目标只差几步 ⇒ 先走过去升（这一回合不发 `attack`）。"""
+        # 三座都 L2，只有非角那两座还能升 L3 ⇒ 从角座旁走一步
+        cmd = self._cmd(self._turn(self.BESIDE_CORNER, "WeaponUpgradeVoucher2", (2, 2, 2)))
+        self.assertEqual(cmd["action"], "move", f"该朝可升的那座走，别开火：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(
+            step.dist(self.SITES[1]),
+            self.BESIDE_CORNER.dist(self.SITES[1]),
+            "这一步朝 (9,23) 去",
+        )
+
+    def test_nothing_to_upgrade_means_he_keeps_firing(self):
+        """券打不着任何目标（三座全 L2、手里是 L1→L2 的券）⇒ 照旧开火，不为了它瞎走。"""
+        cmd = self._cmd(self._turn(self.BESIDE_CORNER, "WeaponUpgradeVoucher1", (2, 2, 2)))
+        self.assertEqual(cmd["action"], "attack", f"没得升就开火：{cmd}")
+
+    def test_a_target_farther_than_the_walk_limit_is_not_chased(self):
+        """可升的那座在 8 步外 ⇒ 不开步（上限 `UPGRADE_WALK_MAX`(3)），这一回合照旧开火。"""
+        far = (Pos(9, 25), Pos(16, 25))  # 贴着的那座 **L2**（券用不上）+ 8 步外的 L1
+        cmd = self._cmd(
+            self._turn(self.BESIDE_CORNER, "WeaponUpgradeVoucher1", (2, 1), sites=far)
+        )
+        self.assertEqual(cmd["action"], "attack", f"太远就追不动：{cmd}")
+
+
 class NoTaskNightTest(unittest.TestCase):
     """无任务模式的夜班**与平常夜班是同一套**（第 130 步）：炮手上炮、其余挖矿；清场走白天线。
 
