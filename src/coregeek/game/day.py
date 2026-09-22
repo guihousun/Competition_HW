@@ -225,8 +225,8 @@ class RaiseForWeapons(State):
 class WallLine(State):
     """第 2 级：武器建满之后，把环补齐 —— 只看 L1。
 
-    不完备有两种：**缺口**（那一格没墙）与 **L1 弱墙**（`needs_repair`：血 < `WALL_REPAIR_HP`(200)
-    ⇒ 直接拆了重砌：1 块石头换满血，比 20 金的升级券便宜）。L2/L3 的损伤**不阻塞**这一级
+    不完备有两种：**缺口**（那一格没墙）与 **L1 弱墙**（`needs_repair`：血 < `wall_repair_hp(turn)`
+    —— 第 1–4 天 200、第 5 天起随天数抬 ⇒ 直接拆了重砌：1 块石头换满血，比 20 金的升级券便宜）。L2/L3 的损伤**不阻塞**这一级
     （升级券顺带回满血，见第 3 级；夜里还有 `night.repair_wall` 用修复包）。
 
     石头够 ⇒ 先拆该拆的弱墙、再砌缺口；石头不够 ⇒ 算"补齐这一摊还差几块"，挑一趟**最省回合**
@@ -877,7 +877,7 @@ def walk_to_upgrade(role: BaseRole, ctx: _Ctx) -> bool:
 
 
 def _weak_l1(turn: Turn) -> tuple[Pos, ...]:
-    """环上**该处理了的 L1 墙**（`core.needs_repair`：血 < `WALL_REPAIR_HP`(200)），按坐标序。
+    """环上**该处理了的 L1 墙**（`core.needs_repair`：血 < `core.wall_repair_hp(turn)`），按坐标序。
 
     ⚠️ 只认 L1（用户拍板）：L2/L3 拆了只能重砌回 L1（掉一级），它们的血量交给券链的升级券与
     夜里的修复包（升级、修复都回满血）。已毁（血 0）的墙在 `model._walls` 就丢了 ⇒ 它在那里算
@@ -885,7 +885,7 @@ def _weak_l1(turn: Turn) -> tuple[Pos, ...]:
     return tuple(
         w.pos
         for w in sorted(turn.walls, key=lambda w: w.pos)
-        if w.level == 1 and needs_repair(w)
+        if w.level == 1 and needs_repair(w, turn)
     )
 
 

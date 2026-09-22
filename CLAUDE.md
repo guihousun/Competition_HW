@@ -315,8 +315,9 @@ src/coregeek/
     │                 常量（`WEAPON_COST`/`WALL`/`WALL_COST`/`ORE_CHARGES`/`VOUCHER`/
     │                 `WALL_VOUCHER`/**`VOUCHER_CHAIN`（武器的三步步骤表）/ `WALL_CHAIN`（墙券四步：
     │                 中间三格→2 → 边上三格→2 → 中间三格→3 → 边上三格→3，归修墙工那条差事）**/
-    │                 `VOUCHER_NAMES`/**`WALL_REPAIR_HP`(200) 与 `needs_repair`（修墙 / 拆墙两条线
-    │                 共用的那一个阈值：血 < 它 ⇒ 夜里用修复包回满、白天对 L1 拆了重砌）**/
+    │                 `VOUCHER_NAMES`/**`WALL_REPAIR_HP`(200) 与 `needs_repair(wall, turn)`（修墙 /
+    │                 拆墙两条线共用的那一个阈值：血 < `wall_repair_hp(turn)` ⇒ 夜里用修复包回满、
+    │                 白天对 L1 拆了重砌；**第 5 天起每天 +`WALL_REPAIR_HP_STEP`(50)**，第 169 步）**/
     │                 **`WALL_FIXER`（"WallFixer"，10 金）**/**`FRONT_WALLS`(6) 与 `front_wall_cells`**/
     │                 **`POST_MARGIN`(3) 与 `_wall_post`（白天回岗 / 回待命位两处共用）**）
     │                 + 走路账与指令出口（`_Move`/`_Queue`/`_emit`）
@@ -360,7 +361,8 @@ src/coregeek/
     │                 枚举划分给两个工人、取"最后一个建完的回合最早"的那份；钱不够 ⇒ 两人**一起挖
     │                 最贵的矿**，团队金币 + 两人背包货值 ≥ 缺口就各自去卖。
     │                 **L2 `WallLine`**：只看 L1 —— 缺口要砌、**L1 弱墙（`core.needs_repair`：血 <
-    │                 `WALL_REPAIR_HP`(200)）直接拆了重砌**（1 块石头换满血，比 20 金的券便宜）；
+    │                 `core.wall_repair_hp(turn)`）直接拆了重砌**（1 块石头换满血，比 20 金的券便宜）；
+    │                 ⚠️ 阈值随天数抬 ⇒ 第 5 天起白天**拆得更早、更多**（两条线共用一处判据）；
     │                 **先补缺口、后拆**（缺口是夜里机器人进来的门）；石头不够就挑一趟"去 + 回最短"
     │                 的采石（`_mine_stone`，采量 = 还差几块，**不留存货**），没石矿可采就拿手里的
     │                 先砌。`remove` 的唯一调用点是 `day._demolish`。**L2/L3 的损伤不阻塞这一级**
@@ -423,7 +425,8 @@ src/coregeek/
     │                 （`taken` 记的是**整组**、开火或动身那一刻入账 ⇒ 同组不会被两人同时打）
     │                 ⚠️ **只有一个炮手**（`utils._night_gunner`：三座火箭共用一个操作位 ⇒ 一个
     │                 角色站上去按冷却轮换就全操得满），**夜里与白天收工门两处同源**，其余工人
-    │                 整夜在盒外挖矿（`mine_ore`：机器人周围切比雪夫 ≤ `DANGER`(2) 格当走不通）。
+    │                 整夜在盒外挖矿（`mine_ore`：机器人周围切比雪夫 ≤ `DANGER`(2) 格 **+ 它朝基地
+    │                 推进的那条走廊**都当走不通；脚边已经不安全就先撤一格 —— `night.flee`，第 170 步）。
     │                 ⚠️ **`night.mine_ore` 是 `_priciest_ore(…, ahead=1)`**（第 149 步）：夜里
     │                 采的货第二天才卖 ⇒ 按**明天**的期望价挑（白天那条 `ahead=0`）。
     │                 **可采性仍按今天**（今晚采得了就采，停工的窗口落在明天）。

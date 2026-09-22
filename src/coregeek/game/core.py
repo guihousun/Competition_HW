@@ -65,26 +65,37 @@ POST_MARGIN = 3
 ON_THE_WAY_MAX = 1
 
 
-#: 围墙该处理了的血量（绝对值）。两条线共用这一个判据：白天 `day._weak_l1` 对 L1 拆了重砌，
-#: 夜里 `night.repair_wall` 用修复包回满（不分等级）。
+#: 围墙该处理了的血量（绝对值，第 1–4 天）。两条线共用这一个判据：白天 `day._weak_l1` 对 L1
+#: 拆了重砌，夜里 `night.repair_wall` 用修复包回满（不分等级）。
 #: 为什么是绝对值、为什么是 200：机器人伤害（5/10/20/40）不吃墙的等级，而机器人的攻击距离是 3
 #: ⇒ 同一格正面墙会被它身后一列里的多台同时啃 ⇒ "能不能在被打死之前修上"只由**绝对剩余血量**
 #: 决定。阈值要盖过"越过阈值到修复包落地"之间挨掉的伤害：待命位到最远那格 3 步 ⇒ 其间挨 2 次
 #: 结算伤害（伤害在回合末统一结算、包落地当回合的伤害在包之后）⇒ `T > 2 × 单格单回合伤害`；
-#: 最坏单格 80/回合（BOSS + 两座大型）⇒ `T > 160`，取 200（余量够到 100/回合）。再往上只多
-#: 撑一回合，却让"够格修"的格子同时变多 —— 一个工人一回合只修一格，会排队。
+#: 最坏单格 80/回合（BOSS + 两座大型）⇒ `T > 160`，取 200（余量够到 100/回合）。
 WALL_REPAIR_HP = 200
+
+#: 第 `WALL_REPAIR_HP_FROM_DAY` 天起，阈值按天再抬一档（用户口径"机器人的进攻更猛了"）：
+#: `WALL_REPAIR_HP + WALL_REPAIR_HP_STEP × (第几天 − 4)` ⇒ 第 5 天 250、第 10 天 500（恰好 L1
+#: 满血的一半）。按上面那条推算，50/天 = "每天多挨 25 点/回合"；波次曲线任务书没给 ⇒ 拍的值。
+WALL_REPAIR_HP_STEP = 50
+WALL_REPAIR_HP_FROM_DAY = 5
+
+
+def wall_repair_hp(turn: Turn) -> int:
+    """这一天的修墙阈值：第 1–4 天 `WALL_REPAIR_HP`(200)，第 5 天起每天 +`WALL_REPAIR_HP_STEP`(50)。"""
+    return WALL_REPAIR_HP + WALL_REPAIR_HP_STEP * max(0, turn.day_no - (WALL_REPAIR_HP_FROM_DAY - 1))
 
 
 #: 围墙修复包（武器商店消耗品，10 金）：站在待修复围墙一格范围内 ⇒ 目标那一格回满血。
 WALL_FIXER = "WallFixer"
 
 
-def needs_repair(wall: Wall) -> bool:
-    """这面墙该处理了吗：血量已知（`>= 0`）且低于 `WALL_REPAIR_HP`。
+def needs_repair(wall: Wall, turn: Turn) -> bool:
+    """这面墙该处理了吗：血量已知（`>= 0`）且低于 `wall_repair_hp(turn)`。
 
-    L1/L2/L3 一个口径 —— 动不动它只由绝对血量决定。血量缺失（-1）⇒ 不碰（不知道就别动）。"""
-    return 0 <= wall.health < WALL_REPAIR_HP
+    L1/L2/L3 一个口径 —— 动不动它只由绝对血量决定。血量缺失（-1）⇒ 不碰（不知道就别动）。
+    ⚠️ 两条线共用一个阈值 ⇒ 抬阈值会连带抬高白天"拆了重砌"那道门（L1 墙在 500 血时就被拆）。"""
+    return 0 <= wall.health < wall_repair_hp(turn)
 
 
 #: 升级券的商品名（`weaponShopList.name` 那套词；价目逐回合从载荷读，样例实证 100/150）。
