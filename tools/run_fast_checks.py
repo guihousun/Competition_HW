@@ -22,16 +22,18 @@ def main() -> int:
     args = parser.parse_args()
     if args.full:
         command = [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-v']
+        return subprocess.run(command, check=False).returncode
     else:
-        command = [sys.executable, '-m', 'unittest', 'discover', '-s', 'tests', '-p', FAST[0], '-v']
         # unittest accepts one pattern per invocation; keep the gate explicit
         # so each file gets an independent, readable failure boundary.
-        for pattern in FAST[1:]:
-            subprocess.run(command, check=True)
-            command[-1] = pattern
-    return subprocess.run(command, check=False).returncode
+        for pattern in FAST:
+            command = [sys.executable, '-m', 'unittest', 'discover', '-s',
+                       'tests', '-p', pattern, '-v']
+            result = subprocess.run(command, check=False)
+            if result.returncode:
+                return result.returncode
+        return 0
 
 
 if __name__ == '__main__':
     raise SystemExit(main())
-

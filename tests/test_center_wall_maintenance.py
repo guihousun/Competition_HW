@@ -152,14 +152,14 @@ class CenterMaintenanceTests(unittest.TestCase):
             result=nightwork._front_repair(turn,((workers[1],guns[20]),(workers[2],guns[21])))
             self.assertEqual(result,{1:dict(action='use',name=WALL_FIXER,targetPos=[target.dump()])})
 
-    def test_only_rear_damage_does_not_override_weapon_budget_for_stock(self):
+    def test_survival_stock_is_reserved_before_weapon_budget(self):
         from test_user_phase_integration import observation as stock_board
         p=stock_board();p['teamOur']['roles'][-1]['pos']=dict(x=7,y=10)
         p['teamOur']['roles'][-1]['health']=100
         with patch.object(phase_supply.upgrade_itinerary,'weapon_reserve',return_value={'gold':150}):
             proposal,report=phase_supply.plan(Turn.load(p),p,{},deadline=67)
-            self.assertIsNone(proposal)
-            self.assertEqual(report['reason'],'finish_phase_weapon_target_first')
+            self.assertEqual(proposal,(2,dict(action='buy',name=WALL_FIXER,num=2)))
+            self.assertEqual(report['reason'],'prepare_night_repair_stock')
             # Same known damage at a front wall permits the existing emergency exception.
             p['teamOur']['roles'][-1]['pos']=dict(x=12,y=10)
             proposal,report=phase_supply.plan(Turn.load(p),p,{},deadline=67)

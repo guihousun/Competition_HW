@@ -3,7 +3,7 @@
 Stock is carried back unused for night repair. No future income or robot wave
 is assumed; only current quotes, stock, route and day deadline permit dispatch.
 """
-from . import team_trip, strategy_config
+from . import team_trip, strategy_config, upgrade_itinerary
 from .protocol import WALL_FIXER
 from .coordination import available_gold
 from .market import shop_prices

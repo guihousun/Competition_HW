@@ -48,6 +48,7 @@ def plan(turn, payload, state, commands, claimed, aim_points, *, force=False):
     ready = [g for g in guns if aims[g.unit_id]]
     used = {str(c.get('controllerId')) for c in commands.values() if c.get('action') == 'attack'}
     workers = [w for w in turn.workers() if w.unit_id not in commands and str(w.unit_id) not in used]
+    critical_workers = {w.unit_id for w in workers if w.health > 0 and w.health <= 55}
 
     def can_fire(role):
         return home_defense.inside(turn, role.pos) and any(distance(role.pos, g.pos) == 1 for g in ready)
@@ -66,7 +67,13 @@ def plan(turn, payload, state, commands, claimed, aim_points, *, force=False):
             return True
         return False
 
-    owner = min(workers, key=lambda w: (w.pos not in common, not can_fire(w),
+    # Once the emergency handover is requested, do not keep a worker that is
+    # one hit from death as the only controller.  The ordinary path still
+    # preserves the current worker until the pioneer reaches a legal common
+    # post; this branch is specifically for the replay failure where both
+    # workers were left exposed while the pioneer stayed idle.
+    owner_pool = [w for w in workers if not (force and w.unit_id in critical_workers)]
+    owner = min(owner_pool, key=lambda w: (w.pos not in common, not can_fire(w),
                 min(distance(w.pos, p) for p in common), w.unit_id), default=None)
     report = dict(owner=owner.unit_id if owner else None, stand=None,
                   weapons=[g.unit_id for g in guns], active=False, single_operator=True,
@@ -74,7 +81,20 @@ def plan(turn, payload, state, commands, claimed, aim_points, *, force=False):
                   candidate=hero.unit_id if eligible else None, handover='not_requested',
                   reservation_owner=owner.unit_id if owner else None, owned_roles=[],
                   common_stand_feasible=bool(common))
-    if eligible and hero.pos in common:
+    if force and eligible and hero is not None and hero.pos not in common:
+        report['handover'] = 'emergency_approaching'
+        report['reason'] = 'critical_worker_released_before_death'
+        route = path(hero, common)
+        if route and move(hero, route):
+            report['reservation_owner'] = hero.unit_id
+            report['owned_roles'].append(hero.unit_id)
+            report['phase'] = 'handover_move'
+        elif not route:
+            report['handover'] = 'approach_blocked'
+            report['reason'] = 'pioneer_post_unreachable'
+        # A non-critical worker may keep the post while the pioneer walks in;
+        # never select the wounded worker as a forced emergency owner.
+    elif eligible and hero.pos in common:
         owner = hero
         report.update(owner=hero.unit_id, reservation_owner=hero.unit_id,
                       reason='idle_pioneer_on_common_post', handover='complete')
