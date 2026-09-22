@@ -428,8 +428,8 @@ app.handle(payload)
 
 **操作细则住在各工具的描述里**（第 107 步，不另开段）：回合成本模型（一次 `executeCmd` = 2 回合、
 `python_exec` 1 回合）、合并命令、批量尝试打标签、**失败要看得出来**（第 153 步：命令自带成败证据、
-Python 代码 `try/except` + `traceback.print_exc()`、**第 169 步**：Python 代跑 shell 时原始输出必须
-原样打印）。⚠️ 最后这条**只写在 `executeCmd` 那一处** ——
+Python 代码 `try/except` + `traceback.print_exc()`、**第 169 步**：shell 的执行结果会原样回到回执里
+⇒ 不做计算就别套 Python）。⚠️ 最后这条**只写在 `executeCmd` 那一处** ——
 本地那条不靠措辞兜：`pyexec` 的报错产出**自带调用栈**（只回 LLM 自己那几帧），且**崩之前的 print
 照旧保留**（"跑到哪一步才崩"的证据）。
 

@@ -410,7 +410,9 @@ class ChatPromptTest(unittest.TestCase):
         判据是资源约束，不是"遇到 A 就做 B"的流程 —— 后者才是过拟合。这条错了本地一点异常
         都没有，只是分数低（日志上数 `executeCmd` 的条数才看得出来）。
 
-        第 133 步用户把两段描述压成散文：条目符号与标题没了，四条性质逐条改钉新措辞。"""
+        第 133 步用户把两段描述压成散文：条目符号与标题没了，四条性质逐条改钉新措辞。
+        第 169 步把整段按题目重排成五段（用途 / 成本 / 回执纪律 / Python 与 shell / 边界）——
+        逐句追加了几轮之后段落已经分不清彼此，措辞随之微调，钉点同步换。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         tools = _section(system, "# 【工具描述】")
         cmd, local = tools.split("## ToolName - python_exec", 1)
@@ -418,20 +420,20 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("连续操作应尽量合并", cmd)
         self.assertIn("批量尝试", cmd)
         # 产出是写给下一轮的自己读的：不带标签就分不清哪条结果对哪次尝试
-        self.assertIn("给每次尝试输出清晰标签", cmd)
+        self.assertIn("每次尝试给清晰标签分家", cmd)
         self.assertIn("比 executeCmd 省一个回合", local)
 
     def test_the_flow_demands_evidence_of_failure(self):
-        """命令要自带成败证据、Python 代码要打印调用栈与 shell 的原始输出（第 153 / 169 步，
+        """命令要自带成败证据、Python 代码要打印调用栈、shell 的结果不用套 Python 拿（第 153 / 169 步，
         用户口径"shell 指令和 python 代码必须有充足的提示，用于后续成功或者失败进行分析"、
-        "若需要通过 python 打印 shell 的输出，至少需要将原始的输出打印出来"）。
+        "这个命令会将 shell 指令的执行结果返回回来，如果不做计算没有必要叠加 python 代码"）。
 
         沙盒那条通道我们控不住（命令是 LLM 写的、跑在判题器里）：回执照旧只有退出码与它
         自己打出来的那些字 —— 不点破这件事，它会把每条回执当成二元的"成 / 不成"，然后
-        换一个参数把同一条命令重写一遍（每次两个回合）。四条落点同处一段：成败都要看得见、
-        失败要打全原因（错误原文、出错的文件与行号）、Python 必须 try/except + 调用栈、
-        Python 代跑 shell 时原始输出必须原样打出（只打加工后的结论 ⇒ 结论一旦漏了重点，
-        回执里再没有证据可查，这两个回合白花）。
+        换一个参数把同一条命令重写一遍（每次两个回合）。四条落点（第 169 步重排后分住两段：
+        回执纪律 / Python 与 shell）：成败都要看得见、失败要打全原因（错误原文、出错的文件与
+        行号）、Python 必须 try/except + 调用栈、**结果本来就会回到回执里 ⇒ 不计算就别套
+        Python**（套一层只是多一道丢信息的关口 —— 要计算时才用它，且那份原始输出一并打出来）。
         本地那条（`python_exec`）不写这条规则 —— 执行器是我们自己的，直接回调用栈，
         见 `test_agent_pyexec.PyExecTest.test_a_runtime_error_is_reported_not_raised`。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
@@ -439,7 +441,9 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("自带成败证据", cmd)
         self.assertIn("try/except", cmd)
         self.assertIn("traceback.print_exc()", cmd)
-        self.assertIn("shell 的原始输出必须原样打印", cmd)
+        self.assertIn("shell 指令的执行结果会原样回到回执里", cmd)
+        self.assertIn("不必再套一层 Python", cmd)
+        self.assertIn("原始输出一并打出来", cmd)
 
     def test_the_flow_says_a_failure_is_a_clue(self):
         """拿到结果先分析、照着结果调整方案再继续（【工作原则】循环的第 (7) 步那一支）。

@@ -197,8 +197,8 @@ src/coregeek/
 │   │                   **操作细则搬到各工具的描述里**（同上第 107 步）：**回合成本模型**
 │   │                   （一次 `executeCmd` = **2 回合**）、合并命令 / 批量尝试 / 输出打标签、
 │   │                   **失败要看得出来**（第 153 步：命令自带成败证据、Python 代码
-│   │                   `try/except` + `traceback.print_exc()`；第 169 步再补一句：Python 代跑
-│   │                   shell 时原始输出必须原样打印 —— 只写在 `executeCmd` 那一处，
+│   │                   `try/except` + `traceback.print_exc()`；第 169 步再补一句：shell 的执行结果
+│   │                   会原样回到回执里 ⇒ 不做计算就别套 Python —— 只写在 `executeCmd` 那一处，
 │   │                   本地那条靠执行器兜底、不写措辞）、
 │   │                   `python_exec` 的 1 回合优势、`readSandboxFile` 的清单与两种写法、
 │   │                   **整套沉淀规则**（什么时候存 / **正文四栏**（第 143 步）/ 可沉淀什么 /
