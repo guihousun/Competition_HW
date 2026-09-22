@@ -6,7 +6,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Demo/CoreGeek/src'))
 
 from agent.scenarios import scenario
-from agent.simulator import ROBOT_DEVIATION_RADIUS, _plan_robot_actions
+from agent.simulator import ROBOT_DEVIATION_RADIUS, _plan_robot_actions, _stable_base_goal
+from agent.protocol import Pos, Turn
 
 
 class RobotRoutingBoundaryTests(unittest.TestCase):
@@ -34,6 +35,19 @@ class RobotRoutingBoundaryTests(unittest.TestCase):
         moves, attacks = _plan_robot_actions(self.state((13, 21), target='defender'))
         self.assertEqual(attacks, [])
         self.assertEqual(moves, {}, 'other-team robots are not redirected by our policy')
+
+    def test_base_entry_goal_stays_stable_and_does_not_reverse_vertical_direction(self):
+        state = self.state((20, 26))
+        turn = Turn.load(state)
+        self.assertEqual(_stable_base_goal(turn, Pos(20, 26)), Pos(8, 26))
+        state['teamOur']['roles'] = [r for r in state['teamOur']['roles']
+                                     if r['roleType'] == 'station']
+        positions = []
+        for _ in range(6):
+            positions.append(tuple(state['robot']['roles'][0]['pos'].values()))
+            result = __import__('agent.simulator', fromlist=['step']).step(state)
+            state = result['state']
+        self.assertEqual([y for _x, y in positions], [26] * 6)
 
 
 if __name__ == '__main__':

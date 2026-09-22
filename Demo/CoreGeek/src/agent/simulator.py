@@ -270,14 +270,17 @@ def _allocate_robot_moves(turn, walkers, obstacles):
     resolved once by the shared resolver, without retrying failed intentions.
     """
     ranks = {}
-    for robot, origin, goal in walkers:
-        ranks.setdefault(distance(origin, goal) if goal is not None else 0, []).append((robot, origin, goal))
-    unvacated = {origin for _, origin, _ in walkers}
+    for row in walkers:
+        robot, origin, goal = row[:3]
+        ranks.setdefault(distance(origin, goal) if goal is not None else 0, []).append(row)
+    unvacated = {row[1] for row in walkers}
     reserved, moves = set(), {}
     for rank in sorted(ranks):
         group = sorted(ranks[rank], key=lambda row: row[0]['id'])
         offset = (turn.round_no - 1) % len(group)
-        for robot, origin, goal in group[offset:] + group[:offset]:
+        for row in group[offset:] + group[:offset]:
+            robot, origin, goal = row[:3]
+            base_directed = bool(row[3]) if len(row) > 3 else False
             options = [Pos(origin.x + dx, origin.y + dy)
                        for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
             options = [q for q in options if turn.land(q) and q not in obstacles
@@ -285,11 +288,35 @@ def _allocate_robot_moves(turn, walkers, obstacles):
                        and (goal is None or distance(q, goal) < distance(origin, goal))]
             if not options:
                 continue
-            target = min(options, key=lambda q: (distance(q, goal) if goal is not None else 0, q.x, q.y))
+            target = min(options, key=lambda q: (
+                distance(q, goal) if goal is not None else 0,
+                abs(q.x - goal.x) + abs(q.y - goal.y) if base_directed and goal is not None else 0,
+                q.x, q.y))
             moves[str(robot['id'])] = target
             reserved.add(target)
             unvacated.discard(origin)
     return moves
+
+
+def _stable_base_goal(turn, origin):
+    """Choose one deterministic entry cell on the station's approach side.
+
+    Re-selecting the nearest cell of a 2x2 station every round can alternate
+    between its upper and lower cells and create an artificial down-then-up
+    path.  The side is chosen from the current approach vector, while the
+    entry cell on that side is canonical and therefore remains stable.
+    """
+    base = turn.station()
+    if base is None:
+        return None
+    cells = turn.footprint(base)
+    xmin, xmax = min(c.x for c in cells), max(c.x for c in cells)
+    ymin, ymax = min(c.y for c in cells), max(c.y for c in cells)
+    cx, cy = (xmin + xmax) / 2, (ymin + ymax) / 2
+    dx, dy = origin.x - cx, origin.y - cy
+    if abs(dx) >= abs(dy):
+        return Pos(xmax if dx >= 0 else xmin, ymax)
+    return Pos(xmax, ymax if dy >= 0 else ymin)
 
 
 def _plan_robot_actions(state):
@@ -331,8 +358,10 @@ def _plan_robot_actions(state):
                 # deviate for a nearby role within three cells. The exact
                 # tie-break among several nearby roles remains local.
                 base = turn.station()
-                goal = (min(turn.footprint(base), key=lambda c: (distance(p, c), abs(p.x-c.x)+abs(p.y-c.y), c.x, c.y))
-                        if base is not None else _nearest_building_cell(turn, p))
+                demo_profile = isinstance(state.get('_demo'), dict) and 'profile' in state['_demo']
+                goal = (_stable_base_goal(turn, p) if base is not None and demo_profile
+                        else (min(turn.footprint(base), key=lambda c: (distance(p, c), abs(p.x-c.x)+abs(p.y-c.y), c.x, c.y))
+                              if base is not None else _nearest_building_cell(turn, p)))
             screening_wall = None
             if victim is not None and goal is not None and distance(p, goal) <= 3:
                 screening_wall = _intervening_wall(turn, p, goal)
@@ -365,13 +394,19 @@ def _plan_robot_actions(state):
                                       'buildingKind': building_unit['roleType'],
                                       'from': p.dump(), 'to': blocked_by.dump()})
                 continue
-            walkers.append((robot, p, goal))
+            # Mark base-directed walkers so their tie-break can favor a
+            # straight approach without changing the historical local order
+            # used by independent robot-intent tests.
+            walkers.append((robot, p, goal,
+                            victim is None and turn.station() is not None
+                            and isinstance(state.get('_demo'), dict)
+                            and 'profile' in state['_demo']))
     # First classify actions for the entire unchanged snapshot. Attacking,
     # stunned and inactive robots are known not to vacate; route around them.
     # Plan non-conflicting robot destinations before the joint resolver. This
     # local AI coordination avoids repeatedly choosing an identical failed
     # destination set; it is not permission to ignore an actual collision.
-    walker_ids = {robot['id'] for robot, _, _ in walkers}
+    walker_ids = {row[0]['id'] for row in walkers}
     known_stationary = {Pos.load(robot['pos']) for robot in robots
                         if robot['health'] > 0 and robot['id'] not in walker_ids}
     obstacles = hard_blocked | known_stationary
