@@ -118,7 +118,7 @@ class ObservedWaveTableTests(unittest.TestCase):
 class FixedPoolTests(unittest.TestCase):
     def test_issue48_observed_first_column_and_provisional_mirror(self):
         from agent.map_layout import OBSERVED
-        for side, expected_x in (('challenger', 22), ('defender', 18)):
+        for side, expected_x in (('challenger', 18), ('defender', 22)):
             state = scenario(7, side, map_layout=OBSERVED)
             layout = state['_demo']['spawn_layout']
             self.assertEqual(expected_x, layout['center']['x'])
@@ -141,7 +141,7 @@ class FixedPoolTests(unittest.TestCase):
     def test_ten_nights_reuse_prefixes_of_one_fixed_pool_for_both_sides(self):
         for profile, pressure, counts in [('observed-seven-days', 3, OBSERVED_TOTALS + EXTRAPOLATED_TOTALS),
                                           ('local-pressure', 3, [4, 7, 10, 13, 16, 19, 22, 25, 28, 31])]:
-            for side, first_x in [('challenger', 22), ('defender', 18)]:
+            for side, first_x in [('challenger', 18), ('defender', 22)]:
                 with self.subTest(profile=profile, side=side):
                     state = scenario(90317, side, pressure, profile=profile)
                     layout = deepcopy(state['_demo']['spawn_layout'])

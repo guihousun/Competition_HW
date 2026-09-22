@@ -158,9 +158,10 @@ def free_cells(state, exclude_rings=False):
                 min(distance(Pos(x,y), p) for p in station_footprint(b.pos)) > 2 for b in bases))]
 
 
-# Issue #48, official replay pk-696563: the left-base attack column is x=22.
-# User requests this observed anchor as the simulator default. Only that x is
-# observed: opposite-side mirroring, row order and later columns remain local.
+# Issue #48, official replay pk-696563: team 4474/defender's right-base
+# attack column is x=22. User requests this observed anchor as the simulator
+# default. Only that x is observed: opposite-side mirroring, row order and
+# later columns remain local.
 # Keep the schema stable so saved/custom pools retain their original geometry.
 SPAWN_SCHEMA = 'local-fixed-spawn/1'
 SPAWN_MAX_PER_COLUMN = 9
@@ -188,8 +189,8 @@ def spawn_row_band(center_y: int, height: int) -> list[int]:
 def spawn_column_pool(turn: Turn):
     """Fixed columns on the base's attack side: x near-to-far, <=9 y per column.
 
-    On the official 41-column map, left bases start at observed x=22 and step
-    right; right bases provisionally mirror to x=18 and step left. Scaling to
+    On the official 41-column map, right bases start at observed x=22 and step
+    left; left bases provisionally mirror to x=18 and step right. Scaling to
     other map widths is only a local experiment, not an official coordinate.
     Each column uses :func:`spawn_row_band`, so it keeps nine distinct rows even
     when the base sits on the top or bottom edge. Returned cells are not yet
@@ -199,8 +200,8 @@ def spawn_column_pool(turn: Turn):
     if station is None:
         return None, None, []
     on_left = station.pos.x < turn.width / 2
-    first_x = round((turn.width - 1) * (SPAWN_FIRST_COLUMN_FRACTION if on_left else
-                                        1 - SPAWN_FIRST_COLUMN_FRACTION))
+    first_x = round((turn.width - 1) * (1 - SPAWN_FIRST_COLUMN_FRACTION if on_left else
+                                        SPAWN_FIRST_COLUMN_FRACTION))
     direction = 1 if on_left else -1
     band = spawn_row_band(station.pos.y, turn.height)
     columns, slots = [], []
@@ -252,7 +253,7 @@ def configure_spawns(state, points=None):
                   'source': 'issue48_pk696563_first_x22_rows_and_mirror_provisional',
                   'observed_first_column': 22,
                   'source_replay': 'pk-696563',
-                  'geometry': '左侧基地来袭首列 x=22（Issue48 回放摘录）；右侧镜像 x=18、纵向排列与后续列仍为本地补全'}
+                  'geometry': '右侧基地来袭首列 x=22（Issue48 回放摘录）；左侧镜像 x=18、纵向排列与后续列仍为本地补全'}
     layout['occupancy'] = 'skip occupied fixed slots; report shortages; never spread outside pool'
     layout['pool_size'] = len(layout['slots'])
     layout['min_pool_size'] = wave_data.DEFAULT_POOL_REQUIRED
