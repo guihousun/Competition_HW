@@ -113,7 +113,9 @@ class NightWeaponTest(unittest.TestCase):
 
         夹具没有矿 ⇒ 挖矿那位这一回合什么都不发（空指令合法）。
         """
-        cmds = plan(self._turn(Worker(1, Pos(14, 26)), Worker(2, Pos(14, 24))))
+        # 第二个工人站在 (14, 22)：不在机器人 (16, 26) 的推进走廊上、也离它 4 格
+        # （近到 `night.DANGER`(2) 就会先撤，那是另一条线的事，见 `RobotLaneTest`）
+        cmds = plan(self._turn(Worker(1, Pos(14, 26)), Worker(2, Pos(14, 22))))
         self.assertEqual(set(cmds), {"1"}, f"只有炮手有指令：{cmds}")
         self.assertEqual(cmds["1"]["action"], "move", "炮手朝炮位走")
         cell = Pos(cmds["1"]["targetPos"][0]["x"], cmds["1"]["targetPos"][0]["y"])
@@ -142,12 +144,13 @@ class NightWeaponTest(unittest.TestCase):
         """**开拓者就是炮手**（用户口径"晚上开拓者操三个火箭筒"）：它上炮位，工人出门挖矿。
 
         旧的"工人够多 ⇒ 开拓者一组都不认领"（第 74 步补位炮手）随新阵形作废 —— 三座火箭
-        共用一个操作位、一人全操，人手不再紧张。夹具没有矿 ⇒ 工人这一回合空指令。
+        共用一个操作位、一人全操，人手不再紧张。夹具没有矿 ⇒ 工人这一回合空指令
+        （两个工人都放在机器人 (16, 26) 的推进走廊之外：站在走廊上会先撤，见 `RobotLaneTest`）。
         """
         cmds = plan(
             self._turn(
                 Pioneer(1, Pos(14, 26)),  # 离 NEAR 更近
-                Worker(2, Pos(12, 24)),
+                Worker(2, Pos(12, 21)),
                 Worker(3, Pos(9, 19)),
             )
         )
@@ -879,6 +882,101 @@ class NightEconomyTest(unittest.TestCase):
         self.assertIn(cmd["action"], ("move", "collect"), cmd)
 
 
+class RobotLaneTest(unittest.TestCase):
+    """工人避开机器人**和它朝基地推进的那条走廊**（用户报"工人在机器人前进路径上、人和机器人
+    走到一块导致工人死亡"）。
+
+    走廊（`night._lane_cells`）= 从机器人朝基地走 `LANE_AHEAD`(8) 格、上下各让开 `LANE_HALF`(1)
+    的那条带子；它和机器人周围 `DANGER`(2) 格一起进 `night._safe`：
+    ① 挑矿时算走不通（矿在走廊里就换一座）；② 迈步时当软避让；③ 脚边已经不安全（站在走廊上 /
+    机器人 2 格内）⇒ `night.flee` 先撤一格 —— 挑不出矿时也不许原地站着挨啃。
+    """
+
+    BASE = Pos(10, 24)
+    NIGHT = 85
+    ROBOT = Pos(18, 24)
+    # 机器人 (18, 24) 朝基地 (10, 24) 走 ⇒ 走廊是 x 11..17、y ∈ [23, 25] 那一条
+    ON_LANE = Pos(14, 24)
+    LANE_ORE = Pos(13, 24)
+    SAFE_ORE = Pos(18, 30)
+    MINER = Pos(12, 30)
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+        night._fired.clear()
+
+    def _turn(self, *roles: BaseRole, ores: dict[Pos, str] | None = None, robot: Pos | None = None):
+        foes = (Robot(pos=self.ROBOT if robot is None else robot, health=40),)
+        grid = {self.BASE: "station", **(ores or {})}
+        grid |= {r.pos: r.type_name for r in roles}
+        for foe in foes:
+            grid[foe.pos] = "robot:smallRobot"
+        return Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=0,
+            weapons=(),
+            robots=foes,
+            vendor_prices={"copper": 5, "stone": 1},
+        )
+
+    def _pioneer(self) -> Pioneer:
+        """把炮手的位置占掉（名册里有开拓者 ⇒ 工人全去挖矿，不会被派上炮位）。"""
+        return Pioneer(1, Pos(22, 30))
+
+    def test_a_worker_on_the_corridor_steps_out_of_it(self):
+        """站在走廊上（离机器人 4 格、也不在 2 格圈里）⇒ 先撤一格，不许原地开矿。
+
+        脚边那格铜矿（`out = 0`、压根不用走路）正好是"没有 `flee` 就会 `collect`"的对照。
+        """
+        worker = Worker(2, self.ON_LANE)
+        turn = self._turn(self._pioneer(), worker, ores={Pos(14, 25): "copper"})
+        cmd = plan(turn)["2"]
+        self.assertEqual(cmd["action"], "move", f"该从走廊上撤走，而不是采脚边那块：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertGreater(
+            step.dist(self.ROBOT), self.ON_LANE.dist(self.ROBOT), f"这一步要离机器人更远：{cmd}"
+        )
+
+    def test_a_worker_two_cells_from_a_robot_backs_off_instead_of_mining(self):
+        """机器人贴到 `DANGER`(2) 格内 ⇒ 哪怕脚边就有矿也先撤（那是被啃死的那一类阵亡）。"""
+        worker = Worker(2, Pos(16, 27))
+        robot = Pos(14, 26)
+        turn = self._turn(
+            self._pioneer(), worker, ores={Pos(16, 28): "copper"}, robot=robot
+        )
+        cmd = plan(turn)["2"]
+        self.assertEqual(cmd["action"], "move", f"该先撤，不是采脚边那块：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertGreater(step.dist(robot), Pos(16, 27).dist(robot), f"离机器人更远：{cmd}")
+
+    def test_the_corridor_is_not_mined(self):
+        """同价的两座铜矿，一座在走廊里、一座在走廊外 ⇒ 挑走廊外的那座（走廊当走不通）。
+
+        对照：把机器人挪远（它的走廊不再盖住那一格）⇒ 近的那座立刻是目标。
+        """
+        worker = Worker(2, self.MINER)
+        ores = {self.LANE_ORE: "copper", self.SAFE_ORE: "copper"}
+        cmd = plan(self._turn(self._pioneer(), worker, ores=ores))["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cmd["action"], "move")
+        self.assertLess(step.dist(self.SAFE_ORE), self.MINER.dist(self.SAFE_ORE), f"该奔走廊外那座：{cmd}")
+        far = plan(self._turn(self._pioneer(), worker, ores=ores, robot=Pos(35, 8)))["2"]
+        far_step = Pos(far["targetPos"][0]["x"], far["targetPos"][0]["y"])
+        self.assertLess(
+            far_step.dist(self.LANE_ORE), self.MINER.dist(self.LANE_ORE), f"机器人挪远 ⇒ 近的那座没了危险：{far}"
+        )
+
+    def test_a_safe_miner_is_not_disturbed(self):
+        """机器人既不挨着、走廊也不从脚下过 ⇒ 一切照旧（照挑最值钱的矿）。"""
+        worker = Worker(2, self.MINER)
+        cmd = plan(self._turn(self._pioneer(), worker, ores={self.SAFE_ORE: "copper"}, robot=Pos(35, 8)))["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cmd["action"], "move")
+        self.assertLess(step.dist(self.SAFE_ORE), self.MINER.dist(self.SAFE_ORE), f"照旧去挖：{cmd}")
+
+
 class NightTrajectoryTest(unittest.TestCase):
     """夜里的**轨迹账**（第 163–166 步，用户报"天亮才刚走到矿边又要回来修墙"）：
 
@@ -1135,14 +1233,17 @@ class NoTaskNightTest(unittest.TestCase):
         夜里采的货**第二天才卖** ⇒ 照今天的价挑等于拿过期行情下注。对照：白天那一支仍按当天
         实测价（`ahead=0`，见 `test_game_core`），这是两条线唯一的分歧。
         """
+        # 机器人放在远处的角上：这条用例测的是**定价**，不是安全（挨得近的工人会先撤，
+        # 那是 `RobotLaneTest` 的事；默认那台 (14, 26) 离 (12, 28) 只有 2 格）
+        far = (Robot(pos=Pos(35, 8), health=40),)
         roles = (Pioneer(1, Pos(9, 24)), Worker(2, Pos(12, 28)))
-        today = self._turn(*roles)
+        today = self._turn(*roles, robots=far)
         cmd = plan(today)["2"]
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.COPPER), Pos(12, 28).dist(self.COPPER), "今天：铜贵")
 
         core.record_news([("iron", "up", 1, 1)], today)  # 明天铁 3 × 2 = 6 > 铜 5
-        cmd = plan(self._turn(*roles))["2"]
+        cmd = plan(self._turn(*roles, robots=far))["2"]
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.IRON), Pos(12, 28).dist(self.IRON), f"明天铁贵 ⇒ 挖铁：{cmd}")
 
@@ -1236,6 +1337,7 @@ class WallRepairTest(unittest.TestCase):
     BASE = Pos(10, 24)
     NIGHT4 = 461  # 第 4 天的夜里第一个回合（within = 71）
     NIGHT3 = 331  # 第 3 天的夜里第一个回合
+    NIGHT6 = 721  # 第 6 天的夜里第一个回合（白天是 651..720；阈值已经抬到 300）
     FRONT = Pos(13, 23)  # 正面列中段那一格
     POST = Pos(12, 23)  # 它的后方待命位（靠基地那一列里"离最远那格最近"的一格）
     FOE = Pos(15, 23)  # 一台够得着正面列的小型机器人（攻击距离 3）
@@ -1307,6 +1409,17 @@ class WallRepairTest(unittest.TestCase):
         turn = self._night(worker, damaged={self.FRONT: (140, 1)}, round_no=self.NIGHT3)
         self.assertIsNone(night.repairer(turn, 1), "第 3 夜不该派修墙工")
         self.assertNotIn("use", self._actions(plan(turn)))
+
+    def test_a_later_day_starts_repairing_earlier(self):
+        """阈值随天数抬（第 5 天起每天 +50）：同一格 240 血的墙，第 4 夜不修、第 6 夜就修。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        early = plan(self._night(worker, damaged={self.FRONT: (240, 1)}))
+        self.assertNotIn("use", self._actions(early), "第 4 夜：240 > 200 ⇒ 不动它")
+        late = plan(self._night(worker, damaged={self.FRONT: (240, 1)}, round_no=self.NIGHT6))
+        self.assertEqual(late["2"]["action"], "use", f"第 6 夜：240 < 300 ⇒ 修：{late}")
+        self.assertEqual(
+            Pos(late["2"]["targetPos"][0]["x"], late["2"]["targetPos"][0]["y"]), self.FRONT
+        )
 
     def test_a_wall_above_the_threshold_is_left_alone(self):
         """260 血（> 200）不修：已经守在待命位上 ⇒ 这一回合什么都不发。"""

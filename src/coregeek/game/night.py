@@ -84,6 +84,14 @@ ROCKET_COOLDOWN = 3
 #: 夜里挖矿要离机器人多远（切比雪夫）：工人这一夜在盒外采，机器人周围这一圈当走不通。
 DANGER = 2
 
+#: 机器人朝基地推进时"这一路会经过"的那条走廊：往前看 `LANE_AHEAD` 格，每格再让开
+#: `LANE_HALF` 格的切比雪夫邻域（走廊因此是 `2 × LANE_HALF + 1` 格宽）。
+#: 机器人从正面朝基地压过来（`grid._front_back`）⇒ 工人在它这条路上就会被撞上 / 被顺手打掉
+#: （用户报"工人在机器人前进路径上、人和机器人走到一块"）。8 是拍的：够让工人提前几回合让开，
+#: 又不会把盒外一大片矿全划成禁区（整条画到基地就会）。
+LANE_AHEAD = 8
+LANE_HALF = 1
+
 
 #: 第 4 夜起派一个工人守着正面列修墙（用户口径"第四晚开始"）。
 WALL_REPAIR_FROM_DAY = 4
@@ -108,12 +116,63 @@ def is_cleared(turn: Turn) -> bool:
     return not _alive(_foe_robots(turn))
 
 
-def _safe(turn: Turn) -> set[Pos]:
-    """夜里挖矿用的地形：`_passable` **再加上每个机器人周围切比雪夫 ≤ `DANGER` 的格子**。
+def _lane_cells(turn: Turn) -> set[Pos]:
+    """冲我方来的机器人**朝基地推进时会路过**的那一串格子（带宽 ±`LANE_HALF`，往看 `LANE_AHEAD`）。
 
-    工人这一夜在盒外采，机器人很可能就在旁边 —— 挑矿与"走得到吗"都按这份地形算，等于把
-    机器人附近当成走不通（用户口径"保证安全"）。⚠️ 只是**挑矿与估算**用；真迈步那一步把它
-    当**软避让**（绕不开退回硬障碍照走，绝不原地卡死）。"""
+    目标是正面列里离它最近的那一格（它要去啃的墙）：每步挑"离目标更近、又不挡路"的 8 邻格 ⇒
+    绕开矿石与别的建筑（直着走会在第一块矿那儿判错路）。真的没有更近的自由格了（前面就是墙）
+    ⇒ 把它正对着的那一格也算进走廊，到此为止。⚠️ 地形用 `_passable`（自己人算路过）：同事站在
+    路上不该让这条走廊断在那儿。"""
+    station = turn.map.station
+    if station is None:
+        return set()
+    walk, width, height = _passable(turn), *turn.map.size
+    goals = front_wall_cells(turn) or (station,)
+
+    def band(cell: Pos) -> set[Pos]:
+        """走廊上那一格的**切比雪夫邻域**（半径 `LANE_HALF`）—— 不分方向，正面朝东朝北一样宽。"""
+        return {
+            Pos(cell.x + dx, cell.y + dy)
+            for dx in range(-LANE_HALF, LANE_HALF + 1)
+            for dy in range(-LANE_HALF, LANE_HALF + 1)
+            if 0 <= cell.x + dx < width and 0 <= cell.y + dy < height
+        }
+
+    def near(a: Pos) -> Any:
+        """从 `a` 看过去：切比雪夫近的优先，并列取更"直"的那个（同距离的并列很多 —— 不压一下，
+        正面列那一竖排里会挑到边角那格，整条走廊跟着斜过去）。"""
+        return lambda b: (a.dist(b), abs(b.x - a.x) + abs(b.y - a.y), b)
+
+    out: set[Pos] = set()
+    for robot in _alive(_foe_robots(turn)):
+        goal = min(goals, key=near(robot.pos))
+        cell = robot.pos
+        for _ in range(LANE_AHEAD):
+            ahead = []
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nxt = Pos(cell.x + dx, cell.y + dy)
+                    if (dx or dy) and 0 <= nxt.x < width and 0 <= nxt.y < height:
+                        if nxt.dist(goal) < cell.dist(goal):
+                            ahead.append(nxt)
+            free = [c for c in ahead if c not in walk]
+            if not free:
+                # 前面没路了（那就是墙）：把它正对着的那一格也划进来 —— 机器人停在那儿啃
+                if ahead:
+                    out |= band(min(ahead, key=near(goal)))
+                break
+            cell = min(free, key=near(goal))
+            out |= band(cell)
+    return out
+
+
+def _safe(turn: Turn) -> set[Pos]:
+    """夜里工人**不该待**的地形：`_passable` 再加每个活机器人周围切比雪夫 ≤ `DANGER` 的格子，
+    以及冲我方来的机器人朝基地推进的那条走廊（`_lane_cells`）。
+
+    工人这一夜在盒外采，机器人很可能就在旁边、或者正朝他这边压过来 —— 挑矿与"走得到吗"都按
+    这份地形算，等于把机器人附近与它要经过的路当成走不通（用户口径"保证安全"）。⚠️ 只是
+    **挑矿与估算**用；真迈步那一步把它当**软避让**（绕不开退回硬障碍照走，绝不原地卡死）。"""
     blocked = _passable(turn)
     for robot in _alive(turn.robots):
         blocked |= {
@@ -121,12 +180,44 @@ def _safe(turn: Turn) -> set[Pos]:
             for dx in range(-DANGER, DANGER + 1)
             for dy in range(-DANGER, DANGER + 1)
         }
-    return blocked
+    return blocked | _lane_cells(turn)
 
 
 def _danger_cells(turn: Turn) -> frozenset[Pos]:
-    """机器人周围那圈格子（切比雪夫 ≤ `DANGER`）—— 挖矿路上当软避让用。"""
+    """机器人周围那圈 + 它要走的走廊 —— 挖矿路上当软避让用。"""
     return frozenset(_safe(turn) - _passable(turn))
+
+
+def flee(role: Worker, turn: Turn, q: _Queue) -> bool:
+    """脚边不安全（站在冲我方来的那条推进走廊上，或它在 `DANGER`(2) 格内）⇒ 这一回合先撤一格。
+
+    撤法：在"原地 + 8 邻格"里挑最安全的一格 —— 先看**不在走廊上**，再看**离最近的活机器人最
+    远**，并列取坐标序（可复现）。一个更安全的格子都没有 ⇒ 原地不动（返回 `True`、发空指令，
+    合法）。`True` = 这一回合归它。
+
+    这是"工人和机器人走到一块"那类阵亡的最后一道闸：`_priciest_ore` 把走廊与机器人附近全挡掉
+    之后就挑不出矿，没有这一支那个工人会原地站着被啃死。
+    ⚠️ 触发线用 `DANGER`(2) 而不是机器人的攻击距离 `ROBOT_RANGE`(3)：3 那圈仍允许路过，否则
+    工人会绕着每一台机器人走、盒外的矿一批批放弃。"""
+    foes = _alive(_foe_robots(turn))
+    if not foes:
+        return False
+    lane = _lane_cells(turn)
+    if role.pos not in lane and min(role.pos.dist(r.pos) for r in foes) > DANGER:
+        return False
+    blocked = turn.map.blocked | {r.pos for r in _alive(turn.robots)}  # 机器人脚下那格也不许踩
+    cands = [role.pos]
+    cands += [Pos(role.pos.x + d.x, role.pos.y + d.y) for d in STEPS]
+    # 原地那一格在 `blocked` 里（自己站着），只对它破例
+    cands = [c for c in cands if c == role.pos or c not in blocked]
+
+    def key(cell: Pos) -> tuple[int, int, Pos]:
+        return (1 if cell in lane else 0, -min(cell.dist(r.pos) for r in foes), cell)
+
+    best = min(cands, key=key)
+    if best == role.pos:
+        return True
+    return q.step(role, best, onto=True)
 
 
 def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
@@ -141,9 +232,12 @@ def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     只问"走得到吗"，连时间预算都不算。清场之后才轮到它的是 `planner`：清场后走
     `day.sell_or_mine`（会卖也会买）。
 
-    ⚠️ **机器人还活着时按 `_safe` 挑矿**（把机器人周围 `DANGER` 格内当走不通）⇒ 矿被机器人
-    占着就换下一座；迈步那一步把它们当**软避让**（绕不开照走，绝不为躲机器人原地卡死）。"""
+    ⚠️ **机器人还活着时按 `_safe` 挑矿**（机器人周围 `DANGER` 格内 + 它朝基地推进的走廊都当走
+    不通）⇒ 矿被机器人占着、或正在它要经过的路上就换下一座；迈步那一步把它们当**软避让**（绕不
+    开照走，绝不为躲机器人原地卡死）；**脚边已经不安全就先撤**（`flee`，压在挑矿之前）。"""
     if walk_home(role, turn, q, ore_taken):
+        return
+    if flee(role, turn, q):
         return
     foes = _alive(turn.robots)
     area = _safe(turn) if foes else None
@@ -257,7 +351,7 @@ def hold_the_wall(role: Worker, turn: Turn, q: _Queue) -> bool:
 
 
 def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
-    """守着正面列修墙：把血 < `WALL_REPAIR_HP` 的那一格修回满，没事就待在正面墙后方。
+    """守着正面列修墙：把血 < `core.wall_repair_hp(turn)` 的那一格修回满，没事就待在正面墙后方。
 
     目标由 `repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` —— **手里有打得上的
     墙券就先打券**（升级顺带回满血，比修复包更值），没有券才用修复包。没有要修的就去待命位
@@ -288,7 +382,8 @@ def repair_target(turn: Turn) -> Pos | None:
     夜里砌不了，只能等白天。够不着的也不修：一回合只修得一格，留给正在挨打的那格。"""
     front = set(front_wall_cells(turn))
     hurt = [
-        w for w in turn.walls if w.pos in front and needs_repair(w) and _threatened(w.pos, turn)
+        w for w in turn.walls
+        if w.pos in front and needs_repair(w, turn) and _threatened(w.pos, turn)
     ]
     return min(hurt, key=lambda w: (w.health, w.pos)).pos if hurt else None
 
@@ -470,7 +565,7 @@ def _weight(robot: Robot, walls: tuple[Pos, ...], hurt: frozenset[Pos]) -> int:
 def _weights(turn: Turn, robots: tuple[Robot, ...]) -> dict[Pos, int]:
     """候选机器人格的权重表（墙环最多 20 格 ⇒ 一炮算一次的开销可以忽略）。"""
     walls = tuple(w.pos for w in turn.walls)
-    hurt = frozenset(w.pos for w in turn.walls if needs_repair(w))
+    hurt = frozenset(w.pos for w in turn.walls if needs_repair(w, turn))
     return {r.pos: _weight(r, walls, hurt) for r in robots}
 
 

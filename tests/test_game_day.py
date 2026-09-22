@@ -2473,6 +2473,15 @@ class DemolishRaceTest(unittest.TestCase):
         self.assertEqual(cmds["2"]["action"], "remove", f"该拆：{cmds}")
         self.assertNotIn("use", {c["action"] for c in cmds.values()}, f"券该让位：{cmds}")
 
+    def test_a_later_day_demolishes_a_sturdier_l1_wall(self):
+        """阈值随天数抬（第 5 天起每天 +50）：同一面 240 血的 L1 墙，第 3 天不动、第 6 天拆了重砌。"""
+        first = Worker(2, self.BESIDE_WEAK, {"stone": 1})
+        early = plan(self._turn(Pioneer(1, self.FAR), first, weak_hp=240))
+        self.assertNotIn("remove", {c["action"] for c in early.values()}, f"第 3 天：240 > 200")
+        late = plan(self._turn(Pioneer(1, self.FAR), first, weak_hp=240)._replace(round_no=651))
+        self.assertEqual(late["2"]["action"], "remove", f"第 6 天：240 < 300 ⇒ 拆：{late}")
+        self.assertEqual(late["2"]["targetPos"], [{"x": 13, "y": 23}])
+
     def test_a_demolished_cell_stops_being_a_voucher_target(self):
         """判据在 `_step_targets` 一层就成立（不必经过 planner）：排掉那一格，目标表里就没有它。"""
         turn = self._turn(Pioneer(1, self.FAR))
