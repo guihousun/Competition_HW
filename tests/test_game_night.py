@@ -17,7 +17,7 @@ from coregeek.game import night  # noqa: E402
 from coregeek.game.grid import Pos, wall_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
-from coregeek.game.core import WALL  # noqa: E402
+from coregeek.game.core import WALL, WALL_FIXER  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -845,6 +845,166 @@ class StationUpgradeTest(unittest.TestCase):
             self._turn(worker, 300, robots=(Robot(pos=Pos(14, 24), health=60),))
         ).get("10010")
         self.assertEqual(cmd["action"], "use")
+
+
+class WallRepairTest(unittest.TestCase):
+    """第 4 夜起的修墙线：血 < `WALL_REPAIR_HP`(200) 的**正面墙**用修复包回满。
+
+    三条口径都出自用户：① 第 3 天起攒包（`day.RepairStock`）、**第 4 夜起**派工；② 没包就
+    出门挖矿、有包就守在正面墙后方那一列；③ 阈值与白天"拆了重砌"**共用** `core.WALL_REPAIR_HP`。
+    """
+
+    BASE = Pos(10, 24)
+    NIGHT4 = 461  # 第 4 天的夜里第一个回合（within = 71）
+    NIGHT3 = 331  # 第 3 天的夜里第一个回合
+    FRONT = Pos(13, 23)  # 正面列中段那一格
+    POST = Pos(12, 23)  # 它的后方待命位（靠基地那一列里"离最远那格最近"的一格）
+    FOE = Pos(15, 23)  # 一台够得着正面列的小型机器人（攻击距离 3）
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+        night._fired.clear()
+
+    def _turn(
+        self,
+        *roles: BaseRole,
+        damaged: dict[Pos, tuple[int, int]] | None = None,
+        robots: tuple[Robot, ...] | None = None,
+        round_no: int = NIGHT4,
+        ores: dict[Pos, str] | None = None,
+        weapons: tuple[Weapon, ...] = (),
+        gaps: frozenset[Pos] = frozenset(),
+    ) -> Turn:
+        ring = wall_cells(self.BASE, 41)
+        grid: dict[Pos, str] = {c: WALL for c in ring if c not in gaps}
+        grid[self.BASE] = "station"
+        grid.update(ores or {})
+        for gun in weapons:
+            grid[gun.pos] = gun.kind
+        for role in roles:
+            grid[role.pos] = role.type_name
+        foes = (Robot(pos=self.FOE, health=40),) if robots is None else robots
+        for foe in foes:
+            grid[foe.pos] = "robot:smallRobot"
+        walls = tuple(
+            Wall(40000 + i, cell, *(damaged or {}).get(cell, (1000, 1)))
+            for i, cell in enumerate(ring)
+            if cell not in gaps
+        )
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=100,
+            weapons=weapons,
+            robots=foes,
+            walls=walls,
+            vendor_prices={"stone": 1, "iron": 3, "copper": 5},
+        )
+
+    def _night(self, worker: Worker, **kw) -> Turn:
+        """炮手（开拓者 = `_night_gunner` 认的第一个角色）+ 这名工人。"""
+        return self._turn(Pioneer(1, Pos(12, 24)), worker, **kw)
+
+    def _actions(self, cmds: dict) -> list[str]:
+        return [cmd["action"] for cmd in cmds.values()]
+
+    def test_a_fourth_night_repairs_a_front_wall_below_the_threshold(self):
+        """第 4 夜 + 手里有包 + 正面墙 140 血 ⇒ 贴着就 `use WallFixer`，目标是那一格。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}))
+        self.assertEqual(cmds["2"]["action"], "use")
+        self.assertEqual(cmds["2"]["name"], WALL_FIXER)
+        self.assertEqual(
+            Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"]), self.FRONT
+        )
+
+    def test_an_earlier_night_never_repairs(self):
+        """第 3 夜不派修墙工：同一个局面下一张包都不许花（那个工人照旧出门挖矿）。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        turn = self._night(worker, damaged={self.FRONT: (140, 1)}, round_no=self.NIGHT3)
+        self.assertIsNone(night.repairer(turn, 1), "第 3 夜不该派修墙工")
+        self.assertNotIn("use", self._actions(plan(turn)))
+
+    def test_a_wall_above_the_threshold_is_left_alone(self):
+        """260 血（> 200）不修：已经守在待命位上 ⇒ 这一回合什么都不发。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (260, 1)}))
+        self.assertNotIn("use", self._actions(cmds))
+        self.assertNotIn("2", cmds)
+
+    def test_the_threshold_follows_no_level(self):
+        """阈值是**绝对值**：L2 墙 150 血（< 200）照样修，L3 墙 260 血照样不动。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        low = plan(self._night(worker, damaged={self.FRONT: (150, 2)}))
+        self.assertEqual(low["2"]["action"], "use", "L2 墙也归修墙线管")
+        self.assertEqual(
+            Pos(low["2"]["targetPos"][0]["x"], low["2"]["targetPos"][0]["y"]), self.FRONT
+        )
+        high = plan(self._night(worker, damaged={self.FRONT: (260, 3)}))
+        self.assertNotIn("use", self._actions(high))
+
+    def test_the_lowest_wall_goes_first(self):
+        """两格都够格：先修血最少的那格（并列才比坐标）。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        cmds = plan(
+            self._night(
+                worker, damaged={Pos(13, 22): (140, 1), Pos(13, 24): (90, 1)}
+            )
+        )
+        self.assertEqual(
+            Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"]), Pos(13, 24)
+        )
+
+    def test_only_the_front_column_is_repaired(self):
+        """侧面那一列不归它管：那格 100 血也不许花包（白天拆了重砌是它唯一的出路）。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        cmds = plan(self._night(worker, damaged={Pos(11, 21): (100, 1)}))
+        self.assertNotIn("use", self._actions(cmds))
+
+    def test_a_destroyed_wall_is_not_a_repair_target(self):
+        """被打穿的墙已经不在 `turn.walls` 里 ⇒ 既不发 `use` 也**绝不发 `build`**（夜里非法）。"""
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        cmds = plan(self._night(worker, gaps=frozenset({self.FRONT})))
+        self.assertNotIn("use", self._actions(cmds))
+        self.assertNotIn("build", self._actions(cmds))
+
+    def test_without_a_pack_the_worker_mines_instead(self):
+        """手里一个包都没有 ⇒ 不派修墙工，那名工人照旧出门挖矿（用户口径）。"""
+        worker = Worker(2, self.POST, {})
+        turn = self._night(worker, damaged={self.FRONT: (140, 1)}, ores={Pos(20, 10): "copper"})
+        self.assertIsNone(night.repairer(turn, 1), "没包就不该有人去修墙")
+        cmds = plan(turn)
+        self.assertEqual(cmds["2"]["action"], "move", "朝矿走（挖矿那条线）")
+        self.assertNotIn("use", self._actions(cmds))
+
+    def test_the_worker_waits_behind_the_front_wall(self):
+        """没有要修的 ⇒ 去正面墙**后方那一列**待命（不是盒外、也不是炮位）。"""
+        worker = Worker(2, Pos(20, 20), {WALL_FIXER: 1})
+        turn = self._night(worker)
+        self.assertEqual(night._repair_post(turn, worker), self.POST, "待命位在盒内那一列")
+        cmds = plan(turn)
+        cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertLess(cell.dist(self.POST), Pos(20, 20).dist(self.POST), "这一步朝待命位去")
+
+    def test_the_gunner_still_mans_the_guns(self):
+        """修墙工不是炮手：同一回合里 `attack` 与 `use` 各一条、分属两个角色。"""
+        gun = Weapon(id=90001, kind="gatling", pos=Pos(12, 25), attack_range=4, cooldown=0)
+        worker = Worker(2, self.POST, {WALL_FIXER: 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}, weapons=(gun,)))
+        self.assertEqual(cmds["90001"]["action"], "attack", f"炮手照旧开火：{cmds}")
+        self.assertEqual(cmds["2"]["action"], "use")
+
+    def test_a_pinned_pioneer_hands_the_repair_job_to_the_other_worker(self):
+        """开拓者被任务钉死 ⇒ 炮手换成名册第一个工人（没包），持包的那个才是修墙工。"""
+        pioneer = Pioneer(1, Pos(12, 24))
+        gunner = Worker(2, Pos(12, 22), {})
+        carrier = Worker(3, self.POST, {WALL_FIXER: 1})
+        turn = self._turn(pioneer, gunner, carrier, damaged={self.FRONT: (140, 1)})
+        turn = turn._replace(phase_task="一道题")
+        cmds = plan(turn)
+        self.assertEqual(cmds["3"]["action"], "use", f"持包的那个才是修墙工：{cmds}")
+        self.assertNotIn("2", cmds, "顶炮位的那个工人不去修墙")
 
 
 if __name__ == "__main__":

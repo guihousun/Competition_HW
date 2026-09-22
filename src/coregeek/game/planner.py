@@ -117,7 +117,7 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     ① 被任务钉死的开拓者 —— **人手够才钉得住**（工人阵亡 ⇒ 弃任务回炮位，生存第一）→
     ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **清场了 ⇒ 整夜改走白天那两条线**
     （`night.is_cleared`：工人 `day.sell_or_mine`、开拓者 `_pioneer_errand`）→
-    ④ 没清场：炮手 `night.defend`、其余工人 `night.mine_ore`。
+    ④ 没清场：炮手 `night.defend`、持包的工人 `night.repair_wall`、其余工人 `night.mine_ore`。
 
     两本账是**本函数的局部变量** —— 夜里不碰白天那个 `_Ctx` 黑板：炮位认领 `taken`
     （一人一组，组内任一座被认领 = 整组被认领）与矿格认领 `ore_taken`（清场那支自己
@@ -129,6 +129,8 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     # 否则名册第一个工人顶上；其余角色整夜挖矿。
     gunner = _night_gunner(turn)
     cleared = night.is_cleared(turn)
+    # 这一夜谁去修墙（第 4 夜起 + 手里有包的非炮手工人）；没人持包 ⇒ `None`、工人照旧挖矿
+    repairer = night.repairer(turn, gunner)
     # 清场后走白天那两条线 ⇒ 它们收的是 `_Ctx`（矿格认领那本账与挖矿共用同一份）
     ctx = _Ctx(turn, q, ore_taken=ore_taken)
 
@@ -150,6 +152,9 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
             continue
         if role.id == gunner:
             night.defend(role, turn, q, taken)
+            continue
+        if role.id == repairer:
+            night.repair_wall(role, turn, q, ore_taken)
             continue
         if isinstance(role, Worker):
             night.mine_ore(role, turn, q, ore_taken)

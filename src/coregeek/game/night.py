@@ -1,9 +1,13 @@
-"""夜里：一个角色操三座火箭、其余工人出门采矿，外加基地升级与"清场没有"。
+"""夜里：一个角色操三座火箭、一个工人守着正面列修墙、其余工人出门采矿，外加基地升级与
+"清场没有"。
 
-三个入口（`planner._night_intents` 按这个顺序问，那条链的代码在 `planner.py`）：`upgrade_station`
+入口（`planner._night_intents` 按这个顺序问，那条链的代码在 `planner.py`）：`upgrade_station`
 （基地残血 + 持券）→ `is_cleared`（没有还会打我方的活机器人 ⇒ 整夜改走白天那两条线）→
-`defend`（炮手回岗位开火）/ `mine_ore`（其余工人采最值钱的矿）。**判据顺序就是夜里的策略**，
-改序先看 `strategy.md` §5。
+`defend`（炮手回岗位开火）/ `repair_wall`（持包的工人修正面列）/ `mine_ore`（其余工人采最值钱的
+矿）。**判据顺序就是夜里的策略**，改序先看 `strategy.md` §5。
+
+修墙线由 `repairer()` 认人（第 4 夜起 + 手里有修复包的非炮手工人）；它只发 `move` / `use` ——
+夜里 `build` 与 `remove` 都非法，被打穿的墙只能等白天重砌。
 
 岗位几何在 `core`（`_post_spots` / `_operator_spots` / `_near_spots`）：白天收工闸门与
 这里必须同一个口径，只改一处会让白天把人送进岗位、夜里又不认领，那格被占着、整组没人操。
@@ -18,6 +22,7 @@ from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, base_cells
 from .roles import BaseRole, Worker
 from .core import (
+    WALL_FIXER,
     _Queue,
     _collect,
     _emit,
@@ -26,9 +31,11 @@ from .core import (
     _post_spots,
     _priciest_ore,
     _weapon_groups,
+    front_wall_cells,
+    needs_repair,
 )
 from .utils import _passable
-from .world import Robot, Turn, Weapon
+from .world import ROUNDS_PER_DAY, Robot, Turn, Weapon
 
 
 #: 三种武器的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；电磁能量 10（沿弹道
@@ -51,6 +58,14 @@ ROCKET_COOLDOWN = 3
 
 #: 夜里挖矿要离机器人多远（切比雪夫）：工人这一夜在盒外采，机器人周围这一圈当走不通。
 DANGER = 2
+
+
+#: 第 4 夜起派一个工人守着正面列修墙（用户口径"第四晚开始"）。
+WALL_REPAIR_FROM_DAY = 4
+
+
+#: 机器人的攻击距离（任务书 §4.7.2：四种都是 3）—— 够不到某格就不急着修它。
+ROBOT_RANGE = 3
 
 
 #: 基地升级券（夜里基地升级用）。
@@ -116,6 +131,95 @@ def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
         avoid=_danger_cells(turn) if foes else frozenset(),
         with_paths=True,
         reserve=True,
+    )
+
+
+def _day_index(turn: Turn) -> int:
+    """这一回合是第几天（1 起算）。`roundNo` 缺失（-1）⇒ 0：算不上"第几天"。"""
+    return (turn.round_no - 1) // ROUNDS_PER_DAY + 1 if turn.round_no > 0 else 0
+
+
+def repairer(turn: Turn, gunner: int | None) -> int | None:
+    """这一夜谁去修墙 ⇒ 角色 id；不派 ⇒ `None`。
+
+    第 `WALL_REPAIR_FROM_DAY`(4) 夜起才派，且**手里得有修复包**（谁买谁用、包不能转手 ⇒
+    一个包都没有的夜里，工人照旧出门挖矿）。候选 = 非炮手的工人：包多的优先，并列按 id。"""
+    if _day_index(turn) < WALL_REPAIR_FROM_DAY:
+        return None
+    carriers = [
+        r
+        for r in turn.roles
+        if isinstance(r, Worker) and r.id != gunner and r.bag.get(WALL_FIXER, 0) > 0
+    ]
+    if not carriers:
+        return None
+    return min(carriers, key=lambda r: (-r.bag.get(WALL_FIXER, 0), r.id)).id
+
+
+def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
+    """守着正面列修墙：把血 < `WALL_REPAIR_HP` 的那一格修回满，没事就待在正面墙后方。
+
+    目标由 `_repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` 修复包。没有要修的
+    就去待命位站着（`_repair_post`：那里零步够着三格正面墙），下一回合就能出包。待命位走不到
+    ⇒ 出门挖矿，不原地干等。只发 `move` / `use`。"""
+    target = _repair_target(turn)
+    if target is not None:
+        if role.pos.dist(target) <= 1:
+            _emit(q.cmds, role, actions.Use, WALL_FIXER, target)
+            return
+        if q.step(role, target, with_paths=True, reserve=True):
+            return
+    post = _repair_post(turn, role)
+    if post is not None:
+        if role.pos == post:
+            return
+        if q.step(role, post, onto=True, with_paths=True, reserve=True):
+            return
+    mine_ore(role, turn, q, ore_taken)
+
+
+def _repair_target(turn: Turn) -> Pos | None:
+    """该修的那一格正面墙：血最少的（并列按坐标序）；没有 ⇒ `None`。
+
+    只认 `turn.walls` 里真有的活墙 —— 已毁的（血 0）在 `model._walls` 就丢了，那是一格缺口、
+    夜里砌不了，只能等白天。够不着的也不修：一回合只修得一格，留给正在挨打的那格。"""
+    front = set(front_wall_cells(turn))
+    hurt = [
+        w for w in turn.walls if w.pos in front and needs_repair(w) and _threatened(w.pos, turn)
+    ]
+    return min(hurt, key=lambda w: (w.health, w.pos)).pos if hurt else None
+
+
+def _threatened(cell: Pos, turn: Turn) -> bool:
+    """有活机器人够得着这一格吗（切比雪夫 ≤ `ROBOT_RANGE`）。"""
+    return any(cell.dist(r.pos) <= ROBOT_RANGE for r in _alive(_foe_robots(turn)))
+
+
+def _repair_post(turn: Turn, role: Worker) -> Pos | None:
+    """待命位：正面墙**靠基地那一列**里能站的格，取"到最远那格最近 → 邻接最多 → 坐标序"。
+
+    那一列（左半基地 ⇒ 正面列 `x=13` 的后一列 `x=12`）中段一格同时够着 3 格正面墙 ⇒ 待命时
+    这一步不白走。候选全被占 / 出图 ⇒ `None`（调用方退到挖矿）。⚠️ 判据要**把自己脚下那格
+    除外**（`blocked` 里混着我自己）：不除外就会把自己站着的格子判成"不可站"，每回合都往旁边
+    挪一格、永远来回晃。每回合现算，不带跨回合状态。"""
+    front = front_wall_cells(turn)
+    station = turn.map.station
+    if not front or station is None:
+        return None
+    # 靠基地那一列：正面列在基地的哪一侧，就往回退一格
+    back = front[0].x - (1 if front[0].x > station.x else -1)
+    width, height = turn.map.size
+    blocked = turn.map.blocked - {role.pos}
+    cells = {
+        Pos(back, y)
+        for y in range(min(f.y for f in front) - 1, max(f.y for f in front) + 2)
+        if 0 <= back < width and 0 <= y < height and Pos(back, y) not in blocked
+    }
+    if not cells:
+        return None
+    return min(
+        cells,
+        key=lambda p: (max(p.dist(f) for f in front), -sum(1 for f in front if p.dist(f) <= 1), p),
     )
 
 
