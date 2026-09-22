@@ -1182,6 +1182,53 @@ class WallRepairTest(unittest.TestCase):
         cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
         self.assertLess(cell.dist(self.POST), Pos(20, 20).dist(self.POST), "这一步朝待命位去")
 
+    def test_the_repairer_upgrades_a_middle_wall_when_nothing_is_hurt(self):
+        """手边的券不留着：没有残墙可修时，用它升**中段正面墙**（待命位 ≤1 步那几格）。
+
+        升级顺带回满血 + 抬高一档上限（1000 → 1500）；留着不花 = 白站一夜。
+        """
+        worker = Worker(2, self.POST, {WALL_FIXER: 1, "WallUpgradeVoucher1": 1})
+        cmds = plan(self._night(worker))  # 全墙满血 ⇒ 没有要修的
+        self.assertEqual(cmds["2"]["action"], "use", f"该主动升级：{cmds}")
+        self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1")
+        cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertLessEqual(worker.pos.dist(cell), 1, "只用够得着的那一格（待命位中段）")
+
+    def test_a_wounded_wall_still_wins_over_an_idle_upgrade(self):
+        """有残墙 ⇒ 券/包都留给那一格，不把这一回合花在"升别的墙"上。
+
+        （修复前也是这个行为；这条钉住"第 ③ 步的例外"没把它改坏。）
+        """
+        worker = Worker(2, self.POST, {WALL_FIXER: 1, "WallUpgradeVoucher1": 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}))
+        self.assertEqual(cmds["2"]["action"], "use", f"该修那一格：{cmds}")
+        self.assertEqual(cmds["2"]["targetPos"], [{"x": 13, "y": 23}], "目标就是那面残墙")
+
+    def test_the_gunner_spends_a_weapon_voucher_instead_of_firing(self):
+        """夜里的武器券也用掉（用户口径"夜里把手头的券都可以用了"）：到岗先用券、那一回合不开火。
+
+        站位是三座共用的操作位 ⇒ 三座都在一格内；`_targets_for` 给的是"还升得动"的那两座
+        （非角那两座 L1 火箭，血并列 ⇒ 取坐标序 ⇒ (9,23)）。
+        """
+        weapons = tuple(
+            Weapon(10020 + i, "rocket", pos, 10, 0)
+            for i, pos in enumerate(weapon_sites(self.BASE, 41))
+        )
+        pioneer = Pioneer(1, Pos(9, 24), {"WeaponUpgradeVoucher1": 1})  # 共用操作位
+        cmds = plan(self._turn(pioneer, weapons=weapons))
+        self.assertEqual(cmds["1"]["action"], "use", f"持券就先用掉：{cmds}")
+        self.assertEqual(cmds["1"]["name"], "WeaponUpgradeVoucher1")
+        self.assertEqual(cmds["1"]["targetPos"], [{"x": 9, "y": 23}], "打在非角那座火箭上")
+
+    def test_a_wall_voucher_out_of_reach_does_not_stop_the_gunner(self):
+        """够不着的券不追：炮位在盒子深处（最近的墙也在 2 格外）⇒ 照旧开火，不为了券离开岗位。"""
+        gun = Weapon(id=90001, kind="gatling", pos=Pos(9, 25), attack_range=4, cooldown=0)
+        pioneer = Pioneer(1, Pos(9, 24), {"WallUpgradeVoucher1": 1})  # 贴着加特林
+        foe = Robot(pos=Pos(11, 25), health=40)  # 距炮位 2，够得着
+        cmds = plan(self._turn(pioneer, weapons=(gun,), robots=(foe,)))
+        # `attack` 的 key 是武器 id，不是角色 id
+        self.assertEqual(cmds["90001"]["action"], "attack", f"够不着 ⇒ 照旧开火：{cmds}")
+
     def test_the_gunner_still_mans_the_guns(self):
         """修墙工不是炮手：同一回合里 `attack` 与 `use` 各一条、分属两个角色。"""
         gun = Weapon(id=90001, kind="gatling", pos=Pos(12, 25), attack_range=4, cooldown=0)

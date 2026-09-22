@@ -200,11 +200,11 @@ def hold_the_wall(role: Worker, turn: Turn, q: _Queue) -> bool:
 def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     """守着正面列修墙：把血 < `WALL_REPAIR_HP` 的那一格修回满，没事就待在正面墙后方。
 
-    目标由 `_repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` —— **手里有打得上的
+    目标由 `repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` —— **手里有打得上的
     墙券就先打券**（升级顺带回满血，比修复包更值），没有券才用修复包。没有要修的就去待命位
     站着（`core._wall_post`：那里零步够着三格正面墙），下一回合就能出手。待命位走不到 ⇒ 出门
     挖矿，不原地干等。只发 `move` / `use`。"""
-    target = _repair_target(turn)
+    target = repair_target(turn)
     if target is not None:
         wall = next((w for w in turn.walls if w.pos == target), None)
         item = _front_voucher(role, wall) if wall is not None else None
@@ -222,7 +222,7 @@ def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> Non
     mine_ore(role, turn, q, ore_taken)
 
 
-def _repair_target(turn: Turn) -> Pos | None:
+def repair_target(turn: Turn) -> Pos | None:
     """该修的那一格正面墙：血最少的（并列按坐标序）；没有 ⇒ `None`。
 
     只认 `turn.walls` 里真有的活墙 —— 已毁的（血 0）在 `model._walls` 就丢了，那是一格缺口、

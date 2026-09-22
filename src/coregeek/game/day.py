@@ -140,7 +140,7 @@ class BackToPost:
     """第 0 级：`回岗步数 + POST_MARGIN(3) ≥ 白天剩余` ⇒ 回那一组的岗位；`True` = 到此为止。
 
     判据是**实时算出来的回岗步数**（BFS，与挑岗位同一个口径）：回岗要走多久就得多早动身，
-    再加 `POST_MARGIN` 的容错余量。到岗后第一件事是用券（`_use_voucher_here`：贴着就能升的
+    再加 `POST_MARGIN` 的容错余量。到岗后第一件事是用券（`use_voucher_here`：贴着就能升的
     那张先用），用不上就待命。目标与夜里 `night.defend` 的岗位同一个（`core._post_spots`）：
     三座火箭共用一个操作位（要站上去）—— 天黑时人已经在岗上，夜里第一回合就能开火。
     **只发 `move`**：复用 `night.defend` 会发 `attack`，而白天发是非法指令（红线）。
@@ -173,7 +173,7 @@ class BackToPost:
         for w in group:
             ctx.taken.add(w.pos)  # 定下这组了：认领，免得另一个角色也奔这里（一人只能操一组）
         if steps == 0:
-            _use_voucher_here(role, ctx)  # 已经在岗 ⇒ 先用券（贴着就能升的那张）
+            use_voucher_here(role, ctx)  # 已经在岗 ⇒ 先用券（贴着就能升的那张）
             return True
         ctx.q.step(role, spot, onto=onto)  # 只发 move，绝不调 `night._fire`
         return True
@@ -324,8 +324,8 @@ def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
     """修墙差事（第 3 天起，只由名册里最后一个工人跑）：**手上的墙券先花掉 → 攒修复包 → 攒墙券**。
 
     墙券也归他：两条线打的是同一列正面墙、站位契约也一样（切比雪夫 ≤1）⇒ 买、用、修走同一趟路。
-    反过来说，开拓者手里那张墙券在炮位上根本花不掉（`_use_voucher_here` 只管武器券），还会把他
-    从岗位拽到墙边。武器还有缺 ⇒ 整条不跑（别抢武器的钱）；买不起 / 商店走不到 / 这一趟来不及
+    反过来说，开拓者手里那张墙券在炮位上根本花不掉（`use_voucher_here` 只用在贴着的那张，而炮位
+    离墙 ≥4 格），还会把他从岗位拽到墙边。武器还有缺 ⇒ 整条不跑（别抢武器的钱）；买不起 / 商店走不到 / 这一趟来不及
     ⇒ 返回 False，让第 3 级接着挖矿，绝不空转。"""
     turn = ctx.turn
     if ctx.weapon_gap or turn.round_no < 0:
@@ -790,17 +790,24 @@ def _team_holds(turn: Turn, voucher: str) -> int:
     return sum(r.bag.get(voucher, 0) for r in turn.roles)
 
 
-def _use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
-    """站在岗位上、手里有武器券、且目标就贴着 ⇒ 先用掉它（用户口径"到了位置先用券"）。
+def use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
+    """手边的券先花掉：**武器券或墙券**，目标正好贴着（≤1 格）⇒ 当场 `use`。
 
-    不满足就什么都不发（待命）—— 目标不在手边（那座炮离得远）不为了它走开，下一回合再看。"""
-    held = next((v for v in VOUCHER.values() if role.bag.get(v, 0) > 0), None)
-    if held is None:
-        return False
-    spots = _targets_for(held, ctx.turn)
-    if not spots or role.pos.dist(spots[0]) > 1:
-        return False
-    return _emit(ctx.q.cmds, role, actions.Use, held, spots[0])
+    两个时段都用：白天在炮位上到岗那一支（`BackToPost`）、夜里在链的前面
+    （`planner._night_intents` 的 ③）—— `use` 没有昼夜限制。够不着的目标不追（不为了它离开岗位；
+    白天的买券差事接着办）。⚠️ 一个角色一回合只发一条指令 ⇒ 用券那一回合就不开火/不挖矿，
+    换来的是**永久升级（顺带回满血）**。
+
+    基地券不在这里：那条走 `night.upgrade_station` 更保守的门（只在基地 < 1/4 血时才用）。
+    目标按优先链取（`_targets_for`）⇒ 同一步里"血少的在前"，但只认够得着的那几个。"""
+    for voucher in (*VOUCHER_NAMES, *WALL_VOUCHER_NAMES):
+        if role.bag.get(voucher, 0) <= 0:
+            continue
+        spots = _targets_for(voucher, ctx.turn, ctx.demolish_taken)
+        reachable = next((s for s in spots if role.pos.dist(s) <= 1), None)
+        if reachable is not None:
+            return _emit(ctx.q.cmds, role, actions.Use, voucher, reachable)
+    return False
 
 
 def _weak_l1(turn: Turn) -> tuple[Pos, ...]:
