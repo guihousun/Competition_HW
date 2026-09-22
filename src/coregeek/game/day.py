@@ -370,23 +370,32 @@ DAY_CHAIN: tuple[State, ...] = (
 BACK_TO_POST = BackToPost()
 
 
-def _pack_reserve(turn: Turn, ctx: _Ctx) -> int:
-    """本回合该给修墙包留出多少金币（0 = 不用留）。
+def _wall_reserve(turn: Turn, ctx: _Ctx) -> int:
+    """本回合该给"修墙那两个开销"留出多少金币（0 = 不用留）。
 
-    名册里开拓者排在工人**前面**，而它买券是"尽可能多买" ⇒ 不先留这一手，第 3 天那 200 金会
-    被两张武器券一次吃光，工人一张包都买不到。留的钱 = 还缺的张数 × 单价；条件与
-    `repair_errand` 同一套（第 3 天起、武器建满、有工人能背、价目查得到）。"""
+    名册里开拓者排在工人**前面**，而它买武器券是"尽可能多买" ⇒ 不先留这一手，第 3 天那点金币会
+    被武器券一次吃光，工人一张包、一张墙券都买不到（用户口径要"提高墙体升级的优先级"）。
+    留的钱 = 还缺的修墙包 + **一张**墙券（只留一张，最温和；手里已经持着一张就不再留）。
+
+    条件与 `repair_errand` 同一套（第 3 天起、武器建满、有工人能背）；墙券那一半还要求
+    `WALL_CHAIN` 上**还有东西可升** —— 前排全升满 ⇒ 不再锁钱，武器券照旧吃满。"""
     if ctx.weapon_gap or turn.round_no < 0:
         return 0
     if (turn.round_no - 1) // ROUNDS_PER_DAY + 1 < REPAIR_STOCK_FROM_DAY:
         return 0
     if not any(isinstance(r, Worker) for r in turn.roles):
         return 0
+    packs = 0
     price = turn.shop_prices.get(WALL_FIXER, 0)
-    if price <= 0:
-        return 0
-    stock = _team_holds(turn, WALL_FIXER) + ctx.bought.get(WALL_FIXER, 0)
-    return max(0, REPAIR_PACKS - stock) * price
+    if price > 0:
+        stock = _team_holds(turn, WALL_FIXER) + ctx.bought.get(WALL_FIXER, 0)
+        packs = max(0, REPAIR_PACKS - stock) * price
+    step = _voucher_target(turn, WALL_CHAIN, ctx.demolish_taken)
+    if step is None:
+        return packs
+    voucher = step[0]
+    held = _team_holds(turn, voucher) + ctx.bought.get(voucher, 0)
+    return packs if held else packs + turn.shop_prices.get(voucher, 0)
 
 
 def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
@@ -427,8 +436,8 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
     #   还升得动的目标数 − 全队手里已有的张数 − 这一回合已经预扣的张数
     # 只按金币限量是不够的：钱多的时候两条线会各买满一轮，同一座炮买回两张券。
     free = len(spots) - _team_holds(turn, voucher) - ctx.bought.get(voucher, 0)
-    # 先扣掉修墙包那份（`_pack_reserve`）：券不许把工人买包的钱花光
-    afford = max(0, ctx.budget - _pack_reserve(turn, ctx))
+    # 先扣掉修墙那份（`_wall_reserve` = 包 + 一张墙券）：券不许把工人买包 / 买墙券的钱花光
+    afford = max(0, ctx.budget - _wall_reserve(turn, ctx))
     count = min(free, afford // price) if price > 0 else 0
     if count > 0 and _walk_to_shop(role, ctx, voucher, count):
         ctx.budget -= price * count  # 预扣：这一回合的另一条线不会再买

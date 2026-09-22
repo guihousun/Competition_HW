@@ -2067,6 +2067,7 @@ class RepairStockTest(unittest.TestCase):
         weapons: int = 3,
         level: int = 1,
         weak: tuple[Pos, int] | None = None,
+        front_level: int = 1,
     ) -> Turn:
         # 第 3 天起环是 16 格（`utils._sealed_back` 把背面两个角格补上）—— 不照这个口径铺，
         # `_ring` 会把那两个角格当成缺口、把工人支去砌墙，这一级根本轮不到
@@ -2085,6 +2086,9 @@ class RepairStockTest(unittest.TestCase):
         )
         grid = _terrain(guns, {self.BASE: "station"}, {c: WALL for c in ring}, {self.SHOP: "weaponShop"})
         grid |= {r.pos: r.type_name for r in roles}
+        front = set(core.front_wall_cells(
+            Turn(round_no=round_no, map=Map((41, 32), {self.BASE: "station"}), roles=(), gold=0)
+        ))
         return Turn(
             round_no=round_no,
             map=Map((41, 32), grid),
@@ -2092,7 +2096,12 @@ class RepairStockTest(unittest.TestCase):
             gold=gold,
             weapons=guns,
             walls=tuple(
-                Wall(40000 + i, c, weak[1] if weak and c == weak[0] else 1000, 1)
+                Wall(
+                    40000 + i,
+                    c,
+                    weak[1] if weak and c == weak[0] else 1000,
+                    front_level if c in front else 1,
+                )
                 for i, c in enumerate(ring)
             ),
             vendor_prices={"stone": 1, "copper": 5},
@@ -2209,6 +2218,40 @@ class RepairStockTest(unittest.TestCase):
         cmds = plan(self._turn(pioneer, gold=200))
         self.assertEqual(self._packs(cmds), [], f"开拓者不该买包：{cmds}")
         self.assertEqual(cmds["1"]["action"], "buy", "他的钱花在券上")
+
+
+    def test_the_pioneer_leaves_money_for_one_wall_voucher(self):
+        """开拓者买武器券时要给"一张墙券"留钱（用户口径"提高墙体升级的优先级"）。
+
+        210 金、包已攒够 3 张：不留手 ⇒ 他一次买 2 张武器券（200），承运人只剩 10 金、
+        一张 20 金的墙券都买不到；留一张 ⇒ 他只买 1 张，承运人当场买得到墙券。
+        """
+        pioneer = Pioneer(1, self.BESIDE)  # 贴着商店
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})  # 包够了 ⇒ 差事走到第 ③ 步
+        cmds = plan(self._turn(pioneer, worker, gold=210, level=1))
+        self.assertEqual(cmds["1"]["action"], "buy", f"开拓者买武器券：{cmds}")
+        self.assertEqual(cmds["1"]["num"], 1, f"给墙券留一张，别一次买两张：{cmds}")
+        self.assertEqual(
+            (cmds["2"]["action"], cmds["2"]["name"]),
+            ("buy", "WallUpgradeVoucher1"),
+            f"承运人这一回合该买得起墙券：{cmds}",
+        )
+
+    def test_the_reserve_disappears_once_the_front_walls_are_maxed(self):
+        """前排六格全 L3 ⇒ 不再锁钱：开拓者把两张武器券一次买满（预留不是长期占用）。"""
+        pioneer = Pioneer(1, self.BESIDE)
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})
+        cmds = plan(self._turn(pioneer, worker, gold=210, level=1, front_level=3))
+        self.assertEqual(cmds["1"]["action"], "buy", f"开拓者买武器券：{cmds}")
+        self.assertEqual(cmds["1"]["num"], 2, f"墙都满了就不该再留钱：{cmds}")
+
+    def test_a_held_wall_voucher_does_not_double_reserve(self):
+        """手里已经持着一张墙券 ⇒ 不再为第二张留钱（先用掉手里那张，买第二张不着急）。"""
+        pioneer = Pioneer(1, self.BESIDE)
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3, "WallUpgradeVoucher1": 1})
+        cmds = plan(self._turn(pioneer, worker, gold=210, level=1))
+        self.assertEqual(cmds["1"]["action"], "buy", f"开拓者买武器券：{cmds}")
+        self.assertEqual(cmds["1"]["num"], 2, f"手里有券 ⇒ 不用再留一张的钱：{cmds}")
 
 
 class DemolishRaceTest(unittest.TestCase):
