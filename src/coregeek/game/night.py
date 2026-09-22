@@ -24,7 +24,6 @@ from .roles import BaseRole, Worker
 from .core import (
     POST_MARGIN,
     WALL_FIXER,
-    WALL_VOUCHER,
     _Queue,
     _collect,
     _emit,
@@ -42,7 +41,7 @@ from .core import (
 )
 from .path import steps_between
 from .utils import _passable
-from .world import Robot, Turn, Wall, Weapon
+from .world import Robot, Turn, Weapon
 
 
 #: 三种武器**每发/每枚**的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；火箭中心 20、
@@ -353,16 +352,14 @@ def hold_the_wall(role: Worker, turn: Turn, q: _Queue) -> bool:
 def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     """守着正面列修墙：把血 < `core.wall_repair_hp(turn)` 的那一格修回满，没事就待在正面墙后方。
 
-    目标由 `repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` —— **手里有打得上的
-    墙券就先打券**（升级顺带回满血，比修复包更值），没有券才用修复包。没有要修的就去待命位
-    站着（`core._wall_post`：那里零步够着三格正面墙），下一回合就能出手。待命位走不到 ⇒ 出门
-    挖矿，不原地干等。只发 `move` / `use`。"""
+    目标由 `repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` 一张 `WALL_FIXER`。
+    **墙券不在这里**：券归开拓者买也归他用（`day.voucher_errand`），修墙工手里一张都不会有。
+    没有要修的就去待命位站着（`core._wall_post`：那里零步够着三格正面墙），下一回合就能出手。
+    待命位走不到 ⇒ 出门挖矿，不原地干等。只发 `move` / `use`。"""
     target = repair_target(turn)
     if target is not None:
-        wall = next((w for w in turn.walls if w.pos == target), None)
-        item = _front_voucher(role, wall) if wall is not None else None
         if role.pos.dist(target) <= 1:
-            _emit(q.cmds, role, actions.Use, item or WALL_FIXER, target)
+            _emit(q.cmds, role, actions.Use, WALL_FIXER, target)
             return
         if q.step(role, target, with_paths=True, reserve=True):
             return
@@ -386,15 +383,6 @@ def repair_target(turn: Turn) -> Pos | None:
         if w.pos in front and needs_repair(w, turn) and _threatened(w.pos, turn)
     ]
     return min(hurt, key=lambda w: (w.health, w.pos)).pos if hurt else None
-
-
-def _front_voucher(role: Worker, wall: Wall) -> str | None:
-    """手里那张能把这一格升上去的墙券（L1 用券1、L2 用券2）；没有 ⇒ `None`。
-
-    券顺带回满血（任务书 L297）⇒ 对一面残墙比修复包更值：同样回满，还永久抬高一档上限。
-    L3 到顶 ⇒ `WALL_VOUCHER.get(4)` 是 `None` ⇒ 退回用包。"""
-    name = WALL_VOUCHER.get(wall.level + 1)
-    return name if name is not None and role.bag.get(name, 0) > 0 else None
 
 
 def _threatened(cell: Pos, turn: Turn) -> bool:

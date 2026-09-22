@@ -109,7 +109,7 @@ WALL_VOUCHER = {2: "WallUpgradeVoucher1", 3: "WallUpgradeVoucher2"}
 #: 买券/升级的优先级（用户口径）：`(券名, 目标组, 目标等级)`，从上往下先命中先用。
 #: 它是**目标清单**（取第一个"还有东西可升"的步骤去攒钱），不是"哪张便宜买哪张"。
 #: ⚠️ 武器二级券出现两次（第 1 步管非角上两座、第 3 步管角上那座）⇒ 目标组必须一起带着走。
-#: **只有武器券**：围墙券走 `WALL_CHAIN`，归修墙工那条差事（见下）。
+#: **只有武器券**：围墙券走 `WALL_CHAIN`，接在这条链**后面**（开拓者那条差事把两条拼起来）。
 VOUCHER_CHAIN = (
     (VOUCHER[2], "weapon-side", 2),
     (VOUCHER[3], "weapon-side", 3),
@@ -118,10 +118,9 @@ VOUCHER_CHAIN = (
 
 #: 围墙券的优先级（用户口径）：正面列**中间三格** L1→2 → 边上三格 L1→2 → 中间三格 L2→3
 #: → 边上三格 L2→3。两句话合起来 = "重点升中间三个、边上的吃多余的券" + "六格先都到 2 级，
-#: 再一起往 3 级走"（所以不是"中间先满级"）。**归修墙工**（第 2.5 级那条差事），不在券链里：
-#: 券链是开拓者与工人共用的，而开拓者买到的墙券在炮位上花不掉（`day.use_voucher_here` 只用在贴着的那张，
-#: 炮位离墙 ≥4 格）、
-#: 还会把他从岗位拽去墙边；修墙工本来就守那一列，买、用、修走同一趟路。
+#: 再一起往 3 级走"（所以不是"中间先满级"）。**归开拓者那条买券差事**（`day.voucher_errand` 把
+#: 它接在武器链后面），买与用都是他；修墙工只背修复包（券在他手里也拿不到，东西不能转手）。
+#: 两条线共用 `_Ctx.demolish_taken` / `voucher_taken` 认领：同一格不许同回合"一个拆、一个升"。
 #: 中间是哪三格由 `day._wall_band` 切 —— 券线自己的口径，只有一个消费者。
 WALL_CHAIN = (
     (WALL_VOUCHER[2], "wall-middle", 2),
@@ -259,8 +258,8 @@ class _Ctx:
         self.build_plan = {} if build_plan is None else build_plan  # 谁建哪几座（`day.assign_sites`）
         self.taken: set[Pos] = set()  # 收工门认领的岗位（夜里那本账在 `planner._night_intents` 里）
         self.demolish_taken: set[Pos] = set()  # 认领了要拆的 L1 弱墙格
+        self.voucher_taken: set[Pos] = set()  # 认领了要用券升的墙格（反向：拆墙线让位）
         self.budget = turn.gold  # 金币预留：认领一座武器 / 一张券就扣一份，宁可少买不可超支
-        self.bought: dict[str, int] = {}  # 这一回合各券已预扣的张数（两条买券线共用一本账）
         self.target: Pos | None = None  # 分给本工人的环缺口头一格
         self.remaining = 0  # 那一段还剩几格
 
