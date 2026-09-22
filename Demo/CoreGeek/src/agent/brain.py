@@ -979,6 +979,9 @@ def _day(turn: Turn, commands: dict[int, dict[str, Any]], state: dict[str, Any],
             other_errand=bool(errand_owners - {role.unit_id}), routes=routes,
             metal_claimed=metal_claimed,
         )
+        if (not commands.get(role.unit_id) and role.unit_id not in busy
+                and role.unit_id not in errand_owners):
+            _idle_worker_day(turn, role, claimed, commands, state)
         proposed = commands.get(role.unit_id,{})
         if (not proposed and role.unit_id not in busy and role.unit_id not in errand_owners
                 and not towers_missing
@@ -1552,6 +1555,32 @@ def _worker_day(
     # otherwise it gathers the dearest ore the vendor actually buys.
     _mine_metal(turn, role, claimed, commands, state, other_errand=other_errand,
                 routes=routes, mine_claimed=metal_claimed)
+
+
+def _idle_worker_day(turn: Turn, role: Unit, claimed: set[Pos],
+                     commands: dict[int, dict[str, Any]], state: dict[str, Any]) -> bool:
+    """Give an unassigned daytime worker one useful public resource action."""
+    if not turn.is_day or role.unit_id in commands or role.backpack_full:
+        return False
+    candidates = []
+    for kind in ('copper', 'iron', 'stone'):
+        if not _mine_available(turn, kind):
+            continue
+        for target in (pos for pos, zone_kind in turn.zones.items() if zone_kind == kind):
+            if target not in claimed:
+                candidates.append((distance(role.pos, target), target.x, target.y, kind, target))
+    if not candidates:
+        return False
+    target = min(candidates)[-1]
+    if role.pos != target and distance(role.pos, target) <= 1:
+        commands[role.unit_id] = collect_command(target)
+        claimed.add(target)
+        return True
+    step = _step_toward(turn, role, target, claimed)
+    if step is None:
+        return False
+    commands[role.unit_id] = move_command(step)
+    return True
 
 
 def _sellable_metals(state: dict[str, Any]) -> dict[str, int]:

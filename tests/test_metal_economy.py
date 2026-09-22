@@ -253,6 +253,16 @@ class MetalCollectionTests(unittest.TestCase):
         self.assertEqual(second["action"], "move")
         self.assertLessEqual(distance(Pos.load(second["targetPos"][0]), Pos(*MINE)), 1)
 
+    def test_unassigned_day_worker_gets_resource_fallback(self):
+        state = board()
+        state["teamOur"]["roles"][1]["pos"] = {"x": 10, "y": 22}
+        turn = Turn.load(state)
+        worker = turn.workers()[0]
+        commands, claimed = {}, set()
+        self.assertTrue(brain._idle_worker_day(turn, worker, claimed, commands, state))
+        self.assertEqual(commands[worker.unit_id]["action"], "move")
+        self.assertNotEqual(Pos.load(commands[worker.unit_id]["targetPos"][0]), worker.pos)
+
     def test_depleted_mine_with_small_load_heads_to_vendor_or_home(self):
         state = board(ores=(), backpack=["copper"])
         command = day_command(state)
