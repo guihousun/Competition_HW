@@ -1550,14 +1550,18 @@ class VoucherLineTest(unittest.TestCase):
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertLess(step.dist(self.SHOP), worker.pos.dist(self.SHOP), "朝武器商店走")
 
-    def test_wall_vouchers_come_last(self):
-        """武器都到顶了才轮到围墙券（`WeaponUpgradeVoucher1/2` 都没有"还升得动的武器"）。"""
+    def test_the_voucher_chain_is_weapons_only(self):
+        """**券链里没有墙券**（第 146 步）：武器全到顶、正面列摆着一面 L1 墙、钱管够 ⇒
+        券链给不出任何目标，也不再有人为墙券跑腿（墙券归修墙工那条差事）。"""
         worker = Worker(10010, Pos(13, 20))  # 离那面 L1 墙一格
         turn = self._turn(
             (worker,), self._sides(3), walls=(Wall(40000, Pos(13, 21), 1000, 1),), gold=200
         )
-        cmd = plan(turn)["10010"]
-        self.assertIn(cmd["action"], ("move", "use"), f"该为围墙券忙起来：{cmd}")
+        self.assertIsNone(day._voucher_target(turn), "武器到顶 ⇒ 券链给不出目标")
+        cmds = plan(turn)
+        self.assertNotIn(
+            "WallUpgradeVoucher1", {c.get("name") for c in cmds.values()}, f"别买墙券：{cmds}"
+        )
 
     def test_it_never_buys_more_than_the_board_can_use(self):
         """**只买用得上的张数**（用户口径）：场上只有一座升得动的炮 ⇒ 最多买一张，钱再多也一样。"""
@@ -1610,7 +1614,7 @@ class VoucherLineTest(unittest.TestCase):
         self.assertEqual(voucher, "WeaponUpgradeVoucher1", "第 1 步：武器二级、非角两座")
         self.assertEqual(set(spots), {self.SIDE_A, self.SIDE_B}, "先升非角上的两座")
 
-        # 非角两座到顶 ⇒ 下一步是正面墙券（第 3 步），不是角上那座（第 4 步）
+        # 非角两座到顶 ⇒ 下一步是**角上那座**（券链只剩武器步骤，第 146 步）
         weapons = (
             self._gun(10020, "rocket", self.SIDE_A, 3),
             self._gun(10021, "rocket", self.SIDE_B, 3),
@@ -1623,9 +1627,10 @@ class VoucherLineTest(unittest.TestCase):
             walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(front)),
             gold=900,
         )
+        _ = front  # 正面列摆着也不影响：墙券不在这条链里
         voucher, spots = day._voucher_target(turn)
-        self.assertEqual(voucher, "WallUpgradeVoucher1", "第 3 步排在第 4 步（角上火箭）之前")
-        self.assertEqual(set(spots), set(front), "墙券打的是正面那一列")
+        self.assertEqual(voucher, "WeaponUpgradeVoucher1", "轮到角上那座火箭")
+        self.assertEqual(set(spots), {self.CORNER}, "打的是角上那一格")
 
     def test_it_picks_the_weaker_of_the_two_rockets_first(self):
         """同一步里**血少的先升**（用户口径"先升级血少的"）；血量未知（-1）排最后。
@@ -2034,11 +2039,12 @@ class DayOneFinishTest(unittest.TestCase):
 
 
 class RepairStockTest(unittest.TestCase):
-    """第 2.5 级：第 3 天起，**名册里最后一个工人**把修墙包攒到 `REPAIR_PACKS`(3) 张。
+    """第 2.5 级：修墙差事 —— 第 3 天起，**名册里最后一个工人**攒修复包、**墙券也归他**。
 
-    口径出自用户：第 3 天开始攒、第 4 夜起用。包**不能转手**（谁买谁用）⇒ 只让一个工人背，
-    夜里背着包的那个就是修墙工。**顺路优先**（人已经贴在商店旁 ⇒ 当场买）；一张都没有时才肯
-    专程跑一趟，且要求"来回 + 买"赶得回白天结束；买不起就一步都不走。
+    口径出自用户：第 3 天开始攒、第 4 夜起用；墙券由他买也由他用（两条线打的是同一列正面墙）。
+    东西**不能转手**（谁买谁用）⇒ 只让一个工人背，夜里背着包的那个就是修墙工。**顺路优先**
+    （人已经贴在商店旁 ⇒ 当场买）；包里一张都没有时才肯专程跑一趟，且要求"来回 + 买"赶得回
+    白天结束；买不起就一步都不走。手上已有的墙券先用掉 —— 目标就在这条差事的路上。
     """
 
     BASE = Pos(10, 24)
@@ -2054,14 +2060,26 @@ class RepairStockTest(unittest.TestCase):
         _reset_ledgers()
 
     def _turn(
-        self, *roles: BaseRole, gold: int = 40, round_no: int = DAY3, weapons: int = 3
+        self,
+        *roles: BaseRole,
+        gold: int = 40,
+        round_no: int = DAY3,
+        weapons: int = 3,
+        level: int = 1,
     ) -> Turn:
         # 第 3 天起环是 16 格（`utils._sealed_back` 把背面两个角格补上）—— 不照这个口径铺，
         # `_ring` 会把那两个角格当成缺口、把工人支去砌墙，这一级根本轮不到
         sealed = round_no > 2 * ROUNDS_PER_DAY
         ring = wall_cells(self.BASE, 41, sealed=sealed)
         guns = tuple(
-            Weapon(id=10020 + i, kind="rocket", pos=cell, attack_range=10, cooldown=0)
+            Weapon(
+                id=10020 + i,
+                kind="rocket",
+                pos=cell,
+                attack_range=10,
+                cooldown=0,
+                level=level,
+            )
             for i, cell in enumerate(weapon_sites(self.BASE, 41)[:weapons])
         )
         grid = _terrain(guns, {self.BASE: "station"}, {c: WALL for c in ring}, {self.SHOP: "weaponShop"})
@@ -2074,7 +2092,12 @@ class RepairStockTest(unittest.TestCase):
             weapons=guns,
             walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(ring)),
             vendor_prices={"stone": 1, "copper": 5},
-            shop_prices={"WallFixer": self.PACK, "WeaponUpgradeVoucher1": 100},
+            shop_prices={
+                "WallFixer": self.PACK,
+                "WeaponUpgradeVoucher1": 100,
+                "WallUpgradeVoucher1": 20,
+                "WallUpgradeVoucher2": 30,
+            },
         )
 
     def _packs(self, cmds: dict) -> list[dict]:
@@ -2131,6 +2154,49 @@ class RepairStockTest(unittest.TestCase):
         worker = Worker(2, self.BESIDE)
         cmds = plan(self._turn(pioneer, worker, gold=200, weapons=1))
         self.assertEqual(self._packs(cmds), [], f"武器没建满就不该买包：{cmds}")
+
+    def test_the_carrier_buys_the_front_wall_voucher(self):
+        """包攒满之后，**同一个工人**接着买正面墙的升级券（券链里已经没有它了）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})  # 包已满 ⇒ 轮到墙券
+        cmds = plan(self._turn(pioneer, worker, gold=100, level=3))  # 武器到顶 ⇒ 无人抢钱
+        self.assertEqual(cmds["2"]["action"], "buy", f"该去买墙券：{cmds}")
+        self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1")
+        self.assertGreaterEqual(cmds["2"]["num"], 1, "正面列那 6 格都还是 L1 ⇒ 至少买一张")
+
+    def test_the_pioneer_never_buys_a_wall_voucher(self):
+        """开拓者不买墙券（第 146 步）：他在炮位上花不掉它，还会被它拽到墙边去。"""
+        pioneer = Pioneer(1, self.BESIDE)  # 就贴在商店旁
+        cmds = plan(self._turn(pioneer, gold=200, level=3))
+        self.assertNotIn(
+            "WallUpgradeVoucher1", {c.get("name") for c in cmds.values()}, f"开拓者别买墙券：{cmds}"
+        )
+
+    def test_a_worker_who_is_not_the_carrier_never_buys_a_wall_voucher(self):
+        """墙券只由那一个承运人买：另一个工人就算贴着商店也不买。"""
+        pioneer = Pioneer(1, self.FAR)
+        first = Worker(2, self.BESIDE)  # 贴着商店，但不是名册最后一个
+        last = Worker(3, self.FAR)
+        cmds = plan(self._turn(pioneer, first, last, gold=40, level=3))
+        self.assertNotIn(
+            "WallUpgradeVoucher1", {c.get("name") for c in cmds.values()}, f"别买墙券：{cmds}"
+        )
+        self.assertNotIn("2", cmds, "跑差事的只有名册最后一个工人")
+
+    def test_a_held_wall_voucher_is_spent_first(self):
+        """手上那张墙券先用掉（目标就在这条差事的路上）—— 买完就用，不囤。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, Pos(13, 20), {"WallUpgradeVoucher1": 1})  # 离 (13,21) 一格
+        cmds = plan(self._turn(pioneer, worker, gold=0, level=3))
+        self.assertEqual(cmds["2"]["action"], "use", f"持券就先花掉：{cmds}")
+        self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1")
+
+    def test_a_dedicated_wall_voucher_trip_needs_the_time(self):
+        """专程去买墙券也要赶得回白天结束：第 3 天最后一个回合（只剩 1 回合）⇒ 不走。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.FAR, {WALL_FIXER: 3})
+        cmds = plan(self._turn(pioneer, worker, gold=100, round_no=self.DAY3_LAST, level=3))
+        self.assertNotIn("2", cmds, f"赶不回来就不该动：{cmds}")
 
     def test_the_pioneer_never_carries_packs(self):
         """开拓者的差事里没有包这一条（他买券、接任务；包只能由工人背）。"""

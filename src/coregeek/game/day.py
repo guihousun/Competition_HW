@@ -17,8 +17,10 @@ from .core import (
     VOUCHER_CHAIN,
     VOUCHER_NAMES,
     WALL,
+    WALL_CHAIN,
     WALL_COST,
     WALL_FIXER,
+    WALL_VOUCHER_NAMES,
     WEAPON_COST,
     State,
     _Ctx,
@@ -317,14 +319,13 @@ class RepairStock(State):
 
 
 def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
-    """攒修墙包：第 3 天起把存量补到 `REPAIR_PACKS`，买到手就攒着（夜里才花）。
+    """修墙差事（第 3 天起，只由名册里最后一个工人跑）：**手上的墙券先花掉 → 攒修复包 → 攒墙券**。
 
-    **顺路优先**：人已经贴在商店旁 ⇒ 当场买（额外走路 0）；一张都没有时才肯专程跑一趟，且要求
-    "来回 + 买"赶得回白天结束。武器还有缺 ⇒ 整条不跑（别抢武器的钱）；买不起 / 商店走不到 /
-    这一趟来不及 ⇒ 返回 False，让第 3 级接着挖矿，绝不空转。
-
-    买入前从 `ctx.budget` **预扣**（同一个回合的另一条线不会再买），张数记在 `ctx.bought`。"""
-    turn, q = ctx.turn, ctx.q
+    墙券也归他：两条线打的是同一列正面墙、站位契约也一样（切比雪夫 ≤1）⇒ 买、用、修走同一趟路。
+    反过来说，开拓者手里那张墙券在炮位上根本花不掉（`_use_voucher_here` 只管武器券），还会把他
+    从岗位拽到墙边。武器还有缺 ⇒ 整条不跑（别抢武器的钱）；买不起 / 商店走不到 / 这一趟来不及
+    ⇒ 返回 False，让第 3 级接着挖矿，绝不空转。"""
+    turn = ctx.turn
     if ctx.weapon_gap or turn.round_no < 0:
         return False
     if (turn.round_no - 1) // ROUNDS_PER_DAY + 1 < REPAIR_STOCK_FROM_DAY:
@@ -332,25 +333,26 @@ def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
     workers = [r for r in turn.roles if isinstance(r, Worker)]
     if not workers or role.id != workers[-1].id:
         return False
+    # ① 手里那张墙券先花掉（目标就在这条差事的路上）
+    held = next((v for v in WALL_VOUCHER_NAMES if role.bag.get(v, 0) > 0), None)
+    if held is not None and _walk_to_use(role, ctx, held):
+        return True
+    # ② 修复包：手上还有 ⇒ 只在顺路时补货；一张都没有 ⇒ 肯专程跑一趟
     price = turn.shop_prices.get(WALL_FIXER, 0)
-    stock = _team_holds(turn, WALL_FIXER) + ctx.bought.get(WALL_FIXER, 0)
-    count = min(REPAIR_PACKS - stock, ctx.budget // price) if price > 0 else 0
-    if count <= 0:
+    if price > 0:
+        stock = _team_holds(turn, WALL_FIXER) + ctx.bought.get(WALL_FIXER, 0)
+        count = min(REPAIR_PACKS - stock, ctx.budget // price)
+        if count > 0 and _buy_at_shop(role, ctx, WALL_FIXER, count, trips_fit=stock == 0):
+            return True
+    # ③ 墙券：按 `WALL_CHAIN` 取第一张还有东西可升的
+    target = _voucher_target(turn, WALL_CHAIN)
+    if target is None:
         return False
-    walk, size = _passable(turn), turn.map.size
-    hops = [(steps_between(role.pos, s, walk, size), s) for s in turn.map.shops]
-    hops = [(d, s) for d, s in hops if d >= 0]
-    if not hops:
-        return False
-    to_shop, _ = min(hops)
-    # 手上还有包 ⇒ 只在顺路时补货；一张都没有时专程跑一趟，但得赶得回来
-    if to_shop > 0 and (stock > 0 or 2 * to_shop + 1 > turn.day_rounds_left):
-        return False
-    if not _walk_to_shop(role, ctx, WALL_FIXER, count):
-        return False
-    ctx.budget -= price * count
-    ctx.bought[WALL_FIXER] = ctx.bought.get(WALL_FIXER, 0) + count
-    return True
+    voucher, spots = target
+    price = turn.shop_prices.get(voucher, 0)
+    free = len(spots) - _team_holds(turn, voucher) - ctx.bought.get(voucher, 0)
+    count = min(free, ctx.budget // price) if price > 0 else 0
+    return count > 0 and _buy_at_shop(role, ctx, voucher, count)
 
 
 #: 白天链：从上往下第一个"认领了这一回合"的状态说了算。顺序即策略。
@@ -436,11 +438,14 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
     return _mine_for_voucher(role, ctx)
 
 
-def _voucher_target(turn: Turn) -> tuple[str, tuple[Pos, ...]] | None:
+def _voucher_target(
+    turn: Turn, chain: tuple[tuple[str, str, int], ...] = VOUCHER_CHAIN
+) -> tuple[str, tuple[Pos, ...]] | None:
     """优先链上第一个**还有东西可升**的步骤 ⇒ `(券名, 它的全部目标)`；全升满 ⇒ `None`。
 
-    返回的是一串而不是一格：买券要"按需要多少张就买多少张"（用户口径），张数就是这一串的长度。"""
-    for voucher, group, level in VOUCHER_CHAIN:
+    返回的是一串而不是一格：买券要"按需要多少张就买多少张"（用户口径），张数就是这一串的长度。
+    默认走武器链；围墙券那条链（`core.WALL_CHAIN`）由修墙工的差事自己传。"""
+    for voucher, group, level in chain:
         spots = _step_targets(turn, group, level)
         if spots:
             return voucher, spots
@@ -450,8 +455,9 @@ def _voucher_target(turn: Turn) -> tuple[str, tuple[Pos, ...]] | None:
 def _targets_for(voucher: str, turn: Turn) -> tuple[Pos, ...]:
     """手里**这一张**券该打的目标（按优先链取第一个用它、且还有东西可升的步骤）；没有 ⇒ 空元组。
 
-    ⚠️ 不能只看券名：武器二级券在链上出现两次（非角两座 / 角上一座），目标组得从步骤里取。"""
-    for name, group, level in VOUCHER_CHAIN:
+    ⚠️ 不能只看券名：武器二级券在链上出现两次（非角两座 / 角上一座），目标组得从步骤里取。
+    两条链一起找：券名在两条链里不重名，多扫一遍不会串味。"""
+    for name, group, level in VOUCHER_CHAIN + WALL_CHAIN:
         if name != voucher:
             continue
         spots = _step_targets(turn, group, level)
@@ -513,6 +519,36 @@ def _walk_to_shop(role: BaseRole, ctx: _Ctx, voucher: str, count: int = 1) -> bo
         # 0 = 已经贴着商店（`steps_between` 的口径）；1 是"差一格"，那时候还不许买
         return _emit(q.cmds, role, actions.Buy, voucher, count)
     return q.step(role, shop, avoid=frozenset(ctx.sites))
+
+
+def _to_shop(role: BaseRole, ctx: _Ctx) -> tuple[int, Pos] | None:
+    """最近那家走得通的武器商店 ⇒ `(步数, 商店格)`；一家都走不到 ⇒ `None`（步数 0 = 已经贴着）。"""
+    walk, size = _passable(ctx.turn), ctx.turn.map.size
+    hops = [(steps_between(role.pos, s, walk, size), s) for s in ctx.turn.map.shops]
+    hops = [(d, s) for d, s in hops if d >= 0]
+    return min(hops) if hops else None
+
+
+def _buy_at_shop(
+    role: BaseRole, ctx: _Ctx, name: str, count: int, *, trips_fit: bool = True
+) -> bool:
+    """去商店买 `count` 张 `name`：贴着就当场买，否则走一步。`False` = 这一回合买不成。
+
+    `trips_fit=False` ⇒ 只有贴着商店时才买（"顺路优先"：不为了它专程跑一趟）；专程那一趟还要
+    "来回 + 买"赶得回白天结束。买入前预扣 `ctx.budget`（张数记进 `ctx.bought`），同一个回合的
+    另一条线就不会重复买 —— 与 `voucher_errand` 同一条规矩。"""
+    hop = _to_shop(role, ctx)
+    if hop is None or count <= 0:
+        return False
+    to_shop, _shop = hop
+    if to_shop > 0 and (not trips_fit or 2 * to_shop + 1 > ctx.turn.day_rounds_left):
+        return False
+    if not _walk_to_shop(role, ctx, name, count):
+        return False
+    price = ctx.turn.shop_prices.get(name, 0)
+    ctx.budget -= price * count
+    ctx.bought[name] = ctx.bought.get(name, 0) + count
+    return True
 
 
 def _mine_for_voucher(role: BaseRole, ctx: _Ctx) -> bool:
