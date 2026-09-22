@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Demo/CoreGeek/src'))
 
 from agent.scenarios import scenario
-from agent.simulator import ROBOT_DEVIATION_RADIUS, _plan_robot_actions, _stable_base_goal
+from agent.simulator import ROBOT_ATTACK_RANGE, ROBOT_DEVIATION_RADIUS, _plan_robot_actions, _stable_base_goal
 from agent.protocol import Pos, Turn
 
 
@@ -26,8 +26,9 @@ class RobotRoutingBoundaryTests(unittest.TestCase):
         at_four = _plan_robot_actions(self.state((13, 21)))
         # Pioneer is (9,25): Chebyshev distances are 3 and 4. At three the
         # local model may target the nearby role; at four it stays base-directed.
-        self.assertEqual(at_three[0], {}, 'distance 3 can engage the nearby role')
-        self.assertEqual(at_three[1][0]['victim'], 10011)
+        self.assertEqual(ROBOT_ATTACK_RANGE, 1)
+        self.assertEqual(at_three[1], [], 'distance 3 can redirect, but melee cannot attack yet')
+        self.assertTrue(at_three[0].get('900'), 'distance 3 should move toward the nearby role')
         self.assertEqual(at_four[1], [], 'distance 4 must not create a chase attack')
         self.assertTrue(at_four[0].get('900'), 'distance 4 keeps a base-directed move')
 

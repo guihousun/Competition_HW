@@ -5,7 +5,7 @@ A robot blocked by a wall attacks *that wall*, so a wall ring is a delaying shie
 rather than an absolute one, and a wave can eventually break through to the base.
 
 These use a small hand-built state so the expectation is computable by eye: one
-small robot (5 damage, attack range 3), one wall directly between it and the base.
+small robot (5 damage, melee range 1), one wall directly between it and the base.
 """
 import sys
 import unittest
@@ -45,6 +45,19 @@ def health_of(state, role_type):
 
 
 class BuildingAttackTests(unittest.TestCase):
+    def test_robot_search_radius_is_not_a_ranged_attack(self):
+        state = board(robot_pos=(6, 5), wall_pos=None)
+        state['teamOur']['roles'].append({
+            'id': 10010, 'roleType': 'worker', 'health': 100,
+            'level': 1, 'pos': {'x': 8, 'y': 5},
+        })
+        first = step(state, external_response={'roleCommandMap': {}})
+        self.assertEqual(first['frame'].get('robotAttacks'), [])
+        self.assertTrue(first['frame'].get('robotMoves'))
+        self.assertEqual(first['frame']['robotMoves'][0]['to'], {'x': 7, 'y': 4})
+        second = step(first['state'], external_response={'roleCommandMap': {}})
+        self.assertEqual(second['frame']['robotAttacks'][0]['victim'], 10010)
+
     def test_building_kinds_are_named_explicitly(self):
         self.assertIn("wall", ATTACKABLE_BUILDING_KINDS)
         self.assertIn("station", ATTACKABLE_BUILDING_KINDS)

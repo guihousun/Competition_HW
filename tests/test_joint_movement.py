@@ -26,9 +26,9 @@ def positions(state, side='robot'):
 class JointIntentStageTests(unittest.TestCase):
     """No mock: exercise the same complete movement stage called by step.
 
-    Current robot AI prefers attacking any role within 3, so cross-species
-    following cannot naturally be selected by that AI. These tests supply legal
-    intentions independently and do not redefine its target-selection policy.
+    The robot AI searches roles within three cells but attacks only when
+    adjacent. These tests supply legal intentions independently and do not
+    redefine its target-selection policy.
     """
     def state(self, worker=(5, 5), bot=(6, 5)):
         state = board(robot_pos=bot)
@@ -81,9 +81,10 @@ class JointIntentStageTests(unittest.TestCase):
         state['robot']['roles'].append(robot(602, 8,5))
         roles,bots,rejected = _settle_joint_moves(
             state, {'601':Pos(6,5)}, {'601':Pos(7,5), '602':Pos(7,5)})
-        self.assertEqual((roles,bots), ([],[]))
-        self.assertEqual(len(rejected), 3)
-        self.assertEqual(positions(state), {601:(6,5),602:(8,5)})
+        self.assertEqual(len(roles), 1)
+        self.assertEqual(len(bots), 2)
+        self.assertEqual(rejected, [])
+        self.assertEqual(positions(state), {601:(7,5),602:(7,5)})
 
     def test_robot_swap_and_mixed_triangle(self):
         # Unlike role-role swaps, robot-related swaps are a conservative local
@@ -101,30 +102,32 @@ class JointIntentStageTests(unittest.TestCase):
 
 
 class RealRobotStepTests(unittest.TestCase):
-    def test_two_robots_reserve_different_cells_before_settlement(self):
+    def test_two_robots_may_stack_on_one_cell_before_settlement(self):
         for reverse in (False,True):
             state = board()
             state['robot']['roles'] = [robot(901,6,4), robot(902,6,3)]
-            # Without local intent coordination both would choose (7,3).
-            # Round80 rotates the equal-distance rank: 902 reserves it first,
-            # 901 chooses (7,4). This is AI choice, not collision forgiveness.
+            # Both robots may choose the same next cell; a dense wave is not
+            # forced into a queue by local occupancy bookkeeping.
             state['mapInfo']['zones'].append({'neutralType':'stone','pos':{'x':7,'y':2}})
             if reverse:
                 state['robot']['roles'].reverse()
             before = deepcopy(state)
             result = advance(state)
-            self.assertEqual(positions(result['state']), {901:(7,4),902:(7,3)})
+            self.assertEqual(positions(result['state']), {901:(7,3),902:(7,3)})
             self.assertEqual(len(result['frame']['robotMoves']), 2)
             self.assertEqual(result['frame']['robotAttacks'], [])
             self.assertEqual(state, before)
 
-    def test_explicit_two_robot_same_destination_still_stops_both(self):
+    def test_explicit_two_robot_same_destination_is_accepted(self):
         state=board()
         state['robot']['roles']=[robot(901,6,4),robot(902,6,3)]
         roles,bots,rejected=_settle_joint_moves(state,{}, {'901':Pos(7,3),'902':Pos(7,3)})
-        self.assertEqual((roles,bots),([],[]))
-        self.assertEqual({uid for uid,_,_ in rejected},{'robot:901','robot:902'})
-        self.assertEqual(positions(state),{901:(6,4),902:(6,3)})
+        self.assertEqual((roles,bots),([],[
+            {'robot': 901, 'kind': 'smallRobot', 'from': {'x': 6, 'y': 4}, 'to': {'x': 7, 'y': 3}},
+            {'robot': 902, 'kind': 'smallRobot', 'from': {'x': 6, 'y': 3}, 'to': {'x': 7, 'y': 3}},
+        ]))
+        self.assertEqual(rejected, [])
+        self.assertEqual(positions(state),{901:(7,3),902:(7,3)})
 
     def test_robot_chain_follows_vacated_cells_independent_of_list_order(self):
         for reverse in (False,True):
@@ -141,7 +144,7 @@ class RealRobotStepTests(unittest.TestCase):
         state['robot']['roles'] = [robot(901,5,5),robot(902,6,4),
                                   robot(903,7,3,abnormalState='dizzy',dizzyRounds=2)]
         result = advance(state)
-        self.assertEqual(positions(result['state']), {901:(6,4),902:(7,4),903:(7,3)})
+        self.assertEqual(positions(result['state']), {901:(6,4),902:(7,3),903:(7,3)})
         self.assertEqual(len(result['frame']['robotMoves']), 2)
 
     def test_dizzy_obstacle_three_step_public_detour(self):
@@ -153,7 +156,7 @@ class RealRobotStepTests(unittest.TestCase):
                 state['robot']['roles'].reverse()
             # Empty (7,5) is one step closer to base. Then (8,4),(9,3)
             # follow the unchanged (distance,x,y) greedy tie-break.
-            for expected, remaining in [((7,5),4),((8,4),3),((9,3),2)]:
+            for expected, remaining in [((7,4),4),((8,3),3),((9,3),2)]:
                 state = advance(state)['state']
                 self.assertEqual(positions(state)[901], expected)
                 self.assertEqual(positions(state)[902], (7,4))
@@ -163,15 +166,15 @@ class RealRobotStepTests(unittest.TestCase):
     def test_attacking_robot_is_known_stationary_when_other_robot_routes(self):
         for reverse in (False,True):
             state = board()
-            state['teamOur']['roles'].append(unit(601,'worker',8,1))
-            # Worker distance: 4 from901 (stays base-directed), 3 from902 (attacks).
+            state['teamOur']['roles'].append(unit(601,'worker',8,3))
+            # Worker distance: 3 from901 (searches but cannot attack), 1 from902 (attacks).
             state['robot']['roles'] = [robot(901,6,5),robot(902,7,4)]
             if reverse:
                 state['robot']['roles'].reverse()
             result = advance(state)
-            # At distance four robot 901 keeps its base-directed route. Robot
-            # 902 is stationary because it attacks the worker at distance 3.
-            self.assertEqual(positions(result['state']), {901:(7,5),902:(7,4)})
+            # Robot 901 keeps moving; robot 902 is stationary because it attacks
+            # the adjacent worker.
+            self.assertEqual(positions(result['state']), {901:(7,4),902:(7,4)})
             self.assertEqual([a['robot'] for a in result['frame']['robotAttacks']], [902])
             worker = next(r for r in result['state']['teamOur']['roles'] if r['id']==601)
             self.assertEqual(worker['health'], 215)
@@ -180,7 +183,7 @@ class RealRobotStepTests(unittest.TestCase):
         state = board()
         state['robot']['roles'] = [robot(901,6,5),robot(902,7,4,targetTeam='defender')]
         result = advance(state)
-        self.assertEqual(positions(result['state']), {901:(7,5),902:(7,4)})
+        self.assertEqual(positions(result['state']), {901:(7,4),902:(7,4)})
 
     def test_shot_uses_original_robot_position_before_joint_move(self):
         state = board(robot_pos=(4,5))
@@ -216,9 +219,9 @@ class RealRobotStepTests(unittest.TestCase):
 
     def test_cross_attack_snapshot_is_explicit_local_timing_assumption(self):
         state = board(robot_pos=(6,5))
-        state['teamOur']['roles'].append(unit(601,'worker',6,8))
-        result = advance(state, {'601':move(6,9)})
+        state['teamOur']['roles'].append(unit(601,'worker',6,6))
+        result = advance(state, {'601':move(6,7)})
         worker = next(u for u in result['state']['teamOur']['roles'] if u['id']==601)
-        self.assertEqual(worker['pos'], {'x':6,'y':9})
+        self.assertEqual(worker['pos'], {'x':6,'y':7})
         self.assertEqual(worker['health'], 215)
-        self.assertEqual(result['frame']['robotAttacks'][0]['to'], {'x':6,'y':8})
+        self.assertEqual(result['frame']['robotAttacks'][0]['to'], {'x':6,'y':6})

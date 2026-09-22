@@ -70,6 +70,10 @@ SIMPLIFIED_SOURCES = ('rocket', 'gatling', 'railgun', 'robot')
 # its base-directed route when every friendly role is more than three cells
 # away. This pursuit/deviation radius is separate from combat attack range.
 ROBOT_DEVIATION_RADIUS = 3
+# User-confirmed official behaviour (2026-09-22): robots are melee units.
+# The three-cell value above is only the radius in which a role can attract a
+# robot off its base route; it is not an attack range.
+ROBOT_ATTACK_RANGE = 1
 
 
 def _clear_building(state: dict[str, Any], record: dict[str, Any]) -> None:
@@ -169,10 +173,11 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     """Resolve simultaneous movement intents (任务书 §4.5.4 第5条).
 
     ``origins`` includes stationary roles; ``blocked`` contains only hard
-    obstacles, never dynamic role origins. A hard obstacle wins even when an
-    invalid input has a role on the same cell. Reject contests and pair swaps,
-    then propagate blocked departures. Chains and cycles of three or more
-    distinct movers can vacate their cells simultaneously (任务书 §4.2).
+    obstacles, never dynamic role origins. Robots may share a destination and
+    may stand on a cell already occupied by another robot; role/robot contests
+    and pair swaps are still rejected. A hard obstacle wins even when an
+    invalid input has a role on the same cell. Chains and cycles of three or
+    more distinct movers can vacate their cells simultaneously (任务书 §4.2).
     The returned list is a final-position batch, not sequential move commands.
     The official swap clause names two roles; applying that refusal to robot
     pairs is a conservative local extension, documented in SIM_JOINT_MOVEMENT.
@@ -184,10 +189,13 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     for uid, target in moves.items():
         goals.setdefault(target, []).append(uid)
     reasons: dict[str, str] = {}
+    def is_robot(uid: str) -> bool:
+        return str(uid).startswith('robot:')
+
     for uid, target in moves.items():
         if target in blocked:
             reasons[uid] = "目标格被永久障碍占用"
-        elif len(goals[target]) > 1:
+        elif len(goals[target]) > 1 and not all(is_robot(other) for other in goals[target]):
             reasons[uid] = "目标格被其他单位同时争抢"
         elif uid not in origins or target == origins[uid]:
             reasons[uid] = "移动未离开原位置"
@@ -200,7 +208,8 @@ def resolve_moves(moves: dict[str, Pos], origins: dict[str, Pos],
     departing = set(moves) - set(reasons)
     while True:
         stopped = {uid for uid in departing
-                   if occupants.get(moves[uid], set()) - departing}
+                   if {other for other in occupants.get(moves[uid], set())
+                       if not (is_robot(uid) and is_robot(other))} - departing}
         if not stopped:
             break
         for uid in stopped:
@@ -262,19 +271,18 @@ def _settle_joint_moves(state, role_moves: dict[str, Pos], robot_moves: dict[str
 
 
 def _allocate_robot_moves(turn, walkers, obstacles):
-    """Local AI intent reservations, never sequential position settlement.
+    """Local AI intent selection; robot occupancy does not form a queue.
 
     Front ranks choose first, with round-rotated stable IDs within each rank.
-    A robot may follow an already planned departure, but never assumes that an
-    unplanned/staying robot will vacate. Final player/robot collisions are still
-    resolved once by the shared resolver, without retrying failed intentions.
+    Multiple robots may select the same free cell. Final player/robot contests
+    are still resolved once by the shared resolver, without retrying failed
+    intentions.
     """
     ranks = {}
     for row in walkers:
         robot, origin, goal = row[:3]
         ranks.setdefault(distance(origin, goal) if goal is not None else 0, []).append(row)
-    unvacated = {row[1] for row in walkers}
-    reserved, moves = set(), {}
+    moves = {}
     for rank in sorted(ranks):
         group = sorted(ranks[rank], key=lambda row: row[0]['id'])
         offset = (turn.round_no - 1) % len(group)
@@ -284,7 +292,6 @@ def _allocate_robot_moves(turn, walkers, obstacles):
             options = [Pos(origin.x + dx, origin.y + dy)
                        for dx in (-1, 0, 1) for dy in (-1, 0, 1) if dx or dy]
             options = [q for q in options if turn.land(q) and q not in obstacles
-                       and q not in unvacated and q not in reserved
                        and (goal is None or distance(q, goal) < distance(origin, goal))]
             if not options:
                 continue
@@ -293,8 +300,6 @@ def _allocate_robot_moves(turn, walkers, obstacles):
                 abs(q.x - goal.x) + abs(q.y - goal.y) if base_directed and goal is not None else 0,
                 q.x, q.y))
             moves[str(robot['id'])] = target
-            reserved.add(target)
-            unvacated.discard(origin)
     return moves
 
 
@@ -365,7 +370,9 @@ def _plan_robot_actions(state):
             screening_wall = None
             if victim is not None and goal is not None and distance(p, goal) <= 3:
                 screening_wall = _intervening_wall(turn, p, goal)
-            if victim is not None and goal is not None and distance(p, goal) <= 3 and screening_wall is None:
+            if (victim is not None and goal is not None
+                    and distance(p, goal) <= ROBOT_ATTACK_RANGE
+                    and screening_wall is None):
                 power = ROBOT_STATS.get(robot.get('roleType'), (40,5,1))[1]
                 robot_attacks.append({'robot': robot['id'], 'kind': robot.get('roleType'),
                                       'victim': victim['id'], 'damage': power,
@@ -403,13 +410,13 @@ def _plan_robot_actions(state):
                             and 'profile' in state['_demo']))
     # First classify actions for the entire unchanged snapshot. Attacking,
     # stunned and inactive robots are known not to vacate; route around them.
-    # Plan non-conflicting robot destinations before the joint resolver. This
-    # local AI coordination avoids repeatedly choosing an identical failed
-    # destination set; it is not permission to ignore an actual collision.
-    walker_ids = {row[0]['id'] for row in walkers}
-    known_stationary = {Pos.load(robot['pos']) for robot in robots
-                        if robot['health'] > 0 and robot['id'] not in walker_ids}
-    obstacles = hard_blocked | known_stationary
+    # Plan robot destinations before the joint resolver. Stacking is legal for
+    # robot-on-robot movement, while role contests remain rejected.
+    # Robots are allowed to stack on one grid cell.  Keep buildings and player
+    # roles as hard obstacles, but do not turn another robot into a queue slot.
+    role_cells = {cell for role in turn.controllable() if role.health > 0
+                  for cell in turn.footprint(role)}
+    obstacles = hard_blocked | role_cells
     robot_moves = _allocate_robot_moves(turn, walkers, obstacles)
     return robot_moves, robot_attacks
 
