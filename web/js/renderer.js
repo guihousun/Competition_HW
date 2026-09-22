@@ -455,9 +455,10 @@
 
     drawScreenLabels(ctx, world, ui) {
       if (!this.options.labels) return;
-      const sites = world.actors.filter((a) => a.kind === 'station')
-        .map((a) => ({...a, label: a.owner === 'own' ? '我方基地' : '敌方基地'}))
-        .concat(world.zones.filter((z) => !['stone', 'iron', 'copper'].includes(z.kind)));
+      // Buildings and market sprites already carry their visual identity. Keep
+      // the map readable by reserving text nameplates for task/resource points;
+      // the base, vendor and weapon shop do not need duplicate names.
+      const sites = world.zones.filter((z) => !['stone', 'iron', 'copper', 'vendor', 'weaponShop'].includes(z.kind));
       const boxes = this.drawCrewLabels(ctx, world, ui);
       ctx.save(); ctx.font = '14px "Microsoft YaHei", sans-serif'; ctx.textAlign = 'center';
       for (const site of sites) {
@@ -488,6 +489,7 @@
       const boxes = [];
       const crew = world.actors.filter((a) => a.owner === 'own' && ['worker', 'pioneer'].includes(a.kind))
         .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      const workerNo = new Map(crew.filter((a) => a.kind === 'worker').map((a, i) => [a.id, i + 1]));
       const task = HW.viewModel.taskStatus(world);
       ctx.save();
       ctx.textAlign = 'left';
@@ -504,8 +506,7 @@
         const ratio = U.clamp((Number(actor.health) || 0) / maxHealth, 0, 1);
         const same = (other) => other && other.id === actor.id && other.owner === actor.owner;
         const detailed = actor.selected || same(this.selected) || same(ui && ui.hoverActor);
-        const title = detailed ? `${actor.label} #${actor.id}`
-          : `${actor.kind === 'pioneer' ? '拓' : '工'}#${actor.id}`;
+        const title = actor.kind === 'pioneer' ? '拓' : `工#${workerNo.get(actor.id) || '?'}`;
 
         ctx.font = CALLOUT.titleFont;
         // Compact by default; only the focused role gets a full plate.
