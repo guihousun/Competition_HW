@@ -552,6 +552,66 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("用原来那个 name 重写它", deposit)
         self.assertIn("不是只写改了哪儿", deposit)
 
+    def test_the_deposit_rules_say_when_a_task_is_the_same_kind(self):
+        """判"同类"的判据（第 171 步，用户口径）：最终目标 / 核心流程 / 关键工具与环境 /
+        要解决的核心问题 —— 而输入、对象、日期、ID、文件名、本次答案、某一步的参数值
+        换一道题就会变，**不**该因此另起一条。
+
+        判宽了 ⇒ 表里攒一堆只差一个参数名的近义条目，`SOP_FLOWS_MAX`(5) 一到就把真正
+        有用的那条挤掉；判窄了 ⇒ 拿上一次的取值去套这一次。两种错本地都看不出来
+        （存是存进去了，只是永远复用不到、或者复用错）。"""
+        self.agent.chat("题目")
+        rules = _deposit_rules(_deposit_system(self.agent))
+        for same in ("最终目标", "核心流程", "关键工具与环境", "只有解决方法本身变了才是"):
+            self.assertIn(same, rules, f"同类判据少了这条：{same}")
+        self.assertIn("不要因为多了点细节就另起一条", rules)
+
+    def test_the_deposit_rules_split_what_generalizes_from_what_does_not(self):
+        """泛化 = 一张保留清单 + 一张删掉清单（第 171 步，用户口径）：正文写的是"以后遇到
+        这一类任务该怎么解决"，不是"这一次我是怎么做的"。
+
+        排除那一半收在"只对本次成立的取值 / 迁不到别的任务上的细节"上：裸的"路径 / 参数名"
+        是**要收的**环境知识（【工作原则】§2），错杀它等于把这套东西最值钱的一半砍掉。"""
+        self.agent.chat("题目")
+        rules = _deposit_rules(_deposit_system(self.agent))
+        for keep in ("通用执行顺序", "关键判断条件", "工具真实行为", "已验证的参数规则",
+                     "文档与实测的差异", "已验证的异常处理方式"):
+            self.assertIn(keep, rules, f"保留清单少了这条：{keep}")
+        for drop in ("迁不到别的任务上的细节", "探索过程中试过但最终没采用的方法"):
+            self.assertIn(drop, rules, f"删掉清单少了这条：{drop}")
+
+    def test_the_deposit_rules_rank_the_sources_of_truth(self):
+        """信息五级（第 171 步，用户口径）：本次实测 > 已有 SOP 的历史验证 > 任务给的明确
+        事实 > 文档 > 推测 —— 只有前四类能进，推测一律不写。
+
+        末位那条是整套排行的意义所在：不给它排序，"文档说 destination、实测是 from"这种
+        冲突就靠模型自己拍（而它天然偏向文档）。实测推翻旧条目时另有出口：以实测为准、
+        把那一条完整重写。"""
+        self.agent.chat("题目")
+        rules = _deposit_rules(_deposit_system(self.agent))
+        self.assertIn(
+            "本次实测成功的结果 > 已有 SOP 里经历史验证的内容 > 任务提供的明确事实 "
+            "> 官方或环境文档 > 推测",
+            rules,
+        )
+        self.assertIn("推测一律不写进 SOP", rules)
+        self.assertIn("以实测为准、把那一条完整重写", rules)
+
+    def test_the_deposit_rules_carry_a_self_check(self):
+        """输出前自检（第 171 步，用户口径）：指令最后那一段，把"写之前再过一遍"压成几句
+        问话 —— 前四段的规则在这里各有一问，落笔那一刻再看一眼。
+
+        自检里**不复述四栏栏名**：那会让栏名在同一份指令里出现第三、四处（规格一处 +
+        示例一处是刻意的，再多就是复述），`test_the_deposit_body_keeps_its_four_columns`
+        数的就是这件事。"""
+        self.agent.chat("题目")
+        rules = _deposit_rules(_deposit_system(self.agent))
+        self.assertIn("# 【输出前自检】", rules)
+        for ask in ("这条经验经过实际执行验证了吗", "以后同类任务能直接照着用吗",
+                    "文档与实测冲突时采用的是实测结果吗", "四栏齐了吗",
+                    "输出只有一个 <sop> 块吗"):
+            self.assertIn(ask, rules, f"自检少了这一问：{ask}")
+
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))
 
