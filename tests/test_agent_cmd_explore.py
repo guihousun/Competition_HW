@@ -60,6 +60,24 @@ class CmdExploreStateTest(unittest.TestCase):
         """没发过命令 ⇒ 这条件回执是 LLM 的，原样放行给任务线（判据 ② 照旧回灌）。"""
         self.assertEqual(cmd_explore.observe("[exitCode:0]\nok"), "[exitCode:0]\nok")
 
+    def test_a_fallback_lookup_joins_the_inventory(self):
+        """兜底查找（`readSandboxFile` 本地没有那份）的回执**照给 LLM 看**，正文同时并进
+        `_files` —— 清单因此长得出来，同一份文件第二次点名不再花回合。
+
+        与探查自己那趟两处不同（都在 `_waiting` 那一支里）：回执不给 LLM、末尾带
+        `@@@MORE`（收工判据）。这一支只并账。"""
+        cmd_explore.lookup_command("api.md")
+        result = receipt((ONE, "接口文档"))
+        self.assertEqual(cmd_explore.observe(result), result, "点名要的正文必须回给 LLM")
+        self.assertEqual(cmd_explore.known_paths(), [ONE])
+        self.assertFalse(cmd_explore._fallback, "认领是一次性的")
+        self.assertFalse(cmd_explore._done, "兜底那趟没有 `@@@MORE` ⇒ 不算探查走完")
+        # 没找到那份（`[NOT FOUND]`，一个标记都没有）⇒ 表原样不动、回执照样放行
+        cmd_explore.lookup_command("nope.md")
+        not_found = "[exitCode:0]\n[NOT FOUND] nope.md\n"
+        self.assertEqual(cmd_explore.observe(not_found), not_found)
+        self.assertEqual(cmd_explore.known_paths(), [ONE])
+
     def test_our_own_result_is_taken_away(self):
         """发过 ⇒ 回执归我们：收走并返回 `""`（任务线当它没发生）。"""
         cmd_explore.next_command()

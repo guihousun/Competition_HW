@@ -16,10 +16,10 @@
 回执不给任务线看：`observe` 认领自己的回执并返回 ""。正文进 `_files`（不落盘），路径经
 `known_paths()` 挂进 `readSandboxFile` 的描述（`path` 的取值表），正文由 `body_of` 按需取；
 文件名对上不止一份 ⇒ 调用不成立（`matches` 一处认两种写法）。本地没有那份时由
-`lookup_command` 兜底：一条 `find -name <文件名>`，回执走任务线的普通通道（不经 `observe`，
-正文也不进 `_files`）。
+`lookup_command` 兜底：一条 `find -name <文件名>`，那条回执照样回给 LLM（它是点名要的正文），
+同时并进 `_files` —— 清单因此长得出来，同一份文件第二次点名不再花回合。
 
-状态在模块层：`_files` / `_task` / `_done` / `_waiting`（另有只给用例的 `_muted`）。
+状态在模块层：`_files` / `_task` / `_done` / `_waiting` / `_fallback`（另有只给用例的 `_muted`）。
 """
 
 import json
@@ -90,6 +90,9 @@ _task = ""
 _done = False
 #: 上回合发的是探查命令 ⇒ 这回合的回执归我们
 _waiting = False
+#: 上回合发的是**兜底查找**命令（`readSandboxFile` 本地没有那份）⇒ 这回合的回执顺手并进
+#: `_files`。与 `_waiting` 分开：那条回执还要回给 LLM，而且没有 `@@@MORE`（不参与收工判据）
+_fallback = False
 #: 用例静音（`mute`）。生产代码的"停"由 `_done` 说话
 _muted = False
 
@@ -126,7 +129,10 @@ def lookup_command(name: str) -> str:
     只认最后一段文件名 —— 它自己拼出来的目录不作数（照那个路径 `cat` 必然报错）；找到
     第一份即打，路径自己也在 `@@@FILE` 那行里报出来。名字是 LLM 写的，两处都过
     `shlex.quote`（不引就成注入面）。找不到 ⇒ 报 `[NOT FOUND]`。
+    命令发出去了就置 `_fallback`：下一回合那条回执要并进 `_files`（`observe` 认领）。
     """
+    global _fallback
+    _fallback = True
     quote = shlex.quote
     skips = " ".join(f"-not -path {quote('/' + d + '/*')}" for d in _SKIP)
     return (
@@ -140,13 +146,20 @@ def observe(result: str) -> str:
     """收下这回合的沙盒回执、推进状态机；返回该给任务线看的那条（自己发的那条回 `""`）。
 
     每回合调一次、压在 `task_channel` 早返回之前：任务在回执回来前结束，不认领就粘住
-    `_waiting`，之后会把 LLM 的回执也吃掉。"""
-    global _waiting
-    if not _waiting:
-        return result
-    _waiting = False
-    _take(result)
-    return ""
+    `_waiting`，之后会把 LLM 的回执也吃掉。
+
+    兜底查找那条回执（`_fallback`）**照样返回给任务线** —— 它是 LLM 点名要的那份正文，
+    只是顺手并进 `_files`（清单因此长得出来，同一份文件第二次点名不再花回合）。两条回执
+    不会同时挂着：兜底占着命令槽那一轮，探查的闸门根本轮不到。"""
+    global _waiting, _fallback
+    if _waiting:
+        _waiting = False
+        _take(result)
+        return ""
+    if _fallback:
+        _fallback = False
+        _absorb(result)
+    return result
 
 
 def new_task(task: str) -> None:
@@ -179,8 +192,8 @@ def mute() -> None:
 
 def reset() -> None:
     """回到"一次都没探查过"。只给用例隔离（生产代码不调：成果整场累积）。顺带解除 mute。"""
-    global _task, _done, _waiting, _muted
-    _task, _done, _waiting, _muted = "", False, False, False
+    global _task, _done, _waiting, _fallback, _muted
+    _task, _done, _waiting, _fallback, _muted = "", False, False, False, False
     _files.clear()
 
 
@@ -202,50 +215,57 @@ def _script() -> str:
     return ";".join(line.strip() for line in filled.splitlines() if line.strip())
 
 
-def _take(result: str) -> None:
-    """一趟的回执 ⇒ 正文进 `_files`；末尾剩余数决定收工还是接着取。
+def _absorb(text: str) -> tuple[int, int]:
+    """把 `@@@FILE` 段并进 `_files`，返回 `(份数, 新增或变化的份数)`。
 
-    每段正文取到下一个 `@@@FILE` 标记之前、末段取到回执末尾（被截断的那份是残文，照留、
-    不重试）。`MORE 0` ⇒ 没有没读过的了，置 `_done`；`MORE n`（n>0）⇒ 下回合接着取；
-    没拿到剩余数（命令没跑起来 / 被 64KB 截断吃掉）⇒ 不收工、下回合接着试。收工判据是
-    剩余数、不是"取到了正文"：全读过了与沙盒里没有匹配的 md 都报 0，都得停 —— 收工那行
-    带的「库中共 N 份」是分辨这两种的唯一线索。日志只记新增 / 变化的正文（有排除表后
-    这只是兜底，正常不该命中）。"""
-    global _done
-    if "[TRUNCATED]" in result:
-        LOGGER.info("【沙盒探查】：回执被 64KB 截断")
-    # 脚本按约定把 MORE 打在最后 ⇒ 取最后一个，别被正文里的同名串切掉
-    found = list(_RE_MORE.finditer(result))
-    more = found[-1] if found else None
-    text = result[: more.start()] if more else result
+    两个调用者：探查自己那趟的回执（拿到份数后按 `@@@MORE` 决定收工与否）、兜底查找的
+    回执（只并账 —— 它没有 `@@@MORE`，收工判据不参与）。每段正文取到下一个标记之前、
+    末段取到末尾（被截断的那份是残文，照留、不重试）；标记后与正文尾巴上各有一个换行
+    （脚本补的、起手下一段标记），两头各去掉一个。日志只记新增 / 变化的正文。"""
     marks = list(_RE_FILE.finditer(text))
     fresh = 0
     for index, mark in enumerate(marks):
         end = marks[index + 1].start() if index + 1 < len(marks) else len(text)
         body = text[mark.end():end]
-        # 脚本在标记后与正文尾巴上各补了一个换行（起手下一段标记），两头各去掉一个
         body = body[1:] if body.startswith("\n") else body
         body = body[:-1] if body.endswith("\n") else body
         if _files.get(mark.group(1)) != body:
             fresh += 1
             LOGGER.info("【沙盒探查】：%s 取回 %d 字：%s", mark.group(1), len(body), _clip(body, BODY_LOG_MAX))
         _files[mark.group(1)] = body
+    return len(marks), fresh
+
+
+def _take(result: str) -> None:
+    """一趟的回执 ⇒ 并账 + 末尾剩余数决定收工还是接着取。
+
+    `MORE 0` ⇒ 没有没读过的了，置 `_done`；`MORE n`（n>0）⇒ 下回合接着取；没拿到剩余数
+    （命令没跑起来 / 被 64KB 截断吃掉）⇒ 不收工、下回合接着试。收工判据是剩余数、不是
+    "取到了正文"：全读过了与沙盒里没有匹配的 md 都报 0，都得停 —— 收工那行带的
+    「库中共 N 份」是分辨这两种的唯一线索。"""
+    global _done
+    if "[TRUNCATED]" in result:
+        LOGGER.info("【沙盒探查】：回执被 64KB 截断")
+    # 脚本按约定把 MORE 打在最后 ⇒ 取最后一个，别被正文里的同名串切掉
+    found = list(_RE_MORE.finditer(result))
+    more = found[-1] if found else None
+    total, fresh = _absorb(result[: more.start()] if more else result)
     if more is None:
         LOGGER.info(
             "【沙盒探查】：本趟取回 %d 份（新增 %d），没拿到剩余数（命令没跑起来？「%s」）⇒ 接着取",
-            len(marks), fresh, result[:200],
+            total, fresh, result[:200],
         )
         return
     if more.group(1) == "0":
         LOGGER.info(
             "【沙盒探查】：本趟取回 %d 份（新增 %d），没有没读过的了 ⇒ 收工（库中共 %d 份）",
-            len(marks), fresh, len(_files),
+            total, fresh, len(_files),
         )
         _done = True
         return
     LOGGER.info(
         "【沙盒探查】：本趟取回 %d 份（新增 %d），还剩 %s 份",
-        len(marks), fresh, more.group(1),
+        total, fresh, more.group(1),
     )
 
 
