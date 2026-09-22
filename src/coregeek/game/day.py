@@ -477,9 +477,9 @@ def _step_targets(
 ) -> tuple[Pos, ...]:
     """一个步骤现在能打的目标格（**血少的在前**、同血取坐标序）；该等级的一个都不剩 ⇒ 空元组。
 
-    `group` 见 `core.VOUCHER_CHAIN`：`weapon-side` = 非角上那两座火箭、`weapon-corner` = 角上
-    那座、`wall-front` = 面向敌人的一列墙（`core.front_wall_cells` = `wall_cells` 前 `FRONT_WALLS`
-    格，正面列排第一位）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。
+    `group` 见 `core.VOUCHER_CHAIN` / `core.WALL_CHAIN`：`weapon-side` = 非角上那两座火箭、
+    `weapon-corner` = 角上那座、`wall-middle` / `wall-edge` = 正面列（`core.front_wall_cells`）
+    中间 / 边上那三格（切法见 `_wall_band`）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。
 
     `exclude` 只作用于墙：**这一回合已经被认领要拆掉的那几格不能再被券打** —— 两条线都优先挑
     "血最少的正面墙"，不挡一下就会同回合一个 `remove`、一个 `use` 打在同一格上（`use` 先落地
@@ -493,13 +493,27 @@ def _step_targets(
         picks = {sites[i] for i in idx if i < len(sites)}
         guns = [w for w in turn.weapons if w.pos in picks and w.level == want - 1]
         return tuple(w.pos for w in sorted(guns, key=lambda w: (_health_rank(w), w.pos)))
-    front = set(front_wall_cells(turn))
+    picks = _wall_band(turn, group)
     walls = [
         w
         for w in turn.walls
-        if w.pos in front and w.level == want - 1 and w.pos not in exclude
+        if w.pos in picks and w.level == want - 1 and w.pos not in exclude
     ]
     return tuple(w.pos for w in sorted(walls, key=lambda w: (_health_rank(w), w.pos)))
+
+
+def _wall_band(turn: Turn, group: str) -> set[Pos]:
+    """正面列里这一段该升级的格子（`core.WALL_CHAIN` 的两个组）。
+
+    `wall-middle` = **基地那两行 + 朝地图中心的那一行**（`y ∈ [by-2, by]`；样例基地 `(10,24)`
+    ⇒ `y = 22,23,24`）—— 用户口径的"中间三个"，重点升级；`wall-edge` = 正面列剩下的三格
+    （样例 ⇒ `21,25,26`），只吃多余的券。基地没了 ⇒ 空集。"""
+    station = turn.map.station
+    if station is None:
+        return set()
+    front = set(front_wall_cells(turn))
+    middle = {p for p in front if station.y - 2 <= p.y <= station.y}
+    return middle if group == "wall-middle" else front - middle
 
 
 def _health_rank(wall) -> int:

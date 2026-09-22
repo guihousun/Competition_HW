@@ -2190,7 +2190,8 @@ class RepairStockTest(unittest.TestCase):
     def test_a_held_wall_voucher_is_spent_first(self):
         """手上那张墙券先用掉（目标就在这条差事的路上）—— 买完就用，不囤。"""
         pioneer = Pioneer(1, self.FAR)
-        worker = Worker(2, Pos(13, 20), {"WallUpgradeVoucher1": 1})  # 离 (13,21) 一格
+        # 离中间那一段的第一格 (13,22) 一格（券链先砸中间三格，所以站位要贴着它）
+        worker = Worker(2, Pos(12, 22), {"WallUpgradeVoucher1": 1})
         cmds = plan(self._turn(pioneer, worker, gold=0, level=3))
         self.assertEqual(cmds["2"]["action"], "use", f"持券就先花掉：{cmds}")
         self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1")
@@ -2301,6 +2302,118 @@ class DemolishRaceTest(unittest.TestCase):
             day._targets_for("WallUpgradeVoucher1", turn, frozenset({self.WEAK})),
             "认领要拆的格不该再被券挑中",
         )
+
+
+class WallUpgradeBandTest(unittest.TestCase):
+    """墙券链的两段与顺序（用户口径：重点升**中间三个**、边上的吃冗余券；六格先都到 2 级，
+    再一起往 3 级走）。
+
+    正面列 `x=13, y=21..26`（基地 `(10,24)`）：中间 = `22,23,24`（基地那两行 + 朝地图中心
+    那一行）、边上 = `21,25,26`。链是 `(中间,2) (边上,2) (中间,3) (边上,3)` ⇒ 任何时刻都先
+    砸中间那一段；中间升完才轮到边上，六格都到 2 级才开始 3 级。
+    """
+
+    BASE = Pos(10, 24)
+    SHOP = Pos(22, 18)
+    FAR = Pos(20, 24)
+    DAY3 = 261
+    MIDDLE = (Pos(13, 22), Pos(13, 23), Pos(13, 24))
+    EDGE = (Pos(13, 21), Pos(13, 25), Pos(13, 26))
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+
+    def _turn(
+        self, *roles: BaseRole, gold: int = 200, levels: dict[int, int] | None = None
+    ) -> Turn:
+        """`levels` = 正面列按 `y` 给等级（其余格一律 L1、满血）。"""
+        levels = levels or {}
+        ring = wall_cells(self.BASE, 41, sealed=True)
+        front = {p.y for p in core.front_wall_cells(
+            Turn(round_no=self.DAY3, map=Map((41, 32), {self.BASE: "station"}), roles=(), gold=0)
+        )}
+        guns = tuple(
+            Weapon(id=10020 + i, kind="rocket", pos=c, attack_range=10, cooldown=0, level=3)
+            for i, c in enumerate(weapon_sites(self.BASE, 41))
+        )
+        grid = _terrain(guns, {self.BASE: "station"}, {c: WALL for c in ring}, {self.SHOP: "weaponShop"})
+        grid |= {r.pos: r.type_name for r in roles}
+        return Turn(
+            round_no=self.DAY3,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=gold,
+            weapons=guns,
+            walls=tuple(
+                Wall(40000 + i, c, 1000, levels.get(c.y, 1) if c.y in front else 1)
+                for i, c in enumerate(ring)
+            ),
+            vendor_prices={"stone": 1},
+            shop_prices={
+                WALL_FIXER: 10,
+                "WeaponUpgradeVoucher1": 100,
+                "WallUpgradeVoucher1": 20,
+                "WallUpgradeVoucher2": 30,
+            },
+        )
+
+    def test_the_front_column_splits_three_and_three(self):
+        """中间三格与边上三格：互不相交、并起来正好是正面列那 6 格。"""
+        turn = self._turn(Pioneer(1, self.FAR))
+        middle = day._wall_band(turn, "wall-middle")
+        edge = day._wall_band(turn, "wall-edge")
+        self.assertEqual(middle, set(self.MIDDLE))
+        self.assertEqual(edge, set(self.EDGE))
+        self.assertEqual(set(), middle & edge)
+        self.assertEqual(set(core.front_wall_cells(turn)), middle | edge)
+
+    def test_the_middle_band_is_offered_first(self):
+        """六格全是 L1 ⇒ 第一步是"中间的 L1→L2"，目标就是中间那三格。"""
+        turn = self._turn(Pioneer(1, self.FAR))
+        self.assertEqual(
+            day._voucher_target(turn, core.WALL_CHAIN),
+            ("WallUpgradeVoucher1", self.MIDDLE),
+            "第一步该是中间三格",
+        )
+        self.assertEqual(day._targets_for("WallUpgradeVoucher1", turn), self.MIDDLE)
+
+    def test_the_edges_wait_until_the_middle_is_two(self):
+        """中间三格到 L2 ⇒ 才轮到边上的 L1→L2（不是跳过它们去升 3 级）。"""
+        turn = self._turn(Pioneer(1, self.FAR), levels={22: 2, 23: 2, 24: 2})
+        self.assertEqual(
+            day._voucher_target(turn, core.WALL_CHAIN), ("WallUpgradeVoucher1", self.EDGE)
+        )
+
+    def test_level_three_only_starts_after_all_six_are_two(self):
+        """六格全到 L2 ⇒ 第一步变成"中间的 L2→L3"（口径 B：先都到 2 级，再一起往 3 级走）。"""
+        turn = self._turn(Pioneer(1, self.FAR), levels={21: 2, 22: 2, 23: 2, 24: 2, 25: 2, 26: 2})
+        self.assertEqual(
+            day._voucher_target(turn, core.WALL_CHAIN), ("WallUpgradeVoucher2", self.MIDDLE)
+        )
+        self.assertEqual(day._targets_for("WallUpgradeVoucher2", turn), self.MIDDLE)
+
+    def test_a_held_level_three_voucher_goes_to_the_middle_first(self):
+        """六格全 L2、承运人手里有一张 L2→L3 券 ⇒ 这一回合打中间那格，不是边上。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, Pos(12, 23), {"WallUpgradeVoucher2": 1})  # 待命位，够得着中间三格
+        cmds = plan(
+            self._turn(
+                pioneer, worker, levels={21: 2, 22: 2, 23: 2, 24: 2, 25: 2, 26: 2}
+            )
+        )
+        self.assertEqual(cmds["2"]["action"], "use", f"持券就该用掉：{cmds}")
+        self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher2")
+        target = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertIn(target, self.MIDDLE, "重点升级的是中间三格")
+
+    def test_the_edges_are_only_upgraded_with_a_spare_voucher(self):
+        """中间三格 L2、边上 L1、承运人手里有一张 L1→L2 券 ⇒ 这一回合才轮到边上那一格。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, Pos(12, 22), {"WallUpgradeVoucher1": 1})  # 够得着 (13,21)/(13,22)/(13,23)
+        cmds = plan(self._turn(pioneer, worker, levels={22: 2, 23: 2, 24: 2}))
+        self.assertEqual(cmds["2"]["action"], "use", f"中间的升满了就该用掉：{cmds}")
+        target = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertIn(target, self.EDGE, "轮到边上三格")
 
 
 if __name__ == "__main__":
