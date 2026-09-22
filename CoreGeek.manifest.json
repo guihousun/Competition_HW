@@ -1,5 +1,5 @@
 {
-  "commit": "6b098f212add0564a5cbfc0c2ea4ac203a0d2433",
+  "commit": "47414f4f9e9a6ce2694830cc9225a6008e448a9a",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -32,9 +32,9 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 159335,
+      "bytes": 159618,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/brain.py",
-      "sha256": "47cc235f7266c352dd56dadc1ffacaebbeadb385670356963dac418d535127ad",
+      "sha256": "ae97b2e253f76a9109f99416ba82e4c728347969ef4811d2eb020d47315f67db",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -200,9 +200,9 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 7975,
+      "bytes": 8109,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/night_gunner.py",
-      "sha256": "94079ca135aa79b3595e4c472fdf41b979a51eb53e1a96a32f74f7103575de91",
+      "sha256": "bf1349c1e4d1eb18bc467172dd85aad3d4b4699321adbb81fd6a0a5016a827f1",
       "source": "Demo/CoreGeek/src/agent/night_gunner.py"
     },
     {
@@ -298,7 +298,7 @@
     {
       "bytes": 12481,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/strategy_config.py",
-      "sha256": "01486f587bd1cfaf77113b6c1cd905d95eedbbf89092a9082bed315d72f4966e",
+      "sha256": "aa748d737ae7a67a0f2133a2bb9dceb844fb8ceb34992b911177e5392bc6cb5b",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -535,10 +535,10 @@
       "source": "Demo/CoreGeek/src/agent/ballistics.py"
     },
     {
-      "bytes": 159335,
+      "bytes": 159618,
       "generated": true,
       "path": "CoreGeek/src/agent/brain.py",
-      "sha256": "47cc235f7266c352dd56dadc1ffacaebbeadb385670356963dac418d535127ad",
+      "sha256": "ae97b2e253f76a9109f99416ba82e4c728347969ef4811d2eb020d47315f67db",
       "source": "Demo/CoreGeek/src/agent/brain.py"
     },
     {
@@ -731,10 +731,10 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 7975,
+      "bytes": 8109,
       "generated": true,
       "path": "CoreGeek/src/agent/night_gunner.py",
-      "sha256": "94079ca135aa79b3595e4c472fdf41b979a51eb53e1a96a32f74f7103575de91",
+      "sha256": "bf1349c1e4d1eb18bc467172dd85aad3d4b4699321adbb81fd6a0a5016a827f1",
       "source": "Demo/CoreGeek/src/agent/night_gunner.py"
     },
     {
@@ -846,7 +846,7 @@
       "bytes": 12481,
       "generated": true,
       "path": "CoreGeek/src/agent/strategy_config.py",
-      "sha256": "01486f587bd1cfaf77113b6c1cd905d95eedbbf89092a9082bed315d72f4966e",
+      "sha256": "aa748d737ae7a67a0f2133a2bb9dceb844fb8ceb34992b911177e5392bc6cb5b",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -1137,5 +1137,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "2d9890fd05f229e9123702cbef1844defc5f8b5c9b33000343f2c24c190b835c"
+  "source_digest": "ab53bd992421c7c8bf8f530fe249feb3c17b7e99d51f8d84275b2b7719d8860f"
 }
