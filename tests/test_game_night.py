@@ -273,28 +273,43 @@ class NightWeaponTest(unittest.TestCase):
         cmd = self._only_cmd(self._manned(Robot(Pos(12, 27), 40), kind="railgun", level=3))
         self.assertEqual(cmd["targetPos"], [{"x": 12, "y": 27}])
 
-    def test_a_level_two_gun_is_worth_twice_the_damage(self):
-        """升级后伤害翻倍（每级 +10），挑目标要按新伤害算。
+    def test_a_level_two_gun_splits_its_two_shots(self):
+        """等级放的是**子弹数**（每颗 10 点，不是"一发 20 点"）⇒ L2 把两颗分给两台。
 
-        例：(13,25) 15 血（距 1）与 (15,25) 40 血（距 3）都够得着 —— L1 各值 10 点、并列取近，
-        打残血的；L2 前者仍只值 15 点、后者值满 20 点，转打满血的。
+        例：(13,25) 15 血（距 1）与 (14,26) 40 血（距 2、**不在同一条弹道上**）都够得着 ——
+        L1 一颗、各值 10 点、并列取近 ⇒ 打残血的；L2 第一颗仍打残血的（打成 5 血），第二颗
+        它只吸收得下 5 点、满血那台吸收得下 10 点 ⇒ 转打满血的。
+        ⚠️ 同一直线上的两台不能这么算：子弹被前面那台吃掉（`_first_on_line`）。
         """
-        near, far = Robot(Pos(13, 25), 15), Robot(Pos(15, 25), 40)
+        near, far = Robot(Pos(13, 25), 15), Robot(Pos(14, 26), 40)
         self.assertEqual(
             self._only_cmd(self._manned(near, far))["targetPos"], [{"x": 13, "y": 25}], "L1：并列取近"
         )
         self.assertEqual(
             self._only_cmd(self._manned(near, far, level=2))["targetPos"],
-            [{"x": 15, "y": 25}, {"x": 15, "y": 25}],
-            "L2：15 血那只吸收不完 20 点伤害",
+            [{"x": 13, "y": 25}, {"x": 14, "y": 26}],
+            "L2：第一颗补残血、第二颗转满血那台",
         )
 
-    def test_a_level_two_rocket_is_worth_twice_the_splash(self):
-        """火箭的导弹数 = 等级 ⇒ 中心/溅射都按等级翻倍（L2 两枚 = 40/20），评分跟着变。
+    def test_a_bullet_is_eaten_by_the_nearest_robot_on_its_line(self):
+        """子弹沿弹道飞、命中**最近**那台即消耗（任务书 L250）⇒ 同一直线上，后面那台打不到。
 
-        例：(13,25) 15 血与 (13,26) 15 血挨在一起（L1 吃 15+10=25 分），另一台 40 血在 (9,22)
-        （L1 只值 20 分）⇒ L1 打那簇残血的；L2 时那簇被血量封顶只值 30 分、满血那台值满 40 分
-        ⇒ 转打满血的（两枚都砸它 = 一炮带走）。
+        (13,25) 与 (15,25) 都在炮位 (12,25) 的横线上：两颗子弹都只能落在那条线上，
+        挨着的 (13,25) 先吃 —— 第二颗也只值 5 分（它只剩 5 血），不会去够后面那台。
+        """
+        near, far = Robot(Pos(13, 25), 15), Robot(Pos(15, 25), 40)
+        self.assertEqual(
+            self._only_cmd(self._manned(near, far, level=2))["targetPos"],
+            [{"x": 13, "y": 25}, {"x": 13, "y": 25}],
+            "挡在前面的那台没死之前，后面那台一颗都吃不到",
+        )
+
+    def test_a_level_two_rocket_finishes_the_cluster_then_moves_on(self):
+        """火箭的等级放的是**导弹枚数**（每枚中心 20 / 溅射 10）⇒ 逐枚重算，不把两枚砸在同一个点上。
+
+        例：(13,25) 15 血与 (13,26) 15 血挨在一起（一枚 L1 吃 15+10=25 分），另一台 40 血在 (9,22)
+        （只值 20 分）⇒ L1 打那簇残血的；L2 第一枚把 (13,25) 打死、(13,26) 只剩 5 血，第二枚
+        打它只值 5 分、打满血那台值 20 分 ⇒ 第二枚转打满血的。
         """
         cluster = (Robot(Pos(13, 25), 15), Robot(Pos(13, 26), 15))
         lone = Robot(Pos(9, 22), 40)  # 簇离它切比雪夫 4 ⇒ 没有落点能同时吃到两边
@@ -307,9 +322,166 @@ class NightWeaponTest(unittest.TestCase):
         night._fired.clear()
         self.assertEqual(
             self._only_cmd(self._manned(*cluster, lone, kind="rocket", level=2))["targetPos"],
-            [{"x": 9, "y": 22}, {"x": 9, "y": 22}],
-            "L2：满血那台吸收得完 40 点",
+            [{"x": 13, "y": 25}, {"x": 9, "y": 22}],
+            "L2：第一枚收掉那簇，第二枚别再砸在只剩 5 血的那台上",
         )
+
+    def test_the_lowest_tier_is_worth_the_most(self):
+        """低级优先（用户口径"优先攻击最低级的机器人"）：有效伤害并列时挑最低级的 —— 即使它更远。
+
+        (13,25) 是 BOSS（更近、距 1），(14,26) 是小型（距 2）：一颗子弹各值 10 点，权重 4 : 1
+        ⇒ 打小型。没有权重表时这里会按"并列取近"打 BOSS。
+        """
+        boss = Robot(Pos(13, 25), 800, kind="bossRobot")
+        small = Robot(Pos(14, 26), 40, kind="smallRobot")
+        cmd = self._only_cmd(self._manned(boss, small))
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}], "并列时挑最低级的")
+
+    def test_a_robot_without_a_kind_is_still_shot_at(self):
+        """`roleType` 缺失 ⇒ 当最低级（照打，不静默少打）：并列时挑那台没种类的。"""
+        boss = Robot(Pos(13, 25), 800, kind="bossRobot")
+        unknown = Robot(Pos(14, 26), 40)
+        cmd = self._only_cmd(self._manned(boss, unknown))
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 26}])
+
+    def test_the_three_missiles_spread_over_three_finishable_targets(self):
+        """一枚一枚地挑：三只 20 血小型各挨一枚就死 ⇒ 三枚分点 = 60 点有效伤害；
+        同点砸一只只有 20 点（另两枚打空）。这就是 `targetPos` 多格的价值。"""
+        gun = Weapon(
+            id=self.GUN, kind="rocket", pos=Pos(13, 23), attack_range=99, cooldown=-1, level=3
+        )
+        robots = tuple(Robot(Pos(20, y), 20, kind="smallRobot") for y in (15, 23, 31))
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(13, 22)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(
+            cmd["targetPos"], [{"x": 20, "y": 15}, {"x": 20, "y": 23}, {"x": 20, "y": 31}]
+        )
+
+    def test_the_two_missiles_focus_when_that_damages_more(self):
+        """该集火时集火：两只 40 血小型挨得近（溅射互相吃到）⇒ 两枚砸同一格（20+20 中心 +
+        溅射）比各打一枚更值。逐枚贪心两种都出得来，不是"无脑摊开"。"""
+        gun = Weapon(
+            id=self.GUN, kind="rocket", pos=Pos(13, 23), attack_range=99, cooldown=-1, level=2
+        )
+        robots = (Robot(Pos(20, 23), 40, kind="smallRobot"), Robot(Pos(20, 24), 40, kind="smallRobot"))
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(13, 22)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["targetPos"], [{"x": 20, "y": 23}, {"x": 20, "y": 23}], "簇里叠加")
+
+    def test_opposite_targets_collapse_to_one_cell(self):
+        """两台在炮位两侧（夹角 180°）⇒ 第二颗**不许**另开一格：整次攻击非法比少打一发严重得多。
+
+        （任务书 L250：任意两个目标相对加特林的夹角 > 90° ⇒ 整次攻击非法。）
+        第二颗本来更想打右边那台满血的（10 分 > 左边只剩 5 分的 5 分），但那样就出了锥形
+        ⇒ 退回同格（`targetPos` 的个数仍等于等级）。
+        """
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=2
+        )
+        robots = (Robot(Pos(11, 25), 15, kind="smallRobot"), Robot(Pos(14, 25), 40, kind="smallRobot"))
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["targetPos"], [{"x": 11, "y": 25}, {"x": 11, "y": 25}], "退回同格补齐")
+
+    def test_every_volley_stays_inside_the_cone(self):
+        """产出的任何一波都过锥形自查（≤45°，比任务书的 90° 更严）—— 这是红线边上那一条。"""
+        boards = [
+            (Pos(12, 25), (Robot(Pos(15, 24), 40), Robot(Pos(15, 26), 40))),
+            (Pos(12, 25), (Robot(Pos(11, 25), 40), Robot(Pos(13, 25), 40))),
+            (
+                Pos(12, 25),
+                (Robot(Pos(14, 26), 10), Robot(Pos(15, 25), 10), Robot(Pos(13, 27), 10)),
+            ),
+        ]
+        for pos, robots in boards:
+            gun = Weapon(id=self.GUN, kind="gatling", pos=pos, attack_range=9, cooldown=-1, level=3)
+            turn = self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots)
+            targets = night._volley(gun, turn, robots)
+            self.assertTrue(night._in_cone(pos, targets), f"{pos} {robots} ⇒ {targets} 出了锥形")
+        self.assertTrue(night._in_cone(Pos(12, 25), (Pos(15, 24), Pos(15, 26))), "同侧约 37°")
+        self.assertFalse(night._in_cone(Pos(12, 25), (Pos(13, 25), Pos(11, 25))), "两侧 180°")
+        self.assertFalse(night._in_cone(Pos(12, 25), (Pos(13, 25), Pos(12, 26))), "正好 90° 也不赌")
+
+    def test_the_railgun_aims_through_a_line_of_targets(self):
+        """电磁沿弹道穿透（任务书 L252）：能量够时打**穿**一串比只打前排值 ⇒ 瞄线的远端。
+
+        三台里两台 10 血小型在横线上、一台 BOSS 在竖线上（L3 能量 30）：瞄 (16,25) 吃到
+        10+10 两台的伤害（80 分），瞄 (15,25) 只吃到它自己（40 分），瞄 BOSS 是 30 点 ×1（30 分）。
+        """
+        gun = Weapon(
+            id=self.GUN, kind="railgun", pos=Pos(12, 25), attack_range=10, cooldown=-1, level=3
+        )
+        robots = (
+            Robot(Pos(15, 25), 10, kind="smallRobot"),
+            Robot(Pos(16, 25), 10, kind="smallRobot"),
+            Robot(Pos(12, 20), 800, kind="bossRobot"),
+        )
+        cmd = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=robots))
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["targetPos"], [{"x": 16, "y": 25}], "瞄线的远端，把两台都穿上")
+
+    def test_a_robot_that_is_chewing_the_wall_gets_the_fire(self):
+        """贴墙加成（用户口径甲）：正在啃墙的更急 —— 墙塌了就没得修。
+
+        正面墙列 x=13，其中 (13,23) 被打到 150 血（残墙档 ×2）。两台：
+        **中型**贴在墙外 (14,23)（权重 3×20 = 60）、**小型**在远处 (20,23)（4×10 = 40）
+        ⇒ 打贴墙那台；**没有加成**时是 30 vs 40 ⇒ 会去打远处那只小型（这条用例就是钉这个差别的）。
+        """
+        from _fixtures import _terrain  # noqa: PLC0415  （本用例自带一小块地形）
+
+        wall = Pos(13, 23)
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=1
+        )
+        near = Robot(Pos(14, 23), 60, kind="middleRobot")
+        far = Robot(Pos(20, 23), 40, kind="smallRobot")
+        grid = _terrain((gun,), {wall: "wall"}, {self.BASE: "station"})
+        for cell in (near.pos, far.pos):
+            grid[cell] = "robot"
+        turn = Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=(Worker(1, Pos(12, 24)),),
+            gold=0,
+            weapons=(gun,),
+            robots=(near, far),
+            walls=(Wall(40000, wall, 150, 1),),
+        )
+        cmd = self._only_cmd(turn)
+        self.assertEqual(cmd["action"], "attack")
+        self.assertEqual(cmd["targetPos"], [{"x": 14, "y": 23}], "先打啃墙那台")
+
+    def test_the_wall_bonus_does_not_apply_from_two_cells_away(self):
+        """加成只在**贴着**墙（切比雪夫 ≤1）时生效：隔着两格的不算"正在啃"。"""
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=1
+        )
+        # 墙列 x=13；中型在 (15,23)（离墙 2 格，够不着墙）与远处的小型 (20,23)
+        wall = Pos(13, 23)
+        mid = Robot(Pos(15, 23), 60, kind="middleRobot")
+        small = Robot(Pos(20, 23), 40, kind="smallRobot")
+        grid = _terrain((gun,), {wall: "wall"}, {self.BASE: "station"})
+        for cell in (mid.pos, small.pos):
+            grid[cell] = "robot"
+        turn = Turn(
+            round_no=self.NIGHT,
+            map=Map((41, 32), grid),
+            roles=(Worker(1, Pos(12, 24)),),
+            gold=0,
+            weapons=(gun,),
+            robots=(mid, small),
+            walls=(Wall(40000, wall, 150, 1),),
+        )
+        self.assertEqual(self._only_cmd(turn)["targetPos"], [{"x": 20, "y": 23}], "低级优先照旧")
+
+    def test_without_walls_the_fire_is_unchanged(self):
+        """没有墙（或都够不着）⇒ 权重只剩种类那一档：贴墙加成不许改掉原有取舍。"""
+        gun = Weapon(
+            id=self.GUN, kind="gatling", pos=Pos(12, 25), attack_range=9, cooldown=-1, level=1
+        )
+        # 与 `test_the_lowest_tier_is_worth_the_most` 同一块棋盘：BOSS 更近、小型更远
+        boss = Robot(Pos(13, 25), 800, kind="bossRobot")
+        small = Robot(Pos(14, 26), 40, kind="smallRobot")
+        plain = self._only_cmd(self._turn(Worker(1, Pos(12, 24)), weapons=(gun,), robots=(boss, small)))
+        self.assertEqual(plain["targetPos"], [{"x": 14, "y": 26}], "仍是低级优先")
 
     def test_a_cooling_rocket_holds_fire(self):
         """火箭发射台发射后有 3 回合空窗（`cooldown`）⇒ 冷却中一炮不发，
@@ -707,6 +879,114 @@ class NightEconomyTest(unittest.TestCase):
         self.assertIn(cmd["action"], ("move", "collect"), cmd)
 
 
+class NightTrajectoryTest(unittest.TestCase):
+    """夜里的**轨迹账**（第 163–166 步，用户报"天亮才刚走到矿边又要回来修墙"）：
+
+    ① 预算挑矿（`_priciest_ore(budget=...)`）：能**整块采完并回得来**的矿优先，连"走到 + 采一块
+    + 回来"都不够的矿直接不选；② 回程窗口（`night._walk_home`）：`回盒子步数 + POST_MARGIN >= 本段
+    剩余回合` ⇒ 朝盒子走（把回程挪到不赶时间的夜里），到家待命不再出去；③ 回程路上脚边有矿
+    ⇒ 顺手采一回合（`ON_THE_WAY_MAX = 1` 次/趟）；④ 砌墙缺石时路上**石头优先**。
+    """
+
+    BASE = Pos(10, 24)
+    NEAR_STONE = Pos(5, 24)   # 近处石矿（2 步）
+    FAR_COPPER = Pos(30, 4)   # 远处铜矿（这一夜根本采不完）
+    WALK_HOME = Pos(12, 24)   # 回程中的站位（离基地 2 步，`steps_between` 非 0）
+    STEP_COPPER = Pos(13, 24)  # 回程路上脚边的铜矿
+    STEP_STONE = Pos(12, 25)   # 另一侧脚边的石矿
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+        night._fired.clear()
+
+    def _turn(
+        self,
+        role: Worker,
+        *,
+        ores: dict[Pos, str],
+        within: int = 85,
+        stone: int = 0,
+    ) -> Turn:
+        # 不放围墙 ⇒ `_ring` 非空（环上全没砌）⇒ `core.stone_short` 由手里的石头决定
+        grid = {self.BASE: "station", **ores, role.pos: role.type_name}
+        bag = {"stone": stone} if stone else None
+        role = Worker(role.id, role.pos, bag or {})
+        return Turn(
+            round_no=within,  # `within` 直接就是夜里第几回合 ⇒ rounds_left = 130 - within + 1
+            map=Map((41, 32), grid),
+            roles=(role,),
+            gold=0,
+            weapons=(),
+            robots=(),
+            vendor_prices={"stone": 1, "copper": 5},
+        )
+
+    def test_the_whole_ore_beats_a_richer_but_unfinishable_one(self):
+        """能整块采完的矿优先：近处石矿（10+2+回 ≤ 预算）压过远处铜矿（够不着采完）。
+
+        夜里第 115 回合（`rounds_left` = 16、预算 13）：铜矿来回要 20+ 步 ⇒ 整块采不完，
+        石矿 10 次 + 去 2 + 回 14 步…… 挑的是那座**能收工前采完**的。
+        """
+        worker = Worker(2, Pos(7, 24))
+        cmd = plan(
+            self._turn(
+                worker, ores={self.NEAR_STONE: "stone", self.FAR_COPPER: "copper"}, within=115
+            )
+        )["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cmd["action"], "move")
+        self.assertEqual(step.dist(self.NEAR_STONE), 1, f"朝近处石矿迈一步（不奔远处铜矿）：{cmd}")
+
+    def test_an_unreachable_trip_is_not_started_at_all(self):
+        """连"走到 + 采一块"都不够回合的矿 ⇒ 不出门（在家就空指令；在盒外只往基地走，见下一条）。
+
+        这就是用户报的那个场景的治本处：不再在天亮前奔向一座这一夜根本采不到的矿。
+        """
+        at_home = Worker(2, Pos(11, 24))  # 贴着基地
+        turn = self._turn(at_home, ores={self.FAR_COPPER: "copper"}, within=129)  # rounds_left = 2
+        self.assertEqual(plan(turn), {}, f"预算不够 ⇒ 空指令（合法）：{plan(turn)}")
+
+    def test_the_night_walks_home_before_dawn(self):
+        """回程窗口：本段剩余回合不够"采完再走回来" ⇒ 朝基地（盒子）走，把回程挪到夜里。"""
+        worker = Worker(2, Pos(20, 24))  # 离基地 10 步
+        turn = self._turn(worker, ores={}, within=125)  # rounds_left = 6 ⇒ 10 + 3 >= 6
+        cmd = plan(turn)["2"]
+        self.assertEqual(cmd["action"], "move", f"该往回走：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.BASE), Pos(20, 24).dist(self.BASE), "这一步朝基地去")
+
+    def test_home_is_where_it_stays(self):
+        """到家了就待命（空指令），不再折返回矿 —— 天亮那一步不用再走。"""
+        worker = Worker(2, Pos(11, 24))  # 贴着基地（`steps_between` 的 0）
+        turn = self._turn(worker, ores={self.FAR_COPPER: "copper"}, within=125)
+        self.assertEqual(plan(turn), {}, f"到家待命：{plan(turn)}")
+
+    def test_the_walk_home_picks_up_the_ore_underfoot(self):
+        """回程路上脚边有矿 ⇒ 顺手采一回合（不认领矿格：不挡正要去采它的同事）。
+
+        `within=129`（只剩 2 回合）⇒ 回程窗口开着；石头给足 ⇒ 按收购价挑铜。
+        """
+        worker = Worker(2, self.WALK_HOME)
+        turn = self._turn(
+            worker,
+            ores={self.STEP_COPPER: "copper", self.STEP_STONE: "stone"},
+            within=129,
+            stone=20,  # 石头够 ⇒ 按收购价挑
+        )
+        cmds = plan(turn)
+        self.assertEqual(cmds["2"]["action"], "collect", f"该顺手采：{cmds}")
+        self.assertEqual(cmds["2"]["targetPos"], [{"x": 13, "y": 24}], "不缺石 ⇒ 顺手采铜")
+
+    def test_a_short_wall_takes_the_stone_on_the_way_home(self):
+        """砌墙缺石 ⇒ 回程路上优先采石（一块石 = 省下专程采石的 2 回合）。"""
+        worker = Worker(2, self.WALK_HOME)  # 一块石头都没有 ⇒ 缺石
+        turn = self._turn(
+            worker, ores={self.STEP_COPPER: "copper", self.STEP_STONE: "stone"}, within=129
+        )
+        cmds = plan(turn)
+        self.assertEqual(cmds["2"]["targetPos"], [{"x": 12, "y": 25}], f"缺石 ⇒ 顺手采石：{cmds}")
+
+
 class NoTaskNightTest(unittest.TestCase):
     """无任务模式的夜班**与平常夜班是同一套**（第 130 步）：炮手上炮、其余挖矿；清场走白天线。
 
@@ -1027,6 +1307,53 @@ class WallRepairTest(unittest.TestCase):
         cmds = plan(turn)
         cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
         self.assertLess(cell.dist(self.POST), Pos(20, 20).dist(self.POST), "这一步朝待命位去")
+
+    def test_the_repairer_upgrades_a_middle_wall_when_nothing_is_hurt(self):
+        """手边的券不留着：没有残墙可修时，用它升**中段正面墙**（待命位 ≤1 步那几格）。
+
+        升级顺带回满血 + 抬高一档上限（1000 → 1500）；留着不花 = 白站一夜。
+        """
+        worker = Worker(2, self.POST, {WALL_FIXER: 1, "WallUpgradeVoucher1": 1})
+        cmds = plan(self._night(worker))  # 全墙满血 ⇒ 没有要修的
+        self.assertEqual(cmds["2"]["action"], "use", f"该主动升级：{cmds}")
+        self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1")
+        cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertLessEqual(worker.pos.dist(cell), 1, "只用够得着的那一格（待命位中段）")
+
+    def test_a_wounded_wall_still_wins_over_an_idle_upgrade(self):
+        """有残墙 ⇒ 券/包都留给那一格，不把这一回合花在"升别的墙"上。
+
+        （修复前也是这个行为；这条钉住"第 ③ 步的例外"没把它改坏。）
+        """
+        worker = Worker(2, self.POST, {WALL_FIXER: 1, "WallUpgradeVoucher1": 1})
+        cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}))
+        self.assertEqual(cmds["2"]["action"], "use", f"该修那一格：{cmds}")
+        self.assertEqual(cmds["2"]["targetPos"], [{"x": 13, "y": 23}], "目标就是那面残墙")
+
+    def test_the_gunner_spends_a_weapon_voucher_instead_of_firing(self):
+        """夜里的武器券也用掉（用户口径"夜里把手头的券都可以用了"）：到岗先用券、那一回合不开火。
+
+        站位是三座共用的操作位 ⇒ 三座都在一格内；`_targets_for` 给的是"还升得动"的那两座
+        （非角那两座 L1 火箭，血并列 ⇒ 取坐标序 ⇒ (9,23)）。
+        """
+        weapons = tuple(
+            Weapon(10020 + i, "rocket", pos, 10, 0)
+            for i, pos in enumerate(weapon_sites(self.BASE, 41))
+        )
+        pioneer = Pioneer(1, Pos(9, 24), {"WeaponUpgradeVoucher1": 1})  # 共用操作位
+        cmds = plan(self._turn(pioneer, weapons=weapons))
+        self.assertEqual(cmds["1"]["action"], "use", f"持券就先用掉：{cmds}")
+        self.assertEqual(cmds["1"]["name"], "WeaponUpgradeVoucher1")
+        self.assertEqual(cmds["1"]["targetPos"], [{"x": 9, "y": 23}], "打在非角那座火箭上")
+
+    def test_a_wall_voucher_out_of_reach_does_not_stop_the_gunner(self):
+        """够不着的券不追：炮位在盒子深处（最近的墙也在 2 格外）⇒ 照旧开火，不为了券离开岗位。"""
+        gun = Weapon(id=90001, kind="gatling", pos=Pos(9, 25), attack_range=4, cooldown=0)
+        pioneer = Pioneer(1, Pos(9, 24), {"WallUpgradeVoucher1": 1})  # 贴着加特林
+        foe = Robot(pos=Pos(11, 25), health=40)  # 距炮位 2，够得着
+        cmds = plan(self._turn(pioneer, weapons=(gun,), robots=(foe,)))
+        # `attack` 的 key 是武器 id，不是角色 id
+        self.assertEqual(cmds["90001"]["action"], "attack", f"够不着 ⇒ 照旧开火：{cmds}")
 
     def test_the_gunner_still_mans_the_guns(self):
         """修墙工不是炮手：同一回合里 `attack` 与 `use` 各一条、分属两个角色。"""

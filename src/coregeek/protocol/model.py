@@ -200,16 +200,22 @@ def _news(payload: dict[str, Any]) -> str:
 def _robots(payload: dict[str, Any]) -> tuple[Robot, ...]:
     """场上全部机器人（`robot.roles`）：全图可见、逐回合全量，白天为空。
 
-    只留 `pos` + `health` + `target_team`。`target_team` 缺失给空串 ⇒ 当成打我方的
-    （安全降级）。"""
+    只留 `pos` + `health` + `target_team` + `kind`（`roleType`）。`target_team` 缺失给空串 ⇒
+    当成打我方的（安全降级）；`kind` 缺失也给空串 ⇒ 打谁按"最低级"算（照打，不少打）。"""
     out = []
     for node in _items(payload, "robot", "roles"):
         pos = _pos(node)
         if pos is None:
             continue
         team = node.get("targetTeam") if isinstance(node, dict) else None
+        kind = node.get("roleType") if isinstance(node, dict) else None
         out.append(
-            Robot(pos=pos, health=_int(node.get("health")), target_team=team if isinstance(team, str) else "")
+            Robot(
+                pos=pos,
+                health=_int(node.get("health")),
+                target_team=team if isinstance(team, str) else "",
+                kind=kind if isinstance(kind, str) else "",
+            )
         )
     return tuple(out)
 

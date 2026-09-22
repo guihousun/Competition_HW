@@ -47,13 +47,14 @@ if __name__ == "__main__":
 
 
 def _reset_ledgers() -> None:
-    """把模块级的跨回合本地账清零（`core._collected`：我们采过每座矿几次；`core._prices` /
-    `core._blocked`：新闻钉住的未来 k 天）。
+    """把模块级的跨回合本地账清零（`core._collected`：采过每座矿几次；`core._on_the_way`：顺手采的趟账；
+    `core._prices` / `core._blocked`：新闻钉住的未来 k 天）。
 
     用例隔离用 —— 单实例/模块级状态在同一个测试进程里会跨用例串味（与 `night._fired` 同一条
     规矩）。加了新的模块级账就补在这里，别撒到各个用例类里去。
     """
     core._collected.clear()
+    core._on_the_way.clear()
     for pinned in core._prices:
         pinned.clear()
     for stopped in core._blocked:

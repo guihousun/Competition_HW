@@ -28,11 +28,13 @@ from .core import (
     _emit,
     _mineable,
     _post_spots,
+    _on_the_way_ore,
     _priciest_ore,
     _steps_to_post,
     _weapon_groups,
     front_wall_cells,
     needs_repair,
+    stone_short,
 )
 from .grid import STEPS, Pos, box_cells, weapon_sites
 from .path import steps_between
@@ -52,9 +54,11 @@ DETOUR_MAX = 2
 BAG_SELL_AT = 15
 
 #: 修墙包（`core.WALL_FIXER`，10 金/张）从第几天开始攒、攒到几张。
-#: 第 3 天起（第 4 夜就要有人拿着它守正面墙）、3 张 —— 一夜里两格同时垮下来是常事。
+#: 第 3 天起（第 4 夜就要有人拿着它守正面墙）、**5 张**（用户口径"修复包保持在 5 个以上"）——
+#: 夜里不能砌墙，包是唯一能把掉血的墙拉回来的消耗品；一个工人一回合只出手一次、待命位零步
+#: 够着正面列中段三格，5 张留出"同一格被打两轮 / 换格修"的余量（一夜 2–4 次是实际量级）。
 REPAIR_STOCK_FROM_DAY = 3
-REPAIR_PACKS = 3
+REPAIR_PACKS = 5
 
 
 #: 能卖给小贩的矿：三种（含多余的石头），挑哪种由 `Turn.vendor_prices` 现算。
@@ -139,7 +143,7 @@ class BackToPost:
     """第 0 级：`回岗步数 + POST_MARGIN(3) ≥ 白天剩余` ⇒ 回那一组的岗位；`True` = 到此为止。
 
     判据是**实时算出来的回岗步数**（BFS，与挑岗位同一个口径）：回岗要走多久就得多早动身，
-    再加 `POST_MARGIN` 的容错余量。到岗后第一件事是用券（`_use_voucher_here`：贴着就能升的
+    再加 `POST_MARGIN` 的容错余量。到岗后第一件事是用券（`use_voucher_here`：贴着就能升的
     那张先用），用不上就待命。目标与夜里 `night.defend` 的岗位同一个（`core._post_spots`）：
     三座火箭共用一个操作位（要站上去）—— 天黑时人已经在岗上，夜里第一回合就能开火。
     **只发 `move`**：复用 `night.defend` 会发 `attack`，而白天发是非法指令（红线）。
@@ -172,7 +176,7 @@ class BackToPost:
         for w in group:
             ctx.taken.add(w.pos)  # 定下这组了：认领，免得另一个角色也奔这里（一人只能操一组）
         if steps == 0:
-            _use_voucher_here(role, ctx)  # 已经在岗 ⇒ 先用券（贴着就能升的那张）
+            use_voucher_here(role, ctx)  # 已经在岗 ⇒ 先用券（贴着就能升的那张）
             return True
         ctx.q.step(role, spot, onto=onto)  # 只发 move，绝不调 `night._fire`
         return True
@@ -260,7 +264,7 @@ def _build_gap(role: Worker, ctx: _Ctx) -> bool:
         if role.pos in outside and _emit(q.cmds, role, actions.Build, WALL, target):
             return True
         for spot in outside:
-            if q.step(
+            if _on_the_way_to_wall(role, ctx, target) or q.step(
                 role,
                 spot,
                 avoid=frozenset(ctx.sites - {target}),
@@ -279,9 +283,32 @@ def _build_gap(role: Worker, ctx: _Ctx) -> bool:
         # 与建武器同一条契约：`step_toward` 停在贴着目标的一格，那正是 `build` 的站位
         if _emit(q.cmds, role, actions.Build, WALL, target):
             return True
-    elif q.step(role, target, avoid=frozenset(ctx.sites), with_paths=True, reserve=True):
+    elif _on_the_way_to_wall(role, ctx, target) or q.step(
+        role, target, avoid=frozenset(ctx.sites), with_paths=True, reserve=True
+    ):
         return True
     return False
+
+
+def _on_the_way_to_wall(role: Worker, ctx: _Ctx, target: Pos) -> bool:
+    """**去砌墙的路上顺手采一块**（用户口径"顺路还有个矿就顺手采了"）。
+
+    脚边有矿、这一趟还没顺手采过、且"到工地 + 采这 1 回合 + 余量"仍在白天预算内 ⇒ `collect`。
+    砌墙缺石时**石头优先**（一块石 = 省下专程采石的 2 回合，见 `core.stone_short`）。
+    `True` = 这一回合归它（调用方不要再发走路指令）。"""
+    steps = steps_between(role.pos, target, _passable(ctx.turn), ctx.turn.map.size)
+    mine = _on_the_way_ore(
+        role,
+        ctx.turn,
+        ctx.ore_taken,
+        goal=target,
+        steps_to_goal=steps,
+        stone_first=stone_short(role, ctx.turn),
+    )
+    if mine is None:
+        return False
+    # 不认领矿格：顺手拿一块不该挡住"正要去采它"的同事（那一趟才是采集主力）
+    return _collect(ctx.q.cmds, role, mine)
 
 
 def _demolish(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
@@ -323,8 +350,8 @@ def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
     """修墙差事（第 3 天起，只由名册里最后一个工人跑）：**手上的墙券先花掉 → 攒修复包 → 攒墙券**。
 
     墙券也归他：两条线打的是同一列正面墙、站位契约也一样（切比雪夫 ≤1）⇒ 买、用、修走同一趟路。
-    反过来说，开拓者手里那张墙券在炮位上根本花不掉（`_use_voucher_here` 只管武器券），还会把他
-    从岗位拽到墙边。武器还有缺 ⇒ 整条不跑（别抢武器的钱）；买不起 / 商店走不到 / 这一趟来不及
+    反过来说，开拓者手里那张墙券在炮位上根本花不掉（`use_voucher_here` 只用在贴着的那张，而炮位
+    离墙 ≥4 格），还会把他从岗位拽到墙边。武器还有缺 ⇒ 整条不跑（别抢武器的钱）；买不起 / 商店走不到 / 这一趟来不及
     ⇒ 返回 False，让第 3 级接着挖矿，绝不空转。"""
     turn = ctx.turn
     if ctx.weapon_gap or turn.round_no < 0:
@@ -345,8 +372,9 @@ def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
         count = min(REPAIR_PACKS - stock, ctx.budget // price)
         if count > 0 and _buy_at_shop(role, ctx, WALL_FIXER, count, trips_fit=stock == 0):
             return True
-    # ③ 墙券：按 `WALL_CHAIN` 取第一张还有东西可升的
-    target = _voucher_target(turn, WALL_CHAIN)
+    # ③ 墙券：按 `WALL_CHAIN` 取第一张还有东西可升的（**已经被认领要拆的格不算**：两条线都优先
+    #    挑血最少的正面墙，不挡一下就会同回合一个 `remove`、一个 `use` 落在同一格上）
+    target = _voucher_target(turn, WALL_CHAIN, ctx.demolish_taken)
     if target is None:
         return False
     voucher, spots = target
@@ -370,23 +398,32 @@ DAY_CHAIN: tuple[State, ...] = (
 BACK_TO_POST = BackToPost()
 
 
-def _pack_reserve(turn: Turn, ctx: _Ctx) -> int:
-    """本回合该给修墙包留出多少金币（0 = 不用留）。
+def _wall_reserve(turn: Turn, ctx: _Ctx) -> int:
+    """本回合该给"修墙那两个开销"留出多少金币（0 = 不用留）。
 
-    名册里开拓者排在工人**前面**，而它买券是"尽可能多买" ⇒ 不先留这一手，第 3 天那 200 金会
-    被两张武器券一次吃光，工人一张包都买不到。留的钱 = 还缺的张数 × 单价；条件与
-    `repair_errand` 同一套（第 3 天起、武器建满、有工人能背、价目查得到）。"""
+    名册里开拓者排在工人**前面**，而它买武器券是"尽可能多买" ⇒ 不先留这一手，第 3 天那点金币会
+    被武器券一次吃光，工人一张包、一张墙券都买不到（用户口径要"提高墙体升级的优先级"）。
+    留的钱 = 还缺的修墙包 + **一张**墙券（只留一张，最温和；手里已经持着一张就不再留）。
+
+    条件与 `repair_errand` 同一套（第 3 天起、武器建满、有工人能背）；墙券那一半还要求
+    `WALL_CHAIN` 上**还有东西可升** —— 前排全升满 ⇒ 不再锁钱，武器券照旧吃满。"""
     if ctx.weapon_gap or turn.round_no < 0:
         return 0
     if turn.day_no < REPAIR_STOCK_FROM_DAY:
         return 0
     if not any(isinstance(r, Worker) for r in turn.roles):
         return 0
+    packs = 0
     price = turn.shop_prices.get(WALL_FIXER, 0)
-    if price <= 0:
-        return 0
-    stock = _team_holds(turn, WALL_FIXER) + ctx.bought.get(WALL_FIXER, 0)
-    return max(0, REPAIR_PACKS - stock) * price
+    if price > 0:
+        stock = _team_holds(turn, WALL_FIXER) + ctx.bought.get(WALL_FIXER, 0)
+        packs = max(0, REPAIR_PACKS - stock) * price
+    step = _voucher_target(turn, WALL_CHAIN, ctx.demolish_taken)
+    if step is None:
+        return packs
+    voucher = step[0]
+    held = _team_holds(turn, voucher) + ctx.bought.get(voucher, 0)
+    return packs if held else packs + turn.shop_prices.get(voucher, 0)
 
 
 def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
@@ -427,8 +464,8 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
     #   还升得动的目标数 − 全队手里已有的张数 − 这一回合已经预扣的张数
     # 只按金币限量是不够的：钱多的时候两条线会各买满一轮，同一座炮买回两张券。
     free = len(spots) - _team_holds(turn, voucher) - ctx.bought.get(voucher, 0)
-    # 先扣掉修墙包那份（`_pack_reserve`）：券不许把工人买包的钱花光
-    afford = max(0, ctx.budget - _pack_reserve(turn, ctx))
+    # 先扣掉修墙那份（`_wall_reserve` = 包 + 一张墙券）：券不许把工人买包 / 买墙券的钱花光
+    afford = max(0, ctx.budget - _wall_reserve(turn, ctx))
     count = min(free, afford // price) if price > 0 else 0
     if count > 0 and _walk_to_shop(role, ctx, voucher, count):
         ctx.budget -= price * count  # 预扣：这一回合的另一条线不会再买
@@ -440,20 +477,25 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
 
 
 def _voucher_target(
-    turn: Turn, chain: tuple[tuple[str, str, int], ...] = VOUCHER_CHAIN
+    turn: Turn,
+    chain: tuple[tuple[str, str, int], ...] = VOUCHER_CHAIN,
+    exclude: frozenset[Pos] = frozenset(),
 ) -> tuple[str, tuple[Pos, ...]] | None:
     """优先链上第一个**还有东西可升**的步骤 ⇒ `(券名, 它的全部目标)`；全升满 ⇒ `None`。
 
     返回的是一串而不是一格：买券要"按需要多少张就买多少张"（用户口径），张数就是这一串的长度。
-    默认走武器链；围墙券那条链（`core.WALL_CHAIN`）由修墙工的差事自己传。"""
+    默认走武器链；围墙券那条链（`core.WALL_CHAIN`）由修墙工的差事自己传。
+    `exclude` = 这一回合别人已经认领的格（拆墙线：`_Ctx.demolish_taken`），只对墙那几段生效。"""
     for voucher, group, level in chain:
-        spots = _step_targets(turn, group, level)
+        spots = _step_targets(turn, group, level, exclude)
         if spots:
             return voucher, spots
     return None
 
 
-def _targets_for(voucher: str, turn: Turn) -> tuple[Pos, ...]:
+def _targets_for(
+    voucher: str, turn: Turn, exclude: frozenset[Pos] = frozenset()
+) -> tuple[Pos, ...]:
     """手里**这一张**券该打的目标（按优先链取第一个用它、且还有东西可升的步骤）；没有 ⇒ 空元组。
 
     ⚠️ 不能只看券名：武器二级券在链上出现两次（非角两座 / 角上一座），目标组得从步骤里取。
@@ -461,18 +503,24 @@ def _targets_for(voucher: str, turn: Turn) -> tuple[Pos, ...]:
     for name, group, level in VOUCHER_CHAIN + WALL_CHAIN:
         if name != voucher:
             continue
-        spots = _step_targets(turn, group, level)
+        spots = _step_targets(turn, group, level, exclude)
         if spots:
             return spots
     return ()
 
 
-def _step_targets(turn: Turn, group: str, want: int) -> tuple[Pos, ...]:
+def _step_targets(
+    turn: Turn, group: str, want: int, exclude: frozenset[Pos] = frozenset()
+) -> tuple[Pos, ...]:
     """一个步骤现在能打的目标格（**血少的在前**、同血取坐标序）；该等级的一个都不剩 ⇒ 空元组。
 
-    `group` 见 `core.VOUCHER_CHAIN`：`weapon-side` = 非角上那两座火箭、`weapon-corner` = 角上
-    那座、`wall-front` = 面向敌人的一列墙（`core.front_wall_cells` = `wall_cells` 前 `FRONT_WALLS`
-    格，正面列排第一位）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。"""
+    `group` 见 `core.VOUCHER_CHAIN` / `core.WALL_CHAIN`：`weapon-side` = 非角上那两座火箭、
+    `weapon-corner` = 角上那座、`wall-middle` / `wall-edge` = 正面列（`core.front_wall_cells`）
+    中间 / 边上那三格（切法见 `_wall_band`）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。
+
+    `exclude` 只作用于墙：**这一回合已经被认领要拆掉的那几格不能再被券打** —— 两条线都优先挑
+    "血最少的正面墙"，不挡一下就会同回合一个 `remove`、一个 `use` 打在同一格上（`use` 先落地
+    就是"券把墙升到满血、随即被拆"，反过来则是那一趟白跑）。"""
     station = turn.map.station
     if station is None:
         return ()
@@ -482,9 +530,27 @@ def _step_targets(turn: Turn, group: str, want: int) -> tuple[Pos, ...]:
         picks = {sites[i] for i in idx if i < len(sites)}
         guns = [w for w in turn.weapons if w.pos in picks and w.level == want - 1]
         return tuple(w.pos for w in sorted(guns, key=lambda w: (_health_rank(w), w.pos)))
-    front = set(front_wall_cells(turn))
-    walls = [w for w in turn.walls if w.pos in front and w.level == want - 1]
+    picks = _wall_band(turn, group)
+    walls = [
+        w
+        for w in turn.walls
+        if w.pos in picks and w.level == want - 1 and w.pos not in exclude
+    ]
     return tuple(w.pos for w in sorted(walls, key=lambda w: (_health_rank(w), w.pos)))
+
+
+def _wall_band(turn: Turn, group: str) -> set[Pos]:
+    """正面列里这一段该升级的格子（`core.WALL_CHAIN` 的两个组）。
+
+    `wall-middle` = **基地那两行 + 朝地图中心的那一行**（`y ∈ [by-2, by]`；样例基地 `(10,24)`
+    ⇒ `y = 22,23,24`）—— 用户口径的"中间三个"，重点升级；`wall-edge` = 正面列剩下的三格
+    （样例 ⇒ `21,25,26`），只吃多余的券。基地没了 ⇒ 空集。"""
+    station = turn.map.station
+    if station is None:
+        return set()
+    front = set(front_wall_cells(turn))
+    middle = {p for p in front if station.y - 2 <= p.y <= station.y}
+    return middle if group == "wall-middle" else front - middle
 
 
 def _health_rank(wall) -> int:
@@ -495,8 +561,9 @@ def _health_rank(wall) -> int:
 def _walk_to_use(role: BaseRole, ctx: _Ctx, voucher: str) -> bool:
     """把手里这张券用掉：贴着目标就 `use`，否则走一步（没有可用的目标 ⇒ False）。
 
-    手里可能攒着好几张（"尽可能多买"那一条）⇒ 每回合挑**还升得动的第一格**用掉一张。"""
-    spots = _targets_for(voucher, ctx.turn)
+    手里可能攒着好几张（"尽可能多买"那一条）⇒ 每回合挑**还升得动的第一格**用掉一张。
+    选目标要排掉这一回合已经认领要拆掉的墙格（`ctx.demolish_taken`，墙券才受影响）。"""
+    spots = _targets_for(voucher, ctx.turn, ctx.demolish_taken)
     if not spots:
         return False
     spot = spots[0]
@@ -559,9 +626,9 @@ def _mine_for_voucher(role: BaseRole, ctx: _Ctx) -> bool:
     return _mine_ore(role, ctx)
 
 
-def _mine_ore(role: Worker, ctx: _Ctx) -> bool:
-    """白天挖矿：挑最值钱的那座矿；动身之前先看有没有顺路的买卖。"""
-    mine = _priciest_ore(role, ctx.turn, ctx.ore_taken)
+def _mine_ore(role: Worker, ctx: _Ctx, *, budget: int | None = None) -> bool:
+    """白天挖矿：挑最值钱的那座矿；动身之前先看有没有顺路的买卖。`budget` 见 `sell_or_mine`。"""
+    mine = _priciest_ore(role, ctx.turn, ctx.ore_taken, budget=budget)
     if mine is None:
         return False
     ctx.ore_taken.add(mine)
@@ -601,16 +668,18 @@ def _mine_stone(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
     return q.step(role, mine, avoid=frozenset(ctx.sites), with_paths=True, reserve=True)
 
 
-def sell_or_mine(role: Worker, ctx: _Ctx) -> bool:
+def sell_or_mine(role: Worker, ctx: _Ctx, *, budget: int | None = None) -> bool:
     """工人"只管矿 → 金币"的那条线（无任务模式的白天 / 夜里清场后）：攒够一趟的货就背去卖，
     否则接着挖最贵的矿。
 
     两个去卖的触发：**够本**（货值 ≥ 2 × 到小贩的步数，少了它背一块石头也会走十几步）或
-    **背包满了**（售价最高的那种超过 `BAG_SELL_AT`(15) 件）。已经贴着小贩 ⇒ 直接卖。"""
+    **背包满了**（售价最高的那种超过 `BAG_SELL_AT`(15) 件）。已经贴着小贩 ⇒ 直接卖。
+
+    `budget` 只在夜里清场后由 `planner` 传（= 本段剩余回合 − 余量）：别奔一座这一夜采不完的矿。"""
     kind, num = _best_load(role, ctx.turn.vendor_prices)
     if _worth_the_trip(role, ctx.turn, kind, num) or _bag_is_full(role, ctx.turn):
         return _sell_cargo(role, ctx)
-    return _mine_ore(role, ctx)
+    return _mine_ore(role, ctx, budget=budget)
 
 
 def _bag_is_full(role: BaseRole, turn: Turn) -> bool:
@@ -753,17 +822,24 @@ def _team_holds(turn: Turn, voucher: str) -> int:
     return sum(r.bag.get(voucher, 0) for r in turn.roles)
 
 
-def _use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
-    """站在岗位上、手里有武器券、且目标就贴着 ⇒ 先用掉它（用户口径"到了位置先用券"）。
+def use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
+    """手边的券先花掉：**武器券或墙券**，目标正好贴着（≤1 格）⇒ 当场 `use`。
 
-    不满足就什么都不发（待命）—— 目标不在手边（那座炮离得远）不为了它走开，下一回合再看。"""
-    held = next((v for v in VOUCHER.values() if role.bag.get(v, 0) > 0), None)
-    if held is None:
-        return False
-    spots = _targets_for(held, ctx.turn)
-    if not spots or role.pos.dist(spots[0]) > 1:
-        return False
-    return _emit(ctx.q.cmds, role, actions.Use, held, spots[0])
+    两个时段都用：白天在炮位上到岗那一支（`BackToPost`）、夜里在链的前面
+    （`planner._night_intents` 的 ③）—— `use` 没有昼夜限制。够不着的目标不追（不为了它离开岗位；
+    白天的买券差事接着办）。⚠️ 一个角色一回合只发一条指令 ⇒ 用券那一回合就不开火/不挖矿，
+    换来的是**永久升级（顺带回满血）**。
+
+    基地券不在这里：那条走 `night.upgrade_station` 更保守的门（只在基地 < 1/4 血时才用）。
+    目标按优先链取（`_targets_for`）⇒ 同一步里"血少的在前"，但只认够得着的那几个。"""
+    for voucher in (*VOUCHER_NAMES, *WALL_VOUCHER_NAMES):
+        if role.bag.get(voucher, 0) <= 0:
+            continue
+        spots = _targets_for(voucher, ctx.turn, ctx.demolish_taken)
+        reachable = next((s for s in spots if role.pos.dist(s) <= 1), None)
+        if reachable is not None:
+            return _emit(ctx.q.cmds, role, actions.Use, voucher, reachable)
+    return False
 
 
 def _weak_l1(turn: Turn) -> tuple[Pos, ...]:

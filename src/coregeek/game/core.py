@@ -23,7 +23,7 @@ from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, wall_cells
 from .path import steps_between
 from .roles import BaseRole, Worker
-from .utils import _passable
+from .utils import _passable, _ring
 from .world import DAYS, Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
@@ -44,6 +44,12 @@ ORE_CHARGES = 10
 _collected: dict[Pos, int] = {}
 
 
+#: 顺手采的趟账（跨回合观测状态）：`{角色 id: (这一趟的目标格, 已顺手采几次)}`。
+#: 一趟 = 同一个目标格：换目标或走到了就重新计数（`_on_the_way_ore` 自己维护）。
+#: 卡住的最坏代价 = 下一趟少顺手采一块（不碰红线）；角色换 id / 目标变化都会自愈。
+_on_the_way: dict[int, tuple[Pos, int]] = {}
+
+
 #: 围墙的 `name` 与代价：石头×1，从建造者自己的背包扣（不是全队共享），拆了不返还。
 WALL = "wall"
 WALL_COST = 1
@@ -53,6 +59,10 @@ WALL_COST = 1
 #: 3 是拍的（用户口径"3 回合余量"；"固定 5 回合、不看距离"那一版没有容错，用户报"问题很大"）。
 #: 白天两处共用：`day.BackToPost`（夜里上炮的那个人回岗位）与 `night.hold_the_wall`（修墙工回待命位）。
 POST_MARGIN = 3
+
+#: 一趟赶路最多"顺手采"几次（用户口径：正事优先，最多顺手拿一次）。
+#: 一趟 = 同一个目标格（换目标 / 到了就重新计数，见 `_on_the_way`）。
+ON_THE_WAY_MAX = 1
 
 
 #: 围墙该处理了的血量（绝对值）。两条线共用这一个判据：白天 `day._weak_l1` 对 L1 拆了重砌，
@@ -95,12 +105,18 @@ VOUCHER_CHAIN = (
     (VOUCHER[2], "weapon-corner", 2),
 )
 
-#: 围墙券的优先级：正面列那一列墙 L1→2 → L2→3。**归修墙工**（第 2.5 级那条差事），不在券链里：
-#: 券链是开拓者与工人共用的，而开拓者买到的墙券在炮位上花不掉（`day._use_voucher_here` 只管武器券）、
+#: 围墙券的优先级（用户口径）：正面列**中间三格** L1→2 → 边上三格 L1→2 → 中间三格 L2→3
+#: → 边上三格 L2→3。两句话合起来 = "重点升中间三个、边上的吃多余的券" + "六格先都到 2 级，
+#: 再一起往 3 级走"（所以不是"中间先满级"）。**归修墙工**（第 2.5 级那条差事），不在券链里：
+#: 券链是开拓者与工人共用的，而开拓者买到的墙券在炮位上花不掉（`day.use_voucher_here` 只用在贴着的那张，
+#: 炮位离墙 ≥4 格）、
 #: 还会把他从岗位拽去墙边；修墙工本来就守那一列，买、用、修走同一趟路。
+#: 中间是哪三格由 `day._wall_band` 切 —— 券线自己的口径，只有一个消费者。
 WALL_CHAIN = (
-    (WALL_VOUCHER[2], "wall-front", 2),
-    (WALL_VOUCHER[3], "wall-front", 3),
+    (WALL_VOUCHER[2], "wall-middle", 2),
+    (WALL_VOUCHER[2], "wall-edge", 2),
+    (WALL_VOUCHER[3], "wall-middle", 3),
+    (WALL_VOUCHER[3], "wall-edge", 3),
 )
 
 #: 两条链上出现过的券名（按优先级去重）—— 扫"手里有没有券"用它（链是步骤表，
@@ -332,6 +348,7 @@ def _priciest_ore(
     *,
     walk: set[Pos] | None = None,
     ahead: int = 0,
+    budget: int | None = None,
 ) -> Pos | None:
     """**实际单价**最高的那座矿（并列取近的、再取坐标序）；一座都不值钱 / 都走不到 ⇒ `None`。
 
@@ -348,14 +365,19 @@ def _priciest_ore(
     `ore_taken` 是本回合已被别人认领的矿格（两个工人才不会都奔同一座）。
 
     `walk` 换一份地形（默认 `_passable`）—— 夜里那条挖矿线用它把"机器人周围"也当成走不通
-    （安全半径见 `night._safe`）。"""
+    （安全半径见 `night._safe`）。
+
+    `budget` = 这一段还剩几个回合（白天/夜里各自剩余）：**能整块采完的矿优先** ——
+    先挑"去 + 采空它 + 回"塞得进预算的（`剩余 <= 预算 - 去 - 回` 且 `去 + 剩余 + 回 <= 预算`），
+    在里面再按实际单价；一座都采不完就退回"采得完多少算多少"的实际单价。
+    `None`（默认）⇒ 不看钟，行为与从前逐字相同（白天那两支不传它）。"""
     walk = _passable(turn) if walk is None else walk
     size = turn.map.size
     station = turn.map.station
     posts = [w.pos for w in turn.weapons] or ([station] if station else [])
 
     def pick(use_ledger: bool) -> Pos | None:
-        best: tuple[float, int, Pos] | None = None
+        best: tuple[int, float, int, Pos] | None = None
         for pos, kind in turn.map.ores.items():
             if pos in ore_taken or not _mineable(turn, kind):
                 continue
@@ -367,15 +389,84 @@ def _priciest_ore(
             back = min((steps_between(post, pos, walk, size) for post in posts), default=-1)
             if out < 0 or back < 0:
                 continue
-            key = (-(price * left) / (left + out + back), out, pos)
+            if budget is not None and out + 1 > budget:
+                continue  # 连"走到 + 采一块"都不够回合 ⇒ 这一趟不出（回程由 `night.walk_home` 兜）
+            whole = 1 if budget is None or left + out + back <= budget else 0
+            key = (-whole, -(price * left) / (left + out + back), out, pos)
             if best is None or key < best:
                 best = key
-        return best[2] if best else None
+        return best[3] if best else None
 
     # 账本把候选全清空了（记错 / 与判题器的口径不一致）⇒ **当没账本再挑一遍**。
     # 一本本地账绝不能把整条挖矿线静默关掉 —— 那是"跨回合状态卡住"的老病，
     # 退化成"偶尔白跑一趟"要好得多。
     return pick(True) or pick(False)
+
+
+def stone_short(role: Worker, turn: Turn) -> bool:
+    """砌墙缺石吗（环上还有格没砌 且 手里石头不够）—— 顺手采的物料优先级用它（两个时段都要问）。
+
+    石头的用处不在 1 金的收购价：一块石替掉的是**专程采石**的 2 回合（实测样例地图）。"""
+    gaps = len(_ring(turn))
+    return gaps > 0 and role.stone < gaps
+
+
+def _on_the_way_ore(
+    role: Worker,
+    turn: Turn,
+    ore_taken: set[Pos],
+    *,
+    goal: Pos,
+    steps_to_goal: int,
+    stone_first: bool = False,
+) -> Pos | None:
+    """赶路时**顺手采**的那座矿（没有 ⇒ `None`，调用方照原样赶路）。
+
+    判据三条，全过了才值得花这一回合：
+
+    1. **脚边**：与我方切比雪夫 ≤1 的矿，价 > 0、还有剩余（本地账）、没被别人认领；
+    2. **额度**：这一趟还没采过（`_on_the_way`，一趟 = 同一个 `goal`；换目标或走到了就清零，
+       上限 `ON_THE_WAY_MAX`(1)）；
+    3. **时间**：`steps_to_goal + 1 <= 本段剩余回合 + POST_MARGIN` —— 顺手采最多让到达晚 1 回合，
+       吃的是收工门那份 `POST_MARGIN`(3) 的余量（额度 `ON_THE_WAY_MAX`(1) ⇒ 一趟最多吃 1 回合）；
+       "来都来不及"（步数比剩余回合多出 3 以上）就不采。
+
+    `stone_first`（砌墙缺石时那一趟）：脚边有石就采石 —— 一块石替掉的是**专程采石**的 2 回合，
+    它的价值远超 1 金的收购价；没石再按收购价挑。
+
+    ⚠️ 只回答"采哪一格"，发指令与记账由调用方 `_collect`；本函数只维护趟账。"""
+    if steps_to_goal < 0 or steps_to_goal + 1 > turn.rounds_left + POST_MARGIN:
+        return None
+    used_goal, used = _on_the_way.get(role.id, (goal, 0))
+    used = used if used_goal == goal else 0
+    if steps_to_goal == 0 or used >= ON_THE_WAY_MAX:
+        _on_the_way[role.id] = (goal, used)  # 到了 / 额度用完 ⇒ 记下（下一趟从这个目标重新数）
+        return None
+    near = [
+        (pos, kind)
+        for pos, kind in turn.map.ores.items()
+        if pos not in ore_taken
+        and role.pos.dist(pos) <= 1
+        and _ore_left(pos) > 0
+        and turn.vendor_prices.get(kind, 0) > 0
+        and _mineable(turn, kind)  # 今天被新闻钉了停工的矿不顺手采（与挑矿同一条口径）
+    ]
+    if not near:
+        return None
+    stone = [pos for pos, kind in near if kind == "stone"]
+    if stone_first and stone:
+        mine = min(stone, key=lambda p: (role.pos.dist(p), p))
+    else:
+        mine = min(
+            near,
+            key=lambda pk: (
+                -turn.vendor_prices.get(pk[1], 0),
+                role.pos.dist(pk[0]),
+                pk[0],
+            ),
+        )[0]
+    _on_the_way[role.id] = (goal, used + 1)
+    return mine
 
 
 def _ore_left(pos: Pos) -> int:

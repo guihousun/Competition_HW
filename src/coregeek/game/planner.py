@@ -123,9 +123,10 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
     """夜里那条链（顺序就是夜里的策略），逐角色跑：
 
     ① 被任务钉死的开拓者 —— **人手够才钉得住**（工人阵亡 ⇒ 弃任务回炮位，生存第一）→
-    ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **清场了 ⇒ 整夜改走白天那两条线**
-    （`night.is_cleared`：工人 `day.sell_or_mine`、开拓者 `_pioneer_errand`）→
-    ④ 没清场：炮手 `night.defend`、持包的工人 `night.repair_wall`、其余工人 `night.mine_ore`。
+    ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **手边的券先花掉**（武器券 / 墙券；修墙工有残墙时例外）
+    → ④ **清场了 ⇒ 整夜改走白天那两条线**（`night.is_cleared`：工人 `day.sell_or_mine`、
+    开拓者 `_pioneer_errand`）→ ⑤ 没清场：炮手 `night.defend`、持包的工人 `night.repair_wall`、
+    其余工人 `night.mine_ore`。
 
     两本账是**本函数的局部变量** —— 夜里不碰白天那个 `_Ctx` 黑板：炮位认领 `taken`
     （一人一组，组内任一座被认领 = 整组被认领）与矿格认领 `ore_taken`（清场那支自己
@@ -150,11 +151,19 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
             continue
         if night.upgrade_station(role, turn, q):
             continue
-        # 清场了 ⇒ **走白天那套**（工人挖矿卖矿、开拓者接任务/买券/等刷新）：它们只发
+        # ③ 手边的券先花掉（武器券 / 墙券，`use` 没有昼夜限制）：目标必须贴着 ⇒ 用券那一回合
+        #    不开火/不挖矿，换来永久升级（顺带回满血）。**修墙工例外**：有残墙要修时那一格优先，
+        #    别把这一回合花在"升另一面墙"上（`repair_wall` 里也是先修、能打券就打券）。
+        if not (role.id == repairer and night.repair_target(turn) is not None):
+            if day.use_voucher_here(role, ctx):
+                continue
+        # ④ 清场了 ⇒ **走白天那套**（工人挖矿卖矿、开拓者接任务/买券/等刷新）：它们只发
         # `collect`/`sell`/`buy`/`use`/`acceptTask`/`move`，夜里合法；`build`/`remove` 一条都不会发
         if cleared:
             if isinstance(role, Worker):
-                day.sell_or_mine(role, ctx)
+                # 清场后的夜里也是同一本轨迹账：该往回走了就先走（回程路上顺手采在 `walk_home` 里）
+                if not night.walk_home(role, turn, q, ore_taken):
+                    day.sell_or_mine(role, ctx, budget=night.mine_budget(turn))
             else:
                 _pioneer_errand(role, turn, q, ctx)
             continue

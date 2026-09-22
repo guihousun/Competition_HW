@@ -65,6 +65,19 @@ class ParseTest(unittest.TestCase):
             [(4, 4, 40), (4, 5, 500), (5, 4, 60), (5, 5, 800)],
         )
 
+    def test_robots_carry_their_kind(self):
+        """机器人带 `roleType`（`kind`）—— 夜里"打谁"先按它排（低级优先，`night.TIER_VALUE`）。
+        样例四台：小/中/大/BOSS 各一。字段缺失给空串 ⇒ 当最低级（照打，不静默少打）。"""
+        self.assertEqual(
+            {r.pos: (r.kind, r.health) for r in self._turn().robots},
+            {
+                Pos(4, 4): ("smallRobot", 40),
+                Pos(5, 4): ("middleRobot", 60),
+                Pos(4, 5): ("largeRobot", 500),
+                Pos(5, 5): ("bossRobot", 800),
+            },
+        )
+
     def test_weapons_carry_their_level(self):
         """武器带 `level`（接口文档：仅建筑持有、初始 1）—— 升级线靠它认"还升得动"，
         摘要也打它（"升级成没成"只有日志能回答）。样例三座全 L1。"""
