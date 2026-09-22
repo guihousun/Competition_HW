@@ -2066,6 +2066,7 @@ class RepairStockTest(unittest.TestCase):
         round_no: int = DAY3,
         weapons: int = 3,
         level: int = 1,
+        weak: tuple[Pos, int] | None = None,
     ) -> Turn:
         # 第 3 天起环是 16 格（`utils._sealed_back` 把背面两个角格补上）—— 不照这个口径铺，
         # `_ring` 会把那两个角格当成缺口、把工人支去砌墙，这一级根本轮不到
@@ -2090,7 +2091,10 @@ class RepairStockTest(unittest.TestCase):
             roles=roles,
             gold=gold,
             weapons=guns,
-            walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(ring)),
+            walls=tuple(
+                Wall(40000 + i, c, weak[1] if weak and c == weak[0] else 1000, 1)
+                for i, c in enumerate(ring)
+            ),
             vendor_prices={"stone": 1, "copper": 5},
             shop_prices={
                 "WallFixer": self.PACK,
@@ -2204,6 +2208,99 @@ class RepairStockTest(unittest.TestCase):
         cmds = plan(self._turn(pioneer, gold=200))
         self.assertEqual(self._packs(cmds), [], f"开拓者不该买包：{cmds}")
         self.assertEqual(cmds["1"]["action"], "buy", "他的钱花在券上")
+
+
+class DemolishRaceTest(unittest.TestCase):
+    """拆墙线与墙券线**不许在同一回合打同一格**。
+
+    两条线都优先挑"血最少的正面墙"⇒ 唯一那面残墙是两边的第一志愿。不挡一下就会同回合发出
+    `remove` + `use`：`use` 先落地就是"券把墙升到满血、随即被拆掉"（看到的正是"工人拆满血墙"），
+    反过来则是承运人那一趟白跑。判据：`_step_targets` / `_targets_for` / `_voucher_target` 收
+    `exclude`（= `_Ctx.demolish_taken`），只作用于墙那几段。
+    """
+
+    BASE = Pos(10, 24)
+    SHOP = Pos(22, 18)
+    FAR = Pos(20, 24)
+    DAY3 = 261
+    WEAK = Pos(13, 23)  # 正面列中段那一格
+    BESIDE_WEAK = Pos(12, 23)  # 它的待命位（`core._wall_post`），两个工人都够得着
+    BESIDE_WEAK_2 = Pos(12, 22)
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+
+    def _turn(self, *roles: BaseRole, gold: int = 200, weak_hp: int = 150) -> Turn:
+        ring = wall_cells(self.BASE, 41, sealed=True)
+        guns = tuple(
+            Weapon(id=10020 + i, kind="rocket", pos=c, attack_range=10, cooldown=0, level=3)
+            for i, c in enumerate(weapon_sites(self.BASE, 41))
+        )
+        grid = _terrain(guns, {self.BASE: "station"}, {c: WALL for c in ring}, {self.SHOP: "weaponShop"})
+        grid |= {r.pos: r.type_name for r in roles}
+        return Turn(
+            round_no=self.DAY3,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=gold,
+            weapons=guns,
+            walls=tuple(
+                Wall(40000 + i, c, weak_hp if c == self.WEAK else 1000, 1)
+                for i, c in enumerate(ring)
+            ),
+            vendor_prices={"stone": 1},
+            shop_prices={
+                WALL_FIXER: 10,
+                "WeaponUpgradeVoucher1": 100,
+                "WallUpgradeVoucher1": 20,
+                "WallUpgradeVoucher2": 30,
+            },
+        )
+
+    def test_the_demolisher_and_the_voucher_never_pick_the_same_wall(self):
+        """第一个工人（有石头、贴着残墙）拆它，承运人（持券、也贴着）这一回合必须换一格。
+
+        修复前：`2: remove (13,23)` 与 `3: use WallUpgradeVoucher1 (13,23)` 同时出现。
+        """
+        pioneer = Pioneer(1, self.FAR)
+        first = Worker(2, self.BESIDE_WEAK, {"stone": 1})
+        last = Worker(3, self.BESIDE_WEAK_2, {"WallUpgradeVoucher1": 1})
+        cmds = plan(self._turn(pioneer, first, last))
+        self.assertEqual(
+            cmds["2"], {"action": "remove", "targetPos": [{"x": 13, "y": 23}]}, f"该拆：{cmds}"
+        )
+        self.assertNotEqual(
+            [c for c in cmds["3"].get("targetPos", [])],
+            cmds["2"]["targetPos"],
+            "同一回合的 remove 与 use 不许落在同一格",
+        )
+        self.assertEqual(cmds["3"]["action"], "use", f"他手里那张券该换一面墙用掉：{cmds}")
+
+    def test_the_voucher_yields_when_that_is_the_only_target(self):
+        """残墙是唯一还能升的格子时，承运人这一回合**一格都不打**（不许打在正在被拆的那格上）。"""
+        pioneer = Pioneer(1, self.FAR)
+        first = Worker(2, self.BESIDE_WEAK, {"stone": 1})
+        last = Worker(3, self.BESIDE_WEAK_2, {"WallUpgradeVoucher1": 1})
+        turn = self._turn(pioneer, first, last)
+        # 其余正面墙先升到 L2 ⇒ `WallUpgradeVoucher1` 只剩残墙这一个目标
+        turn = turn._replace(
+            walls=tuple(
+                Wall(w.id, w.pos, w.health, 2 if w.pos != self.WEAK else 1) for w in turn.walls
+            )
+        )
+        cmds = plan(turn)
+        self.assertEqual(cmds["2"]["action"], "remove", f"该拆：{cmds}")
+        self.assertNotIn("use", {c["action"] for c in cmds.values()}, f"券该让位：{cmds}")
+
+    def test_a_demolished_cell_stops_being_a_voucher_target(self):
+        """判据在 `_step_targets` 一层就成立（不必经过 planner）：排掉那一格，目标表里就没有它。"""
+        turn = self._turn(Pioneer(1, self.FAR))
+        self.assertEqual(day._targets_for("WallUpgradeVoucher1", turn)[0], self.WEAK, "残墙排第一")
+        self.assertNotIn(
+            self.WEAK,
+            day._targets_for("WallUpgradeVoucher1", turn, frozenset({self.WEAK})),
+            "认领要拆的格不该再被券挑中",
+        )
 
 
 if __name__ == "__main__":

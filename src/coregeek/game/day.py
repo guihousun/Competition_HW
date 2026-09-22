@@ -344,8 +344,9 @@ def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
         count = min(REPAIR_PACKS - stock, ctx.budget // price)
         if count > 0 and _buy_at_shop(role, ctx, WALL_FIXER, count, trips_fit=stock == 0):
             return True
-    # ③ 墙券：按 `WALL_CHAIN` 取第一张还有东西可升的
-    target = _voucher_target(turn, WALL_CHAIN)
+    # ③ 墙券：按 `WALL_CHAIN` 取第一张还有东西可升的（**已经被认领要拆的格不算**：两条线都优先
+    #    挑血最少的正面墙，不挡一下就会同回合一个 `remove`、一个 `use` 落在同一格上）
+    target = _voucher_target(turn, WALL_CHAIN, ctx.demolish_taken)
     if target is None:
         return False
     voucher, spots = target
@@ -439,20 +440,25 @@ def voucher_errand(role: BaseRole, ctx: _Ctx) -> bool:
 
 
 def _voucher_target(
-    turn: Turn, chain: tuple[tuple[str, str, int], ...] = VOUCHER_CHAIN
+    turn: Turn,
+    chain: tuple[tuple[str, str, int], ...] = VOUCHER_CHAIN,
+    exclude: frozenset[Pos] = frozenset(),
 ) -> tuple[str, tuple[Pos, ...]] | None:
     """优先链上第一个**还有东西可升**的步骤 ⇒ `(券名, 它的全部目标)`；全升满 ⇒ `None`。
 
     返回的是一串而不是一格：买券要"按需要多少张就买多少张"（用户口径），张数就是这一串的长度。
-    默认走武器链；围墙券那条链（`core.WALL_CHAIN`）由修墙工的差事自己传。"""
+    默认走武器链；围墙券那条链（`core.WALL_CHAIN`）由修墙工的差事自己传。
+    `exclude` = 这一回合别人已经认领的格（拆墙线：`_Ctx.demolish_taken`），只对墙那几段生效。"""
     for voucher, group, level in chain:
-        spots = _step_targets(turn, group, level)
+        spots = _step_targets(turn, group, level, exclude)
         if spots:
             return voucher, spots
     return None
 
 
-def _targets_for(voucher: str, turn: Turn) -> tuple[Pos, ...]:
+def _targets_for(
+    voucher: str, turn: Turn, exclude: frozenset[Pos] = frozenset()
+) -> tuple[Pos, ...]:
     """手里**这一张**券该打的目标（按优先链取第一个用它、且还有东西可升的步骤）；没有 ⇒ 空元组。
 
     ⚠️ 不能只看券名：武器二级券在链上出现两次（非角两座 / 角上一座），目标组得从步骤里取。
@@ -460,18 +466,24 @@ def _targets_for(voucher: str, turn: Turn) -> tuple[Pos, ...]:
     for name, group, level in VOUCHER_CHAIN + WALL_CHAIN:
         if name != voucher:
             continue
-        spots = _step_targets(turn, group, level)
+        spots = _step_targets(turn, group, level, exclude)
         if spots:
             return spots
     return ()
 
 
-def _step_targets(turn: Turn, group: str, want: int) -> tuple[Pos, ...]:
+def _step_targets(
+    turn: Turn, group: str, want: int, exclude: frozenset[Pos] = frozenset()
+) -> tuple[Pos, ...]:
     """一个步骤现在能打的目标格（**血少的在前**、同血取坐标序）；该等级的一个都不剩 ⇒ 空元组。
 
     `group` 见 `core.VOUCHER_CHAIN`：`weapon-side` = 非角上那两座火箭、`weapon-corner` = 角上
     那座、`wall-front` = 面向敌人的一列墙（`core.front_wall_cells` = `wall_cells` 前 `FRONT_WALLS`
-    格，正面列排第一位）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。"""
+    格，正面列排第一位）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。
+
+    `exclude` 只作用于墙：**这一回合已经被认领要拆掉的那几格不能再被券打** —— 两条线都优先挑
+    "血最少的正面墙"，不挡一下就会同回合一个 `remove`、一个 `use` 打在同一格上（`use` 先落地
+    就是"券把墙升到满血、随即被拆"，反过来则是那一趟白跑）。"""
     station = turn.map.station
     if station is None:
         return ()
@@ -482,7 +494,11 @@ def _step_targets(turn: Turn, group: str, want: int) -> tuple[Pos, ...]:
         guns = [w for w in turn.weapons if w.pos in picks and w.level == want - 1]
         return tuple(w.pos for w in sorted(guns, key=lambda w: (_health_rank(w), w.pos)))
     front = set(front_wall_cells(turn))
-    walls = [w for w in turn.walls if w.pos in front and w.level == want - 1]
+    walls = [
+        w
+        for w in turn.walls
+        if w.pos in front and w.level == want - 1 and w.pos not in exclude
+    ]
     return tuple(w.pos for w in sorted(walls, key=lambda w: (_health_rank(w), w.pos)))
 
 
@@ -494,8 +510,9 @@ def _health_rank(wall) -> int:
 def _walk_to_use(role: BaseRole, ctx: _Ctx, voucher: str) -> bool:
     """把手里这张券用掉：贴着目标就 `use`，否则走一步（没有可用的目标 ⇒ False）。
 
-    手里可能攒着好几张（"尽可能多买"那一条）⇒ 每回合挑**还升得动的第一格**用掉一张。"""
-    spots = _targets_for(voucher, ctx.turn)
+    手里可能攒着好几张（"尽可能多买"那一条）⇒ 每回合挑**还升得动的第一格**用掉一张。
+    选目标要排掉这一回合已经认领要拆掉的墙格（`ctx.demolish_taken`，墙券才受影响）。"""
+    spots = _targets_for(voucher, ctx.turn, ctx.demolish_taken)
     if not spots:
         return False
     spot = spots[0]
