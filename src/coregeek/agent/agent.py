@@ -13,7 +13,12 @@ from collections.abc import Callable
 
 from . import cmd_explore
 from .context import Context
-from .prompt import gen_compression_prompt, gen_news_prompt, gen_system_prompt
+from .prompt import (
+    gen_compression_prompt,
+    gen_news_prompt,
+    gen_sop_request,
+    gen_system_prompt,
+)
 from .tools import pyexec
 from .tools.cmd import executeCmd
 from .tools.sop import store
@@ -158,8 +163,11 @@ class Agent:
         """这一轮给 LLM 看的工具表：`readSandboxFile` 的描述尾部现挂探明的路径清单。
 
         工具块恒在（别的工具描述点过它的名）；清单只在探明过后挂 —— 挂空清单等于暗示
-        "沙盒里没有"。每行给两种写法（全路径、文件名）。调度侧不看这张表，口径一致。"""
-        tools = dict(self._tools)
+        "沙盒里没有"。每行给两种写法（全路径、文件名）。调度侧不看这张表，口径一致。
+
+        `SOP2Prompt` **不在这张表里**：沉淀是交卷之后独立的一轮（`sop_request`），任务阶段
+        只做任务。注册表照旧留着它（派发与沉淀那一轮的描述都从那里取）。"""
+        tools = {name: tool for name, tool in self._tools.items() if name != "SOP2Prompt"}
         paths = cmd_explore.known_paths()
         if not paths:
             return tools
@@ -200,6 +208,19 @@ class Agent:
             return ""
         self._context.sent_for_compression()
         return gen_compression_prompt(self._context.material())
+
+    def sop_request(self) -> str:
+        """沉淀轮的 prompt：沉淀指令 + 现在的 SOP + `SOP2Prompt` 块 + 本题的完整记录。
+        没开会话 ⇒ `""`。
+
+        发送时机 = 交卷那一轮（判据链尾的沉淀闸门）：那个 `prompt` 槽本来空着，判题器在任务
+        期间不计数。它的回复下一轮随 `llmResp` 回来、由 `tool_calls` 派发 —— 派发压在
+        "没任务"早返回之前，所以"答对了、任务已经结束"的那一轮也收得到。"""
+        if self._context is None:
+            return ""
+        _, desc, params = self._tools["SOP2Prompt"]
+        tool = ("SOP2Prompt", desc, params)
+        return gen_sop_request(self._sop, tool, self._context.material())
 
     def read_sandbox_file(self, path: str) -> str:
         """读一份沙盒文件：本地探明过 ⇒ 正文当回合进会话、返 `""`（省一回合）；本地没有 ⇒

@@ -30,13 +30,22 @@ SECTIONS = (
 )
 
 
+def _deposit_system(agent) -> str:
+    """沉淀阶段的 system（`Agent.sop_request` 那条 prompt 的 system，第 141 步）。
+
+    沉淀的细则随 `SOP2Prompt` 从任务 system 搬到了这儿：任务阶段的工具表里没有这个工具
+    （用户口径「一次只专注一件事情」）。**必须在 `chat()` 之后调** —— 没开会话返回 `""`。
+    """
+    return json.loads(agent.sop_request())[0]["content"]
+
+
 def _sop_tool_block(system: str) -> str:
-    """`SOP2Prompt` 那个工具块的正文。
+    """`SOP2Prompt` 那个工具块的正文（第 141 步起传 `_deposit_system(...)` 的结果）。
 
     沉淀的全部细则（什么值得存、怎么泛化、去重与更新、以实测为准）在这里 —— 第 107 步起
     不再单独占 system 的一段（旧【沉淀规则】段随用户重写的 prompt 删除）。
     """
-    return _section(system, "# 【工具描述】").split("## ToolName - SOP2Prompt", 1)[1]
+    return system.split("## ToolName - SOP2Prompt", 1)[1]
 
 
 def _section(system: str, header: str) -> str:
@@ -91,13 +100,14 @@ class ChatPromptTest(unittest.TestCase):
         """整份 system 的字数有上限 —— 它**每回合都发**。
 
         守的是"措辞只增不减"的漂移：每次加一句话都看不出什么，几十次之后 prompt 就
-        被稀释得没法看了。阈值是拍的：顶格那一档实测 11800，上浮约 7%。
-        基线数字会漂，量的时候看是**哪一档**：第 130 步实测干净 system **6845**
-        （用户加回【注意事项】段后八段；第 128 步是 6753）；满 SOP（5 × `SOP_MAX`(1000)）
-        ⇒ **顶格 11927**。要加内容先删同等量级的旧话，或者改这个阈值并说明理由。
+        被稀释得没法看了。阈值是拍的：顶格那一档实测 8518，上浮约 8%。
+        基线数字会漂，量的时候看是**哪一档**：第 141 步实测干净 system **3431**
+        （工具表里去掉 `SOP2Prompt` 那块之后；它连同并列教学一起搬进了沉淀请求）；
+        满 SOP（5 × `SOP_MAX`(1000)）⇒ **顶格 8518**。要加内容先删同等量级的旧话，
+        或者改这个阈值并说明理由。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertLess(len(system), 12600)
+        self.assertLess(len(system), 9200)
 
     def test_every_tool_appears_in_the_prompt(self):
         """prompt 里的工具清单由实例的工具表生成 ⇒ 每个注册的工具**每轮都在**。
@@ -106,15 +116,24 @@ class ChatPromptTest(unittest.TestCase):
         块本身照列 —— 它自己的描述里点过别的工具的名（"已知文件用 readSandboxFile"），藏起来
         就成了一条悬空指引；描述里也已经交代了清单为空时怎么办（改用 executeCmd 自己找）。
         旧口径（一份都没探明就整块藏起来）随用户重写的 prompt 作废。
-        断言按**整份 prompt** 查这个名字（不只是工具块）。"""
+        断言按**整份 prompt** 查这个名字（不只是工具块）。
+
+        第 141 步起查的是 `prompt_tools()` 而不是注册表 `_tools`：任务阶段的工具表里
+        **没有** `SOP2Prompt`（沉淀是交卷之后独立的一轮），而注册表照旧装着它 —— 派发、
+        沉淀请求里那个工具块、参数表都要它。"""
         empty = self.agent.chat("题目")
-        for name in self.agent._tools:
+        self.assertEqual(
+            [name for name in self.agent._tools if name not in self.agent.prompt_tools()],
+            ["SOP2Prompt"],
+            "任务阶段的工具表只滤掉沉淀那一个",
+        )
+        for name in self.agent.prompt_tools():
             self.assertIn(name, empty)
         self.assertNotIn("/opt/task", empty, "还没探明 ⇒ 清单那几行不许凭空出现")
 
         cmd_explore._files["/opt/task/one.md"] = "正文"
         probed = self.agent.chat("题目")
-        for name in self.agent._tools:
+        for name in self.agent.prompt_tools():
             self.assertIn(name, probed)
         self.assertIn("/opt/task/one.md", probed)
 
@@ -123,11 +142,12 @@ class ChatPromptTest(unittest.TestCase):
 
         会话窗口只留最近两轮、摘要是 best-effort ⇒ SOP 是跨回合唯一保证还在的记忆 ——
         不沉淀的发现过了窗口就丢。措辞就是产品，别改成同义词。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(system)
+        self.agent.chat("题目")  # 先开会话（沉淀请求要拿会话原文当原料，没会话是空串）
+        deposit = _deposit_system(self.agent)
+        rules = _sop_tool_block(deposit)
         self.assertIn("环境知识", rules)
         self.assertIn("接口", rules)
-        self.assertIn("SOP2Prompt", rules)
+        self.assertIn("## ToolName - SOP2Prompt", deposit)
 
     def test_the_sop_section_tells_it_to_look_here_first(self):
         """【沉淀的SOP】段要教"先查这里、命中就直接照做、不必重新探索"。
@@ -183,8 +203,8 @@ class ChatPromptTest(unittest.TestCase):
 
         第 133 步描述压缩成一句之后，"一类问题"这层意思由参数表那句
         "泛化后的问题类型名称"承担。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(system)
+        self.agent.chat("题目")
+        rules = _sop_tool_block(_deposit_system(self.agent))
         self.assertIn("泛化后的问题类型名称", rules)
         self.assertIn("订去某地", rules)
 
@@ -200,8 +220,8 @@ class ChatPromptTest(unittest.TestCase):
         收回成"本次任务自己产生的临时文件"（裸的"路径"与【工作原则】§2 打架 —— 接口真实
         路径正是要收的环境知识），排除项改钉"只对本次成立的取值"。泛化要求由参数表那句
         "该类问题的通用解决流程"承担。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(system)
+        self.agent.chat("题目")
+        rules = _sop_tool_block(_deposit_system(self.agent))
         self.assertIn("该类问题的通用解决流程", rules)
         self.assertIn("不要记录只对本次成立的取值", rules)
 
@@ -212,13 +232,14 @@ class ChatPromptTest(unittest.TestCase):
         "已实际验证、且具有复用价值"一道纯闸门，"什么时候该存"没有任何正面触发语。
         现在两半都在：「还没出现在【沉淀的SOP】里」管触发、「已实际验证」管闸门。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(system)
+        rules = _sop_tool_block(_deposit_system(self.agent))
         self.assertIn("已实际验证", rules)
         self.assertIn("还没出现在【沉淀的SOP】里", rules)
         self.assertIn("用同一个 name 更新它", rules)
-        # 沉淀与作答同轮的形状仍在（问答两侧各一处，两处都不许走）
-        self.assertIn("当要沉淀且同回合要交答案时", system)
-        self.assertNotIn("当完成任务且认为流程可沉淀时", system)
+        # 时机第 141 步改由系统安排（交卷之后单独问一轮）⇒ 任务 system 里那句"与答案并列"
+        # 连同它的形状一起删掉，触发语搬进沉淀请求
+        self.assertIn("任务已交卷", _deposit_system(self.agent))
+        self.assertNotIn("当要沉淀且同回合要交答案时", system)
 
     def test_both_output_shapes_are_shown_verbatim(self):
         """两个形状（工具调用 / `submitAnswer` 交卷）逐字出现在模板里。
@@ -245,24 +266,23 @@ class ChatPromptTest(unittest.TestCase):
             system,
         )
 
-    def test_the_sop_round_must_carry_the_answer(self):
-        """prompt 里必须有"沉淀与交卷同回合"的规则与示例 ——
-        不写的话 LLM 就按"一回合只输出一样东西"把沉淀单独占一回合（日志上看着完全
-        正常，只有分数会低）。形状 = 两个工具块并列（`SOP2Prompt` 在前），这是允许并列的
-        唯一组合（`Agent._PARALLEL_TOOLS`），描述与放行必须同源。
+    def test_the_deposit_round_comes_after_the_answer(self):
+        """沉淀不再与交卷抢同一条回复：任务阶段一个字都不提它，交卷之后由系统单独问一轮。
+
+        旧口径（`SOP2Prompt` 与 `submitAnswer` 并列写在同一块回复里，形状叫
+        `3. [特殊混合模式]`）实盘上从没被照做过 —— 并列要求在它收尾那一刻既交卷又记账，
+        而收尾时的注意力全在答案上。第 141 步拆成两阶段（用户口径「一次只专注一件事情」）：
+        任务 system 里没有 `## ToolName - SOP2Prompt`，并列那句纪律与它的示例一并删除；
+        沉淀请求里才有工具块与"任务已交卷"的触发语。下面几条断言是那次删除的守门员 —
+        —— 别什么时候又顺手把并列教学加回去。
         """
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        self.assertIn("3. [特殊混合模式]", _section(system, "# 【输出约定】"))
-        self.assertIn(
-            "    <tool>\n        <tool_name>SOP2Prompt</tool_name>\n        <tool_param>\n"
-            "            <name> 流程名 </name>\n            <sop> xxx </sop>\n"
-            "        </tool_param>\n    </tool>\n    <tool>\n"
-            "        <tool_name>submitAnswer</tool_name>\n        <tool_param>\n"
-            "            <answer> 答案本身 </answer>\n        </tool_param>\n    </tool>",
-            system,
-        )
-        # 并列的例外说在最前面那段"一回合只调一次"的纪律里（示例在输出约定段）
-        self.assertIn("`SOP2Prompt` 与 `submitAnswer`", _section(system, "# 【工具描述】"))
+        self.assertNotIn("## ToolName - SOP2Prompt", system)
+        self.assertNotIn("[特殊混合模式]", system)
+        self.assertNotIn("允许并列", system)
+        deposit = _deposit_system(self.agent)
+        self.assertIn("任务已交卷", deposit)
+        self.assertIn("## ToolName - SOP2Prompt", deposit)
 
     def test_the_answer_round_submits_through_the_tool(self):
         """交卷**一定**走 `submitAnswer` 工具；解释、推演写在块外面，不许写进 `answer` 里。
@@ -278,9 +298,11 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("整条回复里只写一个这个块", output)
         self.assertIn("其他的任务结果提交方式均被禁止", _section(system, "# 【工作原则】"))
         # 【注意事项】第 1 条指的是同一个形状。它是"答案不许走别的路"的最后一道措辞闸门
-        # —— 别让它指向 `[工具调用格式]`（那是把答案指向 <tool> 块）。
+        # —— 别让它指向 `[工具调用格式]`（那是把答案指向 <tool> 块），也别留下已经拆掉的
+        # `[特殊混合模式]`（第 141 步）。
         self.assertIn(
-            "[任务答案提交格式]或[特殊混合模式]", _section(system, "# 【注意事项】")
+            "1. 任务的答案必须用 [任务答案提交格式]，其他的提交方式都不允许。",
+            _section(system, "# 【注意事项】"),
         )
 
     def test_the_flow_asks_for_the_reasoning_before_the_blocks(self):
@@ -399,7 +421,7 @@ class ChatPromptTest(unittest.TestCase):
         已补回"文档与实测冲突时以实际执行结果为准"；旧长文里那个 destination/target 例子
         没有回来（例子是解释用的，判据是那句规则本身）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(system)
+        rules = _sop_tool_block(_deposit_system(self.agent))
         self.assertIn("以实际执行结果为准", rules)
         self.assertIn("存跑通的那一版", rules)
         self.assertIn("冲突时以实测为准", _section(system, "# 【ROLE定位】"))
@@ -412,8 +434,8 @@ class ChatPromptTest(unittest.TestCase):
         同名覆盖是 `tools/sop.py` 已有的存储规则，这里只是把它讲给 LLM 听。
         "同名会覆盖旧条目"这句机制说明没有回来 —— 判据落在"用同一个 name 更新它"
         与它前面那半句"已经沉淀过的不要重复存"上。"""
-        system = json.loads(self.agent.chat("题目"))[0]["content"]
-        rules = _sop_tool_block(system)
+        self.agent.chat("题目")
+        rules = _sop_tool_block(_deposit_system(self.agent))
         self.assertIn("已经沉淀过的不要重复存", rules)
         self.assertIn("用同一个 name 更新它", rules)
 
@@ -526,6 +548,21 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("【上下文压缩】", req)
         self.assertIn("【总目标】", req)
         self.assertIn("【关键数据】", req)
+        self.assertIn("回复1", req)
+        self.assertIn("题目", req)
+
+    def test_the_sop_request_carries_the_instruction_the_sop_and_the_material(self):
+        """沉淀请求 = 指令（判断要不要沉淀）+ 现在的 SOP + `SOP2Prompt` 那个工具块 + 本题完整记录。
+
+        原料与压缩请求同源（`Context.material()`）：判题器只看得到这一条 prompt，不给记录它
+        不知道这道题发生了什么。带上现在的 SOP 是为了判"这条是不是已经有了"。
+        没开会话 ⇒ `""`（与压缩请求同一条退路）。"""
+        self.assertEqual(self.agent.sop_request(), "", "没开会话 ⇒ 不发")
+        self.agent.chat("题目")
+        self.agent.hear("回复1")
+        req = self.agent.sop_request()
+        self.assertIn("任务已交卷", req)
+        self.assertIn("## ToolName - SOP2Prompt", req)
         self.assertIn("回复1", req)
         self.assertIn("题目", req)
 

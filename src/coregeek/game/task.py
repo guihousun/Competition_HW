@@ -1,6 +1,6 @@
 """任务线：跟判题器的 LLM 说什么、接任务、交答案 —— 响应顶层 `(prompt, executeCmd)` 的唯一出产点。
 
-`task_channel` 是一条判据链（②–⑥，先命中先定夺）+ 回合末尾两道闸门（压缩、沙盒探查），
+`task_channel` 是一条判据链（②–⑥，先命中先定夺）+ 回合末尾三道闸门（沉淀、压缩、沙盒探查），
 逐条契约见 `strategy.md` §4。"跟 LLM 说什么、怎么解析回复"在 `coregeek/agent/`（包根那个
 单实例 `AGENT`）—— 本模块只管**什么时候**开口，以及把工具返回的命令放进 `executeCmd`。
 
@@ -60,14 +60,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         # 其余回复记进会话；`hear` 返回 False = 与上一条 assistant 同文（粘住，不是新话）
         sticky = not AGENT.hear(llmReply)
 
-    # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）；探查不发命令（沙盒仅任务期间可用）
-    if not turn.phase_task:
-        return AGENT.news_question(turn.news), ""
-
-    # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
-    if not any(isinstance(r, Pioneer) for r in turn.roles):
-        return "", cmd_explore.next_command()
-    # 解析工具调用
+    # 解析工具调用（压在"没任务"早返回之前：交卷那一轮发的沉淀请求，回复回来时任务可能
+    # 已经结束了 —— 那条 `SOP2Prompt` 调用照样得落库）
     calls = tool_of(llmReply)
     if calls is None and looks_like_tool(llmReply):
         # 想调工具但形状没写对（严格解析取不出名字）⇒ 记日志 + 说明回灌进会话，这轮落重问
@@ -75,6 +69,14 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     command = AGENT.tool_calls(calls) if calls else ""  # 工具调度：副作用只发生在这一行
     # 任务答案 = 上面那一行写的（调了 submitAnswer 才有）——**必须压在调度之后**读
     answer = AGENT.answer
+
+    # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）；命令一律丢弃（沙盒仅任务期间可用）
+    if not turn.phase_task:
+        return AGENT.news_question(turn.news), ""
+
+    # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
+    if not any(isinstance(r, Pioneer) for r in turn.roles):
+        return "", cmd_explore.next_command()
     # 判题器本轮报的"答案不对"（code 2）—— 判据 ④ 的触发条件；原话一并带回（黑盒里唯一
     # 能回答"错在哪一项"的东西）
     rejected = any(e.code == 2 for e in turn.errors)
@@ -103,6 +105,11 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         # 首问：把题目问出去
         prompt, cmd = AGENT.chat(turn.phase_task), ""
 
+    # 链尾沉淀闸门：交了答卷且判题器没报"答错了" ⇒ prompt 槽给沉淀请求（上面各支的 `chat()`
+    # 已经把回执/纠错喂进会话，下一轮渲染带着它们）。放链尾不放判据 ⑤ 里：⑤ 只在回执/纠错
+    # 全空时才命中，而"发命令 → 看回执 → 照着回执作答"这条主链上，交卷那条回复总落在 ② 那一轮
+    if answer and not rejected:
+        prompt = AGENT.sop_request()
     # 链尾压缩闸门：交卷轮不压缩（压缩会占住下一轮的回复槽），只剩命令轮会填上
     if not answer and prompt == "":
         prompt = AGENT.compression_request()

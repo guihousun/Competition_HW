@@ -206,19 +206,25 @@ class HandleTest(unittest.TestCase):
             "# 【ROLE定位】",
             "# 【工作原则】",
             "# 【工具描述】",
-            "## ToolName - SOP2Prompt",
+            "## ToolName - submitAnswer",
             "# 【沉淀的SOP】",
             "# 【输出约定】",
         ):
             self.assertIn(piece, messages[0]["content"])
+        # 沉淀那个工具只在沉淀请求里露面（第 141 步：任务阶段只做任务）
+        self.assertNotIn("## ToolName - SOP2Prompt", messages[0]["content"])
 
-        # 判题器答了 ⇒ 回复那一格才有内容，而且不再提问。交卷轮只交答案：prompt 槽完全
-        # 空着（压缩与交卷互斥 —— 压缩回复会占住下一轮的 `llmResp` 槽，
-        # 答案被判错时纠错分支拿不到答案原文）
+        # 判题器答了 ⇒ 回复那一格才有内容。交卷轮的 prompt 槽归**沉淀请求**（第 141 步）：
+        # 压缩与交卷互斥（压缩回复会占住下一轮的 `llmResp` 槽，答案被判错时纠错分支拿不到
+        # 答案原文），沉淀正好相反 —— 那轮本来就只剩这一件事可说。
         reply = _submit("晴 26 度")
         task, ask = asked_after_sending(llmResp=reply)
         self.assertIn(f"【上一轮模型回复】：{reply}", task)
-        self.assertEqual(ask, "", "交卷轮不提问也不压缩（第 47 步）")
+        deposit = json.loads(ask[len(ASK):])
+        self.assertTrue(
+            deposit[0]["content"].startswith("# 【SOP 沉淀】"), "交卷轮：prompt = 沉淀请求"
+        )
+        self.assertNotIn("【上下文压缩】", ask)
 
         long_text = "题" * (LOG_TEXT_MAX + 7)
         task, _ = asked_after_sending(phaseTask=long_text)
@@ -456,8 +462,8 @@ class HandleTest(unittest.TestCase):
         self.assertIn("[exitCode:0]\n2", messages[3]["content"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ④ LLM 调 `submitAnswer` 交卷 ⇒ 只交 `answer` 参数里那段（不是整段回复），prompt 与
-        #    executeCmd 全空（压缩与交卷互斥）。清 `lastCmdResult`：上一轮我们没发命令
+        # ④ LLM 调 `submitAnswer` 交卷 ⇒ 只交 `answer` 参数里那段（不是整段回复），prompt 槽
+        #    给沉淀请求（压缩与交卷互斥）。清 `lastCmdResult`：上一轮我们没发命令
         raw["lastCmdResult"] = ""
         raw["llmResp"] = _submit("晴 26 度")
         body = ask()
@@ -465,7 +471,10 @@ class HandleTest(unittest.TestCase):
             body["roleCommandMap"]["10011"],
             {"action": "submitAnswer", "taskAnswer": "晴 26 度"},
         )
-        self.assertEqual(body["prompt"], "", "答案轮不提问也不压缩（第 47 步）")
+        self.assertTrue(
+            json.loads(body["prompt"])[0]["content"].startswith("# 【SOP 沉淀】"),
+            "答案轮不提问也不压缩（第 47 步）—— 那个槽归沉淀请求（第 141 步）",
+        )
         self.assertEqual(body["executeCmd"], "")
 
         # ⑤ 判题器说答错了 ⇒ 带着"上次交的是什么"再问一遍，同时照旧提交（两条通道独立；
