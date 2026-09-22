@@ -84,28 +84,23 @@ let widths;
 for (const scale of [.3,1]) {
   renderer.camera.scale = scale;
   const boxes = renderer.drawCrewLabels(ctx,world,{});
-  assert.equal(boxes.length,2);
-  const [a,b] = boxes;
-  assert.ok(!(a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y));
-  for(const box of boxes) assert.ok(box.x>=0 && box.y>=0 && box.x+box.w<=900 && box.y+box.h<=600);
-  // Default labels occupy under one third of the previous plate area.
-  for(const box of boxes) assert.ok(box.w>=80 && box.w<=90, `width ${box.w}`);
-  for(const box of boxes) assert.ok(box.h===22, `height ${box.h}`);
+  assert.equal(boxes.length,0);
   if(widths) assert.deepEqual(boxes.map(b=>b.w),widths);
   widths = boxes.map(b=>b.w);
 }
-// Full identity stays, while detailed numbers no longer cover the map.
-assert.ok(text.some(t=>t.s==='工#10010' && t.font.startsWith('bold 12px')));
+// Worker labels are plain text and no longer reserve a plate or cover the map.
+assert.ok(text.some(t=>t.s==='蓝一' && t.font.startsWith('bold 14px')));
+assert.ok(text.some(t=>t.s==='蓝二' && t.font.startsWith('bold 14px')));
 assert.ok(!text.some(t=>/HP|生命|背包/.test(t.s)));
 renderer.selected=world.actors[0];
 renderer.drawCrewLabels(ctx,world,{});
-assert.ok(text.some(t=>t.s==='工人 #10010'));
-assert.ok(text.some(t=>/HP 220\/220/.test(t.s) && /包 2\/100/.test(t.s)));
+assert.ok(!text.some(t=>t.s==='工人 #10010'));
+assert.ok(!text.some(t=>/HP 220\/220/.test(t.s) && /包 2\/100/.test(t.s)));
 world.actors = [actor(10010,21)];
 world.actors[0].anim = [{type:'walk',from:{x:20,y:16},to:{x:21,y:16}}];
 anchors.length = 0;
 renderer.drawCrewLabels(ctx,world,{walkProgress:0});
-assert.deepEqual(anchors[0],renderer.cellToScreen({x:20,y:16},world,1));
+assert.equal(anchors.length,0);
 """)
 
     def test_active_task_adds_a_short_countdown_and_thin_bar(self):

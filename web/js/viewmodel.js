@@ -88,12 +88,16 @@
       if (covered.has(zone)) continue;
       const kind = zone.neutralType;
       const style = ZONE_STYLE[kind];
+      const taskLabels = {
+        challengerTaskPoint1: '蓝一', challengerTaskPoint2: '蓝二',
+        defenderTaskPoint1: '红一', defenderTaskPoint2: '红二',
+      };
       zones.push({
         kind,
         pos: { x: zone.pos.x, y: zone.pos.y },
         size: footprintOf(kind),
         footprint: HW.footprint(kind),
-        label: style ? style.label : kind,
+        label: taskLabels[kind] || (style ? style.label : kind),
         color: style ? style.color : PALETTE.neutral,
         accent: style ? style.accent : PALETTE.neutral,
         glyph: style ? style.glyph : '?',

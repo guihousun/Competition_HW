@@ -487,9 +487,29 @@
      */
     drawCrewLabels(ctx, world, ui) {
       const boxes = [];
-      const crew = world.actors.filter((a) => a.owner === 'own' && ['worker', 'pioneer'].includes(a.kind))
+      const crew = world.actors.filter((a) => (['own', 'enemy'].includes(a.owner) && a.kind === 'worker')
+          || (a.owner === 'own' && a.kind === 'pioneer'))
         .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-      const workerNo = new Map(crew.filter((a) => a.kind === 'worker').map((a, i) => [a.id, i + 1]));
+      const workerNames = new Map();
+      for (const owner of ['own', 'enemy']) {
+        const field = owner === 'own' ? 'teamOur' : 'teamEnemy';
+        const team = (world.state || {})[field] || {};
+        const ourSide = ((world.state || {}).teamOur || {}).type || world.side || 'challenger';
+        const side = team.type || (owner === 'own' ? ourSide
+          : ourSide === 'challenger' ? 'defender' : 'challenger');
+        // Include dead/initial roster members so the surviving second worker
+        // does not get renamed as the first. IDs identify roles, not teams.
+        const ids = new Set();
+        for (const state of [world.states && world.states[0], world.state]) {
+          for (const role of ((state || {})[field] || {}).roles || []) {
+            if (role.roleType === 'worker') ids.add(String(role.id));
+          }
+        }
+        for (const actor of crew) if (actor.owner === owner && actor.kind === 'worker') ids.add(String(actor.id));
+        [...ids].sort((a, b) => a.localeCompare(b, undefined, {numeric: true})).forEach((id, i) => {
+          workerNames.set(`${owner}:${id}`, `${side === 'challenger' ? '蓝' : '红'}${['一', '二'][i] || i + 1}`);
+        });
+      }
       const task = HW.viewModel.taskStatus(world);
       ctx.save();
       ctx.textAlign = 'left';
@@ -500,13 +520,23 @@
         const pos = walk ? {x: U.lerp(walk.from.x, walk.to.x, t), y: U.lerp(walk.from.y, walk.to.y, t)} : actor.rpos;
         const point = this.cellToScreen(pos, world, actor.footprint || HW.footprint(actor.kind));
         if (point.x < 0 || point.x > this.viewport.width || point.y < 0 || point.y > this.viewport.height) continue;
+        if (actor.kind === 'worker') {
+          const title = workerNames.get(`${actor.owner}:${actor.id}`);
+          ctx.font = 'bold 14px "Microsoft YaHei", sans-serif';
+          ctx.fillStyle = title.startsWith('蓝') ? '#2389ee' : '#ed5265';
+          const width = ctx.measureText(title).width;
+          const x = U.clamp(point.x - width / 2, 4, Math.max(4, this.viewport.width - width - 4));
+          const y = Math.max(18, point.y - BASE_TILE * this.camera.scale / 2 - 4);
+          ctx.fillText(title, x, y);
+          continue; // Plain text only; details remain in the console.
+        }
         const style = CALLOUT_STYLE[actor.kind] || CALLOUT_STYLE.worker;
         const onTask = actor.kind === 'pioneer' && task.active;
         const maxHealth = Number(actor.maxHealth) || 1;
         const ratio = U.clamp((Number(actor.health) || 0) / maxHealth, 0, 1);
         const same = (other) => other && other.id === actor.id && other.owner === actor.owner;
         const detailed = actor.selected || same(this.selected) || same(ui && ui.hoverActor);
-        const title = actor.kind === 'pioneer' ? '拓' : `工#${workerNo.get(actor.id) || '?'}`;
+        const title = '拓';
 
         ctx.font = CALLOUT.titleFont;
         // Compact by default; only the focused role gets a full plate.
