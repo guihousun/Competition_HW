@@ -24,3 +24,6 @@ Thumbs.db
 
 # Office 锁文件（打开 pptx/xlsx 时生成的临时文件）
 ~$*
+
+# Local CodeGraph index (rebuild with codegraph init -y .)
+.codegraph/

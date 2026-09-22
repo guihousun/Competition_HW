@@ -1,0 +1,273 @@
+{
+  "commit": "becfd90b2807ba137ab279a753a55ddd61ab4b59",
+  "entry": "CoreGeek/main3.py",
+  "entry_compat": [
+    "CoreGeek/main.py",
+    "CoreGeek/run.sh",
+    "CoreGeek/main3.py"
+  ],
+  "files": [
+    {
+      "bytes": 11568,
+      "path": "CoreGeek/docs/request.txt",
+      "sha256": "5fc36943ce3d7bbca678b6342cd4a6c092d91ae8032e3107e8e840ba8cc88d82",
+      "source": "docs/request.txt"
+    },
+    {
+      "bytes": 2388,
+      "path": "CoreGeek/docs/response.txt",
+      "sha256": "5daf8278d7f097417b50082165a28dc4ce03163323730dc160ee4f7a534ed8d0",
+      "source": "docs/response.txt"
+    },
+    {
+      "bytes": 28120,
+      "path": "CoreGeek/docs/任务书.md",
+      "sha256": "de99de41b2e87106bdfecbf67e299c044c1de77d7a7000d48938a874ca0f7fe2",
+      "source": "docs/任务书.md"
+    },
+    {
+      "bytes": 11800,
+      "path": "CoreGeek/docs/接口文档.md",
+      "sha256": "931a65d09f881b30644225ca8d6b1bfbc7b2bea7b4f6ce50d1f70cf858cb144d",
+      "source": "docs/接口文档.md"
+    },
+    {
+      "bytes": 2000,
+      "path": "CoreGeek/log/decode_log.py",
+      "sha256": "e449e36a0276e3e53c64a94cd2b724c0643a11344092e1ed3ac70f16d23113c9",
+      "source": "log/decode_log.py"
+    },
+    {
+      "bytes": 1610,
+      "generated": true,
+      "path": "CoreGeek/main.py",
+      "sha256": "117d18cc203882008eb95f81655b5a2d9d22e405b261bc15e7b61b4417fb9660",
+      "source": "main3.py"
+    },
+    {
+      "bytes": 1610,
+      "path": "CoreGeek/main3.py",
+      "sha256": "117d18cc203882008eb95f81655b5a2d9d22e405b261bc15e7b61b4417fb9660",
+      "source": "main3.py"
+    },
+    {
+      "bytes": 451,
+      "path": "CoreGeek/pyproject.toml",
+      "sha256": "f39b22dd0b8a900771d69d9404e1de07d61fcd40e50c21358e566e10b744f628",
+      "source": "pyproject.toml"
+    },
+    {
+      "bytes": 952,
+      "path": "CoreGeek/run.sh",
+      "sha256": "89dc36633cf605a5ace6ecfc03641c78b8c4472b7f70082bdfb72eac6ebeac61",
+      "source": "run.sh"
+    },
+    {
+      "bytes": 0,
+      "path": "CoreGeek/src/coregeek/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "src/coregeek/__init__.py"
+    },
+    {
+      "bytes": 671,
+      "path": "CoreGeek/src/coregeek/agent/__init__.py",
+      "sha256": "656823c2a6c3be9d9593cd7a0a2852b1c52c96b338caebecb3817b97ec3d59ab",
+      "source": "src/coregeek/agent/__init__.py"
+    },
+    {
+      "bytes": 25596,
+      "path": "CoreGeek/src/coregeek/agent/agent.py",
+      "sha256": "d92852f98f2c8479bac3124c1464510deedbc3e03e22c6cdf35bcda2721fb886",
+      "source": "src/coregeek/agent/agent.py"
+    },
+    {
+      "bytes": 8802,
+      "path": "CoreGeek/src/coregeek/agent/chat.py",
+      "sha256": "dd58a65ca2781f9296245ff548b2e893bb18a68e4ef128295fcf7ae52713fcc9",
+      "source": "src/coregeek/agent/chat.py"
+    },
+    {
+      "bytes": 13799,
+      "path": "CoreGeek/src/coregeek/agent/cmd_explore.py",
+      "sha256": "d5430bb493cab913ee0604e873e228d15d3998e3ee4f1157ed10dc47ee929747",
+      "source": "src/coregeek/agent/cmd_explore.py"
+    },
+    {
+      "bytes": 9492,
+      "path": "CoreGeek/src/coregeek/agent/context.py",
+      "sha256": "84781a2589385a0724b51c2478be8ff9146631bee26643cf233a29a3e1ed1d5e",
+      "source": "src/coregeek/agent/context.py"
+    },
+    {
+      "bytes": 20526,
+      "path": "CoreGeek/src/coregeek/agent/prompt.py",
+      "sha256": "b5323097424faae5d36abf8d3c9200cd20b9f72280d3934f1fbbb8d10c5eddd8",
+      "source": "src/coregeek/agent/prompt.py"
+    },
+    {
+      "bytes": 274,
+      "path": "CoreGeek/src/coregeek/agent/tools/__init__.py",
+      "sha256": "a75bc03696ccdaa7a039458a3324a86c0492177c6eb62f00173f1ab2946e76cf",
+      "source": "src/coregeek/agent/tools/__init__.py"
+    },
+    {
+      "bytes": 550,
+      "path": "CoreGeek/src/coregeek/agent/tools/cmd.py",
+      "sha256": "0454b7752bc384069edcbcf9fce83edec1bd771e2adb4e0fa0bb38bbc1d37617",
+      "source": "src/coregeek/agent/tools/cmd.py"
+    },
+    {
+      "bytes": 8359,
+      "path": "CoreGeek/src/coregeek/agent/tools/pyexec.py",
+      "sha256": "f0a3f44aaf7e296ab55aa363c647fe3101a0cb34da931ae89f68ed6e1f38682d",
+      "source": "src/coregeek/agent/tools/pyexec.py"
+    },
+    {
+      "bytes": 3266,
+      "path": "CoreGeek/src/coregeek/agent/tools/sop.py",
+      "sha256": "0786349ad56eb57990dc10917bb8ce29fb96a77122c6121ee5381aef39950d0e",
+      "source": "src/coregeek/agent/tools/sop.py"
+    },
+    {
+      "bytes": 6024,
+      "path": "CoreGeek/src/coregeek/app.py",
+      "sha256": "1ca4a7ea7531089027ae891a16fa4bbcea9fae008dca8840a200cdd99d680842",
+      "source": "src/coregeek/app.py"
+    },
+    {
+      "bytes": 0,
+      "path": "CoreGeek/src/coregeek/game/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "src/coregeek/game/__init__.py"
+    },
+    {
+      "bytes": 30747,
+      "path": "CoreGeek/src/coregeek/game/core.py",
+      "sha256": "3a6bca9b8247cd6f634944c7d1bd3722dcdde205a77a0c6b8ed79c56ca36deff",
+      "source": "src/coregeek/game/core.py"
+    },
+    {
+      "bytes": 44458,
+      "path": "CoreGeek/src/coregeek/game/day.py",
+      "sha256": "6ca95b22700c4f35097cc7b36061efc3698d38f4c5f9e5cc195c1d9e29cc4390",
+      "source": "src/coregeek/game/day.py"
+    },
+    {
+      "bytes": 5650,
+      "path": "CoreGeek/src/coregeek/game/grid.py",
+      "sha256": "d624d7e93c1f632b53418a37a9c5637bb44ce0c9fcb0534e03b49645f86f5682",
+      "source": "src/coregeek/game/grid.py"
+    },
+    {
+      "bytes": 9306,
+      "path": "CoreGeek/src/coregeek/game/map.py",
+      "sha256": "274582d31a7f47601023329d9d4cb32d39552919b68fe989971c99dce561f083",
+      "source": "src/coregeek/game/map.py"
+    },
+    {
+      "bytes": 35701,
+      "path": "CoreGeek/src/coregeek/game/night.py",
+      "sha256": "a595f8b8594a78f4db7d2585fc91bda9978f2e6db3e408ac69674256abf13a40",
+      "source": "src/coregeek/game/night.py"
+    },
+    {
+      "bytes": 7011,
+      "path": "CoreGeek/src/coregeek/game/path.py",
+      "sha256": "57d0fd0f6f08a93f4008761512d7dc5e999420262ee71e314d1d2b956d28f7b1",
+      "source": "src/coregeek/game/path.py"
+    },
+    {
+      "bytes": 12149,
+      "path": "CoreGeek/src/coregeek/game/planner.py",
+      "sha256": "f4e0b8dd91d9340a6726513c55ae0587165c47c55c0b4f101405df0455add5b6",
+      "source": "src/coregeek/game/planner.py"
+    },
+    {
+      "bytes": 1885,
+      "path": "CoreGeek/src/coregeek/game/roles.py",
+      "sha256": "d453347ffcd1a45f9e80ddfc877b8ecada49713f35c58a5339c326fdbfb12d2f",
+      "source": "src/coregeek/game/roles.py"
+    },
+    {
+      "bytes": 8996,
+      "path": "CoreGeek/src/coregeek/game/task.py",
+      "sha256": "bfbe41bc27066a472de9b7412704999a4727100341fb1650f32c7d715208f7cc",
+      "source": "src/coregeek/game/task.py"
+    },
+    {
+      "bytes": 3755,
+      "path": "CoreGeek/src/coregeek/game/utils.py",
+      "sha256": "22dfbf98eb64d699501f4eb3d32199e2bdccfec0de5c8360c22c10bc7872bd91",
+      "source": "src/coregeek/game/utils.py"
+    },
+    {
+      "bytes": 12443,
+      "path": "CoreGeek/src/coregeek/game/world.py",
+      "sha256": "8f3dba4e7f922ddad28a71a26a3dc66f120140b616ea3240525074b05b7d575b",
+      "source": "src/coregeek/game/world.py"
+    },
+    {
+      "bytes": 5026,
+      "path": "CoreGeek/src/coregeek/logfile.py",
+      "sha256": "45403a93e7b6fa4972ca9c52baab944666835e93b6b9fb5a2fd252ddd5dd1899",
+      "source": "src/coregeek/logfile.py"
+    },
+    {
+      "bytes": 0,
+      "path": "CoreGeek/src/coregeek/protocol/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "src/coregeek/protocol/__init__.py"
+    },
+    {
+      "bytes": 9843,
+      "path": "CoreGeek/src/coregeek/protocol/actions.py",
+      "sha256": "51d3a267cf59765107ef9b6d37373e16f629858b2d1ad75bb9e0e163b2c09af6",
+      "source": "src/coregeek/protocol/actions.py"
+    },
+    {
+      "bytes": 17204,
+      "path": "CoreGeek/src/coregeek/protocol/model.py",
+      "sha256": "c54abaf1bf45522f0cc7e1e69ad4f28b182bca72cb24a2864f5445368de58773",
+      "source": "src/coregeek/protocol/model.py"
+    },
+    {
+      "bytes": 784,
+      "path": "CoreGeek/src/coregeek/utils.py",
+      "sha256": "99bc5cc4080532ed8fd64d334d1e3495ec79161982df1c8af48a5596f12ed6f3",
+      "source": "src/coregeek/utils.py"
+    },
+    {
+      "bytes": 0,
+      "path": "CoreGeek/src/coregeek/web/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "src/coregeek/web/__init__.py"
+    },
+    {
+      "bytes": 1330,
+      "path": "CoreGeek/src/coregeek/web/server.py",
+      "sha256": "287a3fb322c6f46dbab41de10e38f51eb9d2a657faa9cf67a08087f2c79132cd",
+      "source": "src/coregeek/web/server.py"
+    }
+  ],
+  "generated_at": "1980-01-01T00:00:00Z",
+  "generated_by": "tools/build_submission.py",
+  "packaging_reference": {
+    "branch": "main",
+    "commit": "becfd90b2807ba137ab279a753a55ddd61ab4b59",
+    "url": "https://github.com/guihousun/Competition_HW"
+  },
+  "profile": "gitcode-coregeek-flat-v1",
+  "rules_baseline": {
+    "date": "2026-09-09",
+    "note": "official rule documents are referenced, not copied",
+    "sha256": "see docs/接口文档.md and docs/任务书.md entries",
+    "version": "v1.0"
+  },
+  "schema": "competition-hw-submission/1",
+  "source_digest": "340b5baf3255ca64d9790a0a88c946e9f7bfa4f87d9a40f9dffbbb8663af3804",
+  "upstream": {
+    "branch": "main",
+    "commit": "becfd90b2807ba137ab279a753a55ddd61ab4b59",
+    "url": "https://gitcode.com/sa1tyfsh/CoreGeek"
+  }
+}
