@@ -24,7 +24,7 @@ from coregeek.game import core, day, planner  # noqa: E402
 from coregeek.game.day import WEAPONS_BY_SITE  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.task import task_channel  # noqa: E402
-from coregeek.game.core import WALL  # noqa: E402
+from coregeek.game.core import WALL, WALL_FIXER  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
 from coregeek.game.world import DAY_ROUNDS, ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
@@ -2031,6 +2031,113 @@ class DayOneFinishTest(unittest.TestCase):
         self.assertLess(
             max(runs.values()), 30, f"有工人整天没动过：最长空指令段 {runs}（回合数）"
         )
+
+
+class RepairStockTest(unittest.TestCase):
+    """第 2.5 级：第 3 天起，**名册里最后一个工人**把修墙包攒到 `REPAIR_PACKS`(3) 张。
+
+    口径出自用户：第 3 天开始攒、第 4 夜起用。包**不能转手**（谁买谁用）⇒ 只让一个工人背，
+    夜里背着包的那个就是修墙工。**顺路优先**（人已经贴在商店旁 ⇒ 当场买）；一张都没有时才肯
+    专程跑一趟，且要求"来回 + 买"赶得回白天结束；买不起就一步都不走。
+    """
+
+    BASE = Pos(10, 24)
+    SHOP = Pos(22, 18)
+    BESIDE = Pos(21, 18)  # 贴着商店（`steps_between` 的 0 = 已经贴着）
+    FAR = Pos(20, 24)  # 盒外空地，去商店要绕
+    DAY3 = 261  # 第 3 天第一个白天回合（within = 1）
+    DAY2 = 131
+    DAY3_LAST = 330  # 第 3 天最后一个回合（`day_rounds_left` = 1）
+    PACK = 10
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+
+    def _turn(
+        self, *roles: BaseRole, gold: int = 40, round_no: int = DAY3, weapons: int = 3
+    ) -> Turn:
+        # 第 3 天起环是 16 格（`utils._sealed_back` 把背面两个角格补上）—— 不照这个口径铺，
+        # `_ring` 会把那两个角格当成缺口、把工人支去砌墙，这一级根本轮不到
+        sealed = round_no > 2 * ROUNDS_PER_DAY
+        ring = wall_cells(self.BASE, 41, sealed=sealed)
+        guns = tuple(
+            Weapon(id=10020 + i, kind="rocket", pos=cell, attack_range=10, cooldown=0)
+            for i, cell in enumerate(weapon_sites(self.BASE, 41)[:weapons])
+        )
+        grid = _terrain(guns, {self.BASE: "station"}, {c: WALL for c in ring}, {self.SHOP: "weaponShop"})
+        grid |= {r.pos: r.type_name for r in roles}
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), grid),
+            roles=roles,
+            gold=gold,
+            weapons=guns,
+            walls=tuple(Wall(40000 + i, c, 1000, 1) for i, c in enumerate(ring)),
+            vendor_prices={"stone": 1, "copper": 5},
+            shop_prices={"WallFixer": self.PACK, "WeaponUpgradeVoucher1": 100},
+        )
+
+    def _packs(self, cmds: dict) -> list[dict]:
+        return [c for c in cmds.values() if c.get("name") == WALL_FIXER]
+
+    def test_the_third_day_stocks_packs_up_to_the_target(self):
+        """第 3 天 + 金币够 + 已经贴着商店 ⇒ 一条 `buy num=3`（顺路，不额外走路）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.BESIDE)
+        cmds = plan(self._turn(pioneer, worker, gold=200))
+        self.assertEqual(cmds["2"], {"action": "buy", "name": WALL_FIXER, "num": 3})
+
+    def test_the_second_day_does_not_stock_packs(self):
+        """第 2 天一张都不买（攒包从第 3 天起）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.BESIDE)
+        cmds = plan(self._turn(pioneer, worker, gold=200, round_no=self.DAY2))
+        self.assertEqual(self._packs(cmds), [], f"第 2 天不该买包：{cmds}")
+
+    def test_a_full_stock_stops_buying(self):
+        """手里已经攒够 3 张 ⇒ 不再买（囤着等夜里用）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})
+        cmds = plan(self._turn(pioneer, worker, gold=200))
+        self.assertEqual(self._packs(cmds), [], f"存量够了还买：{cmds}")
+
+    def test_only_the_last_worker_carries_the_packs(self):
+        """只有名册里最后一个工人跑这条差事：另一个工人就算贴着商店也不买、不动。"""
+        pioneer = Pioneer(1, self.FAR)
+        first = Worker(2, self.BESIDE)
+        last = Worker(3, self.FAR)
+        cmds = plan(self._turn(pioneer, first, last, gold=40))
+        self.assertEqual(self._packs(cmds), [], "贴商店的那个工人不该买包")
+        self.assertNotIn("2", cmds, "跑差事的只有名册最后一个工人")
+        self.assertEqual(cmds["3"]["action"], "move", "最后那个工人专程去商店")
+
+    def test_a_worker_who_cannot_afford_it_does_not_walk(self):
+        """买不起（5 金 < 10）⇒ 一步都不走（不为了 0 张包白跑一趟）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.FAR)
+        cmds = plan(self._turn(pioneer, worker, gold=5))
+        self.assertNotIn("2", cmds, f"买不起就不该动：{cmds}")
+
+    def test_the_special_trip_needs_the_round_trip_to_fit(self):
+        """专程那一趟要赶得回白天结束：第 3 天最后一个回合（只剩 1 回合）⇒ 不走。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.FAR)
+        cmds = plan(self._turn(pioneer, worker, gold=40, round_no=self.DAY3_LAST))
+        self.assertNotIn("2", cmds, f"赶不回来就不该动：{cmds}")
+
+    def test_weapons_first(self):
+        """武器名额还有缺 ⇒ 整条不跑（别抢武器的钱，包排在武器之后）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.BESIDE)
+        cmds = plan(self._turn(pioneer, worker, gold=200, weapons=1))
+        self.assertEqual(self._packs(cmds), [], f"武器没建满就不该买包：{cmds}")
+
+    def test_the_pioneer_never_carries_packs(self):
+        """开拓者的差事里没有包这一条（他买券、接任务；包只能由工人背）。"""
+        pioneer = Pioneer(1, self.BESIDE)
+        cmds = plan(self._turn(pioneer, gold=200))
+        self.assertEqual(self._packs(cmds), [], f"开拓者不该买包：{cmds}")
+        self.assertEqual(cmds["1"]["action"], "buy", "他的钱花在券上")
 
 
 if __name__ == "__main__":
