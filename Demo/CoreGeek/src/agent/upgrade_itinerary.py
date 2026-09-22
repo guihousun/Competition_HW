@@ -57,6 +57,45 @@ def target_level(turn, gun):
     return levels[min(index,2)]
 
 
+def wall_upgrade_allowed(turn, building):
+    """Keep non-front-six walls at the configured level cap."""
+    if building.kind != WALL:
+        return True
+    config = strategy_config.get()
+    if not config['enabled']:
+        return True
+    return (frontline.wall_tier(turn, building.pos)
+            <= 2 or building.level <= config['maintenance']['side_wall_max_level'])
+
+
+def survival_reserve(turn, payload, commands=None):
+    """Gold that must remain available for the next night's wall survival.
+
+    This uses only current shop quotes and public inventory. It never assumes
+    future mining or task income. A held repair pack or eligible wall voucher
+    satisfies the corresponding part of the reserve.
+    """
+    config = strategy_config.get()
+    if not config['enabled']:
+        return 0
+    day = (turn.round_no - 1) // 130 + 1
+    tuning = config['maintenance']
+    if day < tuning['survival_reserve_from_day']:
+        return 0
+    prices = shop_prices(payload)
+    held_fixers = sum(role.backpack.count(WALL_FIXER) for role in turn.workers())
+    target = min(tuning['repair_stock_max'], tuning['stock_target'])
+    fixer_price = prices.get(WALL_FIXER)
+    reserve = max(0, target - held_fixers) * (fixer_price if fixer_price is not None else 0)
+    eligible = [w for w in turn.walls() if w.level < 3 and wall_upgrade_allowed(turn, w)]
+    if eligible and tuning['wall_upgrade_reserve']:
+        item = 'WallUpgradeVoucher1' if any(w.level == 1 for w in eligible) else 'WallUpgradeVoucher2'
+        if item in prices:
+            held = sum(role.backpack.count(item) for role in turn.workers())
+            reserve += max(0, tuning['wall_upgrade_reserve'] - held) * prices[item]
+    return reserve
+
+
 def weapon_reserve(turn, payload):
     """Next usable weapon voucher, priced only from the actual shop quote."""
     if not any(kind == 'weaponShop' for kind in turn.zones.values()):
@@ -76,7 +115,10 @@ def purchase_allowed(turn, payload, item, commands):
     if config['enabled']:
         # Cap only new weapon investment; already held vouchers remain usable.
         if any(can_upgrade(item, kind, level) for kind in TOWER_TYPES for level in (1,2)):
-            return any(can_upgrade(item,g.kind,g.level) and g.level < target_level(turn,g) for g in turn.weapons())
+            price = shop_prices(payload).get(item)
+            return (price is not None
+                    and available_gold(turn, payload, commands) - price >= survival_reserve(turn, payload, commands)
+                    and any(can_upgrade(item,g.kind,g.level) and g.level < target_level(turn,g) for g in turn.weapons()))
         # Real emergency front-wall upgrades may precede weapons; ordinary
         # late-game wear must not indefinitely block the day-four 333 target.
         pressure = any(w.pos in frontline.protected_walls(turn)
@@ -84,6 +126,10 @@ def purchase_allowed(turn, payload, item, commands):
                        and can_upgrade(item,WALL,w.level) for w in turn.walls())
         if pressure:
             return True
+        if item.startswith('WallUpgradeVoucher') and not any(
+                can_upgrade(item, w.kind, w.level) and wall_upgrade_allowed(turn, w)
+                for w in turn.walls()):
+            return False
     reserve = weapon_reserve(turn, payload)
     if reserve is None or item == reserve['voucher']:
         return True
@@ -146,6 +192,7 @@ def plan(turn, payload, commands, *, start=12, deadline=55, commitment=None, res
     retired_rear=set(frontline.rear_walls(turn)) if config['enabled'] else set()
     buildings=sorted((b for b in turn.ours if b.health>0 and b.level<3
                       and b.kind in (STATION,WALL)+TOWER_TYPES
+                      and wall_upgrade_allowed(turn, b)
                       and not (b.kind==WALL and b.pos in retired_rear)),key=building_priority)
     # Bound planning cost on crowded wall maps; retain all base/tower targets.
     wall_ids={b.unit_id for b in buildings if b.kind==WALL}

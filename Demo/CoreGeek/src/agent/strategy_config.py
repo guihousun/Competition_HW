@@ -17,7 +17,9 @@ DEFAULTS = {
                 "tower_loadout": ["rocket", "rocket", "rocket"]},
     "upgrades": {"day_targets": [[3, 3, 3], [3, 3, 3], [3, 3, 3]],
                  "late_weapon_target": [3, 3, 3]},
-    "maintenance": {"from_day": 4, "stock_target": 2,
+    "maintenance": {"from_day": 4, "survival_reserve_from_day": 3,
+                    "stock_target": 2, "repair_stock_max": 4,
+                    "wall_upgrade_reserve": 1, "side_wall_max_level": 1,
                     "entry_fraction": 0.55, "exit_fraction": 0.85,
                     "emergency_fraction": 0.25, "base_emergency_fraction": 0.4},
     "economy": {"dynamic_return": True, "return_margin_early": 4,
@@ -83,7 +85,11 @@ def validate(config):
             raise ValueError("upgrades: targets must not decrease across days")
     maintenance = config["maintenance"]
     _integer(maintenance["from_day"], 1, 10, "maintenance.from_day")
+    _integer(maintenance["survival_reserve_from_day"], 1, 10, "maintenance.survival_reserve_from_day")
     _integer(maintenance["stock_target"], 0, 10, "maintenance.stock_target")
+    _integer(maintenance["repair_stock_max"], maintenance["stock_target"], 10, "maintenance.repair_stock_max")
+    _integer(maintenance["wall_upgrade_reserve"], 0, 2, "maintenance.wall_upgrade_reserve")
+    _integer(maintenance["side_wall_max_level"], 1, 3, "maintenance.side_wall_max_level")
     for key in ("entry_fraction", "exit_fraction", "emergency_fraction", "base_emergency_fraction"):
         value = maintenance[key]
         if type(value) not in (int, float) or not math.isfinite(value) or not 0 <= value <= 1:
@@ -123,6 +129,9 @@ PUBLIC_PARAMETER_META = {
     "upgrades.day_targets": ("策略", "第1至3天允许达到的炮台等级目标。"),
     "upgrades.late_weapon_target": ("策略", "第4天以后继续追求的炮台等级目标。"),
     "maintenance": ("策略", "维修库存、进入/退出和紧急阈值。"),
+    "maintenance.survival_reserve_from_day": ("策略", "从第几天开始先为下一夜维修包和墙券预留金币。"),
+    "maintenance.wall_upgrade_reserve": ("策略", "每个采购窗口预留的前六墙升级券数量；侧墙不升级。"),
+    "maintenance.side_wall_max_level": ("策略", "侧面/非前六墙最高等级；默认保持一级。"),
     "economy": ("策略", "采矿批量、采购回程和入夜安全余量。"),
     "nightwork": ("策略", "确认清场后夜间恢复工作的门槛。"),
     "navigation": ("策略", "停滞恢复和非前六墙拆除通路。"),
