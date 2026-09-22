@@ -10,6 +10,12 @@
 
 ---
 
+## 2026-09-22：自进化类1自动探查任务文档
+
+- 类别：任务 Agent 工具链增强；借鉴 GitCode `sa1tyfsh/CoreGeek` main 的有界沙盒探查设计，不改变官方动作、额度或任务机会规则。
+- 任务文本没有明确文件名时，首个沙盒命令会在限定根目录、深度和数量内寻找任务 Markdown，并一次读取任务文档及同目录 `API_DOCS.md` / `spec.md` / `README.md` / `check`；已读路径继续进入证据记忆，避免重复读取。明确文件名时仍走原有精确探查。
+- 验证方式：`tests/test_task_workspace.py` 9 项、`tests/test_task_pipeline*.py` 10 项、`tests/test_task_answer_contract.py` 10 项、`tests/test_team_agent_simulator.py` 2 项；本地沙盒与脚本模型链路，不代表官方题目通过率。
+
 ## 2026-09-22：机器人近战与同格叠加对齐
 
 - 类别：官方行为实现修复（依据用户高置信度补充，关联 R05/S06；不修改官方伤害数值、刷怪数量或动作额度）。

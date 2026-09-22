@@ -84,6 +84,18 @@ class WorkspaceTests(unittest.TestCase):
         command = workspace.bootstrap('请阅读task_1_alpha.md，获取任务信息')
         self.assertLessEqual(len(command), COMMAND_LIMIT)
 
+    def test_unnamed_task_uses_bounded_automatic_probe(self):
+        self.write('job/task_current.md', '读取同目录 API_DOCS.md')
+        self.write('job/API_DOCS.md', 'python3 /svc/query.py --city 城市')
+        command = workspace.bootstrap('请根据当前任务说明完成 API 查询并提交 JSON')
+        self.assertIsNotNone(command)
+        result = json.loads(execute(command, {
+            'cwd': '/', 'files': {
+                '/workspace/job/task_current.md': '读取同目录 API_DOCS.md',
+                '/workspace/job/API_DOCS.md': 'python3 /svc/query.py --city 城市'}}, active=True).split('\n', 1)[1])
+        self.assertEqual(result['status'], 'found')
+        self.assertEqual(result['files'][1]['path'], '/workspace/job/API_DOCS.md')
+
     def test_virtual_fixture_parity_and_no_arbitrary_execution(self):
         command = workspace.bootstrap('请阅读task_new.md，获取任务信息')
         fixture = {'cwd': '/', 'files': {

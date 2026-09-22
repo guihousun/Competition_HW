@@ -77,7 +77,9 @@ class TeamAgentSimulatorTests(unittest.TestCase):
                         self.assertEqual(result["report"]["ended"], "completed")
                         self.assertEqual(result["report"]["rewards"]["rate"], 1)
                         self.assertGreater(result["report"]["rewards"]["score"], 0)
-                        self.assertEqual((result["calls"], result["tools"]), (3, 2))
+                        # The first sandbox slot is now a bounded task-document
+                        # probe when the prompt names only a directory.
+                        self.assertEqual((result["calls"], result["tools"]), (3, 3))
                         self.assertEqual(result["state"]["_demo"]["planner"]["judge"]["llmUsedToday"], 0)
                         self.assertFalse(any(len(row["channels"]) > 1 for row in result["trace"]))
 

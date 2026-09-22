@@ -11,6 +11,8 @@ import zlib
 from .task_context import COMMAND_LIMIT
 
 ROOTS = ('/tmp/selfEvolutionTask', '/workspace', '/app', '/tmp', '/home')
+AUTO_REF = ''
+AUTO_NAMES = ('api_docs.md', 'spec.md', 'readme.md', 'check', 'check.sh')
 FILE_CAP = 4500
 # The sandbox has Python; interpreter selection does not install anything.
 # Nofollow + regular-file checks avoid FIFOs/devices and linked workspaces.
@@ -41,7 +43,12 @@ else:
    dirs[:]=sorted(d for d in dirs if not os.path.islink(os.path.join(top,d)))[:32]
    if len(dirs)>=32: limited=True
    if os.path.relpath(top,root).count(os.sep)>=6: dirs[:]=[]; limited=True
-   if os.path.basename(ref) in files: add(os.path.join(top,os.path.basename(ref)))
+   if ref and os.path.basename(ref) in files: add(os.path.join(top,os.path.basename(ref)))
+   if not ref:
+    for name in files:
+     low=name.lower()
+     if low.endswith('.md') and 'task' in low:
+      add(os.path.join(top,name))
    if len(hits)>4: limited=True; break
   if limited and (count>800 or time.monotonic()>end or len(hits)>4): break
 out={"probe":"task-workspace/1","ref":ref,"candidates":hits[:4],"limited":limited,"errors":errors,"files":[]}
@@ -92,8 +99,10 @@ def command_for(ref, roots=ROOTS):
 
 
 def bootstrap(text):
+    # Reviewed GitCode pattern: use the first sandbox slot for a bounded
+    # task-document probe even when the prompt does not name a file.
     ref = file_reference(text)
-    return command_for(ref) if ref else None
+    return command_for(ref if ref else AUTO_REF)
 
 
 def virtual_probe(command, files):
@@ -111,8 +120,16 @@ def virtual_probe(command, files):
             return None
     except (ValueError, TypeError, KeyError, IndexError):
         return None
-    hits = [p for p in sorted(files) if (p == ref if ref.startswith('/') else
-            posixpath.basename(p) == ref and any(p.startswith(r.rstrip('/')+'/') for r in ROOTS))]
+    if ref:
+        hits = [p for p in sorted(files) if (p == ref if ref.startswith('/') else
+                posixpath.basename(p) == ref and any(p.startswith(r.rstrip('/')+'/') for r in ROOTS))]
+    else:
+        hits = [p for p in sorted(files) if any(p.startswith(r.rstrip('/')+'/') for r in ROOTS)
+                and posixpath.basename(p).lower().endswith('.md')
+                and 'task' in posixpath.basename(p).lower()]
+        if not hits:
+            hits = [p for p in sorted(files) if any(p.startswith(r.rstrip('/')+'/') for r in ROOTS)
+                    and posixpath.basename(p).lower() in AUTO_NAMES]
     result = dict(probe='task-workspace/1', ref=ref, candidates=hits[:4],
                   limited=len(hits)>4, errors=[], files=[],
                   status='ambiguous' if len(hits)>1 else 'found' if hits else 'not_found')
