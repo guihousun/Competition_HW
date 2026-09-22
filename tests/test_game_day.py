@@ -2121,7 +2121,7 @@ class RepairStockTest(unittest.TestCase):
         pioneer = Pioneer(1, self.FAR)
         worker = Worker(2, self.BESIDE)
         cmds = plan(self._turn(pioneer, worker, gold=200))
-        self.assertEqual(cmds["2"], {"action": "buy", "name": WALL_FIXER, "num": 3})
+        self.assertEqual(cmds["2"], {"action": "buy", "name": WALL_FIXER, "num": 5})
 
     def test_the_second_day_does_not_stock_packs(self):
         """第 2 天一张都不买（攒包从第 3 天起）。"""
@@ -2130,10 +2130,17 @@ class RepairStockTest(unittest.TestCase):
         cmds = plan(self._turn(pioneer, worker, gold=200, round_no=self.DAY2))
         self.assertEqual(self._packs(cmds), [], f"第 2 天不该买包：{cmds}")
 
-    def test_a_full_stock_stops_buying(self):
-        """手里已经攒够 3 张 ⇒ 不再买（囤着等夜里用）。"""
+    def test_a_partial_stock_is_topped_up_to_five(self):
+        """手上只有 2 张 ⇒ 这一趟补到 5 张（差 3 张就买 3 张，不是"一次买满"）。"""
         pioneer = Pioneer(1, self.FAR)
-        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 2})
+        cmds = plan(self._turn(pioneer, worker, gold=60))
+        self.assertEqual(cmds["2"], {"action": "buy", "name": WALL_FIXER, "num": 3})
+
+    def test_a_full_stock_stops_buying(self):
+        """手里已经攒够 5 张 ⇒ 不再买（囤着等夜里用）。"""
+        pioneer = Pioneer(1, self.FAR)
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 5})
         cmds = plan(self._turn(pioneer, worker, gold=200))
         self.assertEqual(self._packs(cmds), [], f"存量够了还买：{cmds}")
 
@@ -2171,7 +2178,7 @@ class RepairStockTest(unittest.TestCase):
     def test_the_carrier_buys_the_front_wall_voucher(self):
         """包攒满之后，**同一个工人**接着买正面墙的升级券（券链里已经没有它了）。"""
         pioneer = Pioneer(1, self.FAR)
-        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})  # 包已满 ⇒ 轮到墙券
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 5})  # 包已满 ⇒ 轮到墙券
         cmds = plan(self._turn(pioneer, worker, gold=100, level=3))  # 武器到顶 ⇒ 无人抢钱
         self.assertEqual(cmds["2"]["action"], "buy", f"该去买墙券：{cmds}")
         self.assertEqual(cmds["2"]["name"], "WallUpgradeVoucher1")
@@ -2208,7 +2215,7 @@ class RepairStockTest(unittest.TestCase):
     def test_a_dedicated_wall_voucher_trip_needs_the_time(self):
         """专程去买墙券也要赶得回白天结束：第 3 天最后一个回合（只剩 1 回合）⇒ 不走。"""
         pioneer = Pioneer(1, self.FAR)
-        worker = Worker(2, self.FAR, {WALL_FIXER: 3})
+        worker = Worker(2, self.FAR, {WALL_FIXER: 5})
         cmds = plan(self._turn(pioneer, worker, gold=100, round_no=self.DAY3_LAST, level=3))
         self.assertNotIn("2", cmds, f"赶不回来就不该动：{cmds}")
 
@@ -2227,7 +2234,7 @@ class RepairStockTest(unittest.TestCase):
         一张 20 金的墙券都买不到；留一张 ⇒ 他只买 1 张，承运人当场买得到墙券。
         """
         pioneer = Pioneer(1, self.BESIDE)  # 贴着商店
-        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})  # 包够了 ⇒ 差事走到第 ③ 步
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 5})  # 包够了 ⇒ 差事走到第 ③ 步
         cmds = plan(self._turn(pioneer, worker, gold=210, level=1))
         self.assertEqual(cmds["1"]["action"], "buy", f"开拓者买武器券：{cmds}")
         self.assertEqual(cmds["1"]["num"], 1, f"给墙券留一张，别一次买两张：{cmds}")
@@ -2240,7 +2247,7 @@ class RepairStockTest(unittest.TestCase):
     def test_the_reserve_disappears_once_the_front_walls_are_maxed(self):
         """前排六格全 L3 ⇒ 不再锁钱：开拓者把两张武器券一次买满（预留不是长期占用）。"""
         pioneer = Pioneer(1, self.BESIDE)
-        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3})
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 5})
         cmds = plan(self._turn(pioneer, worker, gold=210, level=1, front_level=3))
         self.assertEqual(cmds["1"]["action"], "buy", f"开拓者买武器券：{cmds}")
         self.assertEqual(cmds["1"]["num"], 2, f"墙都满了就不该再留钱：{cmds}")
@@ -2248,7 +2255,7 @@ class RepairStockTest(unittest.TestCase):
     def test_a_held_wall_voucher_does_not_double_reserve(self):
         """手里已经持着一张墙券 ⇒ 不再为第二张留钱（先用掉手里那张，买第二张不着急）。"""
         pioneer = Pioneer(1, self.BESIDE)
-        worker = Worker(2, self.BESIDE, {WALL_FIXER: 3, "WallUpgradeVoucher1": 1})
+        worker = Worker(2, self.BESIDE, {WALL_FIXER: 5, "WallUpgradeVoucher1": 1})
         cmds = plan(self._turn(pioneer, worker, gold=210, level=1))
         self.assertEqual(cmds["1"]["action"], "buy", f"开拓者买武器券：{cmds}")
         self.assertEqual(cmds["1"]["num"], 2, f"手里有券 ⇒ 不用再留一张的钱：{cmds}")
