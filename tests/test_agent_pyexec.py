@@ -63,10 +63,20 @@ class PyExecTest(unittest.TestCase):
                 self.assertTrue(pyexec.run(code).startswith("[拒绝]"), code)
 
     def test_a_runtime_error_is_reported_not_raised(self):
-        """代码里的异常是产出，不是我们的异常 —— 冒出去就是整回合退化空指令。"""
+        """代码里的异常是产出，不是我们的异常 —— 冒出去就是整回合退化空指令。
+
+        产出**带调用栈、也带着崩之前的 print**（第 153 步：失败要能分析）：LLM 只看得到
+        这一段文本，没有栈就不知道错在自己代码的哪一行、没有 print 就不知道跑到哪一步
+        才崩。栈里**只有它自己那几帧** —— 本执行器的路径与行号对它是噪音（回头找错地方）。"""
         out = pyexec.run("1/0")
         self.assertTrue(out.startswith("[错误]"), out)
         self.assertIn("ZeroDivisionError", out)
+        self.assertIn('File "<string>", line 1', out)
+        self.assertNotIn("pyexec.py", out)
+
+        multi = pyexec.run("print(1)\nx = [1][3]")
+        self.assertTrue(multi.startswith("1\n[错误]"), multi)
+        self.assertIn('File "<string>", line 2', multi, "多行代码要指到出错的那一行")
 
     def test_a_syntax_error_is_reported(self):
         self.assertTrue(pyexec.run("def :").startswith("[语法错误]"))

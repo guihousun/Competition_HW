@@ -13,6 +13,7 @@ import ast
 import builtins
 import io
 import threading
+import traceback
 from contextlib import redirect_stdout
 
 #: 允许 import 的标准库模块 —— 纯计算的那一小撮（math/json/re/datetime…）。判题环境本
@@ -76,8 +77,8 @@ def run(code: str, timeout: float = EXEC_TIMEOUT) -> str:
     """执行一段纯计算的 Python，返回给 LLM 看的产出文本；绝不抛异常。
 
     标记与判题器沙盒回执同一套词根：`[语法错误]` / `[拒绝]`（环境面）/ `[错误]`（代码
-    自己抛的）/ `[TIMEOUT]`。单表达式走 eval、值即产出；多语句走 exec、只有 print 的输出
-    —— 这两个形状都写进了工具描述。
+    自己抛的，后面跟着完整调用栈）/ `[TIMEOUT]`。单表达式走 eval、值即产出；多语句走 exec、
+    只有 print 的输出 —— 这两个形状都写进了工具描述。
     """
     try:
         tree = ast.parse(code)
@@ -102,7 +103,12 @@ def run(code: str, timeout: float = EXEC_TIMEOUT) -> str:
                 else:
                     exec(code, globs)  # noqa: S102 —— 同上
         except BaseException as exc:  # noqa: BLE001 —— 代码里的任何异常都是产出，不是我们的
-            outcome["error"] = f"{type(exc).__name__}: {exc}"
+            # 连调用栈一起回给 LLM：它只看得见这段文本，没有栈就不知道错在代码的哪一行。
+            # 只回它自己那几帧（跳过本执行器这一帧）—— 本文件的路径与行号只会把它带偏
+            tb = exc.__traceback__.tb_next if exc.__traceback__ else None
+            outcome["error"] = f"{type(exc).__name__}: {exc}\n" + "".join(
+                traceback.format_exception(type(exc), exc, tb)
+            )
 
     worker = threading.Thread(target=work, daemon=True)
     worker.start()
@@ -110,7 +116,9 @@ def run(code: str, timeout: float = EXEC_TIMEOUT) -> str:
     if worker.is_alive():
         return f"[TIMEOUT] 超过 {timeout:g} 秒被终止（本地计算不让等：判题器响应预算只有 5 秒）"
     if "error" in outcome:
-        return _clip_out(f"[错误] {outcome['error']}")
+        # 崩之前打出来的东西照旧交给 LLM —— 那正是"跑到哪一步才崩"的证据
+        head = buf.getvalue().rstrip("\n")
+        return _clip_out(f"{head}\n[错误] {outcome['error']}" if head else f"[错误] {outcome['error']}")
     text = buf.getvalue().rstrip("\n")
     if single and outcome.get("value") is not None:
         text = f"{text}\n{outcome['value']!r}" if text else repr(outcome["value"])
