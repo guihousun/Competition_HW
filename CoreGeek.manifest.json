@@ -1,5 +1,5 @@
 {
-  "commit": "47414f4f9e9a6ce2694830cc9225a6008e448a9a",
+  "commit": "7e14e2e1f6d24d3c08155a632f6574b5d664cdec",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -200,9 +200,9 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 8109,
+      "bytes": 9361,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/night_gunner.py",
-      "sha256": "bf1349c1e4d1eb18bc467172dd85aad3d4b4699321adbb81fd6a0a5016a827f1",
+      "sha256": "271abff689d408595ae97b6f8faabd80e8c9c9659ee03d5a42085d8cdf7c97ce",
       "source": "Demo/CoreGeek/src/agent/night_gunner.py"
     },
     {
@@ -224,9 +224,9 @@
       "source": "Demo/CoreGeek/src/agent/phase_maintenance.py"
     },
     {
-      "bytes": 3068,
+      "bytes": 3087,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/phase_supply.py",
-      "sha256": "3f8d1a3620ff17ff6e25670ba05567d43b1f4942ded43446ea344bd7f2bfdaed",
+      "sha256": "8a4cb036caebfda36ea2ad90fa845c74a3f99979a1a2ed4e890f247818c03326",
       "source": "Demo/CoreGeek/src/agent/phase_supply.py"
     },
     {
@@ -731,10 +731,10 @@
       "source": "Demo/CoreGeek/src/agent/news_ledger.py"
     },
     {
-      "bytes": 8109,
+      "bytes": 9361,
       "generated": true,
       "path": "CoreGeek/src/agent/night_gunner.py",
-      "sha256": "bf1349c1e4d1eb18bc467172dd85aad3d4b4699321adbb81fd6a0a5016a827f1",
+      "sha256": "271abff689d408595ae97b6f8faabd80e8c9c9659ee03d5a42085d8cdf7c97ce",
       "source": "Demo/CoreGeek/src/agent/night_gunner.py"
     },
     {
@@ -759,10 +759,10 @@
       "source": "Demo/CoreGeek/src/agent/phase_maintenance.py"
     },
     {
-      "bytes": 3068,
+      "bytes": 3087,
       "generated": true,
       "path": "CoreGeek/src/agent/phase_supply.py",
-      "sha256": "3f8d1a3620ff17ff6e25670ba05567d43b1f4942ded43446ea344bd7f2bfdaed",
+      "sha256": "8a4cb036caebfda36ea2ad90fa845c74a3f99979a1a2ed4e890f247818c03326",
       "source": "Demo/CoreGeek/src/agent/phase_supply.py"
     },
     {
@@ -1137,5 +1137,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "ab53bd992421c7c8bf8f530fe249feb3c17b7e99d51f8d84275b2b7719d8860f"
+  "source_digest": "4bff6482560dad6eb502196a1211e01fd240dcaf57bb17dfddc6145a7d7e8d90"
 }
