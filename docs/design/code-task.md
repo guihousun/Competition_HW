@@ -2899,6 +2899,30 @@
 
 ---
 
+## 第 144 步：口径同步（`CLAUDE.md` / `strategy.md` / `worker.md`）
+
+**目标** 第 141–143 步动了三条线（共用阈值、夜里修墙、白天攒包），把三份"设计权威副本"里会漂的地方同步掉 —— 它们是后续读代码的人的第一入口。
+
+**产出**（只改文档，一行代码不动）
+
+- `CLAUDE.md`：`core.py` 的常量清单补 `WALL_REPAIR_HP` / `needs_repair` / `WALL_FIXER` / `FRONT_WALLS` / `front_wall_cells`；`day.py` 那段改成"四级链 + 2.5 级攒包"（L2 的阈值改指 `needs_repair`、新增 L2.5 段、L3 里补"券要先给包留预算"）；`night.py` 那段补 `repair_wall`（入口表、目标 / 待命位 / 认人规则、"没包就不派"）；`planner` 夜里那条 ④ 改三档；领域事实两条重写（**"围墙那一半"**：一个阈值两条线 + 第 4 夜起的修复包；**"夜里不能建墙"**：补"掉血的墙能在夜里补回满血"）；`remove` 那条的阈值改指 `WALL_REPAIR_HP`；顺手修掉依赖图里"九条通用判定"这个漏改的死数字（现在是五条）。
+- `docs/design/strategy.md`：§1.2 的链表插入 2.5 级一行 + 补"金币争夺按名册顺序结算"那段；§1.3 的夜里表插入 N2.5（修墙）；§2.1 的阈值改指 `core.needs_repair`、L2/L3 那句补上修复线；§7 的旋钮表把 `WEAK_WALL_HP` 换成 `WALL_REPAIR_HP` 并补 6 个新旋钮。
+- `docs/design/worker.md`：总纲的 ④ 补 2.5 级、⑤ 补修墙那一档；新增"1.5 修墙"小节；§2.1（建墙）的阈值改指 `core.needs_repair`；§2.5 新增"攒修墙包"小节；§5 常量表同步。
+- ⚠️ **`code-task.md` 里那些 `WEAK_WALL_HP` 一律不动**：那是历史留痕（第 130/141 步的记录），规则 2 说历史不重写。
+
+**验证**
+
+1. `grep -rn WEAK_WALL_HP src tests docs/design CLAUDE.md` ⇒ **只剩 `code-task.md` 的历史四行**（第 130 步两处、第 141 步两处），`src` / `tests` / `CLAUDE.md` / `strategy.md` / `worker.md` **0 命中**。
+2. 全量 `PYTHONUTF8=1 py -m unittest discover -s tests` ⇒ **496 条全绿**（本步没动代码）。
+3. 三份文档里新写的常量名 / 函数名逐一回查过代码：`WALL_REPAIR_HP` / `WALL_FIXER` / `FRONT_WALLS` / `front_wall_cells` / `needs_repair`（`core`）、`RepairStock` / `repair_errand` / `_pack_reserve` / `REPAIR_STOCK_FROM_DAY` / `REPAIR_PACKS`（`day`）、`repairer` / `repair_wall` / `_repair_post` / `WALL_REPAIR_FROM_DAY` / `ROBOT_RANGE`（`night`）。
+
+**仍生效的已知不确定性**
+
+1. 三份文档里新写的**推算与口径**（阈值 200、第 3 天开始攒、3 张存量、"够不着就不修"）都还没有实盘背书 —— 判据与回退点见文末 #77–#81，不在这里重抄。
+2. **`docs/wxs/` 那三份通读文档没跟**：它们描述的是第 140 步的代码（写于第 141 步之前），第 141–143 步之后又落后三步（`WALL_REPAIR_HP` 这个改名、夜里修墙线、白天攒包线都不在里面）。要不要跟，等用户定。
+
+---
+
 ## 当前仍悬着的事
 
 跨步重复、或不归属某一步的未了结项。**已实现的下一步不在此列。**
