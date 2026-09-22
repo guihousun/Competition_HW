@@ -879,6 +879,114 @@ class NightEconomyTest(unittest.TestCase):
         self.assertIn(cmd["action"], ("move", "collect"), cmd)
 
 
+class NightTrajectoryTest(unittest.TestCase):
+    """夜里的**轨迹账**（第 163–166 步，用户报"天亮才刚走到矿边又要回来修墙"）：
+
+    ① 预算挑矿（`_priciest_ore(budget=...)`）：能**整块采完并回得来**的矿优先，连"走到 + 采一块
+    + 回来"都不够的矿直接不选；② 回程窗口（`night._walk_home`）：`回盒子步数 + POST_MARGIN >= 本段
+    剩余回合` ⇒ 朝盒子走（把回程挪到不赶时间的夜里），到家待命不再出去；③ 回程路上脚边有矿
+    ⇒ 顺手采一回合（`ON_THE_WAY_MAX = 1` 次/趟）；④ 砌墙缺石时路上**石头优先**。
+    """
+
+    BASE = Pos(10, 24)
+    NEAR_STONE = Pos(5, 24)   # 近处石矿（2 步）
+    FAR_COPPER = Pos(30, 4)   # 远处铜矿（这一夜根本采不完）
+    WALK_HOME = Pos(12, 24)   # 回程中的站位（离基地 2 步，`steps_between` 非 0）
+    STEP_COPPER = Pos(13, 24)  # 回程路上脚边的铜矿
+    STEP_STONE = Pos(12, 25)   # 另一侧脚边的石矿
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+        night._fired.clear()
+
+    def _turn(
+        self,
+        role: Worker,
+        *,
+        ores: dict[Pos, str],
+        within: int = 85,
+        stone: int = 0,
+    ) -> Turn:
+        # 不放围墙 ⇒ `_ring` 非空（环上全没砌）⇒ `core.stone_short` 由手里的石头决定
+        grid = {self.BASE: "station", **ores, role.pos: role.type_name}
+        bag = {"stone": stone} if stone else None
+        role = Worker(role.id, role.pos, bag or {})
+        return Turn(
+            round_no=within,  # `within` 直接就是夜里第几回合 ⇒ rounds_left = 130 - within + 1
+            map=Map((41, 32), grid),
+            roles=(role,),
+            gold=0,
+            weapons=(),
+            robots=(),
+            vendor_prices={"stone": 1, "copper": 5},
+        )
+
+    def test_the_whole_ore_beats_a_richer_but_unfinishable_one(self):
+        """能整块采完的矿优先：近处石矿（10+2+回 ≤ 预算）压过远处铜矿（够不着采完）。
+
+        夜里第 115 回合（`rounds_left` = 16、预算 13）：铜矿来回要 20+ 步 ⇒ 整块采不完，
+        石矿 10 次 + 去 2 + 回 14 步…… 挑的是那座**能收工前采完**的。
+        """
+        worker = Worker(2, Pos(7, 24))
+        cmd = plan(
+            self._turn(
+                worker, ores={self.NEAR_STONE: "stone", self.FAR_COPPER: "copper"}, within=115
+            )
+        )["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertEqual(cmd["action"], "move")
+        self.assertEqual(step.dist(self.NEAR_STONE), 1, f"朝近处石矿迈一步（不奔远处铜矿）：{cmd}")
+
+    def test_an_unreachable_trip_is_not_started_at_all(self):
+        """连"走到 + 采一块"都不够回合的矿 ⇒ 不出门（在家就空指令；在盒外只往基地走，见下一条）。
+
+        这就是用户报的那个场景的治本处：不再在天亮前奔向一座这一夜根本采不到的矿。
+        """
+        at_home = Worker(2, Pos(11, 24))  # 贴着基地
+        turn = self._turn(at_home, ores={self.FAR_COPPER: "copper"}, within=129)  # rounds_left = 2
+        self.assertEqual(plan(turn), {}, f"预算不够 ⇒ 空指令（合法）：{plan(turn)}")
+
+    def test_the_night_walks_home_before_dawn(self):
+        """回程窗口：本段剩余回合不够"采完再走回来" ⇒ 朝基地（盒子）走，把回程挪到夜里。"""
+        worker = Worker(2, Pos(20, 24))  # 离基地 10 步
+        turn = self._turn(worker, ores={}, within=125)  # rounds_left = 6 ⇒ 10 + 3 >= 6
+        cmd = plan(turn)["2"]
+        self.assertEqual(cmd["action"], "move", f"该往回走：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.BASE), Pos(20, 24).dist(self.BASE), "这一步朝基地去")
+
+    def test_home_is_where_it_stays(self):
+        """到家了就待命（空指令），不再折返回矿 —— 天亮那一步不用再走。"""
+        worker = Worker(2, Pos(11, 24))  # 贴着基地（`steps_between` 的 0）
+        turn = self._turn(worker, ores={self.FAR_COPPER: "copper"}, within=125)
+        self.assertEqual(plan(turn), {}, f"到家待命：{plan(turn)}")
+
+    def test_the_walk_home_picks_up_the_ore_underfoot(self):
+        """回程路上脚边有矿 ⇒ 顺手采一回合（不认领矿格：不挡正要去采它的同事）。
+
+        `within=129`（只剩 2 回合）⇒ 回程窗口开着；石头给足 ⇒ 按收购价挑铜。
+        """
+        worker = Worker(2, self.WALK_HOME)
+        turn = self._turn(
+            worker,
+            ores={self.STEP_COPPER: "copper", self.STEP_STONE: "stone"},
+            within=129,
+            stone=20,  # 石头够 ⇒ 按收购价挑
+        )
+        cmds = plan(turn)
+        self.assertEqual(cmds["2"]["action"], "collect", f"该顺手采：{cmds}")
+        self.assertEqual(cmds["2"]["targetPos"], [{"x": 13, "y": 24}], "不缺石 ⇒ 顺手采铜")
+
+    def test_a_short_wall_takes_the_stone_on_the_way_home(self):
+        """砌墙缺石 ⇒ 回程路上优先采石（一块石 = 省下专程采石的 2 回合）。"""
+        worker = Worker(2, self.WALK_HOME)  # 一块石头都没有 ⇒ 缺石
+        turn = self._turn(
+            worker, ores={self.STEP_COPPER: "copper", self.STEP_STONE: "stone"}, within=129
+        )
+        cmds = plan(turn)
+        self.assertEqual(cmds["2"]["targetPos"], [{"x": 12, "y": 25}], f"缺石 ⇒ 顺手采石：{cmds}")
+
+
 class NoTaskNightTest(unittest.TestCase):
     """无任务模式的夜班**与平常夜班是同一套**（第 130 步）：炮手上炮、其余挖矿；清场走白天线。
 

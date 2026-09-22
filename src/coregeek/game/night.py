@@ -29,15 +29,18 @@ from .core import (
     _collect,
     _emit,
     _near_spots,
+    _on_the_way_ore,
     _operator_spots,
     _post_spots,
     _priciest_ore,
     _steps_to_post,
+    stone_short,
     _wall_post,
     _weapon_groups,
     front_wall_cells,
     needs_repair,
 )
+from .path import steps_between
 from .utils import _passable
 from .world import ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon
 
@@ -138,18 +141,74 @@ def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
 
     ⚠️ **机器人还活着时按 `_safe` 挑矿**（把机器人周围 `DANGER` 格内当走不通）⇒ 矿被机器人
     占着就换下一座；迈步那一步把它们当**软避让**（绕不开照走，绝不为躲机器人原地卡死）。"""
+    if walk_home(role, turn, q, ore_taken):
+        return
     foes = _alive(turn.robots)
     area = _safe(turn) if foes else None
-    mine = _priciest_ore(role, turn, ore_taken, walk=area)
+    # 预算 = 本段剩余回合 − 余量：太远的矿这一夜采不完（`_priciest_ore` 会让能整块采完的优先）
+    mine = _priciest_ore(role, turn, ore_taken, walk=area, budget=mine_budget(turn))
     if mine is None:
         return
     ore_taken.add(mine)
     if role.pos.dist(mine) <= 1:
         _collect(q.cmds, role, mine)
         return
+    walk = area if area is not None else _passable(turn)
+    on_way = _on_the_way_ore(
+        role,
+        turn,
+        ore_taken,
+        goal=mine,
+        steps_to_goal=steps_between(role.pos, mine, walk, turn.map.size),
+        stone_first=stone_short(role, turn),
+    )
+    if on_way is not None:
+        _collect(q.cmds, role, on_way)  # 不认领：别挡住正要去采它的同事
+        return
     q.step(
         role,
         mine,
+        avoid=_danger_cells(turn) if foes else frozenset(),
+        with_paths=True,
+        reserve=True,
+    )
+
+
+def mine_budget(turn: Turn) -> int:
+    """这一段还能花在挖矿上的回合数（`本段剩余回合 − POST_MARGIN`）—— 挑矿与清场后那条线共用。"""
+    return max(0, turn.rounds_left - POST_MARGIN)
+
+
+def walk_home(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> bool:
+    """到点了就往回走：朝基地迈步（脚边有矿就顺手采一回合），到了就待命。`True` = 这一回合归它。
+
+    判据 = `回基地的步数 + POST_MARGIN(3) >= 本段剩余回合`（与 `day.BackToPost` /
+    `night.hold_the_wall` 同一个口径）。**为什么值得**：天亮后那趟回程会落在白天的 70 个回合里
+    （砌墙的硬截止），而夜里只采矿、不赶时间 ⇒ 把回程挪到夜里，白天全留给正事。"""
+    station = turn.map.station
+    if station is None:
+        return False
+    foes = _alive(turn.robots)
+    walk = _safe(turn) if foes else _passable(turn)
+    size = turn.map.size
+    steps = steps_between(role.pos, station, walk, size)
+    if steps < 0 or steps + POST_MARGIN < turn.rounds_left:
+        return False
+    if steps == 0:
+        return True  # 已经在盒子边上 ⇒ 待命（空指令合法），不再折返回矿
+    mine = _on_the_way_ore(
+        role,
+        turn,
+        ore_taken,
+        goal=station,
+        steps_to_goal=steps,
+        stone_first=stone_short(role, turn),
+    )
+    if mine is not None:
+        return _collect(q.cmds, role, mine)  # 不认领：别挡住正要去采它的同事
+    return q.step(
+        role,
+        station,
         avoid=_danger_cells(turn) if foes else frozenset(),
         with_paths=True,
         reserve=True,

@@ -161,7 +161,9 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
         # `collect`/`sell`/`buy`/`use`/`acceptTask`/`move`，夜里合法；`build`/`remove` 一条都不会发
         if cleared:
             if isinstance(role, Worker):
-                day.sell_or_mine(role, ctx)
+                # 清场后的夜里也是同一本轨迹账：该往回走了就先走（回程路上顺手采在 `walk_home` 里）
+                if not night.walk_home(role, turn, q, ore_taken):
+                    day.sell_or_mine(role, ctx, budget=night.mine_budget(turn))
             else:
                 _pioneer_errand(role, turn, q, ctx)
             continue

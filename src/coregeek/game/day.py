@@ -27,11 +27,13 @@ from .core import (
     _collect,
     _emit,
     _post_spots,
+    _on_the_way_ore,
     _priciest_ore,
     _steps_to_post,
     _weapon_groups,
     front_wall_cells,
     needs_repair,
+    stone_short,
 )
 from .grid import STEPS, Pos, box_cells, weapon_sites
 from .path import steps_between
@@ -261,7 +263,7 @@ def _build_gap(role: Worker, ctx: _Ctx) -> bool:
         if role.pos in outside and _emit(q.cmds, role, actions.Build, WALL, target):
             return True
         for spot in outside:
-            if q.step(
+            if _on_the_way_to_wall(role, ctx, target) or q.step(
                 role,
                 spot,
                 avoid=frozenset(ctx.sites - {target}),
@@ -280,9 +282,32 @@ def _build_gap(role: Worker, ctx: _Ctx) -> bool:
         # 与建武器同一条契约：`step_toward` 停在贴着目标的一格，那正是 `build` 的站位
         if _emit(q.cmds, role, actions.Build, WALL, target):
             return True
-    elif q.step(role, target, avoid=frozenset(ctx.sites), with_paths=True, reserve=True):
+    elif _on_the_way_to_wall(role, ctx, target) or q.step(
+        role, target, avoid=frozenset(ctx.sites), with_paths=True, reserve=True
+    ):
         return True
     return False
+
+
+def _on_the_way_to_wall(role: Worker, ctx: _Ctx, target: Pos) -> bool:
+    """**去砌墙的路上顺手采一块**（用户口径"顺路还有个矿就顺手采了"）。
+
+    脚边有矿、这一趟还没顺手采过、且"到工地 + 采这 1 回合 + 余量"仍在白天预算内 ⇒ `collect`。
+    砌墙缺石时**石头优先**（一块石 = 省下专程采石的 2 回合，见 `core.stone_short`）。
+    `True` = 这一回合归它（调用方不要再发走路指令）。"""
+    steps = steps_between(role.pos, target, _passable(ctx.turn), ctx.turn.map.size)
+    mine = _on_the_way_ore(
+        role,
+        ctx.turn,
+        ctx.ore_taken,
+        goal=target,
+        steps_to_goal=steps,
+        stone_first=stone_short(role, ctx.turn),
+    )
+    if mine is None:
+        return False
+    # 不认领矿格：顺手拿一块不该挡住"正要去采它"的同事（那一趟才是采集主力）
+    return _collect(ctx.q.cmds, role, mine)
 
 
 def _demolish(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
@@ -600,9 +625,9 @@ def _mine_for_voucher(role: BaseRole, ctx: _Ctx) -> bool:
     return _mine_ore(role, ctx)
 
 
-def _mine_ore(role: Worker, ctx: _Ctx) -> bool:
-    """白天挖矿：挑最值钱的那座矿；动身之前先看有没有顺路的买卖。"""
-    mine = _priciest_ore(role, ctx.turn, ctx.ore_taken)
+def _mine_ore(role: Worker, ctx: _Ctx, *, budget: int | None = None) -> bool:
+    """白天挖矿：挑最值钱的那座矿；动身之前先看有没有顺路的买卖。`budget` 见 `sell_or_mine`。"""
+    mine = _priciest_ore(role, ctx.turn, ctx.ore_taken, budget=budget)
     if mine is None:
         return False
     ctx.ore_taken.add(mine)
@@ -641,16 +666,18 @@ def _mine_stone(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
     return q.step(role, mine, avoid=frozenset(ctx.sites), with_paths=True, reserve=True)
 
 
-def sell_or_mine(role: Worker, ctx: _Ctx) -> bool:
+def sell_or_mine(role: Worker, ctx: _Ctx, *, budget: int | None = None) -> bool:
     """工人"只管矿 → 金币"的那条线（无任务模式的白天 / 夜里清场后）：攒够一趟的货就背去卖，
     否则接着挖最贵的矿。
 
     两个去卖的触发：**够本**（货值 ≥ 2 × 到小贩的步数，少了它背一块石头也会走十几步）或
-    **背包满了**（售价最高的那种超过 `BAG_SELL_AT`(15) 件）。已经贴着小贩 ⇒ 直接卖。"""
+    **背包满了**（售价最高的那种超过 `BAG_SELL_AT`(15) 件）。已经贴着小贩 ⇒ 直接卖。
+
+    `budget` 只在夜里清场后由 `planner` 传（= 本段剩余回合 − 余量）：别奔一座这一夜采不完的矿。"""
     kind, num = _best_load(role, ctx.turn.vendor_prices)
     if _worth_the_trip(role, ctx.turn, kind, num) or _bag_is_full(role, ctx.turn):
         return _sell_cargo(role, ctx)
-    return _mine_ore(role, ctx)
+    return _mine_ore(role, ctx, budget=budget)
 
 
 def _bag_is_full(role: BaseRole, turn: Turn) -> bool:

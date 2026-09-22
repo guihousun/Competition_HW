@@ -1291,7 +1291,11 @@ class WallPriorityTest(unittest.TestCase):
     def test_a_full_worker_does_not_hoard_the_stone_mine(self):
         """石矿认领只发生在"真要采"之后：石头已够的工人（want=0）不许占住矿格 ——
         否则缺石的同事这一回合采不到石、被挤去经济线，环白白慢一拍。
-        认领发生在 `want` 计算之前的话，B（空手）会去采铜，立即挂。"""
+        认领发生在 `want` 计算之前的话，B（空手）会去采铜，立即挂。
+
+        ⚠️ 这块铜矿的位置是**故意**的：它离 A 更近 ⇒ A 走经济线时挑的是它（不是石矿），
+        B 才拿得到那座石矿。往远处挪一格，A 的经济线就会改挑石矿、这条用例立刻失去鉴别力
+        （顺手采那一支另有用例 `OnTheWayTest`，且**只在去砌墙的路上**生效，不掺采石那一趟）。"""
         gaps = {Pos(13, 21), Pos(13, 24)}
         walls = set(wall_cells(self.BASE, 41)) - gaps
         full = Worker(10010, Pos(5, 23), {"stone": 9})   # 段里只剩 1 格 ⇒ want=0
@@ -1306,6 +1310,87 @@ class WallPriorityTest(unittest.TestCase):
         self.assertEqual(cmd["action"], "move", "B 该去采石，不是被挤去采铜")
         step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(step.dist(Pos(4, 24)), 1, "这一步朝石矿迈（贴着矿那一格）")
+
+
+class OnTheWayTest(unittest.TestCase):
+    """赶路时的"顺手采"（用户口径：正事优先，最多顺手拿一次）。
+
+    只挂在**去砌墙的路上**（`_build_gap`）：脚边有矿、这一趟还没顺手采过、且"到工地 + 这 1 回合
+    + 余量"仍在白天预算内 ⇒ `collect` 一回合再走。砌墙缺石时**石头优先**（一块石 = 省下专程采石
+    的 2 回合）。采石那一趟（`_mine_stone`）**不掺**：那一趟的正事就是石料。
+    """
+
+    BASE = Pos(10, 24)
+    GAP = Pos(13, 23)  # 环上留一个缺口 ⇒ `WallLine` 要砌它
+    STAND = Pos(6, 24)  # 工人站位（盒外西侧）
+    COPPER = Pos(7, 24)  # 他脚边的铜矿（切比雪夫 1）
+    STONE = Pos(5, 24)  # 他另一侧的石矿（切比雪夫 1）
+
+    def setUp(self) -> None:
+        _reset_ledgers()
+
+    def _turn(
+        self,
+        worker: Worker,
+        *,
+        ores: dict[Pos, str] | None = None,
+        round_no: int = 1,
+        extra: tuple[BaseRole, ...] = (),
+    ) -> Turn:
+        ring = [c for c in wall_cells(self.BASE, 41) if c != self.GAP]
+        grid: dict[Pos, str] = {self.BASE: "station"}
+        grid.update({c: WALL for c in ring})
+        grid.update(ores if ores is not None else {self.COPPER: "copper"})
+        for role in (worker, *extra):
+            grid[role.pos] = role.type_name
+        return Turn(
+            round_no=round_no,
+            map=Map((41, 32), grid),
+            roles=(worker, *extra),
+            gold=0,
+            vendor_prices={"stone": 1, "copper": 5},
+        )
+
+    def test_a_walk_to_the_wall_picks_up_the_ore_underfoot(self):
+        """去砌墙的路上、脚边正好有矿 ⇒ 先采一回合（用户口径的"顺手采了，然后再去修墙"）。"""
+        worker = Worker(2, self.STAND, {"stone": 3})  # 石头够砌那一个缺口 ⇒ 走 `_build_gap`
+        cmds = plan(self._turn(worker))
+        self.assertEqual(
+            cmds["2"],
+            {"action": "collect", "targetPos": [{"x": 7, "y": 24}]},
+            f"该顺手采铜：{cmds}",
+        )
+
+    def test_the_quota_is_one_collect_per_trip(self):
+        """一趟只顺手采一次：同一趟里再规划一次就不再采，朝工地走（收工时这一趟结束、下趟重新数）。"""
+        worker = Worker(2, self.STAND, {"stone": 3})
+        turn = self._turn(worker)
+        self.assertEqual(plan(turn)["2"]["action"], "collect", "第一回合顺手采")
+        cmd = plan(turn)["2"]  # 同一趟（同一个目标格）再算一次
+        self.assertEqual(cmd["action"], "move", f"额度用完 ⇒ 专心赶路：{cmd}")
+
+    def test_a_tight_day_walks_on_instead_of_detouring(self):
+        """时间不宽裕（白天只剩 1 回合）⇒ 不顺手采，直接朝工地走：正事优先。"""
+        worker = Worker(2, self.STAND, {"stone": 3})
+        cmd = plan(self._turn(worker, round_no=70))["2"]
+        self.assertEqual(cmd["action"], "move", f"该走路：{cmd}")
+
+    def test_a_short_wall_gets_the_stone_underfoot(self):
+        """砌墙缺石 ⇒ 脚边有石就采石（顺手采的物料优先级）。"""
+        worker = Worker(2, self.STAND, {"stone": 0})  # 一块都没有 ⇒ 缺石
+        cmds = plan(self._turn(worker, ores={self.STONE: "stone", self.COPPER: "copper"}))
+        self.assertEqual(cmds["2"]["action"], "collect")
+        self.assertEqual(
+            cmds["2"]["targetPos"], [{"x": 5, "y": 24}], f"缺石时顺手采石、不采铜：{cmds}"
+        )
+
+    def test_a_stocked_worker_takes_the_pricier_ore(self):
+        """石头够 ⇒ 顺手采按收购价挑（铜 5 > 石 1）。"""
+        worker = Worker(2, self.STAND, {"stone": 3})
+        cmds = plan(self._turn(worker, ores={self.STONE: "stone", self.COPPER: "copper"}))
+        self.assertEqual(
+            cmds["2"]["targetPos"], [{"x": 7, "y": 24}], f"石头够 ⇒ 顺手采铜：{cmds}"
+        )
 
 
 class SellCargoTest(unittest.TestCase):
