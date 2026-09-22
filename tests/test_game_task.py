@@ -236,11 +236,8 @@ class TaskChannelTest(unittest.TestCase):
     ANSWER = "晴 26 度"
     #: 交卷的那条回复（答案经 `submitAnswer` 的参数进来）—— `ANSWER` 是它里面的值
     ANSWER_REPLY = _submit(ANSWER)
-    #: 沉淀请求的回复（`SOP2Prompt` 调用）—— 交卷轮的下一轮落进暂存表
-    SOP_REPLY = (
-        "<tool><tool_name>SOP2Prompt</tool_name>"
-        "<tool_param><name>找任务书</name><sop>先看目录</sop></tool_param></tool>"
-    )
+    #: 沉淀请求的回复（裸 `<sop>` 块，第 144 步）—— 交卷轮的下一轮落进暂存表
+    SOP_REPLY = "<sop><name>找任务书</name>先看目录</sop>"
     #: 回灌那两段的分界符，用来断言"该出现 / 不该出现"。拿分界符而不是某句话当判据：模板
     #: 正文里也有"沙盒的执行结果原文"这种普通词、会把自己绊倒；而 `【` 整个模板里一个都没有，
     #: 只属于注入的两段 —— 沙盒输出与 LLM 回复都是任意文本，没分界符就分不清哪段是题目。
@@ -275,13 +272,20 @@ class TaskChannelTest(unittest.TestCase):
         task_channel(turn)
         return plan(turn)
 
-    def _body(self, prompt: str) -> str:
-        """沉淀请求的原料（= 会话全文）解回明文，用来判"某段话在不在会话里"。
+    def _material(self, prompt: str) -> list:
+        """沉淀请求的原料（= 会话全文）解成消息表。
 
-        交卷轮的 prompt 槽归沉淀请求 ⇒ 回执/纠错这些话都在它的原料里，而原料是
-        `json.dumps` 出来的一层 ⇒ 直接查原文会被转义过的换行绊倒（`\\n`）。
+        原料是 `json.dumps` 出来的一层、后面还粘着 `SOP_TAIL` 那一句（不是 JSON）⇒
+        `raw_decode` 从串首解一条、不管尾巴。
         """
-        return "\n".join(m["content"] for m in json.loads(json.loads(prompt)[-1]["content"]))
+        content = json.loads(prompt)[-1]["content"]
+        messages, _ = json.JSONDecoder().raw_decode(content)
+        return messages
+
+    def _body(self, prompt: str) -> str:
+        """原料里全部正文拼成的明文，用来判"某段话在不在会话里"（直接查原文会被
+        转义过的换行绊倒 —— `\\n`）。"""
+        return "\n".join(m["content"] for m in self._material(prompt))
 
     def test_the_question_carries_the_task_text(self):
         """第一次提问 = 段模板（prompt.py 六段）+ 题目原文，不带任何回灌。
@@ -419,21 +423,16 @@ class TaskChannelTest(unittest.TestCase):
 
     def test_the_deposit_reply_lands_even_after_the_task_ended(self):
         """沉淀回复回来时任务往往已经结束（答对了 ⇒ 下一轮 `phaseTask` 空了）——
-        那条 `SOP2Prompt` 调用照样得落库，而命令槽一个字节都不发。
+        那个 `<sop>` 块照样得落库并转正，而命令槽一个字节都不发。
 
-        工具派发压在"没任务"早返回之前就是为这一轮（第 141 步）。丢的后果不是报错，是沉淀
+        落库压在"没任务"早返回之前就是为这一轮（第 141 步）。丢的后果不是报错，是沉淀
         悄悄作废：判题器不评它对错、日志上任务行也照打，只有"沉淀率永远是 0"这一个症状。
-        反向验证：把派发放回"没任务"早返回之后，这条必挂。
+        反向验证：把落库放回"没任务"早返回之后，这条必挂。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问
         task_channel(self._turn(self.TASK, self.ANSWER_REPLY))  # 交卷轮（没报错 ⇒ 答对了）
         prompt, execute = task_channel(
-            self._turn(
-                "",
-                "<tool><tool_name>SOP2Prompt</tool_name>"
-                "<tool_param><name>查天气的流程</name><sop>先问接口再读 temperature</sop>"
-                "</tool_param></tool>",
-            )
+            self._turn("", "<sop><name>查天气的流程</name>先问接口再读 temperature</sop>")
         )
         self.assertEqual(
             AGENT.sop, {"查天气的流程": "先问接口再读 temperature"}, "任务结束之后也照收"
@@ -462,10 +461,11 @@ class TaskChannelTest(unittest.TestCase):
                 self.assertEqual(task_channel(self._turn(self.TASK, reply)), ("", expected))
 
     def test_two_commands_in_one_reply_void_the_round(self):
-        """一条回复里两个执行类工具 ⇒ 整轮作废（一条命令都不发、落重问）。
+        """一条回复里两个工具 ⇒ 整轮作废（一条命令都不发、落重问）。
 
-        用户口径：只有 `SOP2Prompt` 与 `submitAnswer` 允许并列（它们不产命令、当回合也没有
-        回执）。`executeCmd` 一回合只跑得了一条（接口文档 L210），挑一条发等于替 LLM 做选择。
+        用户口径：一个回合只调一个工具（第 144 步删掉了"沉淀 + 交卷"那个白名单 —— 沉淀
+        已经不是工具了）。`executeCmd` 一回合只跑得了一条（接口文档 L210），挑一条发等于
+        替 LLM 做选择。
         """
         def call(cmd: str) -> str:
             return (
@@ -523,10 +523,9 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_broken_tool_tag_yields_no_command(self):
         """凑不齐的标签 ⇒ 没有命令可发。别把半截标签当命令丢进沙盒。
 
-        后面几条是隐式子路径 ③′：调用完整、工具给不出命令（`SOP2Prompt` / 未知工具 / 缺参数），
-        与"畸形"落同一个出口：重问。`SOP2Prompt` 那条的形状是合法的（声明 `name` + `sop`），
-        "给不出命令"与"调用作废"由此分家 —— 后者见
-        `AgentToolCallTest.test_sop2prompt_stores_the_flow_and_yields_no_command`。
+        后面几条是隐式子路径 ③′：调用完整、工具给不出命令（未知工具 / 缺参数），与"畸形"
+        落同一个出口：重问。沉淀那条回复（裸 `<sop>` 块）压根不是工具调用，但它同样不产
+        命令 —— 一起钉在这里。
         """
         replies = (
             "<tool ls",
@@ -536,9 +535,8 @@ class TaskChannelTest(unittest.TestCase):
             "<tool>  </tool>",
             "<tool><tool_name>executeCmd</tool_name></tool>",
             "<tool><tool_name>没这个工具</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>",
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>方法</name><sop>正文</sop></tool_param></tool>",
-            "<tool><tool_name>SOP2Prompt</tool_name><tool_param><sop>正文</sop></tool_param></tool>",
+            "<sop><name>方法</name>正文</sop>",
+            "<sop>只有正文没有名字</sop>",
         )
         for reply in replies:
             with self.subTest(reply=reply):
@@ -547,39 +545,35 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_tool_that_yields_no_command_is_asked_again(self):
         """③′：工具调用成了、但工具不产出命令 ⇒ 重问（既不提交、也不发命令）。
 
-        `SOP2Prompt` 最典型：它当回合没有别的回执。它只沉淀、没作答 ⇒ 沉淀照样进暂存表
-        （`assertEqual(AGENT.pre_sop, …)` 那一行就是那件事），丢的只是那一回合。这条路径不会
-        活锁：任务期间 prompt 不限量不计数（接口文档 L198），出口有"LLM 改口 / 纠错段"两条 ——
-        暂存的沉淀不进 prompt（用户口径），"它看见自己刚写的 SOP 段"因此不再算一条出口。
-        "沉淀 + 同轮作答"见 `test_sinking_the_sop_rides_along_with_the_answer`。
+        `python_exec` 最典型：它的产出当回合就进会话（`tool` 消息），当回合没有别的回执。
+        丢的只是那一回合 —— 这条路径不会活锁：任务期间 prompt 不限量不计数（接口文档
+        L198），出口有"LLM 改口 / 纠错段 / 会话末尾那条产出"三条。
+        "沉淀块 + 同轮作答"见 `test_sinking_the_sop_rides_along_with_the_answer`。
         """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问（本地工具的产出进会话，会话得先在）
         prompt, execute = task_channel(
             self._turn(
                 self.TASK,
-                "<tool><tool_name>SOP2Prompt</tool_name>"
-                "<tool_param><name>找任务书</name><sop>先看目录</sop></tool_param></tool>",
+                "<tool><tool_name>python_exec</tool_name>"
+                "<tool_param><code>1+1</code></tool_param></tool>",
             )
         )
         self.assertEqual(execute, "")
         self.assertIn(self.TASK, prompt, "没作答 ⇒ 这一回合还得问")
-        self.assertEqual(AGENT.pre_sop, {"找任务书": "先看目录"})
+        self.assertIn("【本地 python 的执行结果（原文）】", prompt, "产出当回合进会话")
 
     def test_sinking_the_sop_rides_along_with_the_answer(self):
-        """一条回复里并列了沉淀与交卷 ⇒ 两个都不丢：走判据 ⑤、答案当回合就交上去。
+        """一条回复里同时有沉淀块与交卷 ⇒ 两个都不丢：答案当回合就交上去，块照存。
 
-        第 141 步起 prompt **不再教**这个形状（沉淀搬到交卷之后独立的一轮）—— 但派发的白名单
-        没动（`Agent._PARALLEL_TOOLS`）⇒ 它若自己在任务轮里并列了这两条，答案照交、SOP 照存。
-        这条钉的是那条退路，不是被教出来的主路径。
+        两条通道互不干扰是结构性的：`<sop>` 是裸块（`sops_of` 解）、`submitAnswer` 是工具
+        （`tool_of` 解），一个不产命令、另一个也不产命令。第 141 步起 prompt **不再教**这个
+        形状（沉淀搬到交卷之后独立的一轮）⇒ 这条钉的是那条退路，不是被教出来的主路径。
         """
-        reply = (
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>找文件</name><sop>先找文件</sop></tool_param></tool>\n"
-            + _submit("晴 26 度")
-        )
+        reply = "<sop><name>找文件</name>先找文件</sop>\n" + _submit("晴 26 度")
         AGENT.reset()
         task_channel(self._turn(self.TASK))  # ⑥ 首问（会话开着才测得到"该不该重问"）
         prompt, execute = task_channel(self._turn(self.TASK, reply))
-        self.assertEqual(execute, "", "并列的两个都不产命令")
+        self.assertEqual(execute, "", "两个通道都不产命令")
         self.assertEqual(AGENT.pre_sop, {"找文件": "先找文件"}, "沉淀照样落地（进暂存表）")
         self.assertTrue(
             json.loads(prompt)[0]["content"].startswith("# 【SOP 沉淀】"),
@@ -599,9 +593,7 @@ class TaskChannelTest(unittest.TestCase):
         这条是反向验证：谁再把"扫回复原文"那套加回来，这里立刻挂。
         """
         reply = (
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>答题格式</name>"
-            "<sop>答案要写成 <answer>假答案</answer> 的形状</sop></tool_param></tool>\n"
+            "<sop><name>答题格式</name>答案要写成 <answer>假答案</answer> 的形状</sop>\n"
             + _submit("晴 26 度")
         )
         AGENT.reset()
@@ -684,13 +676,7 @@ class TaskChannelTest(unittest.TestCase):
         探查这回事（`test_the_deposit_reply_lands_even_after_the_task_ended`）。"""
         cmd_explore.reset()
         task_channel(self._turn(self.TASK))  # ⑥ 首问
-        _, execute = task_channel(
-            self._turn(
-                self.TASK,
-                "<tool><tool_name>SOP2Prompt</tool_name>"
-                "<tool_param><name>读题</name><sop>先读题</sop></tool_param></tool>",
-            )
-        )
+        _, execute = task_channel(self._turn(self.TASK, "<sop><name>读题</name>先读题</sop>"))
         self.assertEqual(execute, cmd_explore._command())
         self.assertEqual(AGENT.pre_sop, {"读题": "先读题"}, "沉淀照样落进暂存表")
 
@@ -727,10 +713,40 @@ class TaskChannelTest(unittest.TestCase):
         self.assertEqual(AGENT.pre_sop, {})
 
         # 换题 ⇒ 没转正的作废（转正过的照旧在）
-        AGENT.SOP2Prompt("另一条", "只在暂存")
+        AGENT.deposit("另一条", "只在暂存")
         task_channel(self._turn("另一道题"))
         self.assertEqual(AGENT.pre_sop, {}, "没转正的沉淀不跨题")
         self.assertEqual(AGENT.sop, {"找任务书": "先看目录"})
+
+    def test_an_unrelated_verdict_error_does_not_block_the_promotion(self):
+        """`accepted` 只看 `code 2`（答案不对）—— 别的码（如 4 指令错误）不挡转正。
+
+        判据在 `task_channel` 这一侧（码表的含义不进 `Agent`）。写成"`turn.errors` 非空就不算成"
+        的话，一次无关的报错会把这道题的沉淀白压一轮 —— 而沙盒超时、指令执行失败那一类
+        报错在长任务里是常态。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))  # ⑤ 交卷
+        task_channel(self._turn(self.TASK, self.SOP_REPLY, errors=(Error(4, "指令错误"),)))
+        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"}, "非 2 的码不挡转正")
+        self.assertEqual(AGENT.pre_sop, {})
+
+    def test_a_late_deposit_still_lands_after_the_verdict(self):
+        """沉淀回复晚几轮才回来也照样转正 —— 这是"粘性待判标志"的全部意义。
+
+        交卷轮发出去的那条请求，回复可能掉在后面任何一轮（模型先接着干活、或者干脆隔一轮
+        才答）。只盯"交卷的下一轮"会把它整条错过：`_submitted` 交过卷就挂着，等到暂存表里
+        真有东西可转正才结账。
+        反向验证：把 `<sop>` 落库与 `settle_deposit` 挪到"没任务"早返回之后，最后一段必挂
+        （答对了的那一轮 `phase_task` 已经空了）。
+        """
+        task_channel(self._turn(self.TASK))  # ⑥ 首问
+        task_channel(self._turn(self.TASK, self.ANSWER_REPLY))  # ⑤ 交卷 + 链尾发沉淀请求
+        task_channel(self._turn(self.TASK, cmd_result="[exitCode:0]\nok"))  # 判决干净、没沉淀
+        self.assertEqual(AGENT.sop, {}, "还没东西可转正")
+        # 回复晚到，而且落在题目已经空掉的那一轮（答对了、判题器不再发任务）
+        task_channel(self._turn("", self.SOP_REPLY))
+        self.assertEqual(AGENT.sop, {"找任务书": "先看目录"}, "任务结束那一轮也照收")
 
     def test_an_unusable_call_keeps_the_slot_from_the_probe(self):
         """LLM 点名调了 `executeCmd` 却发不出命令（参数没给全 / 值是空白）⇒ 槽空着也不给探查占。
@@ -1023,9 +1039,8 @@ class TaskChannelTest(unittest.TestCase):
             )
         )
         self.assertEqual(execute, "")
-        material = json.loads(prompt)[-1]["content"]
         self.assertEqual(
-            json.loads(material)[-1]["content"],
+            self._material(prompt)[-1]["content"],
             f"【你上一次提交的答案被判定为不正确】\n{self.ANSWER}"
             "\n【判题器反馈】：答案不正确\n请重新作答。",
             "纠错段整段原文：骂的就是 `answer` 参数里那一份",
@@ -1045,14 +1060,12 @@ class TaskChannelTest(unittest.TestCase):
             ("晴 26 度", ""),  # 裸文本：不再是答案（旧通道的"原文即答案"已删）
             ("<answer>晴 26 度</answer>", ""),  # 旧标签通道同样不再是答案
             (_submit("晴 26 度") + "\n补充一句", "晴 26 度"),  # 块外的话不进答案
-            # 并列（白名单内）：答案只认 `submitAnswer` 那块的参数
+            # 沉淀块搭车：答案只认 `submitAnswer` 那块的参数（`<sop>` 走另一条通道）
             (
-                "<tool><tool_name>SOP2Prompt</tool_name>"
-                "<tool_param><name>答题格式</name><sop>先看目录</sop></tool_param></tool>\n"
-                + _submit("晴 26 度"),
+                "<sop><name>答题格式</name>先看目录</sop>\n" + _submit("晴 26 度"),
                 "晴 26 度",
             ),
-            # 并列（白名单外）⇒ 整轮作废：`submitAnswer` 根本没被派到
+            # 两个工具 ⇒ 整轮作废：`submitAnswer` 根本没被派到
             (
                 "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>\n"
                 + _submit("晴 26 度"),
@@ -1172,8 +1185,8 @@ class TaskChannelTest(unittest.TestCase):
         命令 ⇒ 活锁。回灌那一路不算：它带着本回合刚到的回执原文，是"该它答的那一轮"，不是
         无中生有地又问一遍；同轮的命令也归 `executeCmd` 字段（用户口径：它才是第一优先级）。
         沉淀请求（交卷轮那份）到不了这里：它要 `answer` 非空，而那需要同一轮里调了
-        `submitAnswer`——并列白名单里两个都不产命令 ⇒ 与"这一轮有命令"互斥。所以白名单
-        还是三项，别顺手加第四项。
+        `submitAnswer`，而"两个工具同轮 ⇒ 整轮作废"（第 144 步）⇒ 有命令的那一轮 `answer`
+        必空，两者互斥。所以白名单还是三项，别顺手加第四项。
         """
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
@@ -1190,8 +1203,8 @@ class TaskChannelTest(unittest.TestCase):
             self._turn(self.TASK, cmd_result="[TIMEOUT]\n…"),
             self._turn(self.TASK, self.ANSWER_REPLY, errors=(Error(2, "x"),)),
             self._turn(self.TASK, "<tool ls", errors=(Error(2, "x"),)),
-            # ③′：工具调用成了但工具不产出命令（含 SOP 那条会写状态的）
-            self._turn(self.TASK, "<tool><tool_name>SOP2Prompt</tool_name><tool_param><name>方法</name><sop>正文</sop></tool_param></tool>"),
+            # ③′：工具调用成了但工具不产出命令（含沉淀那条会写状态的）
+            self._turn(self.TASK, "<sop><name>方法</name>正文</sop>"),
             self._turn(self.TASK, "<tool><tool_name>未知</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"),
             self._turn(self.TASK, "<tool><tool_name>executeCmd</tool_name></tool>"),
         ]

@@ -1,4 +1,5 @@
-"""agent/chat.py 的用例：三个谓词（`tool_of` 严格 / `looks_like_tool` 宽 / `summary_of`）。
+"""agent/chat.py 的用例：三个谓词（`tool_of` 严格 / `looks_like_tool` 宽 / `summary_of`）
+与两条裸块通道的解析（`sops_of` 沉淀回复 / `is_prices_reply` 新闻查价）。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -11,7 +12,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from coregeek.agent.chat import looks_like_tool, summary_of, tool_of  # noqa: E402
+from coregeek.agent.chat import (  # noqa: E402
+    is_prices_reply,
+    looks_like_tool,
+    sops_of,
+    summary_of,
+    tool_of,
+)
 
 
 class ToolReplyParseTest(unittest.TestCase):
@@ -81,22 +88,35 @@ class ToolReplyParseTest(unittest.TestCase):
         self.assertEqual(tool_of(reply)[0][1], [("cmd", "ls -la\n  wc -l a.txt")])
 
     def test_all_the_calls_are_collected_in_order(self):
-        """并列的调用**全部**收集、按出现顺序 —— "沉淀 + 交卷同回合"就靠这一条。
-
-        `submitAnswer` 与 `SOP2Prompt` 都不产出命令、当回合也没有回执，所以并列是合法的
-        （放行与否由 `Agent.tool_calls` 按白名单判，这里只负责一条不漏地解出来）。"""
+        """并列的调用**全部**收集、按出现顺序（放行与否由 `Agent.tool_calls` 判：第 144 步
+        起一个回合只调一个工具，并列 = 整轮不成立）。这里只负责一条不漏地解出来。"""
         reply = (
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>\n"
+            "<tool><tool_name>python_exec</tool_name>"
+            "<tool_param><code>1+1</code></tool_param></tool>\n"
             "<tool><tool_name>submitAnswer</tool_name>"
             "<tool_param><answer>晴 26 度</answer></tool_param></tool>"
         )
         self.assertEqual(
             tool_of(reply),
             [
-                ("SOP2Prompt", [("name", "方法"), ("sop", "先找文件")]),
+                ("python_exec", [("code", "1+1")]),
                 ("submitAnswer", [("answer", "晴 26 度")]),
             ],
+        )
+
+    def test_a_sop_block_is_not_a_tool_call(self):
+        """沉淀回复是**裸块**、不是工具调用（第 144 步）：`tool_of` 看不见它、`looks_like_tool`
+        也不认它（没有 `<tool`）—— 它由 `sops_of` 收，两条通道互不干扰。
+
+        一条回复里同时有 `<sop>` 与一个工具块时，工具那一半照旧解析（真实场景：沉淀轮里
+        模型多手调了个工具）。"""
+        reply = "<sop><name>方法</name>先找文件</sop>"
+        self.assertIsNone(tool_of(reply))
+        self.assertFalse(looks_like_tool(reply))
+        self.assertEqual(
+            tool_of(reply + "<tool><tool_name>executeCmd</tool_name>"
+                           "<tool_param><cmd>ls</cmd></tool_param></tool>"),
+            [("executeCmd", [("cmd", "ls")])],
         )
 
     def test_one_broken_block_voids_the_whole_reply(self):
@@ -211,6 +231,66 @@ class SummaryParseTest(unittest.TestCase):
         ):
             with self.subTest(reply=reply):
                 self.assertEqual(summary_of(reply), "")
+
+
+class SopParseTest(unittest.TestCase):
+    """`sops_of`：提取裸 `<sop>` 块里的 `(名字, 正文)`。
+
+    best-effort 与 `summary_of` 同族：块可以夹在散文里（长物料下模型常常先解释两句再给块），
+    缺 `<name>` 或正文的那条**丢掉**、不猜也不回落原文 —— 半截标记当内容用只会存进一条垃圾。
+    正文只去首尾空白、**不反转义**（它是给人读的四栏散文，不是命令参数）。
+    """
+
+    def test_a_plain_block_gives_the_name_and_the_body(self):
+        body = "【适用场景】无。\n【做法】先 ls。"
+        self.assertEqual(
+            sops_of(f"<sop>\n<name>找文件</name>\n{body}\n</sop>"),
+            [("找文件", body)],
+        )
+
+    def test_the_block_may_sit_inside_prose(self):
+        """块外的散文（"我沉淀了一条：…"）不影响解析 —— 只取块本身。"""
+        reply = "这次学到了一条，沉淀如下：\n<sop><name>读题</name>先看目录</sop>\n以上。"
+        self.assertEqual(sops_of(reply), [("读题", "先看目录")])
+
+    def test_several_blocks_are_collected_in_order(self):
+        """多条按出现顺序全收（指令只要一条，解析侧照旧收得住）。"""
+        reply = (
+            "<sop><name>甲</name>正文甲</sop>"
+            "<sop><name>乙</name>正文乙</sop>"
+        )
+        self.assertEqual(sops_of(reply), [("甲", "正文甲"), ("乙", "正文乙")])
+
+    def test_a_block_missing_the_name_or_the_body_is_dropped(self):
+        """缺 `<name>` / 名字空白 / 只剩名字没正文 ⇒ 那一条丢掉；其余照收。"""
+        for bad in (
+            "<sop>只有正文没有名字</sop>",
+            "<sop><name>   </name>正文</sop>",
+            "<sop><name>只有名字</name></sop>",
+        ):
+            with self.subTest(bad=bad):
+                self.assertEqual(sops_of(bad), [])
+                self.assertEqual(sops_of(bad + "<sop><name>好</name>正文</sop>"), [("好", "正文")])
+
+    def test_no_block_or_half_written_yields_nothing(self):
+        """没有块 / 半截 / 空回复 ⇒ `[]`（绝不重问，也绝不拿标签串当正文）。"""
+        for reply in ("", "没有沉淀的回复", "<sop>半截", "<sop></sop>", "<tool>ls</tool>"):
+            with self.subTest(reply=reply):
+                self.assertEqual(sops_of(reply), [])
+
+    def test_the_body_keeps_its_markup_verbatim(self):
+        """正文原样保留（换行、`<` 都算）：它是四栏散文，不反转义、也不挖掉正文里的别的标签。"""
+        body = "【做法】回执形如 <exitCode:0>，多行\n第二行"
+        self.assertEqual(
+            sops_of(f"<sop><name>读回执</name>{body}</sop>"),
+            [("读回执", body)],
+        )
+
+    def test_the_prices_reply_judgement_is_unchanged(self):
+        """同一族的另一条通道（新闻查价）：裸 `<prices>` 块照旧解析，两条互不干扰。"""
+        self.assertEqual(is_prices_reply("<prices>iron up\nstone flat</prices>"),
+                         {"iron": "up", "stone": "flat"})
+        self.assertIsNone(is_prices_reply("<prices>iron up</prices><sop>x</sop>"))
 
 
 if __name__ == "__main__":

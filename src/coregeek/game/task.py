@@ -12,7 +12,7 @@ import logging
 from typing import Any
 
 from ..agent import AGENT, cmd_explore  # 与 LLM 说什么不在策略层
-from ..agent.chat import is_prices_reply, is_summary_reply, looks_like_tool, tool_of
+from ..agent.chat import is_prices_reply, is_summary_reply, looks_like_tool, sops_of, tool_of
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .roles import BaseRole, Pioneer
@@ -60,19 +60,27 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         # 其余回复记进会话；`hear` 返回 False = 与上一条 assistant 同文（粘住，不是新话）
         sticky = not AGENT.hear(llmReply)
 
-    # 解析工具调用（压在"没任务"早返回之前：交卷那一轮发的沉淀请求，回复回来时任务可能
-    # 已经结束了 —— 那条 `SOP2Prompt` 调用照样得落库）
+    # 判题器本轮报的"答案不对"（code 2）—— 判据 ④ 与转正闸门共用这一条；原话一并带回
+    # （黑盒里唯一能回答"错在哪一项"的东西）
+    rejected = any(e.code == 2 for e in turn.errors)
+    why = "；".join(e.description for e in turn.errors if e.code == 2 and e.description)
+
+    # 解析工具调用与沉淀回复（两者都压在"没任务"早返回之前：答案被判对时任务下一轮就结束，
+    # 而那一刻回来的回复照样得收）
     calls = tool_of(llmReply)
     if calls is None and looks_like_tool(llmReply):
         # 想调工具但形状没写对（严格解析取不出名字）⇒ 记日志 + 说明回灌进会话，这轮落重问
         AGENT.reject_shape()
     command = AGENT.tool_calls(calls) if calls else ""  # 工具调度：副作用只发生在这一行
+    # 沉淀回复（裸 `<sop>` 块，散文包着也收）落暂存表 —— 随后由 `settle_deposit` 结账
+    for name, body in sops_of(llmReply):
+        AGENT.deposit(name, body)
     # 任务答案 = 上面那一行写的（调了 submitAnswer 才有）——**必须压在调度之后**读
     answer = AGENT.answer
-    # 结沉淀的账：上一回合交的卷 + 这一轮判题器没报错 ⇒ 那题算成、暂存的沉淀转正。
-    # 压在调度之后（`SOP2Prompt` 的回复就是这一行刚落进暂存表的）、早返回之前（答对了的那
-    # 一轮题目已经空了，转正照样得发生）
-    AGENT.settle_deposit(answer, not turn.errors)
+    # 结沉淀的账：交过卷 + 这一轮没报"答案不对" ⇒ 那题算成、暂存的沉淀转正。
+    # 压在落库之后（`<sop>` 就是这一行刚落进暂存表的）、早返回之前（答对了的那一轮题目
+    # 已经空了，转正照样得发生）
+    AGENT.settle_deposit(answer, not rejected)
 
     # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）；命令一律丢弃（沙盒仅任务期间可用）
     if not turn.phase_task:
@@ -81,10 +89,6 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
     if not any(isinstance(r, Pioneer) for r in turn.roles):
         return "", cmd_explore.next_command()
-    # 判题器本轮报的"答案不对"（code 2）—— 判据 ④ 的触发条件；原话一并带回（黑盒里唯一
-    # 能回答"错在哪一项"的东西）
-    rejected = any(e.code == 2 for e in turn.errors)
-    why = "；".join(e.description for e in turn.errors if e.code == 2 and e.description)
 
     # 构建错误信息提示
     retry = ""

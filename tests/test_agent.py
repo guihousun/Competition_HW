@@ -48,8 +48,7 @@ class AgentToolCallTest(unittest.TestCase):
         self.assertEqual(self.agent.tool_call("executeCmd", []), "")
 
     def test_a_blank_or_non_string_value_never_reaches_the_tool(self):
-        """值不是字符串 / 空白 ⇒ `""`，绝不抛 —— 这条闸门在 `SOP2Prompt` 之前，
-        空参数调用不会把整场攒下来的流程表抹掉。"""
+        """值不是字符串 / 空白 ⇒ `""`，绝不抛 —— 闸门在最前面，空参数调用到不了任何实现。"""
         for value in ("", "   ", "\n", None, 42):
             with self.subTest(value=value):
                 self.assertEqual(self.agent.tool_call("executeCmd", [("cmd", value)]), "")
@@ -91,34 +90,16 @@ class AgentToolCallTest(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 self.assertEqual(self.agent.tool_call("executeCmd", [("cmd", cmd)]), cmd)
 
-    def test_sop2prompt_stores_the_flow_and_yields_no_command(self):
-        """`SOP2Prompt` 存下一条流程（落暂存表）、返回空串（它不产出命令）。
+    def test_a_deposit_lands_in_the_staging_table(self):
+        """`deposit` 写暂存表，同名覆盖（`settle_deposit` 转正之后才进 system）。
 
-        返回值直接进响应顶层的 `executeCmd` ⇒ 返回非空就是往沙盒丢一条不存在的命令。
-        顺带钉闸门的位置：空白参数在 `tool_call` 就被挡下 ⇒ 清不掉已存的流程
-        （`sop` 传空白串的语义是"删掉那条"）。
-        """
-        self.assertEqual(
-            self.agent.tool_call(
-                "SOP2Prompt", [("name", "找任务书"), ("sop", "第一步：先 ls")]
-            ),
-            "",
-        )
-        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls"})
-        self.assertEqual(
-            self.agent.tool_call("SOP2Prompt", [("name", "找任务书"), ("sop", "  ")]), ""
-        )
-        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls"}, "空白参数清不掉流程 —— 闸门在工具之前")
-        # 不认识的参数名不参与闸门：name/sop 都在就放行
-        self.assertEqual(
-            self.agent.tool_call("SOP2Prompt", [("name", "读题"), ("sop", "第二步"), ("答案", "x")]),
-            "",
-        )
-        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
-        # 声明的参数缺一个（这里是 `name`）⇒ 整次调用作废，流程表一个字节都别动
-        self.assertEqual(self.agent.tool_call("SOP2Prompt", [("sop", "第三步")]), "")
-        self.assertEqual(self.agent.tool_call("SOP2Prompt", []), "")
-        self.assertEqual(self.agent.pre_sop, {"找任务书": "第一步：先 ls", "读题": "第二步"})
+        第 144 步起它不是工具：`<sop>` 块由 `task.task_channel` 解析后调这里（空 name /
+        空正文那一条在解析侧就被丢了，见 `SopReplyTest`）。"""
+        self.agent.deposit("找任务书", "【适用场景】无。")
+        self.assertEqual(self.agent.pre_sop, {"找任务书": "【适用场景】无。"})
+        self.agent.deposit("找任务书", "【适用场景】没任务时。")
+        self.assertEqual(self.agent.pre_sop, {"找任务书": "【适用场景】没任务时。"}, "同名覆盖")
+        self.assertNotIn("找任务书", self.agent._tools, "沉淀不再是工具")
 
     def test_an_unknown_tool_yields_no_command_and_no_exception(self):
         """未知工具 ⇒ 空串，绝不抛。
@@ -147,36 +128,13 @@ class AgentToolCallTest(unittest.TestCase):
         `### Params: （无参数）` —— LLM 照着表写调用，不靠描述正文里的散文。"""
         desc = gen_all_tool_prompt(self.agent._tools)
         self.assertIn("### Params:\n    - cmd: 需要在沙盒中执行的完整命令原文", desc)
-        self.assertIn("### Params:\n    - name: ", desc)
-        self.assertIn("    - sop: ", desc)  # 用途是措辞、会改；钉的是"第二个参数叫 sop"
         self.assertIn("    - answer: ", desc)  # 交卷工具的那一个参数
+        self.assertNotIn("SOP2Prompt", desc, "第 144 步起沉淀不是工具：它不在注册表里")
         self.agent._tools["查询状态"] = (lambda: "s", "测试用", ())
         self.assertIn(
             "## ToolName - 查询状态\n### Description: 测试用\n### Params: （无参数）",
             gen_all_tool_prompt(self.agent._tools),
         )
-
-    def test_the_sop_tool_describes_knowledge_deposits_too(self):
-        """SOP2Prompt 的描述要教 LLM 沉淀环境知识（接口描述等），不只是解题流程
-        —— 同一张表、类型由 `name` 约定区分（流程「找任务书」/ 知识「接口-XX」），
-        零新机制。"""
-        desc = gen_all_tool_prompt(self.agent._tools)
-        block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
-        self.assertIn("环境知识", block)
-        self.assertIn("接口", block)
-
-    def test_the_sop_tool_teaches_reuse_and_a_generic_name(self):
-        """描述里要有两层：① 沉淀是为了下次同类任务**复用**；
-        ② `name` 要泛化到"一类问题"（「订去某地的机票的流程」），不能写死成本次的目标。
-
-        第 107 步起"什么时候存、存成什么名"整套细则都在这条描述里（旧的【沉淀规则】段
-        随用户重写的 prompt 删除），这一段就是沉淀规则的唯一出口。① 的措辞改过两次
-        （"能够少做探索" → "具有复用价值" → 第 137 步的"能直接复用"），判据跟着走。"""
-        desc = gen_all_tool_prompt(self.agent._tools)
-        block = desc.split("## ToolName - SOP2Prompt", 1)[1].split("## ToolName", 1)[0]
-        self.assertIn("能直接复用", block)
-        self.assertIn("泛化", block)
-        self.assertIn("订去某地", block)
 
     def test_a_newly_registered_tool_shows_up_everywhere(self):
         """加一个工具只改一处（`Agent.__init__` 里那张表）—— 描述与调度同时跟上。
@@ -257,16 +215,12 @@ class SubmitAnswerTest(unittest.TestCase):
                 self._dispatch(reply)
                 self.assertEqual(self.agent.answer, "")
 
-    def test_a_parallel_call_still_submits(self):
-        """沉淀 + 交卷同回合：两块并列 ⇒ 答案照写，谁在前谁在后都一样。"""
-        sop = (
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
-        )
-        for reply in (sop + self._reply("晴"), self._reply("晴") + sop):
-            with self.subTest(reply=reply[:40]):
-                self._dispatch(reply)
-                self.assertEqual(self.agent.answer, "晴")
+    def test_a_bare_sop_block_still_submits(self):
+        """沉淀回复不再是工具调用（裸 `<sop>` 块，第 144 步）⇒ 与交卷同处一条回复也不冲突：
+        块由 `task.task_channel` 走 `sops_of` 收，`tool_calls` 只看见那一个 `submitAnswer`。"""
+        reply = self._reply("晴") + "\n<sop><name>方法</name>先找文件</sop>"
+        self._dispatch(reply)
+        self.assertEqual(self.agent.answer, "晴")
 
     def test_taking_it_clears_it(self):
         """取走即清（`answer_task` 用它交卷）：同一份答卷只交一次，重交靠 `llmResp` 粘住时
@@ -278,9 +232,10 @@ class SubmitAnswerTest(unittest.TestCase):
 
 
 class ParallelToolTest(unittest.TestCase):
-    """并列调用只放行白名单里那两个（都不产出命令、当回合也没有回执）。
+    """并列调用 ⇒ **整轮作废**，一条都不派 —— 派一半出去，"哪条跑了"日志上都答不出来。
 
-    白名单外的并列**整轮作废**：一条都不派 —— 派一半出去，"哪条跑了"日志上都答不出来。
+    第 144 步删掉了旧白名单（`SOP2Prompt` + `submitAnswer` 那一对）：白名单只剩一个成员
+    等于没有白名单，沉淀也早就不是工具了。
     """
 
     def setUp(self) -> None:
@@ -295,36 +250,22 @@ class ParallelToolTest(unittest.TestCase):
             if "【工具调用：这次调用不成立】" in c
         ]
 
-    def test_the_whitelisted_pair_goes_out(self):
-        """`SOP2Prompt` + `submitAnswer`：逐条派出去，各自的出口各留一行。"""
-        reply = (
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
-            "<tool><tool_name>submitAnswer</tool_name>"
-            "<tool_param><answer>晴</answer></tool_param></tool>"
-        )
-        with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
-            self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
-        self.assertEqual(self.agent.pre_sop, {"方法": "先找文件"}, "沉淀照落库")
-        self.assertEqual(len(caught.records), 2, "两条调用各留一行")
-
-    def test_a_second_command_tool_voids_the_whole_round(self):
-        """白名单外的并列 ⇒ 整轮作废：连那条合法的也不派，原因回灌进会话。"""
+    def test_two_calls_void_the_whole_round(self):
+        """两条并列 ⇒ 整轮不成立：连那条本身合法的也不派，原因回灌进会话。"""
         reply = (
             "<tool><tool_name>executeCmd</tool_name>"
             "<tool_param><cmd>ls</cmd></tool_param></tool>"
-            "<tool><tool_name>SOP2Prompt</tool_name>"
-            "<tool_param><name>方法</name><sop>先找文件</sop></tool_param></tool>"
+            "<tool><tool_name>python_exec</tool_name>"
+            "<tool_param><code>1+1</code></tool_param></tool>"
         )
         with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
             self.assertEqual(self.agent.tool_calls(tool_of(reply)), "")
         self.assertEqual(
             caught.records[0].getMessage(),
-            "【工具调用】：executeCmd、SOP2Prompt ⇒ 整轮不成立（这几个不能并列）",
+            "【工具调用】：executeCmd、python_exec ⇒ 整轮不成立（一轮只调一个工具）",
         )
-        self.assertEqual(self.agent.pre_sop, {}, "作废那一轮连 SOP 也不落库")
         (note,) = self._notes()
-        self.assertIn("并列", note)
+        self.assertIn("一个回合只调一个工具", note)
         self.assertIn("executeCmd", note)
 
     def test_a_voided_round_writes_no_answer_either(self):
@@ -363,13 +304,13 @@ class ToolCallLogTest(unittest.TestCase):
         self.agent._tools["查询状态"] = (lambda: "状态正常", "测试用：查个状态", ())
         with self.assertLogs("coregeek.agent.agent", level="INFO") as caught:
             self.agent.tool_call("executeCmd", [("cmd", "ls -la")])
-            self.agent.tool_call("SOP2Prompt", [("name", "读题"), ("sop", "先 ls")])
+            self.agent.tool_call("python_exec", [("code", "1+1")])
             self.agent.tool_call("查询状态", [])
         self.assertEqual(
             [r.getMessage() for r in caught.records],
             [
                 "【工具调用】：executeCmd（cmd=ls -la）⇒ 命令已出",
-                "【工具调用】：SOP2Prompt（name=读题，sop=先 ls）⇒ 这个工具不产出命令",
+                "【工具调用】：python_exec（code=1+1）⇒ 这个工具不产出命令",
                 "【工具调用】：查询状态（无参数）⇒ 命令已出",
             ],
         )
@@ -420,7 +361,7 @@ class FailedCallFeedbackTest(unittest.TestCase):
         notes = self._notes()
         self.assertEqual(len(notes), 3, "三次失败三条说明，一条不少")
         self.assertIn("查不到的工具", notes[0])
-        for name in ("executeCmd", "readSandboxFile", "python_exec", "SOP2Prompt"):
+        for name in ("executeCmd", "readSandboxFile", "python_exec", "submitAnswer"):
             self.assertIn(name, notes[0])
         self.assertIn("缺了参数 cmd", notes[1])
         self.assertIn("Params", notes[1])

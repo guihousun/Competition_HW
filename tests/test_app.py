@@ -211,8 +211,9 @@ class HandleTest(unittest.TestCase):
             "# 【注意事项】",
         ):
             self.assertIn(piece, messages[0]["content"])
-        # 沉淀那个工具只在沉淀请求里露面（第 141 步：任务阶段只做任务）
-        self.assertNotIn("## ToolName - SOP2Prompt", messages[0]["content"])
+        # 沉淀不是工具（第 144 步）：任务阶段一个字都不提它 —— 形状只在沉淀请求里
+        self.assertNotIn("SOP2Prompt", messages[0]["content"])
+        self.assertNotIn("<sop>", messages[0]["content"])
 
         # 判题器答了 ⇒ 回复那一格才有内容。交卷轮的 prompt 槽归**沉淀请求**（第 141 步）：
         # 压缩与交卷互斥（压缩回复会占住下一轮的 `llmResp` 槽，答案被判错时纠错分支拿不到
@@ -224,6 +225,7 @@ class HandleTest(unittest.TestCase):
         self.assertTrue(
             deposit[0]["content"].startswith("# 【SOP 沉淀】"), "交卷轮：prompt = 沉淀请求"
         )
+        self.assertIn("<sop>", deposit[0]["content"], "输出定义（含示例）只在沉淀请求里")
         self.assertNotIn("【上下文压缩】", ask)
 
         long_text = "题" * (LOG_TEXT_MAX + 7)

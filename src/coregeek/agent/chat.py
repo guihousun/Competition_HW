@@ -1,9 +1,10 @@
-"""Agent 的"怎么读回复"：五个谓词。模板不在这里（在 `prompt.py`）。
+"""Agent 的"怎么读回复"：六个谓词。模板不在这里（在 `prompt.py`）。
 
 收发全是字符串、不收 `Turn`，零包内 import。协议形状是我们自己定的（任务书只规定了沙盒能
 跑什么）⇒ 严格只认嵌套形状：prompt 教什么、这里就只认什么；其他形状靠 `looks_like_tool`
 判宽接住、落重问（丢一回合、不碰红线）。**不认识任何参数名** —— 参数名是 LLM 写的标签、
-由 `Agent.tool_calls` 对注册表认。
+由 `Agent.tool_calls` 对注册表认。三条裸块通道（`<summary>` / `<prices>` / `<sop>`）不在此
+列：它们不是工具调用，各由一个 best-effort 的解析函数收。
 """
 
 import re
@@ -23,6 +24,11 @@ _INNER_RE = re.compile(r"<(\w+)\b[^>]*>(.*?)</\1>", re.DOTALL)
 _SUMMARY_RE = re.compile(r"<summary\b[^>]*>(.*?)</summary>", re.DOTALL)
 #: `looks_like_tool` 的宽判据（见那里）。与上面几个相反，它故意只认前缀。
 _TOOL_MARK_RE = re.compile(r"<tool")
+#: 沉淀回复：`<sop>` 块（块里 `<name>` 给名字、其余全是正文）。第 144 步起沉淀不再是
+#: 工具调用 —— 与 `<summary>` / `<prices>` 同族的裸块通道（长物料下模型就不会照工具格式
+#: 调用，这是那一步的起因）。块里 `<name>` 的标签名与工具参数名同名，但两者不相干。
+_SOP_RE = re.compile(r"<sop\b[^>]*>(.*?)</sop>", re.DOTALL)
+_SOP_NAME_RE = re.compile(r"<name\b[^>]*>(.*?)</name>", re.DOTALL)
 #: 裸 `<prices>` 回复（新闻查价的产物）—— 判别与 `<summary>` 同族。
 _PRICES_RE = re.compile(r"<prices\b[^>]*>(.*?)</prices>", re.DOTALL)
 _PRICE_LINE_RE = re.compile(r"(stone|iron|copper)\s*[：:\s]\s*(up|down|flat)", re.IGNORECASE)
@@ -94,6 +100,24 @@ def is_summary_reply(reply: str) -> str | None:
     if summary and not _SUMMARY_RE.sub("", reply).strip():
         return summary
     return None
+
+
+def sops_of(reply: str) -> list[tuple[str, str]]:
+    """沉淀回复里的条目 ⇒ `[(名字, 正文), …]`（按出现顺序）；一条都没有 ⇒ `[]`。
+
+    best-effort，与 `summary_of` / `is_prices_reply` 同族：块可以夹在散文里（长物料下模型
+    常常先解释两句再给块），只取块本身。块内 `<name>` 与正文**都要有**才作数 —— 缺一个就
+    丢那一条（不猜、也不回落原文：半截标记当内容用只会存进一条垃圾）。
+    正文 = 块里挖掉 `<name>` 之后剩下的部分，只去首尾空白、**不反转义**（它是给人读的四栏
+    散文，不是命令参数；顺带也不怕模型把正文里的 `<` 写成了实体）。"""
+    entries: list[tuple[str, str]] = []
+    for block in _SOP_RE.finditer(reply):
+        body = block.group(1)
+        name = _SOP_NAME_RE.search(body)
+        text = _SOP_NAME_RE.sub("", body).strip()
+        if name is not None and name.group(1).strip() and text:
+            entries.append((name.group(1).strip(), text))
+    return entries
 
 
 def is_prices_reply(reply: str) -> dict[str, str] | None:

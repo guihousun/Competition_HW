@@ -1,14 +1,14 @@
 """`Agent` —— 单实例的解题智能体：一个进程一个，跨回合状态全在实例上。
 
-两张流程表：`_sop`（正式，整场）、`_pre_sop`（暂存，任务内 —— `SOP2Prompt` 先落这里，
+两张流程表：`_sop`（正式，整场）、`_pre_sop`（暂存，任务内 —— 沉淀（`deposit`）先落这里，
 判题器没报错的那一轮才由 `settle_deposit` 转正）。另有 `_news_digest` / `_price_hints`
 （新闻指纹与价格期望）、`_context`（任务内会话，题目变了即换新）。状态丢了只影响 prompt
 内容、不碰红线；判题器逐回合同步请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
 
 `_answer` 与 `_submitted` 是短命的那两个：前者由 `submitAnswer` 写、`task_channel` 读、
 `answer_task` 取走，**只活一回合**（每回合开头由 `task_channel` 清一次）—— 它是回合内的
-一次交接，不是记忆；后者是"上一回合交过卷、判决还没到"，每回合由 `settle_deposit` 重新
-赋值（赋值 ⇒ 卡不住）。
+一次交接，不是记忆；后者是"交过卷、判决还没到"的那笔账，由 `settle_deposit` 结（没报错 ⇒
+转正、报 code 2 ⇒ 作废，都当场结掉）。
 """
 
 import logging
@@ -30,17 +30,6 @@ LOGGER = logging.getLogger(__name__)
 
 #: 【工具调用】那行里每个参数值截到多少字（拍的；原文在任务行的「上一轮模型回复」里）。
 ARGS_LOG_MAX = 1000
-
-#: 允许并列的工具：都不产出命令、当回合也没有回执，同回合再搭一条别的才有意义。
-_PARALLEL_TOOLS = frozenset({"SOP2Prompt", "submitAnswer"})
-
-
-def _dispatchable(calls: list[tuple[str, list[tuple[str, str]]]]) -> bool:
-    """这一轮的工具调用能不能派出去 —— 白名单外的并列**整轮作废**（一条都不派）。
-
-    作废那一轮 `submitAnswer` 根本没被调到 ⇒ 答卷变量也不会被写：**"有没有答案"只看那个
-    变量**，不需要解析侧再判一次（省得一边认、一边不认）。"""
-    return len(calls) <= 1 or {name for name, _ in calls} <= _PARALLEL_TOOLS
 
 
 def _call_text(params: list[tuple[str, str]]) -> str:
@@ -80,10 +69,10 @@ class Agent:
     def __init__(self) -> None:
         #: 沉淀的 SOP —— 流程表 `{流程名: 正文}`（同名覆盖、异名追加、条数上限）。
         self._sop: dict[str, str] = {}
-        #: 本题暂存的沉淀（规则同 `_sop`）：`SOP2Prompt` 先落这里，判题器没报错的那一轮才
+        #: 本题暂存的沉淀（规则同 `_sop`）：`deposit` 先落这里，判题器没报错的那一轮才
         #: 转正；换题即作废 —— 没被验证过的经验不进「沉淀的SOP」段。见 `settle_deposit`。
         self._pre_sop: dict[str, str] = {}
-        #: 上一回合交过卷、判决还没到（`settle_deposit` 每回合重新赋值 ⇒ 卡不住）。
+        #: 交过卷、判决还没到的那笔账（`settle_deposit` 结：转正或作废都当场清）。
         self._submitted = False
         #: 价格期望与新闻指纹。丢了只影响采矿偏好 / 白问一次新闻，不碰红线。
         self._news_digest = ""
@@ -94,7 +83,7 @@ class Agent:
         self._answer = ""
         #: 工具名 → (实现, 给 LLM 看的描述, 参数表)。描述与调度同源这一张表（描述由
         #: `prompt.gen_all_tool_prompt` 生成，不会分家）；顺序即 prompt 里的顺序。表必须由
-        #: 实例构造：`SOP2Prompt` 写 `self._sop`，只能是绑定方法。
+        #: 实例构造：几个实现都是绑定方法（写的是会话与答卷）。
         self._tools: dict[
             str, tuple[Callable[..., str], str, tuple[tuple[str, str], ...]]
         ] = {
@@ -125,23 +114,6 @@ class Agent:
 适用于数学计算、字符串/JSON处理、数据转换、结果比较和命令构造。
 比 executeCmd 省一个回合（它要 2 个回合、还要等沙盒回执）：不需要访问沙盒的活儿一律用它，不要占用昂贵的沙盒执行。""",
                 (("code", "要执行的 Python 代码原文"),),
-            ),
-            "SOP2Prompt": (
-                self.SOP2Prompt,
-                """
-把当前任务中已实际验证、以后同类任务能直接复用的经验沉淀成一条 SOP；每次都要产出一条 —— 没有新的就把已有那条按这次的执行结果改准。
-name 是这条 SOP 的唯一标识：改已有那条时逐字照抄它原来的 name —— 换个写法就是又存了一条。
-sop 是正文，固定写四栏，没有内容的栏写「无」：
-【适用场景】哪些任务该用它 —— 读到它的人据此判断这道题跟自己有没有关系。
-【做法】该类问题的通用解决流程：去哪儿取信息、按什么顺序做、结果怎么用。
-【实测结论】经过实际执行确认的环境知识 —— 接口真实路径、参数名与取值、返回值结构、文件位置、工具行为、文档与实测的差异。
-【注意事项】容易踩的坑、边界条件、这一版修正了上一版的哪里。
-不要记录只对本次成立的取值（本次的答案、本次的参数、本次的中间状态）、未经验证的猜测、完整探索日志，以及本次任务自己产生的临时文件。
-文档与实测冲突时以实际执行结果为准 —— 存跑通的那一版。""",
-                (
-                    ("name", "泛化后的问题类型名称，例如“订去某地的机票的流程”"),
-                    ("sop", "该类问题的通用解决流程，以及经过实际执行确认的接口、路径、参数、返回值等环境知识"),
-                ),
             ),
             "submitAnswer": (
                 self.submitAnswer,
@@ -180,9 +152,9 @@ sop 是正文，固定写四栏，没有内容的栏写「无」：
         工具块恒在（别的工具描述点过它的名）；清单只在探明过后挂 —— 挂空清单等于暗示
         "沙盒里没有"。每行给两种写法（全路径、文件名）。调度侧不看这张表，口径一致。
 
-        `SOP2Prompt` **不在这张表里**：沉淀是交卷之后独立的一轮（`sop_request`），任务阶段
-        只做任务。注册表照旧留着它（派发与沉淀那一轮的描述都从那里取）。"""
-        tools = {name: tool for name, tool in self._tools.items() if name != "SOP2Prompt"}
+        沉淀不在表里（第 144 步起它根本不是工具：交卷之后那一轮按 `SOP_REQUEST` 的格式
+        回一个 `<sop>` 块），所以这张表就是注册表本身。"""
+        tools = dict(self._tools)
         paths = cmd_explore.known_paths()
         if not paths:
             return tools
@@ -225,18 +197,17 @@ sop 是正文，固定写四栏，没有内容的栏写「无」：
         return gen_compression_prompt(self._context.material())
 
     def sop_request(self) -> str:
-        """沉淀轮的 prompt：沉淀指令 + 现在的 SOP + `SOP2Prompt` 块 + 本题的完整记录。
+        """沉淀轮的 prompt：沉淀指令（含 `<sop>` 输出定义）+ 现在的 SOP + 本题的完整记录。
         没开会话 ⇒ `""`。
 
         发送时机 = 交卷那一轮（判据链尾的沉淀闸门）：这一轮调了 `submitAnswer` 就发，
         不问回执 —— 等判决才开口会白占一个 LLM 回合。判题器在任务期间不计数，这次开口
-        不吃额度。它的回复下一轮随 `llmResp` 回来、由 `tool_calls` 派发（落暂存表）——
-        派发压在"没任务"早返回之前，所以"答对了、任务已经结束"的那一轮也收得到。"""
+        不吃额度。回复是裸 `<sop>` 块，下一轮随 `llmResp` 回来、由 `task.task_channel`
+        解析后落暂存表 —— 解析压在"没任务"早返回之前，所以"答对了、任务已经结束"的那一轮
+        也收得到。"""
         if self._context is None:
             return ""
-        _, desc, params = self._tools["SOP2Prompt"]
-        tool = ("SOP2Prompt", desc, params)
-        return gen_sop_request(self._sop, tool, self._context.material())
+        return gen_sop_request(self._sop, self._context.material())
 
     def read_sandbox_file(self, path: str) -> str:
         """读一份沙盒文件：本地探明过 ⇒ 正文当回合进会话、返 `""`（省一回合）；本地没有 ⇒
@@ -359,15 +330,15 @@ sop 是正文，固定写四栏，没有内容的栏写「无」：
     def tool_calls(self, calls: list[tuple[str, list[tuple[str, str]]]]) -> str:
         """顶层调度入口：一回合的调用们 ⇒ 要放进响应顶层 `executeCmd` 的那条命令。
 
-        `calls` 是 `tool_of` 解出的整张表。白名单外的并列（`_dispatchable`）⇒ **整轮不成立**：
-        一条都不派、把"哪些能并列"回灌进会话（那一轮落重问）。放行的逐条走 `tool_call`，
-        任一条不成立只丢那一条、不连坐（并列的那两个本来就不产命令，拼出来还是 `""`）。"""
-        if not _dispatchable(calls):
+        `calls` 是 `tool_of` 解出的整张表。**一轮只许一条**：并列 ⇒ **整轮不成立**，一条都不派、
+        把原因回灌进会话（那一轮落重问）—— 派一半出去，"哪条跑了"日志上都答不出来。放行的
+        走 `tool_call`（它一条不产命令就是 `""`，拼出来还是 `""`）。"""
+        if len(calls) > 1:
             names = "、".join(name for name, _ in calls)
-            LOGGER.info("【工具调用】：%s ⇒ 整轮不成立（这几个不能并列）", names)
+            LOGGER.info("【工具调用】：%s ⇒ 整轮不成立（一轮只调一个工具）", names)
             return self._note_failed_call(
-                f"这一轮同时调了 {names} —— 能并列的只有 {'、'.join(sorted(_PARALLEL_TOOLS))}，"
-                "其他工具一次只调一个。请把任务执行类工具拆到不同的回合"
+                f"这一轮同时调了 {names} —— 一个回合只调一个工具，调用之后要等下一回合的"
+                "回执。请把它们拆到不同的回合"
             )
         command = ""
         for tool_name, params in calls:
@@ -409,26 +380,34 @@ sop 是正文，固定写四栏，没有内容的栏写「无」：
             "每个参数各用一对标签包裹（如 <cmd>命令</cmd>）"
         )
 
-    def SOP2Prompt(self, name: str, sop: str) -> str:
-        """沉淀一条条目（`name` = 这类问题的名字、`sop` = 结构化正文），返回 `""`。
+    def deposit(self, name: str, body: str) -> None:
+        """沉淀一条条目（`name` = 这类问题的名字、`body` = 四栏正文）—— 落**暂存表**。
 
-        正文的四栏（适用场景 / 做法 / 实测结论 / 注意事项）与"什么值得存"在注册表那条
-        描述里 —— 同一条规则只写一处，这里不重抄。落**暂存表**（`settle_deposit` 转正
-        之后才进「沉淀的SOP」段）；存储规则（同名覆盖、条数上限、截断留痕）在
-        `tools/sop.py`。空文本 = 删掉那条。"""
-        self._pre_sop = store(self._pre_sop, name, sop, where="暂存")
-        return ""
+        第 144 步起这条通道不是工具：回复里裸写 `<sop>` 块，`task.task_channel` 用
+        `chat.sops_of` 解出来调这里。`settle_deposit` 转正之后才进「沉淀的SOP」段；
+        存储规则（同名覆盖、条数上限、截断留痕）在 `tools/sop.py`。空文本 = 删掉那条。"""
+        self._pre_sop = store(self._pre_sop, name, body, where="暂存")
 
     def settle_deposit(self, submitted: bool, accepted: bool) -> None:
-        """结沉淀的账（`task.task_channel` 每回合调一次，压在工具调度之后）。
+        """结沉淀的账（`task.task_channel` 每回合调一次，压在 `<sop>` 落库与工具调度之后）。
 
-        `submitted` = 这一轮调了 `submitAnswer`；`accepted` = 这一轮判题器没报任何错。
-        **上一回合交过卷、这一轮又没报错 ⇒ 这题算成**，暂存的沉淀整批转正 —— 判题器只在
-        出错时吭声，"没报错"就是它的成功回执（没有更硬的判据，未实测）。
-        压在调度之后：沉淀请求的回复（`SOP2Prompt`）就是这一轮才落进暂存表的。"""
-        if self._submitted and accepted:
-            self._promote()
-        self._submitted = submitted
+        `submitted` = 这一轮调了 `submitAnswer`；`accepted` = 这一轮判题器**没报 `code 2`**
+        （"答案不对"那个码，由调用方判 —— 码表的含义不写进本模块）。**这笔账交过卷就挂着**，
+        直到判决到齐：没报错、暂存表里又有东西 ⇒ 整批转正 —— 判题器只在出错时吭声，"没报错"
+        就是它的成功回执（没有更硬的判据，未实测）；报 `code 2` ⇒ 判过了、没过，账结掉
+        （那几条留在暂存表里，下次交卷判过时照样转正；换题则整表作废）。
+        ⚠️ 转正看的是**暂存表非空**：沉淀的回复可能比判决晚好几轮才回来（交卷轮发的请求，
+        回复掉进了后面的某一轮），盯着"交卷的下一轮"会把它整条错过。
+        这两个位置都是必需的：压在落库之后（`<sop>` 就是这一轮才进暂存表的），又压
+        "没任务"早返回之前（答对了的那一轮题目已经空了，转正照样得发生）。"""
+        if self._submitted:
+            if not accepted:
+                self._submitted = False
+            elif self._pre_sop:
+                self._promote()
+                self._submitted = False
+        if submitted:
+            self._submitted = True
 
     def _promote(self) -> None:
         """暂存表整批并进正式表（同名覆盖），并清空暂存 —— 每条的日志由 `store` 打（带落点）。"""
