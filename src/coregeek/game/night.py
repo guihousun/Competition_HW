@@ -22,6 +22,7 @@ from ..protocol import actions  # 指令只能经 Action 产出
 from .grid import STEPS, Pos, base_cells
 from .roles import BaseRole, Worker
 from .core import (
+    POST_MARGIN,
     WALL_FIXER,
     _Queue,
     _collect,
@@ -30,6 +31,8 @@ from .core import (
     _operator_spots,
     _post_spots,
     _priciest_ore,
+    _steps_to_post,
+    _wall_post,
     _weapon_groups,
     front_wall_cells,
     needs_repair,
@@ -156,11 +159,30 @@ def repairer(turn: Turn, gunner: int | None) -> int | None:
     return min(carriers, key=lambda r: (-r.bag.get(WALL_FIXER, 0), r.id)).id
 
 
+def hold_the_wall(role: Worker, turn: Turn, q: _Queue) -> bool:
+    """白天末尾：这一夜要修墙的那个人先往待命位挪（与 `day.BackToPost` 同一个思路）。
+
+    天黑时人才动身就晚了 —— 白天采矿/卖矿/买货都在盒外，正面墙在他走到之前就会被打穿。
+    `回待命位步数 + POST_MARGIN(3) >= 白天剩余` ⇒ 动身（步数实时 BFS）；已经在待命位上 ⇒
+    返回 `True` 但什么都不发（站着等天黑）。判据与夜里的 `repair_wall` 共用 `core._wall_post`。
+
+    调用方（`planner._day_intents`）负责认人：是不是这一夜的修墙工由 `repairer()` 说了算。"""
+    post = _wall_post(turn, role)
+    if post is None:
+        return False
+    steps = _steps_to_post(role.pos, post, True, _passable(turn), turn.map.size)
+    if steps < 0 or turn.day_rounds_left > steps + POST_MARGIN:
+        return False
+    if steps == 0:
+        return True
+    return q.step(role, post, onto=True, with_paths=True, reserve=True)
+
+
 def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     """守着正面列修墙：把血 < `WALL_REPAIR_HP` 的那一格修回满，没事就待在正面墙后方。
 
     目标由 `_repair_target` 挑（血最少、且够得着的那一格）；到位就 `use` 修复包。没有要修的
-    就去待命位站着（`_repair_post`：那里零步够着三格正面墙），下一回合就能出包。待命位走不到
+    就去待命位站着（`core._wall_post`：那里零步够着三格正面墙），下一回合就能出包。待命位走不到
     ⇒ 出门挖矿，不原地干等。只发 `move` / `use`。"""
     target = _repair_target(turn)
     if target is not None:
@@ -169,7 +191,7 @@ def repair_wall(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> Non
             return
         if q.step(role, target, with_paths=True, reserve=True):
             return
-    post = _repair_post(turn, role)
+    post = _wall_post(turn, role)
     if post is not None:
         if role.pos == post:
             return
@@ -193,34 +215,6 @@ def _repair_target(turn: Turn) -> Pos | None:
 def _threatened(cell: Pos, turn: Turn) -> bool:
     """有活机器人够得着这一格吗（切比雪夫 ≤ `ROBOT_RANGE`）。"""
     return any(cell.dist(r.pos) <= ROBOT_RANGE for r in _alive(_foe_robots(turn)))
-
-
-def _repair_post(turn: Turn, role: Worker) -> Pos | None:
-    """待命位：正面墙**靠基地那一列**里能站的格，取"到最远那格最近 → 邻接最多 → 坐标序"。
-
-    那一列（左半基地 ⇒ 正面列 `x=13` 的后一列 `x=12`）中段一格同时够着 3 格正面墙 ⇒ 待命时
-    这一步不白走。候选全被占 / 出图 ⇒ `None`（调用方退到挖矿）。⚠️ 判据要**把自己脚下那格
-    除外**（`blocked` 里混着我自己）：不除外就会把自己站着的格子判成"不可站"，每回合都往旁边
-    挪一格、永远来回晃。每回合现算，不带跨回合状态。"""
-    front = front_wall_cells(turn)
-    station = turn.map.station
-    if not front or station is None:
-        return None
-    # 靠基地那一列：正面列在基地的哪一侧，就往回退一格
-    back = front[0].x - (1 if front[0].x > station.x else -1)
-    width, height = turn.map.size
-    blocked = turn.map.blocked - {role.pos}
-    cells = {
-        Pos(back, y)
-        for y in range(min(f.y for f in front) - 1, max(f.y for f in front) + 2)
-        if 0 <= back < width and 0 <= y < height and Pos(back, y) not in blocked
-    }
-    if not cells:
-        return None
-    return min(
-        cells,
-        key=lambda p: (max(p.dist(f) for f in front), -sum(1 for f in front if p.dist(f) <= 1), p),
-    )
 
 
 def _cooling(weapon: Weapon, round_no: int) -> bool:

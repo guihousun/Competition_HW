@@ -21,6 +21,8 @@
 ① 开拓者 且 phaseTask 非空 ⇒ 钉死在任务点上（昼夜无关，永远最先；夜里一个工人都没有时例外，见 §3.1）
 ② 第 0 级 收工门 `day.BACK_TO_POST`：**只有这一夜的炮手走它**，且
    `回岗步数 + POST_MARGIN(3) ≥ 白天剩余` ⇒ 回那个共用的操作位（步数实时算）
+②′ `night.hold_the_wall`：**这一夜的修墙工**（`night.repairer`）同样到点先回待命位
+   （正面墙后方那一列，`core._wall_post`）—— 天黑才发现人还在盒外就来不及了
 ③ 白天·开拓者：有任务点就去接（`task.take_task`）；全空 ⇒ 跑"买券 → 立刻用"的差事，
    都没得干 ⇒ 去最该等的地方站着（`day.wait_errand`）
 ④ 白天·工人：走 `day.DAY_CHAIN` 那几级 —— 建武器（1）→ 建墙（2）→ 攒修墙包（2.5，第 3 天起）
@@ -151,7 +153,7 @@
   **一个包都没有 ⇒ 不派**（那个工人照旧走下面的 2 出门挖矿）。
 - 1.5.2、干什么：正面列（`core.front_wall_cells`）里血 < `core.WALL_REPAIR_HP`(200) **且够得着**
   （有活机器人切比雪夫 ≤ `ROBOT_RANGE`(3)）的那一格，取血最少的 ⇒ 贴着一格内 `use WallFixer`
-  回满血；没有要修的 ⇒ 守在**正面墙靠基地那一列**的待命位（`night._repair_post`：零步够着 3 格，
+  回满血；没有要修的 ⇒ 守在**正面墙靠基地那一列**的待命位（`core._wall_post`：零步够着 3 格，
   两个角格要 1–3 步）；待命位也走不到 ⇒ 出门挖矿，不原地干等。
 - 1.5.3、⚠️ **被打穿的墙它救不了**（血 0 的那格在 `model._walls` 就丢了、夜里又不能 `build`）
   ⇒ 那是白天 `_ring` 的缺口账。只发 `move` / `use`。
@@ -294,7 +296,7 @@
 
 ## 5. 常量与旋钮
 
-⚠️ 大多在 `game/core.py` 顶部（第 121 步起；`POST_MARGIN` / `DETOUR_MAX` / `WEAPONS_BY_SITE` /
+⚠️ 大多在 `game/core.py` 顶部（第 121 步起；`DETOUR_MAX` / `WEAPONS_BY_SITE` /
 `SELLABLE` / `BAG_SELL_AT` / `REPAIR_STOCK_FROM_DAY` / `REPAIR_PACKS` 在 `game/day.py` 顶部，
 `ROCKET_COOLDOWN` / `DANGER` / `WALL_REPAIR_FROM_DAY` / `ROBOT_RANGE` 在 `game/night.py` 顶部）。
 逐条说明见 `strategy.md` §7，此处不重抄。

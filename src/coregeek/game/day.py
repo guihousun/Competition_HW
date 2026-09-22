@@ -12,6 +12,7 @@ from collections.abc import Iterator, Mapping
 
 from ..protocol import actions  # 指令只能经 Action 产出
 from .core import (
+    POST_MARGIN,
     VOUCHER,
     VOUCHER_CHAIN,
     VOUCHER_NAMES,
@@ -39,11 +40,6 @@ from .world import ROUNDS_PER_DAY, Turn, Weapon
 #: 三座武器的种类，下标与 `grid.weapon_sites()` 的落点一一对应：**全是火箭**（用户口径）——
 #: 三座共用一个操作位（`(back_x, by)`），一个角色站着按冷却轮换就能全操，其余角色腾出去挖矿。
 WEAPONS_BY_SITE = ("rocket", "rocket", "rocket")
-
-
-#: 收工门的容错余量（回合）：`回岗步数 + POST_MARGIN ≥ 白天剩余` 就动身。
-#: 3 是拍的（用户口径"3 回合余量"；"固定 5 回合、不看距离"那一版没有容错，用户报"问题很大"）。
-POST_MARGIN = 3
 
 
 #: "顺路卖矿"的绕路上限（格，**切比雪夫**）：去矿的路上离小贩这么近就顺手卖掉。

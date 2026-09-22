@@ -47,6 +47,12 @@ WALL = "wall"
 WALL_COST = 1
 
 
+#: 收工门的容错余量（回合）：`回到岗位的步数 + POST_MARGIN >= 本段剩余回合` 就动身。
+#: 3 是拍的（用户口径"3 回合余量"；"固定 5 回合、不看距离"那一版没有容错，用户报"问题很大"）。
+#: 白天两处共用：`day.BackToPost`（夜里上炮的那个人回岗位）与 `night.hold_the_wall`（修墙工回待命位）。
+POST_MARGIN = 3
+
+
 #: 围墙该处理了的血量（绝对值）。两条线共用这一个判据：白天 `day._weak_l1` 对 L1 拆了重砌，
 #: 夜里 `night.repair_wall` 用修复包回满（不分等级）。
 #: 为什么是绝对值、为什么是 200：机器人伤害（5/10/20/40）不吃墙的等级，而机器人的攻击距离是 3
@@ -105,6 +111,34 @@ def front_wall_cells(turn: Turn) -> tuple[Pos, ...]:
     if station is None:
         return ()
     return wall_cells(station, turn.map.size[0])[:FRONT_WALLS]
+
+
+def _wall_post(turn: Turn, role: BaseRole) -> Pos | None:
+    """正面墙**靠基地那一列**里的待命位：夜里修墙工守着的格，也是白天回待命位的目标。
+
+    取"到最远那格最近 → 邻接最多 → 坐标序"（左半基地 ⇒ `(12,23)`：中段一格零步够着 3 格正面墙，
+    两个角格要 1–3 步）。候选全被占 / 出图 ⇒ `None`。⚠️ 判据要**把自己脚下那格除外**
+    （`blocked` 里混着我方角色）：不除外就会把自己站着的格子判成"不可站"，每回合往旁边挪一格、
+    永远来回晃。每回合现算，不带跨回合状态。"""
+    front = front_wall_cells(turn)
+    station = turn.map.station
+    if not front or station is None:
+        return None
+    # 靠基地那一列：正面列在基地的哪一侧，就往回退一格
+    back = front[0].x - (1 if front[0].x > station.x else -1)
+    width, height = turn.map.size
+    blocked = turn.map.blocked - {role.pos}
+    cells = {
+        Pos(back, y)
+        for y in range(min(f.y for f in front) - 1, max(f.y for f in front) + 2)
+        if 0 <= back < width and 0 <= y < height and Pos(back, y) not in blocked
+    }
+    if not cells:
+        return None
+    return min(
+        cells,
+        key=lambda p: (max(p.dist(f) for f in front), -sum(1 for f in front if p.dist(f) <= 1), p),
+    )
 
 
 class _Move(NamedTuple):

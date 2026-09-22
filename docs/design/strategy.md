@@ -126,6 +126,7 @@ app.handle(payload)
 |---|---|---|---|---|
 | ① | **钉死** `TASK` | 开拓者 **且** `phase_task` 非空 **且人手够**（白天恒够；夜里看 `_short_handed`） | `task.answer_task`：原样交手上的答案（**不移动**） | 非开拓者；`phase_task` 空；**夜里一个工人都没有**（没人能顶炮位 ⇒ 弃任务回炮位，落夜里的 ④） |
 | ② | **收工门** `GO_HOME`（`day.BACK_TO_POST`，第 0 级） | 白天 **且是这一夜的炮手**（`utils._night_gunner`）**且** `回岗步数 + POST_MARGIN(3) ≥ 白天剩余`（步数实时算） | **只发 `move`** 往**那一个操作位**挪（`core._post_spots`：三座火箭共用一个位、要站上去）；已在岗 ⇒ 先用券、用不上就待命 | 还没到窗口；**不是炮手**（工人白天在矿边干到天黑、不回炮位） |
+| ②′ | **修墙工回待命位** `HOLD_THE_WALL`（`night.hold_the_wall`，第 145 步） | 白天 **且 `role.id == night.repairer(...)`**（第 4 夜起 + 手里有包）**且** `回待命位步数 + POST_MARGIN(3) ≥ 白天剩余` | **只发 `move`** 往正面墙后方那个待命位（`core._wall_post`：中段一格零步够着 3 格正面墙）；已在待命位 ⇒ 待命（什么都不发） | 还没到窗口；不是这一夜的修墙工（没包 / 第 4 夜之前） |
 | ③ | **开拓者的白天** `DAY_PIONEER`（`planner._pioneer_errand`，**夜里清场后同一支**） | `isinstance(role, Pioneer)` | 有任务点 ⇒ `task.take_task`；全空 ⇒ `day.voucher_errand`（§3），它也说没事干 ⇒ `day.wait_errand`（去最该等的地方站着） | 非开拓者 |
 | ④ | **夜里** `NIGHT` | `not is_day` | 见 §1.3 —— 夜里**必然**停在这一级 | 白天 |
 | ⑤ | **工人的白天** `DAY_WORKER` | 其余（工人） | 走 `day.DAY_CHAIN` 那四级（§1.4） | —— 这级**必然**给出结论（最差是空指令待命） |
@@ -160,7 +161,7 @@ app.handle(payload)
 |---|---|---|---|
 | N1 | **基地升级** `STATION_USE` | 持基地券 **且** `station_health` 已知 **且** 基地血 < 满血 1/4 | 贴基地 `use`（升级 + 回满血一次到位；**当回合放弃开火**）。⚠️ 第 130 步起**券链里没有基地券** ⇒ 这条**实际进不去**（代码留着，改了链就复活） |
 | N2 | **出门采矿** `NIGHT_MINE` | **炮手之外的工人**（没派出去修墙的那些） | `night.mine_ore`：去采**实际单价最高**的那座矿（`core._priciest_ore`，与白天同一条排序），囤到第二天由白天那条链卖掉。**不卖、不买、不回炮位** —— 只发 `collect` / `move`（`build` / `remove` 夜里非法）。⚠️ **机器人还活着时按 `_safe` 挑矿**（把机器人周围切比雪夫 ≤ `DANGER`(2) 的格子当走不通）、迈步那一步把它们当**软避让**（绕不开照走）—— 用户口径"保证安全" |
-| N2.5 | **修墙** `REPAIR`（第 142 步） | **第 4 夜起** + 非炮手工人里**手里真有修复包**的那个（`night.repairer`：包多的优先、并列按 id） | `night.repair_wall`：正面列里血 < `WALL_REPAIR_HP`(200) **且够得着**的那格 ⇒ 贴着一格内 `use WallFixer` 回满；没有要修的 ⇒ 守在**正面墙靠基地那一列**的待命位（`night._repair_post`）；待命位也去不了 ⇒ 出门挖矿。**没包的夜里不派**（那个工人照旧走 N2）。只发 `move` / `use` |
+| N2.5 | **修墙** `REPAIR`（第 142 步） | **第 4 夜起** + 非炮手工人里**手里真有修复包**的那个（`night.repairer`：包多的优先、并列按 id） | `night.repair_wall`：正面列里血 < `WALL_REPAIR_HP`(200) **且够得着**的那格 ⇒ 贴着一格内 `use WallFixer` 回满；没有要修的 ⇒ 守在**正面墙靠基地那一列**的待命位（`core._wall_post`）；待命位也去不了 ⇒ 出门挖矿。**没包的夜里不派**（那个工人照旧走 N2）。只发 `move` / `use` |
 | N3 | **操炮** `DEFEND` | **炮手一个人**（`utils._night_gunner`：开拓者没被钉死就是它，否则名册第一个工人） | 认领那个**唯一的操作位**（三座火箭共成一组），走到它上面：**先开火、打不了才挪岗**（见 §5） |
 
 ⚠️ N1 / N2 是**当回合放弃开火**，不是"打不了才退而求其次" —— 别把它们读成兜底。
@@ -551,7 +552,7 @@ assistant 消息记原文（**发命令/交答案那轮没有 prompt，回复照
 
 ## 7. 旋钮（改策略先看这张表）
 
-大多在 `game/core.py` 顶部；几个例外：`POST_MARGIN` / `DETOUR_MAX` / `WEAPONS_BY_SITE` /
+大多在 `game/core.py` 顶部；几个例外：`DETOUR_MAX` / `WEAPONS_BY_SITE` /
 `SELLABLE` / `BAG_SELL_AT` / `REPAIR_STOCK_FROM_DAY` / `REPAIR_PACKS` 在 `game/day.py`，
 `ROCKET_COOLDOWN` / `DANGER` / `WALL_REPAIR_FROM_DAY` / `ROBOT_RANGE` 在 `game/night.py`。
 

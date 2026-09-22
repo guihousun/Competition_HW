@@ -239,7 +239,8 @@ src/coregeek/
     │                 `WALL_VOUCHER`/**`VOUCHER_CHAIN`（五步步骤表 `(券名, 目标组, 目标等级)`）**/
     │                 `VOUCHER_NAMES`/**`WALL_REPAIR_HP`(200) 与 `needs_repair`（修墙 / 拆墙两条线
     │                 共用的那一个阈值：血 < 它 ⇒ 夜里用修复包回满、白天对 L1 拆了重砌）**/
-    │                 **`WALL_FIXER`（"WallFixer"，10 金）**/**`FRONT_WALLS`(6) 与 `front_wall_cells`**）
+    │                 **`WALL_FIXER`（"WallFixer"，10 金）**/**`FRONT_WALLS`(6) 与 `front_wall_cells`**/
+    │                 **`POST_MARGIN`(3) 与 `_wall_post`（白天回岗 / 回待命位两处共用）**）
     │                 + 走路账与指令出口（`_Move`/`_Queue`/`_emit`）
     │                 + **白天**的黑板 `_Ctx` + 状态基类 `State`
     │                 + **挖矿排序 `_priciest_ore`**（白天第 1/3 级与夜里那条共用一条：按**实际
@@ -295,8 +296,8 @@ src/coregeek/
     │                 `repair_wall`（第 4 夜起，`WALL_REPAIR_FROM_DAY`）：目标 = 正面列 ∩ 活墙 ∩
     │                 `core.needs_repair` ∩ **有活机器人够得着**（机器人攻击距离 `ROBOT_RANGE`(3)），
     │                 取血最少的那格 ⇒ 贴着一格内 `use WALL_FIXER` 回满；没有要修的 ⇒ 守在**正面墙
-    │                 靠基地那一列**的待命位上（`_repair_post`：零步够着三格，角上那格多走 1–3 步）；
-    │                 待命位也走不到 ⇒ 出门挖矿。⚠️ 候选格判据要**把自己脚下那格从 `blocked` 里
+    │                 靠基地那一列**的待命位上（`core._wall_post`：零步够着三格，角上那格多走 1–3 步）；
+    │                 待命位也走不到 ⇒ 出门挖矿；**白天到点还有一道 `hold_the_wall`**（`planner._day_intents` 的 ②′）先把人叫回这里。⚠️ 候选格判据要**把自己脚下那格从 `blocked` 里
     │                 摘掉**（不摘会每回合往旁边挪、来回晃 —— 与 `_ring` 同一条坑）。谁去：`repairer`
     │                 = 非炮手工人里**手里真有包**的那个（包多的优先，并列按 id）；**没包就不派**，
     │                 那个工人照旧出门挖矿。只发 `move` / `use`。
@@ -342,7 +343,9 @@ src/coregeek/
                       一个逐角色循环、各自的账，**互不知道对方的存在**（夜里的账只是两个局部集合）。
                       **白天那条**（`_day_intents`，先命中先定夺，改序改这里）：
                       ① 开拓者被任务钉死（`task.answer_task`，白天人手恒够 ⇒ 不问 `_short_handed`）→
-                      ② `day.BACK_TO_POST` 收工闸门（只有炮手一个人走）→ ③ 开拓者走
+                      ② `day.BACK_TO_POST` 收工闸门（只有炮手一个人走）→ ②′ **这一夜的修墙工**
+                      （`night.repairer`）走 `night.hold_the_wall`：到点先回正面墙后方的待命位
+                      （`core._wall_post`）→ ③ 开拓者走
                       **`_pioneer_errand`**（`task.take_task` / 买券 / `day.wait_errand` 去该等的地方
                       站着）→ ④ 工人走 `day.DAY_CHAIN`。
                       **夜里那条**（`_night_intents`）：① 被任务钉死的开拓者（**人手够才钉得住**，

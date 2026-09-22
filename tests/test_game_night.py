@@ -13,13 +13,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _reset_ledgers  # noqa: E402
 from _fixtures import _terrain  # noqa: E402
-from coregeek.game import night  # noqa: E402
+from coregeek.game import core, night  # noqa: E402
 from coregeek.game.grid import Pos, wall_cells, weapon_sites  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.core import WALL, WALL_FIXER  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import Robot, Turn, Wall, Weapon  # noqa: E402
+from coregeek.game.world import ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
 
 
@@ -875,7 +875,10 @@ class WallRepairTest(unittest.TestCase):
         weapons: tuple[Weapon, ...] = (),
         gaps: frozenset[Pos] = frozenset(),
     ) -> Turn:
-        ring = wall_cells(self.BASE, 41)
+        # 第 3 天起环是 16 格（`utils._sealed_back` 补上背面两个角格）—— 白天那条链按 `_ring`
+        # 算缺口，铺少了那两个角格会被当成缺口、把人支去砌墙（与 `RepairStockTest` 同一个坑）
+        sealed = round_no > 2 * ROUNDS_PER_DAY
+        ring = wall_cells(self.BASE, 41, sealed=sealed)
         grid: dict[Pos, str] = {c: WALL for c in ring if c not in gaps}
         grid[self.BASE] = "station"
         grid.update(ores or {})
@@ -982,7 +985,7 @@ class WallRepairTest(unittest.TestCase):
         """没有要修的 ⇒ 去正面墙**后方那一列**待命（不是盒外、也不是炮位）。"""
         worker = Worker(2, Pos(20, 20), {WALL_FIXER: 1})
         turn = self._night(worker)
-        self.assertEqual(night._repair_post(turn, worker), self.POST, "待命位在盒内那一列")
+        self.assertEqual(core._wall_post(turn, worker), self.POST, "待命位在盒内那一列")
         cmds = plan(turn)
         cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
         self.assertLess(cell.dist(self.POST), Pos(20, 20).dist(self.POST), "这一步朝待命位去")
@@ -994,6 +997,41 @@ class WallRepairTest(unittest.TestCase):
         cmds = plan(self._night(worker, damaged={self.FRONT: (140, 1)}, weapons=(gun,)))
         self.assertEqual(cmds["90001"]["action"], "attack", f"炮手照旧开火：{cmds}")
         self.assertEqual(cmds["2"]["action"], "use")
+
+    def test_the_repair_worker_walks_back_before_dark(self):
+        """天黑前先回待命位（照收工门的思路）：白天只剩 1 回合 + 手里有包 ⇒ 往正面墙后方挪。
+
+        金币给 0 是为了让"这一条 move"只可能来自回待命位那道闸门（不然他会朝商店走）。
+        """
+        worker = Worker(2, Pos(20, 20), {WALL_FIXER: 3})
+        turn = self._turn(Pioneer(1, Pos(12, 24)), worker, round_no=460)  # 第 4 天最后一回合
+        cmds = plan(turn._replace(gold=0))
+        cell = Pos(cmds["2"]["targetPos"][0]["x"], cmds["2"]["targetPos"][0]["y"])
+        self.assertLess(cell.x, worker.pos.x, f"朝盒子那一侧走（不是在朝商店）：{cell}")
+        self.assertLess(cell.dist(self.POST), worker.pos.dist(self.POST), "朝待命位去")
+
+    def test_an_early_day_does_not_call_him_back(self):
+        """白天还早（剩 70 回合）就不叫他回 —— 他照旧干自己的活。"""
+        worker = Worker(2, Pos(20, 20), {WALL_FIXER: 3})
+        turn = self._turn(Pioneer(1, Pos(12, 24)), worker, round_no=391)  # 第 4 天第一回合
+        turn = turn._replace(gold=0)
+        self.assertNotIn("2", plan(turn), "白天还早就该接着干活，不是回待命位站着")
+
+    def test_a_worker_without_a_pack_is_never_called_back(self):
+        """没包的那个人不归这条线管（他照旧采矿；这一夜也不会派他修墙）。"""
+        worker = Worker(2, Pos(20, 20), {})
+        turn = self._turn(Pioneer(1, Pos(12, 24)), worker, round_no=460)
+        turn = turn._replace(gold=0)
+        self.assertIsNone(night.repairer(turn, 1))
+        self.assertNotIn("2", plan(turn))
+
+    def test_before_the_fourth_night_nobody_is_called_back(self):
+        """第 4 夜之前不派修墙工 ⇒ 那份包还在背包里，人不往墙边走。"""
+        worker = Worker(2, Pos(20, 20), {WALL_FIXER: 3})
+        turn = self._turn(Pioneer(1, Pos(12, 24)), worker, round_no=330)  # 第 3 天最后一回合
+        turn = turn._replace(gold=0)
+        self.assertIsNone(night.repairer(turn, 1))
+        self.assertNotIn("2", plan(turn))
 
     def test_a_pinned_pioneer_hands_the_repair_job_to_the_other_worker(self):
         """开拓者被任务钉死 ⇒ 炮手换成名册第一个工人（没包），持包的那个才是修墙工。"""

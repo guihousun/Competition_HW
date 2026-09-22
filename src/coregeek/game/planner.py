@@ -60,7 +60,9 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
     """白天那条链，逐角色跑、先命中先定夺：
 
     ① 开拓者被任务钉死（白天人手恒够，`_short_handed` 恒假）→ ② `day.BACK_TO_POST` 收工门
-    （到点就回岗位）→ ③ 开拓者走 `_pioneer_errand` → ④ 工人走 `day.DAY_CHAIN` 那四级。
+    （到点就回岗位）→ ②′ 这一夜的修墙工（`night.repairer`）走 `night.hold_the_wall`：到点先
+    回正面墙后方的待命位（天黑才发现人还在盒外就晚了）→ ③ 开拓者走 `_pioneer_errand` →
+    ④ 工人走 `day.DAY_CHAIN` 那几级。
 
     黑板装在 `_Ctx` 里逐角色顺序累计、不跨回合；环缺口按在场工人数切段也在这里。"""
     cmds = q.cmds
@@ -74,6 +76,8 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
         sites_pending=pending,
         build_plan=day.assign_sites(turn, pending),
     )
+    # 这一夜要修墙的那个人（第 4 夜起 + 手里有包）：天黑前得先回正面墙后方的待命位
+    repairer = night.repairer(turn, _night_gunner(turn))
 
     # 环缺口按在场工人数切段（A 领前段、B 领后段；一个工人 ⇒ 整段）
     workers_no = [r for r in turn.roles if isinstance(r, Worker)]
@@ -90,6 +94,10 @@ def _day_intents(turn: Turn, q: _Queue) -> None:
 
         # 第 0 级：到收工窗口就回岗位（判据只看还剩多少回合）
         if day.BACK_TO_POST.run(role, ctx):
+            continue
+
+        # 修墙工的先手：到点先往正面墙后方的待命位挪（与收工门同一个思路，几何共用 `core._wall_post`）
+        if role.id == repairer and night.hold_the_wall(role, turn, q):
             continue
 
         if isinstance(role, Pioneer):
