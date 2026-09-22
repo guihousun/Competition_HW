@@ -18,11 +18,11 @@ from collections.abc import Callable, Mapping, Set
 from typing import Any, NamedTuple
 
 from ..protocol import actions  # 指令只能经 Action 产出
-from .grid import STEPS, Pos
+from .grid import STEPS, Pos, wall_cells
 from .path import steps_between
 from .roles import BaseRole, Worker
 from .utils import _passable
-from .world import Turn, Weapon
+from .world import Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -45,6 +45,27 @@ _collected: dict[Pos, int] = {}
 #: 围墙的 `name` 与代价：石头×1，从建造者自己的背包扣（不是全队共享），拆了不返还。
 WALL = "wall"
 WALL_COST = 1
+
+
+#: 围墙该处理了的血量（绝对值）。两条线共用这一个判据：白天 `day._weak_l1` 对 L1 拆了重砌，
+#: 夜里 `night.repair_wall` 用修复包回满（不分等级）。
+#: 为什么是绝对值、为什么是 200：机器人伤害（5/10/20/40）不吃墙的等级，而机器人的攻击距离是 3
+#: ⇒ 同一格正面墙会被它身后一列里的多台同时啃 ⇒ "能不能在被打死之前修上"只由**绝对剩余血量**
+#: 决定。阈值要盖过 单格单回合伤害 × 修墙延迟：最坏单格 80/回合（BOSS + 两座大型）、延迟 2
+#: 回合（待命位零步够着三格，角上那格多走一步）⇒ 200 撑得住 2.5 回合。再往上只多撑一回合，
+#: 却让"够格修"的格子同时变多 —— 一个工人一回合只修一格，会排队。
+WALL_REPAIR_HP = 200
+
+
+#: 围墙修复包（武器商店消耗品，10 金）：站在待修复围墙一格范围内 ⇒ 目标那一格回满血。
+WALL_FIXER = "WallFixer"
+
+
+def needs_repair(wall: Wall) -> bool:
+    """这面墙该处理了吗：血量已知（`>= 0`）且低于 `WALL_REPAIR_HP`。
+
+    L1/L2/L3 一个口径 —— 动不动它只由绝对血量决定。血量缺失（-1）⇒ 不碰（不知道就别动）。"""
+    return 0 <= wall.health < WALL_REPAIR_HP
 
 
 #: 升级券的商品名（`weaponShopList.name` 那套词；价目逐回合从载荷读，样例实证 100/150）。
@@ -71,6 +92,18 @@ VOUCHER_CHAIN = (
 #: 链上出现过的券名（按优先级去重）—— 扫"手里有没有券"用它（`VOUCHER_CHAIN` 是步骤表，
 #: 逐条取 `step[0]` 会把整条元组当键，一张券都认不出来）。
 VOUCHER_NAMES = tuple(dict.fromkeys(step[0] for step in VOUCHER_CHAIN))
+
+
+#: 正面列（面向机器人的那一竖排）有几格 = `wall_cells` 的前几格（正面列排第一位）。
+FRONT_WALLS = 6
+
+
+def front_wall_cells(turn: Turn) -> tuple[Pos, ...]:
+    """正面列那 6 格 —— 券链给它们升级、夜里守着它们修。基地没了 ⇒ 空元组。"""
+    station = turn.map.station
+    if station is None:
+        return ()
+    return wall_cells(station, turn.map.size[0])[:FRONT_WALLS]
 
 
 class _Move(NamedTuple):

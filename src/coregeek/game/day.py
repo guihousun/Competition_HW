@@ -26,8 +26,10 @@ from .core import (
     _priciest_ore,
     _steps_to_post,
     _weapon_groups,
+    front_wall_cells,
+    needs_repair,
 )
-from .grid import STEPS, Pos, box_cells, wall_cells, weapon_sites
+from .grid import STEPS, Pos, box_cells, weapon_sites
 from .path import steps_between
 from .roles import BaseRole, Worker
 from .utils import _night_gunner, _passable, _ring
@@ -46,15 +48,8 @@ POST_MARGIN = 3
 #: "顺路卖矿"的绕路上限（格，**切比雪夫**）：去矿的路上离小贩这么近就顺手卖掉。
 DETOUR_MAX = 2
 
-#: 面向敌人的那一列墙有几格（= `wall_cells` 的前几格，正面列）。券链给它们升级。
-FRONT_WALLS = 6
-
 #: 背包里售价最高的那种矿攒到这么多件就先去卖（用户口径"超过 15 个"）。
 BAG_SELL_AT = 15
-
-#: L1 围墙血低于这个数就直接拆了重砌（用户口径 200）。⚠️ **只认 L1**：L2/L3 拆了只能重砌回
-#: L1（掉一级），它们的血量交给升级券（升级顺带回满血）。
-WEAK_WALL_HP = 200
 
 
 #: 能卖给小贩的矿：三种（含多余的石头），挑哪种由 `Turn.vendor_prices` 现算。
@@ -221,9 +216,9 @@ class RaiseForWeapons(State):
 class WallLine(State):
     """第 2 级：武器建满之后，把环补齐 —— 只看 L1。
 
-    不完备有两种：**缺口**（那一格没墙）与 **L1 弱墙**（血 < `WEAK_WALL_HP`(200) ⇒ 直接拆了
-    重砌：1 块石头换满血，比 20 金的升级券便宜）。L2/L3 的损伤**不阻塞**这一级（升级券顺带
-    回满血，见第 3 级）。
+    不完备有两种：**缺口**（那一格没墙）与 **L1 弱墙**（`needs_repair`：血 < `WALL_REPAIR_HP`(200)
+    ⇒ 直接拆了重砌：1 块石头换满血，比 20 金的升级券便宜）。L2/L3 的损伤**不阻塞**这一级
+    （升级券顺带回满血，见第 3 级；夜里还有 `night.repair_wall` 用修复包）。
 
     石头够 ⇒ 先拆该拆的弱墙、再砌缺口；石头不够 ⇒ 算"补齐这一摊还差几块"，挑一趟**最省回合**
     的采石（去 + 回最短的石矿），采够了再回工地砌。**不留存货**（旧口径的 `STONE_RESERVE` 删了）。"""
@@ -398,8 +393,8 @@ def _step_targets(turn: Turn, group: str, want: int) -> tuple[Pos, ...]:
     """一个步骤现在能打的目标格（**血少的在前**、同血取坐标序）；该等级的一个都不剩 ⇒ 空元组。
 
     `group` 见 `core.VOUCHER_CHAIN`：`weapon-side` = 非角上那两座火箭、`weapon-corner` = 角上
-    那座、`wall-front` = 面向敌人的一列墙（`wall_cells` 前 `FRONT_WALLS` 格，正面列排第一位）。
-    ⚠️ 血量未知（-1）排最后：不知道就别优先动它。"""
+    那座、`wall-front` = 面向敌人的一列墙（`core.front_wall_cells` = `wall_cells` 前 `FRONT_WALLS`
+    格，正面列排第一位）。⚠️ 血量未知（-1）排最后：不知道就别优先动它。"""
     station = turn.map.station
     if station is None:
         return ()
@@ -409,7 +404,7 @@ def _step_targets(turn: Turn, group: str, want: int) -> tuple[Pos, ...]:
         picks = {sites[i] for i in idx if i < len(sites)}
         guns = [w for w in turn.weapons if w.pos in picks and w.level == want - 1]
         return tuple(w.pos for w in sorted(guns, key=lambda w: (_health_rank(w), w.pos)))
-    front = set(wall_cells(station, turn.map.size[0])[:FRONT_WALLS])
+    front = set(front_wall_cells(turn))
     walls = [w for w in turn.walls if w.pos in front and w.level == want - 1]
     return tuple(w.pos for w in sorted(walls, key=lambda w: (_health_rank(w), w.pos)))
 
@@ -660,15 +655,15 @@ def _use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
 
 
 def _weak_l1(turn: Turn) -> tuple[Pos, ...]:
-    """环上**血低于 `WEAK_WALL_HP`(200) 的 L1 墙**，按坐标序（可复现）。
+    """环上**该处理了的 L1 墙**（`core.needs_repair`：血 < `WALL_REPAIR_HP`(200)），按坐标序。
 
-    ⚠️ 只认 L1（用户拍板）：L2/L3 拆了只能重砌回 L1（掉一级），不划算 —— 它们的血量交给第 3 级
-    的升级券（升级同时回满血）。已毁（血 0）的墙在 `model._walls` 就丢了 ⇒ 它在那里算"缺口"。
-    `health` 缺失（-1）⇒ 未知 ⇒ 不拆。"""
+    ⚠️ 只认 L1（用户拍板）：L2/L3 拆了只能重砌回 L1（掉一级），它们的血量交给券链的升级券与
+    夜里的修复包（升级、修复都回满血）。已毁（血 0）的墙在 `model._walls` 就丢了 ⇒ 它在那里算
+    "缺口"。`health` 缺失（-1）⇒ 未知 ⇒ 不拆。"""
     return tuple(
         w.pos
         for w in sorted(turn.walls, key=lambda w: w.pos)
-        if w.level == 1 and 0 <= w.health < WEAK_WALL_HP
+        if w.level == 1 and needs_repair(w)
     )
 
 

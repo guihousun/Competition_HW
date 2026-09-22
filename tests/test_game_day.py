@@ -989,9 +989,9 @@ class PathReserveTest(unittest.TestCase):
 class DemolishTest(unittest.TestCase):
     """第 2 级的另一半：**L1 弱墙直接拆了重砌**（用户口径 2）。
 
-    弱墙 = 血 < `WEAK_WALL_HP`(200)。拆一回合、砌一回合 = 2 回合 1 块石头，比 20 金的围墙升级券
+    弱墙 = 血 < `WALL_REPAIR_HP`(200)。拆一回合、砌一回合 = 2 回合 1 块石头，比 20 金的围墙升级券
     便宜。**L2/L3 的损伤不碰**：拆了只能重砌回 L1（掉一级），它们的损伤留给第 3 级的升级券
-    （升级同时回满血）。
+    （升级同时回满血）与夜里的修复包（`night.repair_wall`）。
     """
 
     BASE = Pos(10, 24)
@@ -1022,9 +1022,9 @@ class DemolishTest(unittest.TestCase):
         raise AssertionError("没有邻居格")
 
     def test_a_level_one_wall_below_the_threshold_is_demolished(self):
-        """L1 墙血低于 `WEAK_WALL_HP`(200) ⇒ 直接拆（贴着就 `remove`），下一回合再砌回满血。"""
+        """L1 墙血低于 `WALL_REPAIR_HP`(200) ⇒ 直接拆（贴着就 `remove`），下一回合再砌回满血。"""
         spot = wall_cells(self.BASE, 41)[0]
-        wall = Wall(40000, spot, 199, 1)  # < WEAK_WALL_HP(200)
+        wall = Wall(40000, spot, 199, 1)  # < WALL_REPAIR_HP(200)
         cmd = plan(self._turn((wall,), stone=1, at=self._beside(spot)))[str(10010)]
         self.assertEqual(cmd["action"], "remove", f"该拆了重砌：{cmd}")
         self.assertEqual(Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]), spot)
