@@ -1,5 +1,5 @@
 {
-  "commit": "1747f1905edcf499b20cad8f72886c98305f1e5a",
+  "commit": "46494b0bf84781dccd5caadf36056a1e9e357ca8",
   "entry": "CoreGeek/main3.py",
   "entry_compat": [
     "CoreGeek/main.py",
@@ -224,9 +224,9 @@
       "source": "Demo/CoreGeek/src/agent/phase_maintenance.py"
     },
     {
-      "bytes": 3166,
+      "bytes": 3068,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/phase_supply.py",
-      "sha256": "7206b91630e8a7204c828283770a09c4dbb319acb803b7a14e42645f3cfcc0dd",
+      "sha256": "3f8d1a3620ff17ff6e25670ba05567d43b1f4942ded43446ea344bd7f2bfdaed",
       "source": "Demo/CoreGeek/src/agent/phase_supply.py"
     },
     {
@@ -296,9 +296,9 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 11598,
+      "bytes": 12507,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/strategy_config.py",
-      "sha256": "48bb2cf8989f036dc5607b590eb0480e7482e023d20af737d0516995a18db4cf",
+      "sha256": "54d46ecd611b79d6d996e3c389c28ce62a6025b32c68ba93c86442188f2c17b3",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -422,9 +422,9 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 11576,
+      "bytes": 13778,
       "path": "CoreGeek/Demo/CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "29403bb09dbdefa59721454f5552be95edf768dc726a8cf266ea461554943e1d",
+      "sha256": "81509a470d605af8dc38dc2e3afbec0b0af20cca38896c5854b01bf09e4f0f5c",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -759,10 +759,10 @@
       "source": "Demo/CoreGeek/src/agent/phase_maintenance.py"
     },
     {
-      "bytes": 3166,
+      "bytes": 3068,
       "generated": true,
       "path": "CoreGeek/src/agent/phase_supply.py",
-      "sha256": "7206b91630e8a7204c828283770a09c4dbb319acb803b7a14e42645f3cfcc0dd",
+      "sha256": "3f8d1a3620ff17ff6e25670ba05567d43b1f4942ded43446ea344bd7f2bfdaed",
       "source": "Demo/CoreGeek/src/agent/phase_supply.py"
     },
     {
@@ -843,10 +843,10 @@
       "source": "Demo/CoreGeek/src/agent/simulator.py"
     },
     {
-      "bytes": 11598,
+      "bytes": 12507,
       "generated": true,
       "path": "CoreGeek/src/agent/strategy_config.py",
-      "sha256": "48bb2cf8989f036dc5607b590eb0480e7482e023d20af737d0516995a18db4cf",
+      "sha256": "54d46ecd611b79d6d996e3c389c28ce62a6025b32c68ba93c86442188f2c17b3",
       "source": "Demo/CoreGeek/src/agent/strategy_config.py"
     },
     {
@@ -990,10 +990,10 @@
       "source": "Demo/CoreGeek/src/agent/twomatch.py"
     },
     {
-      "bytes": 11576,
+      "bytes": 13778,
       "generated": true,
       "path": "CoreGeek/src/agent/upgrade_itinerary.py",
-      "sha256": "29403bb09dbdefa59721454f5552be95edf768dc726a8cf266ea461554943e1d",
+      "sha256": "81509a470d605af8dc38dc2e3afbec0b0af20cca38896c5854b01bf09e4f0f5c",
       "source": "Demo/CoreGeek/src/agent/upgrade_itinerary.py"
     },
     {
@@ -1137,5 +1137,5 @@
     "version": "v1.0"
   },
   "schema": "competition-hw-submission/1",
-  "source_digest": "c2b6fc047074e8444b4643fda001486fc86260d681323dc33ef1c4440bcdfdfa"
+  "source_digest": "d4b3493e0d008adfe2a814856cf3eafe7b9cdbc08f20bf9954089c1267b1f904"
 }
