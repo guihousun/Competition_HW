@@ -14,6 +14,7 @@ from .roles import BaseRole
 #: 日历：130 回合 = 1 天（白天 70 + 夜晚 60），共 10 天。
 ROUNDS_PER_DAY = 130
 DAY_ROUNDS = 70
+DAYS = 10
 
 #: 三种武器工事的 `roleType`。与 `day.WEAPONS_BY_SITE` 不是一回事：那个是"三座炮建在哪、
 #: 各自是什么"（策略），这个是"哪些 roleType 算武器"（协议）。
@@ -155,6 +156,11 @@ class Turn(NamedTuple):
         return (self.round_no - 1) % ROUNDS_PER_DAY + 1
 
     @property
+    def day_no(self) -> int:
+        """第几天（1 起算，共 `DAYS` 天）—— 价格表按它取格。`round_no` 缺失（-1）⇒ 0。"""
+        return (self.round_no - 1) // ROUNDS_PER_DAY + 1 if self.round_no > 0 else 0
+
+    @property
     def is_day(self) -> bool:
         """白天吗？`within <= 70` 为白天（`build` 仅白天；`remove` 任务书没写，保守也仅
         白天）。`round_no` 缺失 ⇒ 判成夜晚 ⇒ 不建造。"""
@@ -207,10 +213,16 @@ class Turn(NamedTuple):
         def point(p: Pos) -> str:
             return f"({p.x},{p.y})"
 
+        def price(kind: str, name: str) -> str:
+            # 矿价逐回合从载荷读（新闻只钉未来天）；缺失打成 ? —— 与金币同一条口径
+            value = self.vendor_prices.get(kind, -1)
+            return f"{name}{value if value >= 0 else '?'}"
+
         return "\n".join(
             [
                 # 回合号在最前 —— `logging` 的时间戳前缀只加在第一条物理行上
                 f"\n【回合】 {round_no}（{when}） ｜ 【金币】 {gold} | "
+                f"【矿价】 {price(STONE, '石')}{price(IRON, '铁')}{price(COPPER, '铜')} | "
                 f"【武器】 {len(self.weapons)}/{len(self.roles)}："
                 f"{_listed(self.weapons, weapon) or '无'}",
                 f"【我方】 {_listed(self.roles, role, ' ｜ ') or '无'}",

@@ -62,12 +62,13 @@ class TurnSummaryTest(unittest.TestCase):
             ),
             robots=(Robot(Pos(4, 4), 40), Robot(Pos(5, 5), 800)),
             task_points=(Pos(14, 14), Pos(17, 17)),
+            vendor_prices={"stone": 1, "iron": 3, "copper": 5},
         )
         lines = _blocks(turn.summary())
         self.assertEqual(len(lines), 4)
         self.assertEqual(
             lines[0],
-            "【回合】 85（夜里） ｜ 【金币】 20 | 【武器】 3/3："
+            "【回合】 85（夜里） ｜ 【金币】 20 | 【矿价】 石1铁3铜5 | 【武器】 3/3："
             "10020 gatling(9,24)L1r4 10030 railgun(10,25)L1r7 10040 rocket(9,25)L1r∞c3",
         )
         self.assertEqual(
@@ -134,6 +135,14 @@ class DayNightTest(unittest.TestCase):
             with self.subTest(round_no=round_no):
                 self.assertIs(self._turn(round_no).is_day, day)
         self.assertFalse(self._turn(-1).is_day, "roundNo 缺失 ⇒ 判成夜里 ⇒ 不建造")
+
+    def test_day_no_counts_from_one(self):
+        """`day_no` 是价格表的下标来源（1 起算，共 10 天）：第 1 天 = 回合 1..130。
+        缺失的回合号 ⇒ 0 = 算不上第几天（价格表那一格永不读，见 `core._expected_price`）。"""
+        for round_no, day in ((1, 1), (130, 1), (131, 2), (260, 2), (1300, 10)):
+            with self.subTest(round_no=round_no):
+                self.assertEqual(self._turn(round_no).day_no, day)
+        self.assertEqual(self._turn(-1).day_no, 0)
 
 
 if __name__ == "__main__":

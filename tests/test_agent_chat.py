@@ -289,8 +289,21 @@ class SopParseTest(unittest.TestCase):
     def test_the_prices_reply_judgement_is_unchanged(self):
         """同一族的另一条通道（新闻查价）：裸 `<prices>` 块照旧解析，两条互不干扰。"""
         self.assertEqual(is_prices_reply("<prices>iron up\nstone flat</prices>"),
-                         {"iron": "up", "stone": "flat"})
+                         [("iron", "up", 1, 1), ("stone", "flat", 1, 1)])
         self.assertIsNone(is_prices_reply("<prices>iron up</prices><sop>x</sop>"))
+
+    def test_the_price_line_carries_a_window(self):
+        """行格式 `矿种 方向 起始天 天数` —— 数字缺省 1（旧的 `矿种 方向` 两词形式照旧合法），
+        同一种矿可以给两行（任务书那段塌方：又涨价又采不了）。"""
+        self.assertEqual(
+            is_prices_reply("<prices>iron up 1 2\niron stop 1 2\ncopper down 3</prices>"),
+            [("iron", "up", 1, 2), ("iron", "stop", 1, 2), ("copper", "down", 3, 1)],
+        )
+
+    def test_a_price_line_with_a_broken_window_falls_back_to_the_defaults(self):
+        """非数字的窗口位解析不出来 ⇒ 连方向一起丢（只会多出几行 `flat`，不会钉错天）。"""
+        self.assertEqual(is_prices_reply("<prices>iron sideways 1 2</prices>"), [])
+        self.assertEqual(is_prices_reply("<prices>回头再说</prices>"), [])
 
 
 if __name__ == "__main__":

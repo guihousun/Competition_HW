@@ -767,6 +767,24 @@ class NoTaskNightTest(unittest.TestCase):
         self.assertEqual(attacks, {"2"}, f"第一个工人操炮：{cmds}")
         self.assertIn(cmds["3"]["action"], ("move", "collect"), f"另一个工人挖矿：{cmds}")
 
+    def test_the_news_moves_tonights_shift_to_the_ore_that_pays_tomorrow(self):
+        """夜里那一支按**明天**的期望价挑矿（`night.mine_ore` 的 `ahead=1`）：新闻说明天铁涨
+        ⇒ 今夜去挖铁，哪怕今晚实测下来还是铜贵。
+
+        夜里采的货**第二天才卖** ⇒ 照今天的价挑等于拿过期行情下注。对照：白天那一支仍按当天
+        实测价（`ahead=0`，见 `test_game_core`），这是两条线唯一的分歧。
+        """
+        roles = (Pioneer(1, Pos(9, 24)), Worker(2, Pos(12, 28)))
+        today = self._turn(*roles)
+        cmd = plan(today)["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.COPPER), Pos(12, 28).dist(self.COPPER), "今天：铜贵")
+
+        core.record_news([("iron", "up", 1, 1)], today)  # 明天铁 3 × 2 = 6 > 铜 5
+        cmd = plan(self._turn(*roles))["2"]
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertLess(step.dist(self.IRON), Pos(12, 28).dist(self.IRON), f"明天铁贵 ⇒ 挖铁：{cmd}")
+
     def test_the_miners_keep_clear_of_the_robots(self):
         """挖矿的工人离机器人**至少 `night.DANGER`(2) 格**（用户口径"保证安全"）：最贵的铜矿
         就在机器人旁边 ⇒ 两个工人都去够得着的铁矿，不去送死。

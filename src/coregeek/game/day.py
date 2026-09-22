@@ -26,6 +26,7 @@ from .core import (
     _Ctx,
     _collect,
     _emit,
+    _mineable,
     _post_spots,
     _priciest_ore,
     _steps_to_post,
@@ -37,7 +38,7 @@ from .grid import STEPS, Pos, box_cells, weapon_sites
 from .path import steps_between
 from .roles import BaseRole, Worker
 from .utils import _night_gunner, _passable, _ring
-from .world import ROUNDS_PER_DAY, Turn, Weapon
+from .world import Turn, Weapon
 
 #: 三座武器的种类，下标与 `grid.weapon_sites()` 的落点一一对应：**全是火箭**（用户口径）——
 #: 三座共用一个操作位（`(back_x, by)`），一个角色站着按冷却轮换就能全操，其余角色腾出去挖矿。
@@ -328,7 +329,7 @@ def repair_errand(role: BaseRole, ctx: _Ctx) -> bool:
     turn = ctx.turn
     if ctx.weapon_gap or turn.round_no < 0:
         return False
-    if (turn.round_no - 1) // ROUNDS_PER_DAY + 1 < REPAIR_STOCK_FROM_DAY:
+    if turn.day_no < REPAIR_STOCK_FROM_DAY:
         return False
     workers = [r for r in turn.roles if isinstance(r, Worker)]
     if not workers or role.id != workers[-1].id:
@@ -377,7 +378,7 @@ def _pack_reserve(turn: Turn, ctx: _Ctx) -> int:
     `repair_errand` 同一套（第 3 天起、武器建满、有工人能背、价目查得到）。"""
     if ctx.weapon_gap or turn.round_no < 0:
         return 0
-    if (turn.round_no - 1) // ROUNDS_PER_DAY + 1 < REPAIR_STOCK_FROM_DAY:
+    if turn.day_no < REPAIR_STOCK_FROM_DAY:
         return 0
     if not any(isinstance(r, Worker) for r in turn.roles):
         return 0
@@ -581,7 +582,8 @@ def _mine_stone(role: Worker, ctx: _Ctx, weak: list[Pos]) -> bool:
     back_to = ctx.target if ctx.target is not None else weak[0]
     best: tuple[int, Pos] | None = None
     for pos, kind in turn.map.ores.items():
-        if kind != "stone" or pos in ctx.ore_taken:
+        # 石矿被新闻钉了停工 ⇒ 不去白跑（一座能用的都没有 ⇒ 下面返回 False，拿手里的先砌）
+        if kind != "stone" or pos in ctx.ore_taken or not _mineable(turn, kind):
             continue
         to_mine = steps_between(role.pos, pos, walk, size)
         back = steps_between(pos, back_to, walk, size)
@@ -732,11 +734,14 @@ def _at_vendor(role: BaseRole, turn: Turn) -> bool:
 
 
 def _can_fund(turn: Turn) -> bool:
-    """筹资可行：地图上有小贩、且有收购价 > 0 的矿 —— 矿挖了卖得掉，才谈得上凑钱。"""
+    """筹资可行：地图上有小贩、且有**今天采得着**的、收购价 > 0 的矿 —— 矿挖了卖得掉，
+    才谈得上凑钱。全被新闻钉了停工 ⇒ 不可行（别派个人出去干站一回合）。"""
     if not turn.map.vendors:
         return False
     prices = turn.vendor_prices
-    return any(prices.get(kind, 0) > 0 for kind in turn.map.ores.values())
+    return any(
+        prices.get(kind, 0) > 0 and _mineable(turn, kind) for kind in turn.map.ores.values()
+    )
 
 
 def _team_holds(turn: Turn, voucher: str) -> int:

@@ -39,7 +39,7 @@ from .core import (
     needs_repair,
 )
 from .utils import _passable
-from .world import ROUNDS_PER_DAY, Robot, Turn, Wall, Weapon
+from .world import Robot, Turn, Wall, Weapon
 
 
 #: 三种武器的 L1 伤害：加特林每颗子弹 10（沿弹道命中最近一台即消耗）；电磁能量 10（沿弹道
@@ -111,8 +111,10 @@ def _danger_cells(turn: Turn) -> frozenset[Pos]:
 def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     """夜里（炮手之外的）工人去采最值钱的那座矿 —— 囤到第二天由白天那条链卖掉。
 
-    排序与白天第 1/3 级共用一处（`core._priciest_ore`：按实际单价，不读新闻修正）；
-    区别只在白天那一支动身前会看一眼顺路买卖、挖到的货是拿去凑券钱的。
+    排序与白天第 1/3 级共用一处（`core._priciest_ore`），**只有一处不同：`ahead=1`** ——
+    夜里采的货第二天才卖，所以按**明天**的期望价挑（新闻说明天铁涨/今夜就该去挖铁，白天那支
+    按当天的实测价）；可采性仍按**今天**（今晚采得了就采，停工的窗口落在明天）。
+    白天那一支动身前还会看一眼顺路买卖、挖到的货是拿去凑券钱的。
 
     夜里这条**不买、不回炮位**：天亮前赶不回去也没有代价（白天还有 70 个回合走回来）⇒
     只问"走得到吗"，连时间预算都不算。清场之后才轮到它的是 `planner`：清场后走
@@ -122,7 +124,7 @@ def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     占着就换下一座；迈步那一步把它们当**软避让**（绕不开照走，绝不为躲机器人原地卡死）。"""
     foes = _alive(turn.robots)
     area = _safe(turn) if foes else None
-    mine = _priciest_ore(role, turn, ore_taken, walk=area)
+    mine = _priciest_ore(role, turn, ore_taken, walk=area, ahead=1)
     if mine is None:
         return
     ore_taken.add(mine)
@@ -138,17 +140,12 @@ def mine_ore(role: Worker, turn: Turn, q: _Queue, ore_taken: set[Pos]) -> None:
     )
 
 
-def _day_index(turn: Turn) -> int:
-    """这一回合是第几天（1 起算）。`roundNo` 缺失（-1）⇒ 0：算不上"第几天"。"""
-    return (turn.round_no - 1) // ROUNDS_PER_DAY + 1 if turn.round_no > 0 else 0
-
-
 def repairer(turn: Turn, gunner: int | None) -> int | None:
     """这一夜谁去修墙 ⇒ 角色 id；不派 ⇒ `None`。
 
     第 `WALL_REPAIR_FROM_DAY`(4) 夜起才派，且**手里得有修复包**（谁买谁用、包不能转手 ⇒
     一个包都没有的夜里，工人照旧出门挖矿）。候选 = 非炮手的工人：包多的优先，并列按 id。"""
-    if _day_index(turn) < WALL_REPAIR_FROM_DAY:
+    if turn.day_no < WALL_REPAIR_FROM_DAY:
         return None
     carriers = [
         r

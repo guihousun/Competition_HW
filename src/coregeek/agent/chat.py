@@ -29,9 +29,14 @@ _TOOL_MARK_RE = re.compile(r"<tool")
 #: 调用，这是那一步的起因）。块里 `<name>` 的标签名与工具参数名同名，但两者不相干。
 _SOP_RE = re.compile(r"<sop\b[^>]*>(.*?)</sop>", re.DOTALL)
 _SOP_NAME_RE = re.compile(r"<name\b[^>]*>(.*?)</name>", re.DOTALL)
-#: 裸 `<prices>` 回复（新闻查价的产物）—— 判别与 `<summary>` 同族。
+#: 裸 `<prices>` 回复（新闻查价的产物）—— 判别与 `<summary>` 同族。行格式
+#: `矿种 方向 [起始天 [天数]]`，两个数字缺省 1（旧的 `矿种 方向` 两词形式照旧合法）。
 _PRICES_RE = re.compile(r"<prices\b[^>]*>(.*?)</prices>", re.DOTALL)
-_PRICE_LINE_RE = re.compile(r"(stone|iron|copper)\s*[：:\s]\s*(up|down|flat)", re.IGNORECASE)
+_PRICE_LINE_RE = re.compile(
+    r"(stone|iron|copper)\s*[：:\s]\s*(up|down|flat|stop)"
+    r"(?:\s*[：:\s]\s*(\d+))?(?:\s*[：:\s]\s*(\d+))?",
+    re.IGNORECASE,
+)
 #: 反转义表：prompt 教了 LLM 转义 ⇒ 参数值里的五个预定义实体要还原。`&amp;` 必须最后换
 #: （`&amp;lt;` 只该还原一层）。LLM 没转义时这条是空操作 —— 裸 `<` / `>` / `&` 一个都不许改写。
 _ENTITIES = (
@@ -120,16 +125,19 @@ def sops_of(reply: str) -> list[tuple[str, str]]:
     return entries
 
 
-def is_prices_reply(reply: str) -> dict[str, str] | None:
-    """裸 `<prices>` 回复（新闻查价的产物）⇒ `{矿种: 方向}`；否则 `None`。判据与
-    `is_summary_reply` 同构。行格式 `矿种: 方向`（大小写都认）；解析不出的行直接丢。"""
+def is_prices_reply(reply: str) -> list[tuple[str, str, int, int]] | None:
+    """裸 `<prices>` 回复（新闻查价的产物）⇒ `[(矿种, 方向, 起始天, 天数), …]`（按出现顺序）；
+    否则 `None`。判据与 `is_summary_reply` 同构，行格式见 `_PRICE_LINE_RE`。
+
+    数字缺省 1（起始天 1 = 明天）。同一种矿可以出现两行（`iron up 1 2` 与 `iron stop 1 2` ——
+    又涨价又停工正是任务书那段塌方的样子）⇒ 返回的是**列表**而不是按矿种去重的字典。"""
     block = _PRICES_RE.search(reply)
     if block is None or _PRICES_RE.sub("", reply).strip():
         return None
-    return {
-        m.group(1).lower(): m.group(2).lower()
+    return [
+        (m.group(1).lower(), m.group(2).lower(), int(m.group(3) or 1), int(m.group(4) or 1))
         for m in _PRICE_LINE_RE.finditer(block.group(1))
-    }
+    ]
 
 
 def looks_like_tool(reply: str) -> bool:

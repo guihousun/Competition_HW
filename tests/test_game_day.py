@@ -1240,6 +1240,51 @@ class WallPriorityTest(unittest.TestCase):
         cell = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
         self.assertEqual(cell, Pos(4, 24))
 
+    def test_a_stopped_ore_does_not_count_as_a_way_to_raise_money(self):
+        """能卖的矿全被新闻钉了停工 ⇒ 筹资判成**不可行**（`_can_fund`）⇒ 整条墙线接回来
+        （该采石采石），而不是派个人出去干站一回合。
+
+        对照：同一局面去掉新闻 ⇒ 奔铜矿筹资（第 1 级"钱不够 ⇒ 挖最贵的矿"）。
+        """
+        ground = {
+            self.BASE: "station", Pos(4, 24): "stone", Pos(6, 24): "copper",
+            Pos(7, 26): "vendor",
+        }
+        worker = Worker(10010, Pos(5, 23))
+        prices = {"stone": 1, "copper": 5}
+        today = self._turn((worker,), ground, prices=prices)
+        cmd = plan(today)["10010"]
+        self.assertEqual(
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]),
+            Pos(6, 24),
+            "没人停工 ⇒ 筹资采最值钱的铜",
+        )
+        core.record_news([("copper", "stop", 0, 1)], today)  # 起始天 0 = 今天起
+        cmd = plan(self._turn((worker,), ground, prices=prices))["10010"]
+        self.assertEqual(
+            Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"]),
+            Pos(4, 24),
+            f"铜卖不掉了 ⇒ 退出筹资、走墙线采石：{cmd}",
+        )
+
+    def test_a_stopped_stone_mine_is_not_walked_to(self):
+        """石矿被新闻钉了停工（今天起）⇒ 采石那一趟不发，改走链尾那条兜底（朝缺口挪一格）。
+
+        新闻说的是**矿种**，同一种矿在地图上整类停 —— 所以这里没有"改去另一座石矿"这条退路，
+        只剩"拿手里的先砌"（手里没有 ⇒ 就是朝缺口走）。对照：没这条新闻 ⇒ 贴着矿当场
+        `collect`，一步都不多走。
+        """
+        worker = Worker(10010, Pos(5, 23))
+        mine = Pos(4, 24)
+        ground = {self.BASE: "station", mine: "stone"}
+        today = self._turn((worker,), ground, prices={"stone": 1})
+        self.assertEqual(plan(today)["10010"]["action"], "collect", "对照：贴着矿就采")
+        core.record_news([("stone", "stop", 0, 1)], today)
+        cmd = plan(self._turn((worker,), ground, prices={"stone": 1}))["10010"]
+        self.assertNotEqual(cmd["action"], "collect", f"不为停工的矿发采集：{cmd}")
+        step = Pos(cmd["targetPos"][0]["x"], cmd["targetPos"][0]["y"])
+        self.assertGreaterEqual(step.dist(mine), worker.pos.dist(mine), f"也不朝它走：{cmd}")
+
 
     def test_no_stone_mine_means_build_with_what_is_in_hand(self):
         """环上有缺口、手里就一块石头、地图上**没有石矿** ⇒ 拿这点石头先砌（能做多少做多少）。

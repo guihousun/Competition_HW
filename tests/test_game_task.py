@@ -13,18 +13,22 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from _fixtures import _terrain  # noqa: E402
+from _fixtures import _reset_ledgers, _terrain  # noqa: E402
 from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
 from coregeek.agent.agent import COMPRESS_AFTER_TOOLS  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
+from coregeek.game import core  # noqa: E402
 from coregeek.game.grid import Pos  # noqa: E402
 from coregeek.game.map import Map  # noqa: E402
 from coregeek.game.path import step_toward  # noqa: E402
 from coregeek.game.planner import plan  # noqa: E402
 from coregeek.game.task import task_channel  # noqa: E402
 from coregeek.game.roles import BaseRole, Pioneer, Worker  # noqa: E402
-from coregeek.game.world import Error, Robot, Turn, Weapon  # noqa: E402
+from coregeek.game.world import ROUNDS_PER_DAY, Error, Robot, Turn, Weapon  # noqa: E402
 from coregeek.protocol import model  # noqa: E402
+
+#: 样例价目（`docs/request.txt` 的 `vendorShopList`）—— 价格表的基准价就是它
+PRICES = {"stone": 1, "iron": 3, "copper": 5}
 
 #: 沙盒探查那条命令的回执形状：`[exitCode:0]` + 每份一段 `@@@FILE <路径>@@@` 与正文 + 末尾剩余数
 PROBE_RESULT = "[exitCode:0]\n@@@FILE /opt/task/rescue.md@@@\n# 任务\n正文\n@@@MORE 0@@@\n"
@@ -227,6 +231,8 @@ class TaskChannelTest(unittest.TestCase):
     def setUp(self) -> None:
         # SOP 是单实例上的跨回合状态，不清就会跨用例串味。
         AGENT.reset()
+        # 价格表在 `game.core`（模块级），同一进程里跨用例串味。
+        _reset_ledgers()
         # 沙盒探查同理（状态在模块里），而且它每回合都会把空着的命令槽吃掉 ⇒ 先隔离、再静音；
         # 要看它的用例自己 `reset()` 打开。落盘目录不动：这些用例一条文件都不取。
         cmd_explore.reset()
@@ -322,17 +328,31 @@ class TaskChannelTest(unittest.TestCase):
         prompt, _ = task_channel(self._turn(news="北部铁矿区塌方"))
         self.assertEqual(prompt, "")
 
-    def test_a_prices_reply_is_routed_into_hints(self):
-        """查价回复（裸 `<prices>` 块）⇒ 进价格期望表、不进会话表、当轮不再重问。
-        与裸摘要同一条路由纪律。"""
-        AGENT.reset()
+    def test_the_same_news_is_asked_again_on_a_new_day(self):
+        """指纹里带着"第几天"：同一段新闻第二天再现是**新的一天**（它说的"明天"是另一天）
+        ⇒ 照问。漏了这一项，价格表的窗口会永远停在第一天。"""
         task_channel(self._turn(news="北部铁矿区塌方"))
         prompt, _ = task_channel(
-            self._turn(news="北部铁矿区塌方", llm_resp="<prices>iron up\\ncopper flat</prices>")
+            self._turn(news="北部铁矿区塌方")._replace(round_no=ROUNDS_PER_DAY + 1)
+        )
+        self.assertIn("【市场情报】", prompt)
+
+    def test_a_prices_reply_lands_in_the_price_table(self):
+        """查价回复（裸 `<prices>` 块）⇒ 进 `core` 那张 10 天表、不进会话表、当轮不再重问。
+        与裸摘要同一条路由纪律。起始天 1 = 明天 ⇒ 第 2、3 天（今天是第 1 天）。"""
+        turn = self._turn(news="北部铁矿区塌方")._replace(vendor_prices=PRICES)
+        task_channel(turn)
+        prompt, _ = task_channel(
+            turn._replace(
+                llm_resp="<prices>iron up 1 2\niron stop 1 2\ncopper flat 1 1</prices>"
+            )
         )
         self.assertEqual(prompt, "", "回复轮不重问（指纹已记）")
-        self.assertEqual(AGENT.price_hint("iron"), 2.0)
-        self.assertEqual(AGENT.price_hint("copper"), 1.0)
+        self.assertEqual(core._prices[1]["iron"], 6, "明天：铁价翻倍（实测 3）")
+        self.assertEqual(core._prices[2]["iron"], 6)
+        self.assertIn("iron", core._blocked[1], "明天起铁矿采不了")
+        self.assertNotIn("copper", core._prices[1], "flat = 照旧，不写进表")
+        self.assertEqual(core._prices[0], {}, "今天那一格从不写（当天价永远实测）")
 
     def test_a_python_exec_round_feeds_the_output_back_at_once(self):
         """本地计算：LLM 调 `python_exec` ⇒ 当回合执行、产出直接进

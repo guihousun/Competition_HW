@@ -1,9 +1,12 @@
 """`Agent` —— 单实例的解题智能体：一个进程一个，跨回合状态全在实例上。
 
 两张流程表：`_sop`（正式，整场）、`_pre_sop`（暂存，任务内 —— 沉淀（`deposit`）先落这里，
-判题器没报错的那一轮才由 `settle_deposit` 转正）。另有 `_news_digest` / `_price_hints`
-（新闻指纹与价格期望）、`_context`（任务内会话，题目变了即换新）。状态丢了只影响 prompt
-内容、不碰红线；判题器逐回合同步请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
+判题器没报错的那一轮才由 `settle_deposit` 转正）。另有 `_news_digest`（新闻指纹，含"第几天"）、
+`_context`（任务内会话，题目变了即换新）。状态丢了只影响 prompt 内容、不碰红线；判题器逐回合同步
+请求 ⇒ 不加锁。`task.task_channel` 每次都用包根那个 `AGENT`。
+
+⚠️ **新闻的产物不在这里**：查价的回复（裸 `<prices>`）由 `task.task_channel` 交给
+`game.core.record_news` —— 那是一张**按天**的价格表，只被 game 侧的挖矿排序读。
 
 `_answer` 与 `_submitted` 是短命的那两个：前者由 `submitAnswer` 写、`task_channel` 读、
 `answer_task` 取走，**只活一回合**（每回合开头由 `task_channel` 清一次）—— 它是回合内的
@@ -79,9 +82,8 @@ class Agent:
         self._pre_sop: dict[str, str] = {}
         #: 交过卷、判决还没到的那笔账（`settle_deposit` 结：转正或作废都当场清）。
         self._submitted = False
-        #: 价格期望与新闻指纹。丢了只影响采矿偏好 / 白问一次新闻，不碰红线。
+        #: 新闻指纹。丢了只影响"白问一次新闻"，不碰红线。
         self._news_digest = ""
-        self._price_hints: dict[str, float] = {}
         #: 任务内的会话上下文。题目变了即换新；任务结束不清（死会话，下场换题自然被替）。
         self._context: Context | None = None
         #: 本回合交上来的答卷（`submitAnswer` 的参数值）—— 只活一回合，见模块 docstring。
@@ -250,29 +252,19 @@ class Agent:
             self._context.tool_output(output, "【本地 python 的执行结果（原文）】")
         return ""
 
-    def news_question(self, news: str) -> str:
-        """没任务时的新闻查价 prompt。同一份 news 只问一次（指纹去重，额度 3/日）；
-        news 空 / 指纹没变 ⇒ `""`。指纹在发问时就记下：判题器不答也只是"不再问了"。"""
+    def news_question(self, news: str, day: int) -> str:
+        """没任务时的新闻查价 prompt。同一天里同一份 news 只问一次（指纹去重，额度 3/日）；
+        news 空 / 指纹没变 ⇒ `""`。指纹在发问时就记下：判题器不答也只是"不再问了"。
+
+        ⚠️ **指纹要含"第几天"**：新闻每天发一次，而它说的"明天"是相对**发问那天**的 ——
+        同一段文字第二天再现是新的一天（窗口该整体后移），照旧去重会让表永远停在第一天。"""
         if not news:
             return ""
-        digest = f"{len(news)}:{news[:64]}:{news[-32:]}"
+        digest = f"{day}:{len(news)}:{news[:64]}:{news[-32:]}"
         if digest == self._news_digest:
             return ""
         self._news_digest = digest
         return gen_news_prompt(news)
-
-    def adopt_price_hints(self, hints: dict[str, str]) -> None:
-        """新闻查价回复（裸 `<prices>` 块）→ 价格期望表。
-
-        粗粒度方向：up ×2 / down ×0.5 / flat ×1 —— 只修正挖矿性价比的排序，payload 的实时
-        收购价每回合照读（期望是叠加项，不是替代）。
-        """
-        factor = {"up": 2.0, "down": 0.5, "flat": 1.0}
-        self._price_hints = {kind: factor.get(d, 1.0) for kind, d in hints.items()}
-
-    def price_hint(self, kind: str) -> float:
-        """矿种的新闻期望系数。没问过新闻 ⇒ 1.0（无修正）。"""
-        return self._price_hints.get(kind, 1.0)
 
     def _note_failed_call(self, why: str) -> str:
         """把"这次调用不成立"的说明回灌进会话（LLM 侧的唯一线索）。没开会话 ⇒ 只留日志。"""
@@ -434,12 +426,12 @@ class Agent:
         return self._pre_sop
 
     def reset(self) -> None:
-        """清空全部跨回合状态（两张流程表、新闻指纹、价格期望、会话、答卷）。只给用例用 ——
-        单实例是模块级的，会跨用例串味。"""
+        """清空全部跨回合状态（两张流程表、新闻指纹、会话、答卷）。只给用例用 ——
+        单实例是模块级的，会跨用例串味。⚠️ 价格表在 `game.core`（模块级），不在本实例上；
+        用例隔离由 `tests._fixtures._reset_ledgers` 一并清。"""
         self._sop = {}
         self._pre_sop = {}
         self._submitted = False
         self._news_digest = ""
-        self._price_hints = {}
         self._context = None
         self._answer = ""

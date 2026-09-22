@@ -16,7 +16,7 @@ from ..agent.chat import is_prices_reply, is_summary_reply, looks_like_tool, sop
 from ..protocol import actions  # 指令只能经 Action 产出
 from ..utils import _clip  # 日志的截断规则在叶子模块里
 from .roles import BaseRole, Pioneer
-from .core import _Queue, _emit
+from .core import _Queue, _emit, record_news
 from .world import Turn
 
 LOGGER = logging.getLogger(__name__)
@@ -53,8 +53,8 @@ def task_channel(turn: Turn) -> tuple[str, str]:
         AGENT.adopt_summary(summary)
         llmReply = ""
     elif prices is not None:
-        # 价格期望进 AGENT（不进会话表）
-        AGENT.adopt_price_hints(prices)
+        # 未来 k 天的价格 / 停工进 core 的 10 天表（不进会话表）
+        record_news(prices, turn)
         llmReply = ""
     else:
         # 其余回复记进会话；`hear` 返回 False = 与上一条 assistant 同文（粘住，不是新话）
@@ -82,9 +82,9 @@ def task_channel(turn: Turn) -> tuple[str, str]:
     # 已经空了，转正照样得发生）
     AGENT.settle_deposit(answer, not rejected)
 
-    # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹去重）；命令一律丢弃（沙盒仅任务期间可用）
+    # 没任务 ⇒ 问一次新闻查价（额度 3/日，指纹带天去重）；命令一律丢弃（沙盒仅任务期间可用）
     if not turn.phase_task:
-        return AGENT.news_question(turn.news), ""
+        return AGENT.news_question(turn.news, turn.day_no), ""
 
     # 任务回合，但没有开拓者参与 ⇒ 不发 prompt（任务线只在开拓者身上）；命令槽交给探查。
     if not any(isinstance(r, Pioneer) for r in turn.roles):

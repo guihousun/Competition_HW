@@ -1,20 +1,22 @@
 """共用底座：两个时段都要用的常量、走路账、黑板与岗位几何。
 
-五样东西：常量（一张共用旋钮表）、走路账与指令出口（`_Move` / `_Queue` / `_emit`）、
-黑板 `_Ctx`、状态基类 `State`、挖矿排序 `_priciest_ore`、岗位几何。
+七样东西：常量（一张共用旋钮表）、走路账与指令出口（`_Move` / `_Queue` / `_emit`）、
+黑板 `_Ctx`、状态基类 `State`、矿价表（`record_news` / `_expected_price` / `_mineable`）、
+挖矿排序 `_priciest_ore`、岗位几何。
 **上层是 `day` / `night` / `planner`**（单向 import）—— 本模块绝不 import 它们（那就是循环导入）。
 
 "两个模块都要问"就是进这里的门槛：只有一个消费者的判据留在各自的模块里 —— 白天那条四级链
 （收工门 / 建武器 / 建墙 / 挖矿买券）连同买卖与顺路的助手全在 `day.py`，操炮与弹道全在
-`night.py`。只剩三族共用：常量、走路/指令、岗位几何（白天收工门与夜里操炮共用 `_post_spots`），
-外加一条**挖矿排序**（白天挖矿与夜里出门采矿那一支都是"挖最值钱的矿"）。
+`night.py`。只剩四族共用：常量、走路/指令、岗位几何（白天收工门与夜里操炮共用 `_post_spots`），
+外加**挖矿排序与矿价表**（白天挖矿与夜里出门采矿那一支都是"挖最值钱的矿"，区别只在夜里按
+**明天**的期望价排 —— 见 `_priciest_ore` 的 `ahead`）。
 
 两个距离口径别混：回合预算一律用 BFS 真实步数（`steps_between`，-1 = 走不到）；选点/贴着
 用切比雪夫 `Pos.dist`（`dist <= 1` 是"站在建造位/采集位/炮位旁"的判据，不是步数）。
 """
 
 import logging
-from collections.abc import Callable, Mapping, Set
+from collections.abc import Callable, Iterable, Mapping, Set
 from typing import Any, NamedTuple
 
 from ..protocol import actions  # 指令只能经 Action 产出
@@ -22,7 +24,7 @@ from .grid import STEPS, Pos, wall_cells
 from .path import steps_between
 from .roles import BaseRole, Worker
 from .utils import _passable
-from .world import Turn, Wall, Weapon
+from .world import DAYS, Turn, Wall, Weapon
 
 LOGGER = logging.getLogger(__name__)
 
@@ -249,22 +251,100 @@ class State:
         raise NotImplementedError
 
 
+# ── 矿价：新闻钉住未来 k 天，当天价永远实测 ──────────────────────────
+
+
+#: 10 天价格表：下标 = 第几天 - 1，每格 `{矿种: 期望单价}`。**只装新闻钉住的未来天**
+#: （`record_news` 写）—— 当天价永远现读载荷（`_expected_price` 的那道闸门），所以这里
+#: 不维护"今天"，判题器真涨价了当天就看得见。跨回合状态：记错只影响挖矿排序，不碰红线。
+_prices: list[dict[str, int]] = [{} for _ in range(DAYS)]
+
+#: 新闻钉住的"这几天采不了"（同形，值是矿种集合）。判据 `_mineable`。
+_blocked: list[set[str]] = [set() for _ in range(DAYS)]
+
+#: 新闻方向的倍数（**拍的**）：黑盒 LLM 给的"涨多少"没法校准，方向才是它判得准的那一维。
+_NEWS_FACTOR = {"up": 2.0, "down": 0.5}
+
+
+def _expected_price(turn: Turn, kind: str, day: int) -> int:
+    """第 `day` 天这种矿的期望单价（`day` = 今天几号 + `ahead`）。
+
+    只有**未来天**以新闻钉的为准（`record_news` 写进去的）；没钉过 / 出表 / 就是今天 ⇒
+    一律照当回合的实测价 —— 没有新闻时与"只读载荷"逐字等价，当天价永远最真。"""
+    if day > turn.day_no and 1 <= day <= DAYS:
+        pinned = _prices[day - 1].get(kind)
+        if pinned is not None:
+            return pinned
+    return turn.vendor_prices.get(kind, 0)
+
+
+def _mineable(turn: Turn, kind: str) -> bool:
+    """这种矿**今天**采不采得了（新闻说"停工 k 天"就采不了）—— 只看今天那一格。
+
+    采不了的这一趟不去：`_priciest_ore` 挑矿、`day._mine_stone` 采石、`day._can_fund` 筹资
+    三处共用这一条。"""
+    day = turn.day_no
+    return not (1 <= day <= DAYS and kind in _blocked[day - 1])
+
+
+def record_news(events: Iterable[tuple[str, str, int, int]], turn: Turn) -> None:
+    """新闻查价的回复进表 —— `[(矿种, 方向, 起始天, 天数), …]`（`agent.chat.is_prices_reply` 的产物）。
+
+    窗口 = `[今天 + 起始天, + 天数 - 1]`，裁到 `1..DAYS`，整段落在表外 ⇒ 丢。
+    `stop` ⇒ 进 `_blocked`（那几天采不了）；`up` / `down` ⇒ 以**当天实测价**为基准钉一个绝对价
+    （拿倍数去乘最新实测价会跨天双重计数）；`flat` 与"查不到价"什么都不写（等于照旧）。
+    有实质改动才打一条日志 —— 那个方向本来就是 LLM 猜的，复盘要看得到它猜了什么。"""
+    today = turn.day_no
+    parts: list[str] = []
+    for kind, direction, first, days in events:
+        start = today + first
+        last = min(start + days - 1, DAYS)
+        if start < 1 or start > last:
+            continue
+        span = f"第{start}天" if start == last else f"第{start}-{last}天"
+        if direction == "stop":
+            added = [day for day in range(start, last + 1) if kind not in _blocked[day - 1]]
+            for day in added:
+                _blocked[day - 1].add(kind)
+            if added:
+                parts.append(f"{kind} 停工 {span}")
+            continue
+        factor = _NEWS_FACTOR.get(direction)
+        base = turn.vendor_prices.get(kind, 0)
+        if factor is None or base <= 0:
+            continue
+        pinned = round(base * factor)
+        if any(_prices[day - 1].get(kind) != pinned for day in range(start, last + 1)):
+            for day in range(start, last + 1):
+                _prices[day - 1][kind] = pinned
+            parts.append(f"{kind} {direction} {span}→{pinned}（今 {base}）")
+    if parts:
+        LOGGER.info("【价格表】新闻进表：%s", " ｜ ".join(parts))
+
+
 # ── 挖矿：白天与夜里同一个排序 ──────────────────────────────────────
 
 
 def _priciest_ore(
-    role: Worker, turn: Turn, ore_taken: set[Pos], *, walk: set[Pos] | None = None
+    role: Worker,
+    turn: Turn,
+    ore_taken: set[Pos],
+    *,
+    walk: set[Pos] | None = None,
+    ahead: int = 0,
 ) -> Pos | None:
     """**实际单价**最高的那座矿（并列取近的、再取坐标序）；一座都不值钱 / 都走不到 ⇒ `None`。
 
     实际单价（用户口径）= `单价 × 剩余 / (剩余 + 去 + 回)` —— 一次把这座矿采空的平均收益，
     回合都算进去：
 
-    - **单价** = `turn.vendor_prices[kind]`（小贩收购价；**不读新闻修正**）；
+    - **单价** = `_expected_price(turn, kind, 今天 + ahead)`：`ahead=0` 是当回合的实测价，
+      `ahead=1` 是**明天**的期望价（新闻钉过就用新闻的）—— 夜里采的货第二天才卖；
     - **剩余** = 本地账 `_ore_left(pos)`（payload 不给这个数，任务书 L79 说每座矿采 10 次消失）；
     - **去** = `role.pos → 矿`、**回** = `矿 → 最近的武器位`（没有武器就用基地）的 BFS 步数。
 
-    ⇒ 采空了的矿（剩余 0）、小贩不收的（价 ≤ 0）、走不到的（BFS -1）一律剔掉。
+    ⇒ 采空了的矿（剩余 0）、小贩不收的（价 ≤ 0）、**今天采不了的**（`_mineable`：新闻钉了
+    停工）、走不到的（BFS -1）一律剔掉。
     `ore_taken` 是本回合已被别人认领的矿格（两个工人才不会都奔同一座）。
 
     `walk` 换一份地形（默认 `_passable`）—— 夜里那条挖矿线用它把"机器人周围"也当成走不通
@@ -277,9 +357,9 @@ def _priciest_ore(
     def pick(use_ledger: bool) -> Pos | None:
         best: tuple[float, int, Pos] | None = None
         for pos, kind in turn.map.ores.items():
-            if pos in ore_taken:
+            if pos in ore_taken or not _mineable(turn, kind):
                 continue
-            price = turn.vendor_prices.get(kind, 0)
+            price = _expected_price(turn, kind, turn.day_no + ahead)
             left = _ore_left(pos) if use_ledger else ORE_CHARGES
             if price <= 0 or left <= 0:
                 continue
