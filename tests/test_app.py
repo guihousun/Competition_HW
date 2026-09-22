@@ -439,15 +439,16 @@ class HandleTest(unittest.TestCase):
         self.assertIn("请查询北京天气", body["prompt"])
         self.assertEqual(body["executeCmd"], "")
 
-        # ② LLM 要一条命令（嵌套形状）⇒ 命令进 `executeCmd`；prompt 槽空着 —— 上下文还小，
-        #    压缩闸门要 >5 条工具往来才发（第 145 步）
+        # ② LLM 要一条命令（嵌套形状）⇒ 命令进 `executeCmd`；空着的 prompt 槽归压缩闸门
+        #    （第 152 步去掉阈值 ⇒ 有中间段就压，原料 = 题目 + 摘要 + 没盖到的往来）
         raw["llmResp"] = (
             '<tool><tool_name>executeCmd</tool_name>'
             '<tool_param><cmd>python -c "print(1+1)"</cmd></tool_param></tool>'
         )
         body = ask()
         self.assertEqual(body["executeCmd"], 'python -c "print(1+1)"')
-        self.assertEqual(body["prompt"], "")
+        self.assertIn("【上下文压缩】", body["prompt"])
+        self.assertIn("请查询北京天气", body["prompt"], "原料带着题目原文")
 
         # ③ 沙盒交作业 ⇒ 结果全文回灌，这一轮绝不重复发命令；它自己上一轮
         #    要的那条命令也在会话里

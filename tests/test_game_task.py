@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from _fixtures import _reset_ledgers, _terrain  # noqa: E402
 from coregeek.agent import AGENT, Agent, cmd_explore  # noqa: E402
-from coregeek.agent.agent import COMPRESS_AFTER_TOOLS  # noqa: E402
 from coregeek.agent.prompt import SOP_REQUEST  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 from coregeek.game import core  # noqa: E402
@@ -863,11 +862,8 @@ class TaskChannelTest(unittest.TestCase):
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
         task_channel(self._turn(self.TASK))  # ⑥ 首问（会话从这道题开始）
-        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令（prompt 槽空着）
+        _, execute = task_channel(self._turn(self.TASK, call))  # ③ 发命令
         self.assertEqual(execute, "ls")
-        self.assertEqual(
-            prompt, "", "上下文还小 ⇒ 压缩闸门不发（第 145 步：>5 条工具往来才压一次）"
-        )
         prompt, execute = task_channel(
             self._turn(self.TASK, call, cmd_result="[exitCode:0]\n2")  # ② 回灌（llmResp 粘住）
         )
@@ -881,36 +877,37 @@ class TaskChannelTest(unittest.TestCase):
             ],
         )
 
-    def test_the_compression_material_is_the_original_context(self):
-        """压缩原料 = 原始上下文全文：给任务 LLM 的渲染可以只剩摘要之后那段，原料永远是原文
-        —— 压缩总从原文重来、不从旧摘要叠（避免多次压缩的失真累积）。"""
+    def test_the_compression_material_is_the_middle_segment(self):
+        """压缩原料 = **中间段**（`Context.middle`）：题目 + 已有摘要 + 摘要没盖到的全部往来。
+
+        命令轮那个空着的 `prompt` 槽一到手就压（第 152 步去掉阈值 ⇒ 第一条命令那轮就够料，
+        原料里因此带着题目与最近一次工具调用）；摘要到位之后，更早的往来由【历史摘要】
+        那一行带着走，不再逐条占地方。
+        """
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
         task_channel(self._turn(self.TASK))  # ⑥ 首问
-        task_channel(self._turn(self.TASK, call))  # ③ 命令轮 a1
-        task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))  # ② 回灌
-        # 攒够工具往来（第 145 步起闸门才发请求）；回执同轮到达 ⇒ 判据 ③ 照发命令、回执进会话
-        for _ in range(COMPRESS_AFTER_TOOLS):
-            task_channel(self._turn(self.TASK, call, cmd_result="[exitCode:0]\n1"))
-        prompt, execute = task_channel(
+        prompt, execute = task_channel(self._turn(self.TASK, call))  # ③ 命令轮
+        self.assertEqual(execute, "ls")
+        self.assertIn("【上下文压缩】", prompt, "空槽到手就压")
+        self.assertIn("ls", prompt, "最近一次工具调用在原料里")
+        self.assertIn(self.TASK, prompt, "题目永远带着（压缩器的【总目标】要照抄原文）")
+        # 摘要回来 ⇒ 覆盖点推到发请求那一刻；渲染 = 题目 + 摘要 + 最近一对，不再逐条铺开
+        prompt, _ = task_channel(
             self._turn(
                 self.TASK,
-                "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>pwd</cmd></tool_param></tool>",
-                # `lastCmdResult` 已清（上一轮是回灌、没发命令）—— 否则判据 ② 先命中
+                "<summary>[总目标] 交 token</summary>",  # 压缩回复（随 cmd_result 一起到）
+                cmd_result="[exitCode:0]\n1",
             )
         )
-        self.assertEqual(execute, "pwd")
-        self.assertIn("【上下文压缩】", prompt)
-        self.assertIn("pwd", prompt, "最近一条工具调用在原料里")
-        # 渲染可以只带摘要之后那段，但原料是原文 ⇒ 更早的往来一条都不少
-        self.assertIn("ls", prompt, "早先的往来原文仍在压缩原料里（原文永久保留）")
+        contents = [m["content"] for m in json.loads(prompt)]
+        self.assertIn("【历史摘要】\n[总目标] 交 token", contents)
 
     def test_a_bare_summary_reply_is_routed_not_heard(self):
         """裸 `<summary>` 回复 = 压缩轮的产物：进 `Context.summary`、不进会话表
         （它不是 LLM 在任务上说过的话，进表会污染窗口、与【历史摘要】双份），
         任务判据按"没回复"走 —— 下一轮判据 ② 照常回灌结果。"""
-        AGENT.reset()
         call = (
             "<tool><tool_name>executeCmd</tool_name><tool_param><cmd>ls</cmd></tool_param></tool>"
         )
@@ -919,12 +916,12 @@ class TaskChannelTest(unittest.TestCase):
         prompt, execute = task_channel(
             self._turn(
                 self.TASK,
-                "<summary>【总目标】交 token</summary>",  # 压缩回复（随 cmd_result 一起到）
+                "<summary>[总目标] 交 token</summary>",  # 压缩回复（随 cmd_result 一起到）
                 cmd_result="[exitCode:0]\n2",
             )
         )
         self.assertEqual(execute, "")
-        self.assertIn("【总目标】交 token", prompt, "摘要已就位")
+        self.assertIn("[总目标] 交 token", prompt, "摘要已就位")
         contents = [m["content"] for m in json.loads(prompt)]
         self.assertNotIn(
             True, ["<summary>" in c for c in contents], "裸摘要不进会话表"
@@ -933,8 +930,8 @@ class TaskChannelTest(unittest.TestCase):
     def test_a_summary_reply_round_goes_back_to_the_task(self):
         """压缩回复到达、又没有别的回执 ⇒ 判据按"没回复"走 → ⑥ 重问。
 
-        压缩只跟在 ③ 命令轮后面（交卷轮不压缩，两件事互斥）⇒ 命令轮与压缩轮交替。
-        这一轮不是压缩轮 —— nudge 是模型请求、闸门不落；摘要照样进（`【历史摘要】` 可见）。
+        压缩只跟在 ③ 命令轮后面（交卷轮不压缩，两件事互斥）；这一轮是回复轮、不是压缩轮
+        —— nudge 是模型请求、闸门不落；摘要照样进（`【历史摘要】` 可见）。
         """
         task_channel(self._turn(self.TASK))  # ⑥ 首问
         task_channel(
@@ -944,12 +941,12 @@ class TaskChannelTest(unittest.TestCase):
             )
         )  # ③ 命令轮（prompt = 压缩请求）
         prompt, execute = task_channel(
-            self._turn(self.TASK, "<summary>【总目标】交 token</summary>")
+            self._turn(self.TASK, "<summary>[总目标] 交 token</summary>")
         )
         self.assertEqual(execute, "")
         self.assertNotIn("【上下文压缩】", prompt, "nudge 是模型请求，闸门不落")
         self.assertIn("请继续。", prompt)
-        self.assertIn("【总目标】交 token", prompt, "摘要已进【历史摘要】")
+        self.assertIn("[总目标] 交 token", prompt, "摘要已进【历史摘要】")
 
     def test_a_fresh_call_owns_the_slot_even_when_a_result_arrives(self):
         """回执与命令同轮到达 ⇒ 两个字段各归各的：结果进 prompt、命令照发。
@@ -1031,8 +1028,8 @@ class TaskChannelTest(unittest.TestCase):
         )
         self.assertIn(self.RETRY_MARK, broken[0], "半条命令不妨碍把反馈带到")
 
-        # 独立会话：这轮走 ③ ⇒ prompt 是压缩请求，而原料是原始上下文全文 —— 不清会话的话
-        # 上面两个 case 的纠错块会被原料带出来，"不骂"就断言不出来了。
+        # 独立会话：这轮走 ③ ⇒ prompt 是压缩请求（原料 = 中间段：题目 + 摘要 + 没盖到的往来）
+        # —— 不清会话的话上面两个 case 的纠错块会被原料带出来，"不骂"就断言不出来了。
         AGENT.reset()
         replied_a_command = task_channel(
             self._turn(

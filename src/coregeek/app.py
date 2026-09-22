@@ -78,7 +78,8 @@ def _log(turn: Turn, cmds: dict[str, dict[str, Any]], prompt: str) -> None:
     | 提问那一轮（题目 400 字） | 10 | 18652 |
     | 顶格：题目/回复/沙盒各 40000 字（`LOG_TEXT_MAX`） | 11 | 376907 |
 
-    命令轮另有一条 prompt 行（压缩请求，随原始历史线性变大），上表四格没有这一行。
+    命令轮另有一条 prompt 行（压缩请求 = 指令 + 中间段，第 152 步起每轮都发），
+    上表四格没有这一行；题目那一轮的 prompt 行则随渲染变短（只留题目 + 摘要 + 最近一对）。
     判题器推来的 payload 原文那行已停用（体量）⇒ 要看它去 `handle` 里解开那一条。
 
     量法（`logs/measure_bytes.py`）：① 量真 stdout 的形状（带 asctime 前缀的 handler、取

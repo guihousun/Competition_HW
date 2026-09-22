@@ -14,7 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from coregeek.agent import Agent, cmd_explore  # noqa: E402
-from coregeek.agent.agent import COMPRESS_AFTER_TOOLS  # noqa: E402
 from coregeek.agent.tools import sop  # noqa: E402
 
 #: system 的段头，按 `prompt.gen_system_prompt` 那份列表的顺序 —— 段名只在这里写一次，
@@ -50,7 +49,7 @@ def _deposit_rules(system: str) -> str:
 
 
 def _grow_tools(agent: Agent, tools: int) -> None:
-    """攒够工具往来：压缩闸门按"还没被摘要盖住的 `tool` 条数"判（`COMPRESS_AFTER_TOOLS`）。
+    """往会话里攒几条工具往来（压缩原料 `Context.middle()` 靠它们才有内容）。
 
     走 `python_exec` 这条真口子（本地即时执行、产出当场进会话）。**必须在 `chat()` 之后调**
     —— 没开会话时产出直接丢。
@@ -485,11 +484,12 @@ class ChatPromptTest(unittest.TestCase):
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
 
-        渲染只带「摘要盖住的那段」之后的部分（`Context.render`），试错一长，早先的尝试就只剩摘要 ——
-        摘要（压缩轮的产物）是唯一还记得"哪些路已经走死"的地方。不点破这一点，压缩器会
-        只留成功经验，"反复试同一条死路"就是它漏记的直接后果。"""
+        渲染只留「摘要 + 最近一次工具调用与结果」（`Context.render`），试错一长，早先的尝试
+        就只剩摘要 —— 摘要（压缩轮的产物）是唯一还记得"哪些路已经走死"的地方。不点破这一点，
+        压缩器会只留成功经验，"反复试同一条死路"就是它漏记的直接后果。"""
         self.agent.chat("题目")
-        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS + 1)  # 上下文够大才有请求（第 145 步）
+        self.agent.hear("回复1")
+        _grow_tools(self.agent, 1)  # 有中间段才发得出请求
         req = self.agent.compression_request()
         self.assertIn("试过并且失败", req)
         self.assertIn("反复试同一条死路", req)
@@ -632,44 +632,43 @@ class ChatPromptTest(unittest.TestCase):
         `executeCmd` 同发）。任务 prompt 专注任务，压缩 prompt 专注压缩。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertNotIn("<summary>", system)
-        self.assertNotIn("【总目标】", system)
+        self.assertNotIn("[总目标]", system)
+        self.assertNotIn("[关键数据]", system)
 
     def test_the_compression_request_carries_the_instruction_and_material(self):
-        """压缩请求 = 独立指令（四槽 + 只输出摘要块）+ 原始上下文全文。
+        """压缩请求 = 独立指令（三槽 + 只输出摘要块）+ **中间段**。
 
-        原料永远是原文：压缩从原文重来、不从旧摘要叠 —— 避免多次压缩的失真累积；
-        给任务 LLM 的才是压缩后的。"""
+        原料从覆盖点起（`Context.middle`，头上带题目与已有摘要）：老账已经在摘要里，
+        压的是"还没进摘要的那一段" —— 题目照旧带着，压缩器的【总目标】要照抄任务书原文。"""
         self.agent.chat("题目")
         self.agent.hear("回复1")
-        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS + 1)  # 上下文够大才有请求（第 145 步）
+        _grow_tools(self.agent, 1)
         req = self.agent.compression_request()
         self.assertIn("【上下文压缩】", req)
-        self.assertIn("【总目标】", req)
-        self.assertIn("【关键数据】", req)
+        self.assertIn("[总目标]", req)
+        self.assertIn("[关键数据]", req)
         self.assertIn("回复1", req)
         self.assertIn("题目", req)
 
-    def test_the_compression_waits_until_the_context_is_big(self):
-        """上下文小了不压（第 145 步用户口径：超过 5 次 tool 才压一次）。
-
-        摘要一落地，`render` 就把那些往来整段换成摘要（原始信息当场没了）—— 所以只有
-        未覆盖的工具往来多到阈值之上才值得开口。阈值两侧各钉一次。"""
+    def test_the_compression_waits_until_there_is_a_middle(self):
+        """没有中间段就不开口：没开会话、或那些往来已经全进了摘要 ⇒ `""` ——
+        压缩闸门那一轮于是就是个干净的空槽，不白占判题器的 LLM。"""
+        self.assertEqual(self.agent.compression_request(), "", "没开会话 ⇒ 不发")
         self.agent.chat("题目")
-        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS)
-        self.assertEqual(self.agent.compression_request(), "", "刚好到阈值还不压")
+        self.assertEqual(self.agent.compression_request(), "", "只有题目 ⇒ 没有中间段")
+        self.agent.hear("回复1")
+        self.assertTrue(self.agent.compression_request(), "有了往来就压")
+
+    def test_an_unanswered_request_is_asked_again_with_the_same_material(self):
+        """判题器不答 ⇒ 下一个空着的 prompt 槽照旧把那一段压一遍（**不丢**优先于不重问）。
+
+        覆盖点只在摘要真到的那一刻推进 ⇒ 重问的原料与上一趟逐字相同，一条往来都没被跳过。"""
+        self.agent.chat("题目")
+        self.agent.hear("回复1")
         _grow_tools(self.agent, 1)
-        self.assertTrue(self.agent.compression_request(), "多一条工具往来才发请求")
-
-    def test_an_unanswered_request_is_not_asked_again_every_round(self):
-        """判题器不答 ⇒ 在途请求本身也是基准：再攒到阈值之内不会重问。
-
-        不这么算的话，上下文一大就每个命令轮都在讨摘要 —— 白扔 prompt 槽（而且它一旦
-        真答了，那一整段原始往来当场被替掉）。"""
-        self.agent.chat("题目")
-        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS + 1)
-        self.assertTrue(self.agent.compression_request())
-        _grow_tools(self.agent, COMPRESS_AFTER_TOOLS)
-        self.assertEqual(self.agent.compression_request(), "", "在途请求之后重新起算")
+        first = self.agent.compression_request()
+        self.assertTrue(first)
+        self.assertEqual(self.agent.compression_request(), first, "原料没变 ⇒ 请求逐字相同")
 
     def test_the_sop_request_carries_the_instruction_the_sop_and_the_material(self):
         """沉淀请求 = 指令（形状 + 该产什么）+ 现在的 SOP + 本题完整记录 + 末尾那道格式。

@@ -1,5 +1,5 @@
-"""agent/context.py 的用例：任务内会话上下文（构造即问、粘住去重、全量保真渲染成
-标准 messages JSON）。
+"""agent/context.py 的用例：任务内会话上下文（构造即问、粘住去重、逐字保真；渲染只走到
+最近一次工具调用，中间段交给压缩器）。
 
 跑法：`PYTHONUTF8=1 py -m unittest discover -s tests -v`（单文件：`py tests/<本文件>`）。用 `py`——本地 `python` 是 3.7.1；不加 PYTHONUTF8 中文会乱码。
 """
@@ -22,8 +22,9 @@ class ContextTest(unittest.TestCase):
 
     判题器的 LLM 每回合只看到我们发出的 `prompt` 一段字符串 ⇒ 渲染成
     `[{"role": "system"/"user"/"assistant", "content": ...}]`。这里钉 Context 本身
-    （构造即问、进表规则、粘住去重、全量保真）；跨回合接线在 `ChatPromptTest`、
-    判据链在 `TaskChannelTest`、端到端在 `HandleTest.test_the_task_loop_through_handle`。
+    （构造即问、进表规则、粘住去重、逐字保真、渲染与压缩原料各取哪一段）；跨回合接线在
+    `ChatPromptTest`、判据链在 `TaskChannelTest`、端到端在
+    `HandleTest.test_the_task_loop_through_handle`。
     """
 
     SYSTEM = "# Agent定位\n（占位 header）"
@@ -122,8 +123,8 @@ class ContextTest(unittest.TestCase):
 
     def test_every_message_survives_verbatim_and_in_order(self):
         """进表逐字：题目/回复/结果里的 `{}`、换行、标签一个都不许动，顺序就是
-        进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。（渲染侧的窗口与摘要
-        钉在下面的窗口用例里；存储始终是全量逐字。）"""
+        进表的顺序 —— `json.dumps`/`loads` 负责转义与还原。（渲染的取段与摘要钉在下面
+        那几条用例里；存储始终是全量逐字。）"""
         self.ctx.hear("回复 {'a': 1}")
         self.ctx.feed("结果 {task} {0}", "")
         self.ctx.hear("<tool><tool_name>submitAnswer</tool_name><tool_param><answer>答案</answer></tool_param></tool>")
@@ -144,23 +145,23 @@ class ContextTest(unittest.TestCase):
 
 
     def test_the_summary_rides_right_after_the_task(self):
-        """`summary` 渲染成题目后面的一条 `tool` 消息（`【历史摘要】` 头 ——
-        标题当内容标签的既有模式）：它替旧往来记账，与沙盒回执同类，不是用户说的话。
-        没有摘要时这条不出现（首问 = `[system, user]`，
+        """`summary` 渲染成题目后面的一条 `assistant` 消息（`【历史摘要】` 头 ——
+        标题当内容标签的既有模式）：它替旧往来记账，与"最近一次工具调用"同侧，
+        不是新的一轮用户提问。没有摘要时这条不出现（首问 = `[system, user]`，
         由 `test_a_fresh_context_opens_with_the_task` 钉着）。"""
-        self.ctx.summary = "【总目标】交 token"
+        self.ctx.summary = "[总目标] 交 token"
         roles = [m["role"] for m in self.messages()]
-        self.assertEqual(roles[:3], ["system", "user", "tool"])
+        self.assertEqual(roles[:3], ["system", "user", "assistant"])
         self.assertEqual(
             self.messages()[2],
-            {"role": "tool", "content": "【历史摘要】\n【总目标】交 token"},
+            {"role": "assistant", "content": "【历史摘要】\n[总目标] 交 token"},
         )
 
     def test_nothing_is_dropped_before_a_summary_lands(self):
-        """**摘要没盖到的往来一条都不丢**（用户口径）：渲染只掐"上一次压缩请求盖住的那段"。
+        """**摘要没盖到的往来一条都不丢**（用户口径）：渲染只掐"摘要真盖住的那段"。
 
-        压缩请求是命令轮才发得出去的（回合末尾的闸门），中间可能连着好几轮轮不到 —— 按
-        "最近 N 轮"掐会把这中间的往来丢在摘要之外（旧 `_WINDOW`(2) 就是那样）。
+        压缩请求是命令轮才发得出去的（回合末尾的闸门），中间可能连着好几轮轮不到 ⇒
+        还没压过的时候整段都在。
         """
         for i in (1, 2, 3):
             self.ctx.hear(f"回复{i}")
@@ -170,26 +171,39 @@ class ContextTest(unittest.TestCase):
             self.assertIn(f"回复{i}", contents, "还没压缩过 ⇒ 全量都在")
         self.assertNotIn("【历史摘要】", contents, "没有摘要就不占那一条")
 
-    def test_only_what_the_summary_covers_drops_out(self):
-        """摘要回来 ⇒ 只有**它盖住的那段**（= 上次压缩请求发出去时的全部往来）不再逐条渲染。
+    def test_the_render_keeps_the_last_call_and_its_result(self):
+        """渲染 = 题目 + 摘要 + **最近一次工具调用与它的结果**（`min(覆盖点, 尾巴起点)`）。
 
-        覆盖点按"发请求时的快照"划，不按"摘要回来的时刻" —— 请求发出之后新添的往来
-        （工具产出、纠错、重问）还没进任何摘要，照旧全量跟着走。
+        中间那些往来已进摘要 ⇒ 不再逐条渲染；尾那一对永远留着 —— 它没被压过，
+        LLM 得看得见自己刚说了什么、结果是什么。
         """
         for i in (1, 2, 3):
             self.ctx.hear(f"回复{i}")
             self.ctx.feed(f"结果{i}", "")
-        self.ctx.sent_for_compression()  # 压缩请求发出去（快照 = 现在这些往来）
-        self.ctx.hear("回复4")  # 请求发出之后又添的一条：它没进摘要
-        self.ctx.feed("结果4", "")
-        self.ctx.adopt_summary("旧账都在这里")
+        self.ctx.sent_for_compression()
+        self.ctx.adopt_summary("三轮回执都在这里")
         contents = [m["content"] for m in self.messages()]
         text = "\n".join(contents)
-        self.assertIn("【历史摘要】\n旧账都在这里", contents)
-        for i in (1, 2, 3):
-            self.assertNotIn(f"回复{i}", text, f"第 {i} 轮已被摘要盖住 ⇒ 不再逐条渲染")
-        self.assertIn("回复4", text, "摘要之后新添的照旧全量")
-        self.assertIn("结果4", text)
+        self.assertIn("【历史摘要】\n三轮回执都在这里", contents)
+        self.assertIn("回复3", text, "最近一次工具调用留着")
+        self.assertIn("结果3", text, "它的结果也留着")
+        for i in (1, 2):
+            self.assertNotIn(f"回复{i}", text, f"第 {i} 轮已进摘要 ⇒ 不再逐条渲染")
+            self.assertNotIn(f"结果{i}", text)
+
+    def test_a_later_round_rides_along_until_the_next_summary(self):
+        """摘要之后新添的往来照旧全量跟着走 —— 覆盖点按"发请求那一刻的快照"划，
+        不按"摘要回来的时刻"（那些还没进任何摘要）。"""
+        self.ctx.hear("回复1")
+        self.ctx.feed("结果1", "")
+        self.ctx.sent_for_compression()
+        self.ctx.hear("回复2")
+        self.ctx.feed("结果2", "")
+        self.ctx.adopt_summary("旧账都在这里")
+        text = "\n".join(m["content"] for m in self.messages())
+        self.assertNotIn("回复1", text, "已进摘要")
+        self.assertIn("回复2", text)
+        self.assertIn("结果2", text)
 
     def test_a_summary_without_a_pending_request_covers_nothing(self):
         """凭空来的摘要（没发过压缩请求）⇒ 只记摘要、覆盖点不动 —— 绝不能因为"有摘要了"
@@ -210,20 +224,55 @@ class ContextTest(unittest.TestCase):
         self.assertIn("回复1", contents)
         self.assertIn("回复2", contents)
 
-    def test_the_uncompressed_tool_count_follows_both_bases(self):
-        """压缩闸门的判据：还没被摘要（或在途请求）盖住的 `tool` 条数 —— 两个基准取靠后的那个。
+    def test_the_middle_carries_the_head_and_everything_since_the_coverage(self):
+        """压缩原料 = 题目 +（已有摘要）+ 覆盖点之后的**全部**往来（尾巴那一对也在里面）。
 
-        请求在途 ⇒ 从请求那一刻起算（判题器不答也不会每轮重问）；摘要落地 ⇒ 改从覆盖点起算，
-        而覆盖点只到请求那一刻 ⇒ 那之后新添的往来照旧算"没盖住"（`render` 也一样全量带它们）。
+        题目永远带着（压缩器的【总目标】要照抄任务书原文）；已有摘要在最前 ⇒ 新摘要是
+        "在它之上并进这一段"，逐次压缩不丢老账。
         """
+        self.ctx.hear("回复1")
         self.ctx.feed("结果1", "")
-        self.ctx.tool_output("输出2", "【本地执行】")
-        self.assertEqual(self.ctx.uncompressed_tools(), 2)
         self.ctx.sent_for_compression()
-        self.ctx.feed("结果3", "")
-        self.assertEqual(self.ctx.uncompressed_tools(), 1, "请求在途 ⇒ 基准是请求那一刻")
-        self.ctx.adopt_summary("【总目标】交 token")
-        self.assertEqual(self.ctx.uncompressed_tools(), 1, "摘要只盖到请求那一刻")
+        self.ctx.adopt_summary("第一轮的账")
+        self.ctx.hear("回复2")
+        self.ctx.feed("结果2", "")
+        material = json.loads(self.ctx.middle())
+        self.assertEqual(material[0], {"role": "user", "content": "请查询北京天气"})
+        self.assertEqual(
+            material[1], {"role": "assistant", "content": "【历史摘要】\n第一轮的账"}
+        )
+        self.assertEqual(
+            [(m["role"], m["content"]) for m in material[2:]],
+            [
+                ("assistant", "回复2"),
+                ("tool", "【上一条命令的执行结果（原文）】\n结果2"),
+            ],
+        )
+
+    def test_the_middle_is_empty_until_something_lands(self):
+        """一条往来都还没进表（或全都盖在摘要里）⇒ 压缩原料是 `""` —— 压缩闸门的判据就是它：
+        空着的时候不开口（没东西可压，问了也是白问）。"""
+        self.assertEqual(self.ctx.middle(), "", "只有题目 ⇒ 没有中间段")
+        self.ctx.hear("回复1")
+        self.ctx.feed("结果1", "")
+        self.ctx.sent_for_compression()
+        self.ctx.adopt_summary("盖住了")
+        self.assertEqual(self.ctx.middle(), "", "全都盖住了 ⇒ 也没有中间段")
+
+    def test_an_inflight_request_keeps_its_own_coverage(self):
+        """在途的那一份不被后来的请求改写：判题器漏答一份时，后一份的原料本来就含着前一份
+        那段 ⇒ 覆盖点按**先发**那份推是保守的（少盖一段、照旧渲染）；按后发那份推会把
+        "先发盖住、后发没盖住"的中间那段凭空丢掉。"""
+        self.ctx.hear("回复1")
+        self.ctx.feed("结果1", "")
+        self.ctx.sent_for_compression()
+        self.ctx.hear("回复2")
+        self.ctx.feed("结果2", "")
+        self.ctx.sent_for_compression()  # 在途 ⇒ 不改写
+        self.ctx.adopt_summary("只盖到第一趟")
+        text = "\n".join(m["content"] for m in self.messages())
+        self.assertIn("回复2", text, "后发那份没盖到的那段照旧渲染")
+        self.assertIn("结果2", text)
 
     def test_a_tail_nudge_rides_along(self):
         """尾巴上的 nudge 照旧在最末（它本来就是最新那一条，与摘要无关）。
