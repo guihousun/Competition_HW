@@ -422,13 +422,16 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("比 executeCmd 省一个回合", local)
 
     def test_the_flow_demands_evidence_of_failure(self):
-        """命令要自带成败证据、Python 代码要打印调用栈（第 153 步，用户口径"shell 指令和
-        python 代码必须有充足的提示，用于后续成功或者失败进行分析"）。
+        """命令要自带成败证据、Python 代码要打印调用栈与 shell 的原始输出（第 153 / 169 步，
+        用户口径"shell 指令和 python 代码必须有充足的提示，用于后续成功或者失败进行分析"、
+        "若需要通过 python 打印 shell 的输出，至少需要将原始的输出打印出来"）。
 
         沙盒那条通道我们控不住（命令是 LLM 写的、跑在判题器里）：回执照旧只有退出码与它
         自己打出来的那些字 —— 不点破这件事，它会把每条回执当成二元的"成 / 不成"，然后
-        换一个参数把同一条命令重写一遍（每次两个回合）。三条落点同处一句：成败都要看得见、
-        失败要打全原因（错误原文、出错的文件与行号）、Python 必须 try/except + 调用栈。
+        换一个参数把同一条命令重写一遍（每次两个回合）。四条落点同处一段：成败都要看得见、
+        失败要打全原因（错误原文、出错的文件与行号）、Python 必须 try/except + 调用栈、
+        Python 代跑 shell 时原始输出必须原样打出（只打加工后的结论 ⇒ 结论一旦漏了重点，
+        回执里再没有证据可查，这两个回合白花）。
         本地那条（`python_exec`）不写这条规则 —— 执行器是我们自己的，直接回调用栈，
         见 `test_agent_pyexec.PyExecTest.test_a_runtime_error_is_reported_not_raised`。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
@@ -436,6 +439,7 @@ class ChatPromptTest(unittest.TestCase):
         self.assertIn("自带成败证据", cmd)
         self.assertIn("try/except", cmd)
         self.assertIn("traceback.print_exc()", cmd)
+        self.assertIn("shell 的原始输出必须原样打印", cmd)
 
     def test_the_flow_says_a_failure_is_a_clue(self):
         """拿到结果先分析、照着结果调整方案再继续（【工作原则】循环的第 (7) 步那一支）。
