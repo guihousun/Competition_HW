@@ -391,8 +391,10 @@ src/coregeek/
     │                 `day.wait_errand`：去冷却最快的任务点旁等着，全做完则去商店旁）。
     ├── night.py      **夜里**：认领武器组 → 走到岗位 → 开火，外加基地升级、修正面墙与"清场没有"。
     │                 入口（`planner._night_intents` 按这个顺序问）：`upgrade_station`（基地残血 +
-    │                 持券）→ **手边的券先花掉**（`day.use_voucher_here`：武器券 / 墙券，目标贴着就 `use`；
-    │                 修墙工有残墙时例外）→ `is_cleared`（= `not _alive(_foe_robots(turn))`）→ 没清场时三档：
+    │                 持券）→ **手边的券先花掉**（`day.use_voucher_here`：武器券 / 墙券，**逐个链上步骤**
+    │                 找贴着手边的目标；修墙工有残墙时例外）→ **炮手手里的武器券目标只差
+    │                 `day.UPGRADE_WALK_MAX`(3) 步 ⇒ 先走过去升**（`day.walk_to_upgrade`，不发 `attack`）
+    │                 → `is_cleared`（= `not _alive(_foe_robots(turn))`）→ 没清场时三档：
     │                 `defend`（炮手一个人）/ `repair_wall`（**持包的工人**修正面墙）/ `mine_ore`
     │                 （其余工人出门采矿）。
     │                 `repair_wall`（第 4 夜起，`WALL_REPAIR_FROM_DAY`）：目标 = 正面列 ∩ 活墙 ∩

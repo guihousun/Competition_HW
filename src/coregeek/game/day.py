@@ -831,14 +831,48 @@ def use_voucher_here(role: BaseRole, ctx: _Ctx) -> bool:
     换来的是**永久升级（顺带回满血）**。
 
     基地券不在这里：那条走 `night.upgrade_station` 更保守的门（只在基地 < 1/4 血时才用）。
-    目标按优先链取（`_targets_for`）⇒ 同一步里"血少的在前"，但只认够得着的那几个。"""
+
+    ⚠️ **同一张券在链上可能出现两次**（武器二级券：① 非角上那两座、③ 角上那座）⇒ 要**逐个步骤**
+    找贴着手边的目标，不能只看"链上第一个还有东西可升的步骤"：站在角座旁边、而券的第一志愿是
+    非角那两座（又够不着）时，只扫第一步就会判成"没得用"，于是他整夜在那儿开火、那张券一直花不掉。
+    步骤顺序仍是优先级（同一步里"血少的在前"），只是**够不着就继续往下看**。"""
     for voucher in (*VOUCHER_NAMES, *WALL_VOUCHER_NAMES):
         if role.bag.get(voucher, 0) <= 0:
             continue
-        spots = _targets_for(voucher, ctx.turn, ctx.demolish_taken)
-        reachable = next((s for s in spots if role.pos.dist(s) <= 1), None)
-        if reachable is not None:
-            return _emit(ctx.q.cmds, role, actions.Use, voucher, reachable)
+        for name, group, level in VOUCHER_CHAIN + WALL_CHAIN:
+            if name != voucher:
+                continue
+            spots = _step_targets(ctx.turn, group, level, ctx.demolish_taken)
+            reachable = next((s for s in spots if role.pos.dist(s) <= 1), None)
+            if reachable is not None:
+                return _emit(ctx.q.cmds, role, actions.Use, voucher, reachable)
+    return False
+
+
+#: "为了升级走几步"的上限（拍）：目标在这个步数内 ⇒ 先走过去升，而不是这一回合开火/挖矿。
+#: 升级是永久的（还顺带回满血），三炮之内就回本；再远就不追 —— 那一回合的火力更值。
+UPGRADE_WALK_MAX = 3
+
+
+def walk_to_upgrade(role: BaseRole, ctx: _Ctx) -> bool:
+    """手里有券、目标不在手边但**只差几步** ⇒ 这一步朝它走（调用方：夜里的炮手，见 `planner`）。
+
+    `use_voucher_here` 只管"贴着就能升"；这一支补上"差几步"：**别因为手里那张券打不着就一炮一炮
+    地打下去**（实测症状：站在角座旁边、券的第一志愿是非角那两座 ⇒ 整夜开火、券一直花不掉）。
+    判据：链上按优先级找第一个 `0 < BFS 步数 <= UPGRADE_WALK_MAX` 的目标；一个都没有 ⇒ `False`
+    （调用方照原样开火/干活）。`True` = 这一回合归它（只发 `move`）。"""
+    walk, size = _passable(ctx.turn), ctx.turn.map.size
+    for voucher in (*VOUCHER_NAMES, *WALL_VOUCHER_NAMES):
+        if role.bag.get(voucher, 0) <= 0:
+            continue
+        for name, group, level in VOUCHER_CHAIN + WALL_CHAIN:
+            if name != voucher:
+                continue
+            spots = _step_targets(ctx.turn, group, level, ctx.demolish_taken)
+            hops = [(steps_between(role.pos, s, walk, size), s) for s in spots]
+            hops = [(d, s) for d, s in hops if 0 < d <= UPGRADE_WALK_MAX]
+            if hops:
+                return ctx.q.step(role, min(hops)[1], avoid=frozenset(ctx.sites))
     return False
 
 

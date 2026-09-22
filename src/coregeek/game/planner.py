@@ -124,6 +124,7 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
 
     ① 被任务钉死的开拓者 —— **人手够才钉得住**（工人阵亡 ⇒ 弃任务回炮位，生存第一）→
     ② 持基地券且基地残血 ⇒ 贴基地 `use` → ③ **手边的券先花掉**（武器券 / 墙券；修墙工有残墙时例外）
+    → ③′ 炮手手里那张武器券的目标只差 `UPGRADE_WALK_MAX`(3) 步 ⇒ 先走过去升（不开火）
     → ④ **清场了 ⇒ 整夜改走白天那两条线**（`night.is_cleared`：工人 `day.sell_or_mine`、
     开拓者 `_pioneer_errand`）→ ⑤ 没清场：炮手 `night.defend`、持包的工人 `night.repair_wall`、
     其余工人 `night.mine_ore`。
@@ -168,6 +169,10 @@ def _night_intents(turn: Turn, q: _Queue) -> None:
                 _pioneer_errand(role, turn, q, ctx)
             continue
         if role.id == gunner:
+            # ③′ 手里还有能升的武器券、目标只差几步 ⇒ **先走过去升，别急着一炮**（用户口径
+            #     "优先升级武器再操作攻击"）：升级永久（+伤害/射程，还回满血），几炮就回本。
+            if day.walk_to_upgrade(role, ctx):
+                continue
             night.defend(role, turn, q, taken)
             continue
         if role.id == repairer:
