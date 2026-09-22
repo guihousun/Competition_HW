@@ -52,7 +52,7 @@ def metadata(layout, side):
                       'challenger 初始角色', 'defender 一名工人 (30,8)'],
         'unconfirmed': ['数字类型 23/24/25 未解析，不据此增加阻挡',
                         '矿点仍为本地随机生成', '完整地形与建造区域未确认',
-                        'defender 其余角色为本地补位', '机器人刷新点仍为本地几何'],
+                        'defender 其余角色为本地补位', '刷怪左首列按 Issue48 x=22；镜像、纵向与后续列待核验'],
         'unresolved_cells': [
             {'mapType': kind, 'grid': {'x': x, 'y': y},
              'pos': grid_to_protocol(x, y), 'status': 'unresolved_not_applied'}

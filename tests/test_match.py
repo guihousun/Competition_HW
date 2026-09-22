@@ -76,8 +76,8 @@ class SpawnIsolationTests(unittest.TestCase):
         match = self._match_at_night()
         blue = match.private['challenger']['spawn_layout']
         red = match.private['defender']['spawn_layout']
-        self.assertEqual(27, blue['center']['x'])
-        self.assertEqual(13, red['center']['x'])
+        self.assertEqual(22, blue['center']['x'])
+        self.assertEqual(18, red['center']['x'])
         self.assertIsNot(blue, red)
         self.assertNotEqual(blue['slots'], red['slots'])
         # Mutating one side's pool must not move the other's.
@@ -96,7 +96,7 @@ class SpawnIsolationTests(unittest.TestCase):
         self.assertEqual('challenger', blue['ownerTeam'])
         self.assertEqual(custom, blue['slots'])
         red = match.private['defender']['spawn_layout']
-        self.assertEqual(13, red['center']['x'])
+        self.assertEqual(18, red['center']['x'])
         self.assertNotEqual(custom, red['slots'])
 
     def test_custom_red_pool_from_the_mirror_is_preserved(self):
@@ -111,7 +111,7 @@ class SpawnIsolationTests(unittest.TestCase):
         self.assertTrue(red_layout['custom'])
         self.assertEqual('defender', red_layout['ownerTeam'])
         self.assertEqual(custom, red_layout['slots'])
-        self.assertEqual(27, match.private['challenger']['spawn_layout']['center']['x'])
+        self.assertEqual(22, match.private['challenger']['spawn_layout']['center']['x'])
 
     def test_legacy_layout_without_owner_is_adopted_for_its_side_only(self):
         world = two_team_world()
@@ -121,7 +121,7 @@ class SpawnIsolationTests(unittest.TestCase):
         self.assertEqual('challenger', blue['ownerTeam'])
         # The red side only had a copy of the blue bookkeeping, so it must rebuild
         # rather than inherit (or be "adopted" into) the blue pool.
-        self.assertEqual(13, match.private['defender']['spawn_layout']['center']['x'])
+        self.assertEqual(18, match.private['defender']['spawn_layout']['center']['x'])
         self.assertEqual('defender', match.private['defender']['spawn_layout']['ownerTeam'])
 
     def test_both_sides_spawn_their_own_full_observed_wave_at_night(self):
@@ -132,7 +132,7 @@ class SpawnIsolationTests(unittest.TestCase):
                             for line in events), events)
         self.assertTrue(any(line.startswith('[defender]') and '35' in line and '实测' in line
                             for line in events), events)
-        for side, first_x in (('challenger', 27), ('defender', 13)):
+        for side, first_x in (('challenger', 22), ('defender', 18)):
             layout = match.private[side]['spawn_layout']
             self.assertEqual(first_x, layout['center']['x'])
             self.assertEqual(35, match.private[side]['wave']['total_count'])

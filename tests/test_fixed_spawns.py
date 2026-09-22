@@ -116,10 +116,32 @@ class ObservedWaveTableTests(unittest.TestCase):
 
 
 class FixedPoolTests(unittest.TestCase):
+    def test_issue48_observed_first_column_and_provisional_mirror(self):
+        from agent.map_layout import OBSERVED
+        for side, expected_x in (('challenger', 22), ('defender', 18)):
+            state = scenario(7, side, map_layout=OBSERVED)
+            layout = state['_demo']['spawn_layout']
+            self.assertEqual(expected_x, layout['center']['x'])
+            self.assertEqual('pk-696563', layout['source_replay'])
+            self.assertIn('provisional', layout['source'])
+            state['roundNo'] = 71
+            born = prepare_round(state, [])
+            self.assertEqual(expected_x, born[0]['pos']['x'])
+            self.assertEqual(35, len(born))
+
+    def test_saved_geometry_is_not_rewritten_by_new_default(self):
+        state = scenario(7)
+        old = [{'x': 27, 'y': 15}, {'x': 27, 'y': 16}]
+        configure_spawns(state, old)
+        state['_demo']['spawn_layout']['custom'] = False
+        state['roundNo'] = 71
+        born = prepare_round(state, [])
+        self.assertEqual(old, [r['pos'] for r in born])
+
     def test_ten_nights_reuse_prefixes_of_one_fixed_pool_for_both_sides(self):
         for profile, pressure, counts in [('observed-seven-days', 3, OBSERVED_TOTALS + EXTRAPOLATED_TOTALS),
                                           ('local-pressure', 3, [4, 7, 10, 13, 16, 19, 22, 25, 28, 31])]:
-            for side, first_x in [('challenger', 27), ('defender', 13)]:
+            for side, first_x in [('challenger', 22), ('defender', 18)]:
                 with self.subTest(profile=profile, side=side):
                     state = scenario(90317, side, pressure, profile=profile)
                     layout = deepcopy(state['_demo']['spawn_layout'])
