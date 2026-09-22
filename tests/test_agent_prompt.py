@@ -196,25 +196,26 @@ class ChatPromptTest(unittest.TestCase):
         那条已经过期**（口径：接口定义/参数定义要收，本次的取值不收）。
 
         第 133 步那串黑名单清单（token / 仅本次有效的参数值 / 一次性中间状态）压缩成
-        一句"不要记录一次性答案、临时状态、临时文件/路径"，泛化要求由参数表那句
+        一句"不要记录一次性答案、临时状态、临时文件/路径"；第 137 步把"临时文件/路径"
+        收回成"本次任务自己产生的临时文件"（裸的"路径"与【工作原则】§2 打架 —— 接口真实
+        路径正是要收的环境知识），排除项改钉"只对本次成立的取值"。泛化要求由参数表那句
         "该类问题的通用解决流程"承担。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
         self.assertIn("该类问题的通用解决流程", rules)
-        self.assertIn("不要记录一次性答案、临时状态", rules)
+        self.assertIn("不要记录只对本次成立的取值", rules)
 
     def test_the_deposit_rules_pin_the_timing(self):
-        """沉淀的时机：**已实际验证**且**对未来同类任务有复用价值**这两道门。
+        """沉淀的时机：**已实际验证** + **还没出现在【沉淀的SOP】里就存一条**。
 
-        第 133 步口径又变一次：第 107 步那版把"[什么时候使用]"四条清单加"判断标准"
-        整段放在描述里，用户压缩后门槛只剩"已实际验证、且具有复用价值"这一句 ——
-        门还在（不是"只要没存过就存"），清单没了。"""
+        门槛第 137 步翻回正面（表 #66：实盘上一条都不沉淀 ⇒ 太紧）：第 133 步那版只剩
+        "已实际验证、且具有复用价值"一道纯闸门，"什么时候该存"没有任何正面触发语。
+        现在两半都在：「还没出现在【沉淀的SOP】里」管触发、「已实际验证」管闸门。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
         self.assertIn("已实际验证", rules)
-        self.assertIn("具有复用价值", rules)
-        self.assertIn("已有相同 SOP 时应更新", rules)
-        self.assertIn("而不是重复创建", rules)
+        self.assertIn("还没出现在【沉淀的SOP】里", rules)
+        self.assertIn("用同一个 name 更新它", rules)
         # 沉淀与作答同轮的形状仍在（问答两侧各一处，两处都不许走）
         self.assertIn("当要沉淀且同回合要交答案时", system)
         self.assertNotIn("当完成任务且认为流程可沉淀时", system)
@@ -409,12 +410,12 @@ class ChatPromptTest(unittest.TestCase):
 
         旧条目错了而没人改，它就会一直被照做；新起一条同样名字的又会把旧的挤掉或并存。
         同名覆盖是 `tools/sop.py` 已有的存储规则，这里只是把它讲给 LLM 听。
-        第 133 步压缩后"同名会覆盖旧条目"这句机制说明没了，只剩"已有相同 SOP 时应更新，
-        而不是重复创建" —— 判据落在"应更新"这半句上。"""
+        "同名会覆盖旧条目"这句机制说明没有回来 —— 判据落在"用同一个 name 更新它"
+        与它前面那半句"已经沉淀过的不要重复存"上。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _sop_tool_block(system)
-        self.assertIn("已有相同 SOP 时应更新", rules)
-        self.assertIn("而不是重复创建", rules)
+        self.assertIn("已经沉淀过的不要重复存", rules)
+        self.assertIn("用同一个 name 更新它", rules)
 
     def test_the_task_text_is_there(self):
         self.assertIn("请查询北京天气", self.agent.chat("请查询北京天气"))
