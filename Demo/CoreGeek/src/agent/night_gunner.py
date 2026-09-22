@@ -32,12 +32,15 @@ def pioneer_status(turn, payload, state):
     return True, 'pioneer_idle'
 
 
-def plan(turn, payload, state, commands, claimed, aim_points):
+def plan(turn, payload, state, commands, claimed, aim_points, *, force=False):
     common, inner = rocket_post.common_cells(turn)
     if not common:
         return None  # Preserve existing worker fallback for non-shared layouts.
     guns = sorted((g for g in turn.weapons() if g.kind == 'rocket'), key=lambda g: g.unit_id)
     eligible, reason = pioneer_status(turn, payload, state)
+    if force and reason == 'pioneer_idle':
+        eligible = True
+        reason = 'emergency_worker_loss_or_injury'
     hero = turn.pioneer()
     if hero is not None and hero.unit_id in commands:
         eligible, reason = False, 'pioneer_action_preserved'

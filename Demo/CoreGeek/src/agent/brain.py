@@ -2242,11 +2242,15 @@ def _night(turn: Turn, commands: dict[int, dict[str, Any]],
         # ordinary combat defence. Day-four full defence deliberately reserves
         # workers for the established gunner/repair policy. The helper preserves
         # the worker's shot until a legal, covered handover exists.
-        if not home_defense.full_night(turn):
+        emergency_handover = any(
+            worker.health > 0 and worker.health <= 55
+            for worker in turn.workers()) or not any(worker.health > 0 for worker in turn.workers())
+        if not home_defense.full_night(turn) or emergency_handover:
             eligible, _ = night_gunner.pioneer_status(turn, state, planner_state)
             if eligible:
                 handover = night_gunner.plan(turn, state, planner_state, commands,
-                                              claimed, _aim_points)
+                                              claimed, _aim_points,
+                                              force=emergency_handover)
         if handover and handover.get('owner') is not None:
             operator = handover['owner']
             fixed = next((r for r in turn.workers() + (turn.pioneer(),)

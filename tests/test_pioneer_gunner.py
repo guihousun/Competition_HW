@@ -76,6 +76,19 @@ class PioneerGunnerTests(unittest.TestCase):
         self.assertTrue(attacks)
         self.assertEqual(attacks[0]['controllerId'], '2')
 
+    def test_full_night_emergency_handover_when_gunner_is_critically_wounded(self):
+        p = board(); p['roundNo'] = 500
+        # A full-night reserve must not prevent the pioneer from taking over
+        # when the only active worker gunner is about to die.
+        p['teamOur']['roles'][2]['health'] = 40
+        state = planner.PlannerState(); commands = {}
+        with patch.object(brain, '_productive_night', return_value=False):
+            brain._night(Turn.load(p), commands, p, state)
+        self.assertTrue(any(uid == 4 and command.get('action') == 'move'
+                            for uid, command in commands.items())
+                        or any(command.get('controllerId') == '4'
+                               for command in commands.values()))
+
     def test_diagnostic_marks_real_pioneer_controller(self):
         p = board(); state = planner.PlannerState()
         response = brain.plan_for_state(p, state, judge_tasks=False)

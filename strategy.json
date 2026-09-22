@@ -36,7 +36,7 @@
     ]
   },
   "maintenance": {
-    "from_day": 4,
+    "from_day": 3,
     "survival_reserve_from_day": 3,
     "stock_target": 2,
     "repair_stock_max": 4,

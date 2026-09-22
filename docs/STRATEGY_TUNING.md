@@ -28,7 +28,7 @@
 | `defense.tower_loadout` | 三个 `rocket` | 三座武器类型；单人三炮策略开启时必须全部为 `rocket`。 |
 | `upgrades.day_targets` | `[[3,3,3],[3,3,3],[3,3,3]]` | 第 1、2、3 天允许投资的三炮目标等级；默认不设置等日期再升级的门槛。按当前存活武器 `(y, x, id)` 升序对应；若要测试保守计划，应整段改成如 `[[1,1,1],[1,2,1],[2,2,2]]`，不能单独调低第二天而让目标下降。 |
 | `upgrades.late_weapon_target` | `[3,3,3]` | 第四天及以后的目标。未完成的三级升级继续保留预算，紧急维修或基地救援可优先。 |
-| `maintenance.from_day` | `4` | 启用后期维修准备的起始日；白天可备货，不独占所有工人。 |
+| `maintenance.from_day` | `3` | 启用维修 lease 的起始日；第三夜就能处理低血量前墙，白天仍可正常采矿和升级。 |
 | `maintenance.survival_reserve_from_day` | `3` | 从第几天开始在武器升级前预留下一夜生存预算。 |
 | `maintenance.stock_target` | `2` | 维修物品储备目标，0–10；目标不是强制购买或无限预算。 |
 | `maintenance.repair_stock_max` | `4` | 维修包储备上限，防止生存预留无限挤占炮台升级。 |

@@ -17,7 +17,7 @@ DEFAULTS = {
                 "tower_loadout": ["rocket", "rocket", "rocket"]},
     "upgrades": {"day_targets": [[3, 3, 3], [3, 3, 3], [3, 3, 3]],
                  "late_weapon_target": [3, 3, 3]},
-    "maintenance": {"from_day": 4, "survival_reserve_from_day": 3,
+    "maintenance": {"from_day": 3, "survival_reserve_from_day": 3,
                     "stock_target": 2, "repair_stock_max": 4,
                     "wall_upgrade_reserve": 1, "side_wall_max_level": 1,
                     "entry_fraction": 0.55, "exit_fraction": 0.85,
