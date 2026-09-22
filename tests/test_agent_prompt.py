@@ -455,13 +455,32 @@ class ChatPromptTest(unittest.TestCase):
         两处落点：`executeCmd` 的第 8 条使用原则（指定了脚本就用那一个）与【工作原则】任务
         理解的第 5 条（先看它给了哪些线索）。绕一圈回来，那两个回合的反馈照样得付。
         第 133 步压缩时这一条**整句被删过一次**，已按守门员的原意补回：判据仍是
-        "不要自行创造另一套验证方式"这半句，别在下次改版面时再删掉。"""
+        "不要自行创造另一套验证方式"这半句，别在下次改版面时再删掉（第 151 步起落点有三处：工具描述那半句只管验证手段、六问第 5 条、以及【工作原则】4 里补回的"路线"整句）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         self.assertIn(
             "指定了脚本或验证方式时优先执行它，不要自行创造另一套验证方式",
             _section(system, "# 【工具描述】"),
         )
         self.assertIn("任务中明确提供了哪些线索", _section(system, "# 【工作原则】"))
+        # 第 151 步把"路线"整句写回了决策层（第 82 步的原话）
+        self.assertIn(
+            "任务书点到的文件、接口、脚本是这一趟的路线", _section(system, "# 【工作原则】")
+        )
+
+    def test_the_rules_forbid_inventing_facts(self):
+        """路径 / 参数名 / 字段名 / 取值 / 格式只能来自**文档原文**或**执行回执**，不许凭印象编。
+
+        用户报的症状："LLM 很容易一点不听文档的，自己编东西"。净口径在我们这边：降"文档"
+        权重的话有四句（ROLE 的可信度排序、"属于参考信息"、信任优先级、destination/target
+        那个例子），正面规则只剩工具描述末尾半句 —— 而"编"不花一个回合、"读"一轮、"试错"
+        两轮，最省回合的读法恰好就是编。第 151 步补的这条是主药（同时掐住"编"的许可与
+        "编更省"的动机）；【工作原则】2 末尾那句分界是配重（把"文档可能写错"收成冲突时的
+        裁决规则）—— 没有它，这条会被"以实测为准"顶回去。"""
+        system = json.loads(self.agent.chat("题目"))[0]["content"]
+        rules = _section(system, "# 【工作原则】")
+        self.assertIn("只能来自**文档原文**或**执行回执**", rules)
+        self.assertIn("不许凭印象编", rules)
+        self.assertIn("可以先不读、先不信", rules)
 
     def test_the_compression_keeps_the_failed_tries(self):
         """压缩请求要明说"试过并失败的也列上"。
@@ -484,12 +503,14 @@ class ChatPromptTest(unittest.TestCase):
         落点两处：沉淀指令（文档与实测冲突时以实测为准）与【ROLE定位】的可信度排序
         （第 107 步，旧【沉淀规则】段删除）。第 133 步压缩时描述那一处**整句被删过一次**，
         已补回"文档与实测冲突时以实际执行结果为准"；旧长文里那个 destination/target 例子
-        没有回来（例子是解释用的，判据是那句规则本身）。"""
+        没有回来（例子是解释用的，判据是那句规则本身）。第 151 步把【ROLE定位】那半句改成
+        "验过之前就是事实、冲突才反超" —— 旧措辞读起来像"随时可以先不信"，那正是"自己编"
+        的许可（用户报的症状见下一条用例）。"""
         system = json.loads(self.agent.chat("题目"))[0]["content"]
         rules = _deposit_rules(_deposit_system(self.agent))
         self.assertIn("以实际执行结果为准", rules)
         self.assertIn("存跑通的那一版", rules)
-        self.assertIn("冲突时以实测为准", _section(system, "# 【ROLE定位】"))
+        self.assertIn("只有实测回执与它冲突时，才以实测为准", _section(system, "# 【ROLE定位】"))
 
     def test_the_deposit_rules_say_how_a_stale_entry_gets_replaced(self):
         """复用条目而实测与它不一致时，用**同名覆盖**改那一条 —— 而不是机械重复、
